@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: payment-schema-0001-create
+      author: edudron
+      changes:
+        - sql:
+            sql: |
+              create schema if not exists payment;
+  - changeSet:
+      id: payment-0001-subscriptions
+      author: edudron
+      changes:
+        - createTable:
+            tableName: subscription_plans
+            schemaName: payment
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: text, constraints: { nullable: false } }
+              - column: { name: price_paise, type: bigint, constraints: { nullable: false } }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: subscription_plans
+            schemaName: payment
+            indexName: idx_payment_subscription_plans_client_id
+            columns:
+              - column: { name: client_id }
+

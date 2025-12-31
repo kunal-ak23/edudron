@@ -1,0 +1,234 @@
+databaseChangeLog:
+  # Enhanced courses table with all metadata
+  - changeSet:
+      id: content-0002-enhance-courses
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: courses
+            schemaName: content
+            columns:
+              - column: { name: thumbnail_url, type: text }
+              - column: { name: preview_video_url, type: text }
+              - column: { name: is_free, type: boolean, defaultValueBoolean: false }
+              - column: { name: price_paise, type: bigint }
+              - column: { name: currency, type: varchar(3), defaultValue: "INR" }
+              - column: { name: category_id, type: varchar(26) }
+              - column: { name: tags, type: text[] }
+              - column: { name: difficulty_level, type: varchar(20) }
+              - column: { name: language, type: varchar(10), defaultValue: "en" }
+              - column: { name: total_duration_seconds, type: integer, defaultValueNumeric: 0 }
+              - column: { name: total_lectures_count, type: integer, defaultValueNumeric: 0 }
+              - column: { name: total_students_count, type: integer, defaultValueNumeric: 0 }
+              - column: { name: certificate_eligible, type: boolean, defaultValueBoolean: false }
+              - column: { name: max_completion_days, type: integer }
+              - column: { name: published_at, type: timestamptz }
+        - createIndex:
+            tableName: courses
+            schemaName: content
+            indexName: idx_content_courses_category
+            columns:
+              - column: { name: category_id }
+        - createIndex:
+            tableName: courses
+            schemaName: content
+            indexName: idx_content_courses_difficulty
+            columns:
+              - column: { name: difficulty_level }
+        - createIndex:
+            tableName: courses
+            schemaName: content
+            indexName: idx_content_courses_published
+            columns:
+              - column: { name: is_published }
+              - column: { name: client_id }
+
+  # Sections (Chapters)
+  - changeSet:
+      id: content-0003-sections
+      author: edudron
+      changes:
+        - createTable:
+            tableName: sections
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: title, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: sequence, type: integer, constraints: { nullable: false } }
+              - column: { name: is_published, type: boolean, defaultValueBoolean: false }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: sections
+            baseTableSchemaName: content
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_sections_course
+        - createIndex:
+            tableName: sections
+            schemaName: content
+            indexName: idx_content_sections_course_sequence
+            columns:
+              - column: { name: course_id }
+              - column: { name: sequence }
+        - createIndex:
+            tableName: sections
+            schemaName: content
+            indexName: idx_content_sections_client_id
+            columns:
+              - column: { name: client_id }
+
+  # Lectures (Modules/Lessons)
+  - changeSet:
+      id: content-0004-lectures
+      author: edudron
+      changes:
+        - createTable:
+            tableName: lectures
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: section_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: title, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: content_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: sequence, type: integer, constraints: { nullable: false } }
+              - column: { name: duration_seconds, type: integer, defaultValueNumeric: 0 }
+              - column: { name: is_preview, type: boolean, defaultValueBoolean: false }
+              - column: { name: is_published, type: boolean, defaultValueBoolean: false }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: lectures
+            baseTableSchemaName: content
+            baseColumnNames: section_id
+            referencedTableName: sections
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_lectures_section
+        - addForeignKeyConstraint:
+            baseTableName: lectures
+            baseTableSchemaName: content
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_lectures_course
+        - createIndex:
+            tableName: lectures
+            schemaName: content
+            indexName: idx_content_lectures_section_sequence
+            columns:
+              - column: { name: section_id }
+              - column: { name: sequence }
+        - createIndex:
+            tableName: lectures
+            schemaName: content
+            indexName: idx_content_lectures_client_id
+            columns:
+              - column: { name: client_id }
+
+  # Lecture Content (Content Items)
+  - changeSet:
+      id: content-0005-lecture-content
+      author: edudron
+      changes:
+        - createTable:
+            tableName: lecture_content
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: lecture_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: content_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: title, type: text }
+              - column: { name: description, type: text }
+              - column: { name: file_url, type: text }
+              - column: { name: file_size_bytes, type: bigint }
+              - column: { name: mime_type, type: varchar(100) }
+              - column: { name: video_url, type: text }
+              - column: { name: transcript_url, type: text }
+              - column: { name: subtitle_urls, type: jsonb }
+              - column: { name: thumbnail_url, type: text }
+              - column: { name: text_content, type: text }
+              - column: { name: external_url, type: text }
+              - column: { name: embedded_code, type: text }
+              - column: { name: sequence, type: integer, defaultValueNumeric: 0 }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: lecture_content
+            baseTableSchemaName: content
+            baseColumnNames: lecture_id
+            referencedTableName: lectures
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_lecture_content_lecture
+        - createIndex:
+            tableName: lecture_content
+            schemaName: content
+            indexName: idx_content_lecture_content_lecture
+            columns:
+              - column: { name: lecture_id }
+              - column: { name: sequence }
+        - createIndex:
+            tableName: lecture_content
+            schemaName: content
+            indexName: idx_content_lecture_content_client_id
+            columns:
+              - column: { name: client_id }
+
+  # Sub-lessons (Optional nested content)
+  - changeSet:
+      id: content-0006-sub-lessons
+      author: edudron
+      changes:
+        - createTable:
+            tableName: sub_lessons
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: lecture_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: title, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: content_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: sequence, type: integer, constraints: { nullable: false } }
+              - column: { name: duration_seconds, type: integer, defaultValueNumeric: 0 }
+              - column: { name: file_url, type: text }
+              - column: { name: file_size_bytes, type: bigint }
+              - column: { name: mime_type, type: varchar(100) }
+              - column: { name: text_content, type: text }
+              - column: { name: external_url, type: text }
+              - column: { name: embedded_code, type: text }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: sub_lessons
+            baseTableSchemaName: content
+            baseColumnNames: lecture_id
+            referencedTableName: lectures
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_sub_lessons_lecture
+        - createIndex:
+            tableName: sub_lessons
+            schemaName: content
+            indexName: idx_content_sub_lessons_lecture_sequence
+            columns:
+              - column: { name: lecture_id }
+              - column: { name: sequence }
+        - createIndex:
+            tableName: sub_lessons
+            schemaName: content
+            indexName: idx_content_sub_lessons_client_id
+            columns:
+              - column: { name: client_id }
+

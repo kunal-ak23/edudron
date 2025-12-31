@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: payment
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:edudron}?sslmode=${DB_SSLMODE:prefer}
+    username: ${DB_USERNAME:edudron}
+    password: ${DB_PASSWORD:edudron}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        default_schema: payment
+        jdbc.time_zone: UTC
+  liquibase:
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+    default-schema: public
+    liquibase-schema: public
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,env,beans,configprops
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+  show-actuator: true
+
+server:
+  port: ${PAYMENT_SERVICE_PORT:8084}
+

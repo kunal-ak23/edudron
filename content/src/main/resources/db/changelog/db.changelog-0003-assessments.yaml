@@ -1,0 +1,151 @@
+databaseChangeLog:
+  # Assessments
+  - changeSet:
+      id: content-0007-assessments
+      author: edudron
+      changes:
+        - createTable:
+            tableName: assessments
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: section_id, type: varchar(26) }
+              - column: { name: lecture_id, type: varchar(26) }
+              - column: { name: assessment_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: title, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: instructions, type: text }
+              - column: { name: passing_score_percentage, type: integer, defaultValueNumeric: 70 }
+              - column: { name: max_attempts, type: integer }
+              - column: { name: time_limit_seconds, type: integer }
+              - column: { name: is_required, type: boolean, defaultValueBoolean: false }
+              - column: { name: is_published, type: boolean, defaultValueBoolean: false }
+              - column: { name: sequence, type: integer, defaultValueNumeric: 0 }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: assessments
+            baseTableSchemaName: content
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_assessments_course
+        - addForeignKeyConstraint:
+            baseTableName: assessments
+            baseTableSchemaName: content
+            baseColumnNames: section_id
+            referencedTableName: sections
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_assessments_section
+            onDelete: SET_NULL
+        - addForeignKeyConstraint:
+            baseTableName: assessments
+            baseTableSchemaName: content
+            baseColumnNames: lecture_id
+            referencedTableName: lectures
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_assessments_lecture
+            onDelete: SET_NULL
+        - createIndex:
+            tableName: assessments
+            schemaName: content
+            indexName: idx_content_assessments_course
+            columns:
+              - column: { name: course_id }
+        - createIndex:
+            tableName: assessments
+            schemaName: content
+            indexName: idx_content_assessments_lecture
+            columns:
+              - column: { name: lecture_id }
+        - createIndex:
+            tableName: assessments
+            schemaName: content
+            indexName: idx_content_assessments_client_id
+            columns:
+              - column: { name: client_id }
+
+  # Quiz Questions
+  - changeSet:
+      id: content-0008-quiz-questions
+      author: edudron
+      changes:
+        - createTable:
+            tableName: quiz_questions
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: assessment_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: question_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: question_text, type: text, constraints: { nullable: false } }
+              - column: { name: points, type: integer, defaultValueNumeric: 1 }
+              - column: { name: sequence, type: integer, constraints: { nullable: false } }
+              - column: { name: explanation, type: text }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: quiz_questions
+            baseTableSchemaName: content
+            baseColumnNames: assessment_id
+            referencedTableName: assessments
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_quiz_questions_assessment
+        - createIndex:
+            tableName: quiz_questions
+            schemaName: content
+            indexName: idx_content_quiz_questions_assessment_sequence
+            columns:
+              - column: { name: assessment_id }
+              - column: { name: sequence }
+        - createIndex:
+            tableName: quiz_questions
+            schemaName: content
+            indexName: idx_content_quiz_questions_client_id
+            columns:
+              - column: { name: client_id }
+
+  # Quiz Options (for multiple choice)
+  - changeSet:
+      id: content-0009-quiz-options
+      author: edudron
+      changes:
+        - createTable:
+            tableName: quiz_options
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: question_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: option_text, type: text, constraints: { nullable: false } }
+              - column: { name: is_correct, type: boolean, defaultValueBoolean: false }
+              - column: { name: sequence, type: integer, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: quiz_options
+            baseTableSchemaName: content
+            baseColumnNames: question_id
+            referencedTableName: quiz_questions
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_quiz_options_question
+        - createIndex:
+            tableName: quiz_options
+            schemaName: content
+            indexName: idx_content_quiz_options_question_sequence
+            columns:
+              - column: { name: question_id }
+              - column: { name: sequence }
+        - createIndex:
+            tableName: quiz_options
+            schemaName: content
+            indexName: idx_content_quiz_options_client_id
+            columns:
+              - column: { name: client_id }
+

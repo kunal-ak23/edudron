@@ -1,0 +1,51 @@
+databaseChangeLog:
+  - changeSet:
+      id: schemas-0000-create
+      author: edudron
+      changes:
+        - sql:
+            sql: |
+              create schema if not exists common;
+              create schema if not exists idp;
+  - changeSet:
+      id: common-0001-init
+      author: edudron
+      changes:
+        - createTable:
+            tableName: clients
+            schemaName: common
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: slug, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: name, type: text, constraints: { nullable: false } }
+              - column: { name: gstin, type: varchar(32) }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - createTable:
+            tableName: audit_logs
+            schemaName: common
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: actor, type: varchar(128) }
+              - column: { name: action, type: varchar(64) }
+              - column: { name: entity, type: varchar(64) }
+              - column: { name: entity_id, type: varchar(64) }
+              - column: { name: meta, type: jsonb }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - createTable:
+            tableName: outbox
+            schemaName: common
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: aggregate_type, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: aggregate_id, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: type, type: varchar(64), constraints: { nullable: false } }
+              - column: { name: payload_json, type: jsonb, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: processed_at, type: timestamptz }
+  - include:
+      file: db/changelog/db.changelog-0002-users-auth.yaml
+  - include:
+      file: db/changelog/db.changelog-0003-system-admin-fix.yaml
+

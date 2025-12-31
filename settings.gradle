@@ -1,0 +1,14 @@
+pluginManagement {
+	repositories {
+		maven { url = 'https://repo.spring.io/snapshot' }
+		gradlePluginPortal()
+	}
+}
+rootProject.name = 'edudron'
+include 'common'
+include 'gateway'
+include 'identity'
+include 'content'
+include 'student'
+include 'payment'
+

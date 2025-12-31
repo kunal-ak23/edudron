@@ -1,0 +1,98 @@
+services:
+  identity-service:
+    build:
+      context: .
+      dockerfile: identity/Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: edudron-identity-dev
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_NAME=edudron
+      - DB_USERNAME=edudron
+      - DB_PASSWORD=edudron
+      - IDENTITY_SERVICE_PORT=8081
+      - JWT_SECRET=devSecretKey123456789012345678901234567890
+      - JWT_EXPIRATION=86400
+    ports:
+      - "8081:8081"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  content-service:
+    build:
+      context: .
+      dockerfile: content/Dockerfile
+    container_name: edudron-content-dev
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_NAME=edudron
+      - DB_USERNAME=edudron
+      - DB_PASSWORD=edudron
+      - CONTENT_SERVICE_PORT=8082
+    ports:
+      - "8082:8082"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  student-service:
+    build:
+      context: .
+      dockerfile: student/Dockerfile
+    container_name: edudron-student-dev
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_NAME=edudron
+      - DB_USERNAME=edudron
+      - DB_PASSWORD=edudron
+      - STUDENT_SERVICE_PORT=8083
+    ports:
+      - "8083:8083"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment/Dockerfile
+    container_name: edudron-payment-dev
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_NAME=edudron
+      - DB_USERNAME=edudron
+      - DB_PASSWORD=edudron
+      - PAYMENT_SERVICE_PORT=8084
+    ports:
+      - "8084:8084"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  gateway-service:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: edudron-gateway-dev
+    environment:
+      - GATEWAY_SERVICE_PORT=8080
+      - IDENTITY_SERVICE_URL=http://identity-service:8081
+      - CONTENT_SERVICE_URL=http://content-service:8082
+      - STUDENT_SERVICE_URL=http://student-service:8083
+      - PAYMENT_SERVICE_URL=http://payment-service:8084
+    ports:
+      - "8080:8080"
+    depends_on:
+      - identity-service
+      - content-service
+      - student-service
+      - payment-service
+    restart: unless-stopped
+
+

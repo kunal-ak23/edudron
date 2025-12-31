@@ -1,0 +1,83 @@
+databaseChangeLog:
+  # Media Assets
+  - changeSet:
+      id: content-0010-media-assets
+      author: edudron
+      changes:
+        - createTable:
+            tableName: media_assets
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: asset_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: file_name, type: text, constraints: { nullable: false } }
+              - column: { name: file_url, type: text, constraints: { nullable: false } }
+              - column: { name: file_size_bytes, type: bigint, constraints: { nullable: false } }
+              - column: { name: mime_type, type: varchar(100), constraints: { nullable: false } }
+              - column: { name: thumbnail_url, type: text }
+              - column: { name: metadata, type: jsonb }
+              - column: { name: uploaded_by, type: varchar(26) }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: media_assets
+            schemaName: content
+            indexName: idx_content_media_assets_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: media_assets
+            schemaName: content
+            indexName: idx_content_media_assets_type
+            columns:
+              - column: { name: asset_type }
+        - createIndex:
+            tableName: media_assets
+            schemaName: content
+            indexName: idx_content_media_assets_uploaded_by
+            columns:
+              - column: { name: uploaded_by }
+
+  # Course Resources
+  - changeSet:
+      id: content-0011-course-resources
+      author: edudron
+      changes:
+        - createTable:
+            tableName: course_resources
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: resource_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: title, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: file_url, type: text, constraints: { nullable: false } }
+              - column: { name: file_size_bytes, type: bigint }
+              - column: { name: is_downloadable, type: boolean, defaultValueBoolean: true }
+              - column: { name: download_count, type: integer, defaultValueNumeric: 0 }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: course_resources
+            baseTableSchemaName: content
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_course_resources_course
+        - createIndex:
+            tableName: course_resources
+            schemaName: content
+            indexName: idx_content_course_resources_course
+            columns:
+              - column: { name: course_id }
+        - createIndex:
+            tableName: course_resources
+            schemaName: content
+            indexName: idx_content_course_resources_client_id
+            columns:
+              - column: { name: client_id }
+

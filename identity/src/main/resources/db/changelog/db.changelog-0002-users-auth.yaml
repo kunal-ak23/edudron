@@ -1,0 +1,79 @@
+databaseChangeLog:
+  - changeSet:
+      id: users-auth-0001
+      author: edudron
+      changes:
+        - createTable:
+            tableName: users
+            schemaName: idp
+            columns:
+              - column:
+                  name: id
+                  type: varchar(26)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: email
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: password
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: phone
+                  type: varchar(20)
+              - column:
+                  name: role
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_login_at
+                  type: timestamp with time zone
+              - column:
+                  name: active
+                  type: boolean
+                  constraints:
+                    nullable: false
+                    defaultValueBoolean: true
+        - addUniqueConstraint:
+            tableName: users
+            schemaName: idp
+            columnNames: email, client_id
+            constraintName: uk_users_email_client
+        - createIndex:
+            tableName: users
+            schemaName: idp
+            indexName: idx_users_email
+            columns:
+              - column:
+                  name: email
+        - createIndex:
+            tableName: users
+            schemaName: idp
+            indexName: idx_users_client_role
+            columns:
+              - column:
+                  name: client_id
+              - column:
+                  name: role
+

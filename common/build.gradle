@@ -1,0 +1,12 @@
+plugins {
+	id 'java'
+}
+
+dependencies {
+    // Swagger/OpenAPI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.2.0'
+    
+    // Spring Web for RestTemplate interceptor
+    implementation 'org.springframework:spring-web'
+}
+

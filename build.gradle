@@ -1,0 +1,152 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.3.4'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.datagami'
+version = '0.1.0-SNAPSHOT'
+description = 'EduDron multi-module LMS platform'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+subprojects {
+	apply plugin: 'java'
+	apply plugin: 'io.spring.dependency-management'
+
+	group = rootProject.group
+	version = rootProject.version
+
+	repositories {
+		mavenCentral()
+	}
+
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(21)
+		}
+	}
+
+	dependencyManagement {
+		imports {
+			mavenBom 'org.springframework.cloud:spring-cloud-dependencies:2023.0.3'
+		}
+	}
+
+	dependencies {
+		testImplementation 'org.springframework.boot:spring-boot-starter-test'
+		testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	}
+
+	tasks.named('test') {
+		useJUnitPlatform()
+	}
+}
+
+// Service management tasks
+task stopAllServices {
+	group = 'edudron'
+	description = 'Stop all running EduDron services'
+	
+	doLast {
+		println "🛑 Stopping all EduDron services..."
+		println "💡 Use './scripts/edudron.sh stop' or run the following commands manually:"
+		println "   pkill -f 'identity:bootRun'"
+		println "   pkill -f 'content:bootRun'"
+		println "   pkill -f 'student:bootRun'"
+		println "   pkill -f 'payment:bootRun'"
+		println "   pkill -f 'gateway:bootRun'"
+		println "✅ All services stopped"
+	}
+}
+
+task startAllServices {
+	group = 'edudron'
+	description = 'Start all EduDron services in the correct order'
+	dependsOn 'stopAllServices'
+	
+	doLast {
+		println "🚀 Starting all EduDron services..."
+		println "💡 Use './scripts/edudron.sh start' or run the following commands manually:"
+		println ""
+		println "📋 Start services in this order:"
+		println "   ./gradlew :identity:bootRun &"
+		println "   sleep 5"
+		println "   ./gradlew :content:bootRun &"
+		println "   sleep 3"
+		println "   ./gradlew :student:bootRun &"
+		println "   sleep 3"
+		println "   ./gradlew :payment:bootRun &"
+		println "   sleep 3"
+		println "   ./gradlew :gateway:bootRun &"
+		println ""
+		println "🔗 Service URLs:"
+		println "   Identity:    http://localhost:8081"
+		println "   Content:     http://localhost:8082"
+		println "   Student:     http://localhost:8083"
+		println "   Payment:     http://localhost:8084"
+		println "   Gateway:     http://localhost:8080"
+		println ""
+		println "📱 Frontend Apps:"
+		println "   Admin Dashboard: http://localhost:3000"
+		println "   Student Portal:  http://localhost:3001"
+	}
+}
+
+task restartAllServices {
+	group = 'edudron'
+	description = 'Restart all EduDron services'
+	dependsOn 'stopAllServices', 'startAllServices'
+	
+	doLast {
+		println "🔄 All services restarted successfully!"
+	}
+}
+
+task statusAllServices {
+	group = 'edudron'
+	description = 'Check status of all EduDron services'
+	
+	doLast {
+		println "🔍 Checking status of all EduDron services..."
+		println ""
+		
+		def services = [
+			[name: 'Identity',    port: 8081],
+			[name: 'Content',     port: 8082],
+			[name: 'Student',      port: 8083],
+			[name: 'Payment',      port: 8084],
+			[name: 'Gateway',      port: 8080]
+		]
+		
+		services.each { service ->
+			try {
+				// Check if port is in use using lsof
+				def process = "lsof -i :${service.port}".execute()
+				process.waitFor()
+				def isRunning = process.exitValue() == 0
+				
+				if (isRunning) {
+					println "✅ ${service.name} Service (port ${service.port}) - RUNNING"
+				} else {
+					println "❌ ${service.name} Service (port ${service.port}) - STOPPED"
+				}
+			} catch (Exception e) {
+				println "❌ ${service.name} Service (port ${service.port}) - ERROR: ${e.message}"
+			}
+		}
+		
+		println ""
+		println "💡 Use './gradlew startAllServices' to start all services"
+		println "💡 Use './gradlew stopAllServices' to stop all services"
+	}
+}
+

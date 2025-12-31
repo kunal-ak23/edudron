@@ -1,0 +1,235 @@
+databaseChangeLog:
+  # Course Categories
+  - changeSet:
+      id: content-0012-course-categories
+      author: edudron
+      changes:
+        - createTable:
+            tableName: course_categories
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: parent_category_id, type: varchar(26) }
+              - column: { name: icon_url, type: text }
+              - column: { name: sequence, type: integer, defaultValueNumeric: 0 }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: course_categories
+            baseTableSchemaName: content
+            baseColumnNames: parent_category_id
+            referencedTableName: course_categories
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_course_categories_parent
+            onDelete: SET_NULL
+        - createIndex:
+            tableName: course_categories
+            schemaName: content
+            indexName: idx_content_course_categories_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: course_categories
+            schemaName: content
+            indexName: idx_content_course_categories_parent
+            columns:
+              - column: { name: parent_category_id }
+
+  # Course Tags
+  - changeSet:
+      id: content-0013-course-tags
+      author: edudron
+      changes:
+        - createTable:
+            tableName: course_tags
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(100), constraints: { nullable: false } }
+              - column: { name: usage_count, type: integer, defaultValueNumeric: 0 }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: course_tags
+            schemaName: content
+            indexName: idx_content_course_tags_name
+            columns:
+              - column: { name: name }
+        - createIndex:
+            tableName: course_tags
+            schemaName: content
+            indexName: idx_content_course_tags_client_id
+            columns:
+              - column: { name: client_id }
+        - addUniqueConstraint:
+            tableName: course_tags
+            schemaName: content
+            columnNames: client_id, name
+            constraintName: uk_course_tags_client_name
+
+  # Course Prerequisites
+  - changeSet:
+      id: content-0014-course-prerequisites
+      author: edudron
+      changes:
+        - createTable:
+            tableName: course_prerequisites
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: prerequisite_course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: is_required, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: course_prerequisites
+            baseTableSchemaName: content
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_course_prerequisites_course
+        - addForeignKeyConstraint:
+            baseTableName: course_prerequisites
+            baseTableSchemaName: content
+            baseColumnNames: prerequisite_course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_course_prerequisites_prerequisite
+        - createIndex:
+            tableName: course_prerequisites
+            schemaName: content
+            indexName: idx_content_course_prerequisites_course
+            columns:
+              - column: { name: course_id }
+        - createIndex:
+            tableName: course_prerequisites
+            schemaName: content
+            indexName: idx_content_course_prerequisites_client_id
+            columns:
+              - column: { name: client_id }
+
+  # Learning Objectives
+  - changeSet:
+      id: content-0015-learning-objectives
+      author: edudron
+      changes:
+        - createTable:
+            tableName: learning_objectives
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: objective_text, type: text, constraints: { nullable: false } }
+              - column: { name: sequence, type: integer, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: learning_objectives
+            baseTableSchemaName: content
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_learning_objectives_course
+        - createIndex:
+            tableName: learning_objectives
+            schemaName: content
+            indexName: idx_content_learning_objectives_course_sequence
+            columns:
+              - column: { name: course_id }
+              - column: { name: sequence }
+        - createIndex:
+            tableName: learning_objectives
+            schemaName: content
+            indexName: idx_content_learning_objectives_client_id
+            columns:
+              - column: { name: client_id }
+
+  # Course Instructors
+  - changeSet:
+      id: content-0016-course-instructors
+      author: edudron
+      changes:
+        - createTable:
+            tableName: course_instructors
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: instructor_user_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: role, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: bio, type: text }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: course_instructors
+            baseTableSchemaName: content
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_course_instructors_course
+        - createIndex:
+            tableName: course_instructors
+            schemaName: content
+            indexName: idx_content_course_instructors_course
+            columns:
+              - column: { name: course_id }
+        - createIndex:
+            tableName: course_instructors
+            schemaName: content
+            indexName: idx_content_course_instructors_client_id
+            columns:
+              - column: { name: client_id }
+        - addUniqueConstraint:
+            tableName: course_instructors
+            schemaName: content
+            columnNames: course_id, instructor_user_id
+            constraintName: uk_course_instructors_course_instructor
+
+  # Course Announcements
+  - changeSet:
+      id: content-0017-course-announcements
+      author: edudron
+      changes:
+        - createTable:
+            tableName: course_announcements
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: title, type: text, constraints: { nullable: false } }
+              - column: { name: message, type: text, constraints: { nullable: false } }
+              - column: { name: is_pinned, type: boolean, defaultValueBoolean: false }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: course_announcements
+            baseTableSchemaName: content
+            baseColumnNames: course_id
+            referencedTableName: courses
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_course_announcements_course
+        - createIndex:
+            tableName: course_announcements
+            schemaName: content
+            indexName: idx_content_course_announcements_course
+            columns:
+              - column: { name: course_id }
+        - createIndex:
+            tableName: course_announcements
+            schemaName: content
+            indexName: idx_content_course_announcements_client_id
+            columns:
+              - column: { name: client_id }
+

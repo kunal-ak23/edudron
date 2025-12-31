@@ -1,0 +1,36 @@
+databaseChangeLog:
+  - changeSet:
+      id: system-admin-fix-0001
+      author: edudron
+      changes:
+        # Directly alter the column to remove NOT NULL constraint
+        - sql:
+            sql: |
+              ALTER TABLE idp.users ALTER COLUMN client_id DROP NOT NULL;
+        # Drop the existing unique constraint on (email, client_id)
+        - dropUniqueConstraint:
+            tableName: users
+            schemaName: idp
+            constraintName: uk_users_email_client
+        # Add a new unique constraint for tenant-scoped users (email, client_id) where client_id is not null
+        - addUniqueConstraint:
+            tableName: users
+            schemaName: idp
+            columnNames: email, client_id
+            constraintName: uk_users_email_client_tenant
+        # Add a unique constraint for SYSTEM_ADMIN users (email only) where client_id is null
+        - sql:
+            sql: |
+              CREATE UNIQUE INDEX IF NOT EXISTS uk_users_email_system_admin 
+              ON idp.users (email) 
+              WHERE client_id IS NULL AND role = 'SYSTEM_ADMIN';
+        # Add a check constraint to ensure SYSTEM_ADMIN users have null client_id
+        - sql:
+            sql: |
+              ALTER TABLE idp.users 
+              ADD CONSTRAINT chk_system_admin_client_id 
+              CHECK (
+                (role = 'SYSTEM_ADMIN' AND client_id IS NULL) OR 
+                (role != 'SYSTEM_ADMIN' AND client_id IS NOT NULL)
+              );
+

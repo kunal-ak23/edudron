@@ -1,0 +1,38 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-schema-0001-create
+      author: edudron
+      changes:
+        - sql:
+            sql: |
+              create schema if not exists content;
+  - changeSet:
+      id: content-0001-courses
+      author: edudron
+      changes:
+        - createTable:
+            tableName: courses
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: title, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: is_published, type: boolean, defaultValueBoolean: false }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: courses
+            schemaName: content
+            indexName: idx_content_courses_client_id
+            columns:
+              - column: { name: client_id }
+  - include:
+      file: db/changelog/db.changelog-0002-content-structure.yaml
+  - include:
+      file: db/changelog/db.changelog-0003-assessments.yaml
+  - include:
+      file: db/changelog/db.changelog-0004-media-assets.yaml
+  - include:
+      file: db/changelog/db.changelog-0005-course-metadata.yaml
+
