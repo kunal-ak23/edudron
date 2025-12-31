@@ -1,0 +1,66 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0002-progress
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: progress
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: progress
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: enrollment_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: section_id, type: varchar(26) }
+              - column: { name: lecture_id, type: varchar(26) }
+              - column: { name: is_completed, type: boolean, defaultValueBoolean: false }
+              - column:
+                  name: progress_percentage
+                  type: numeric
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column: { name: time_spent_seconds, type: integer, defaultValueNumeric: 0 }
+              - column: { name: last_accessed_at, type: timestamptz }
+              - column: { name: completed_at, type: timestamptz }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: progress
+            schemaName: student
+            indexName: idx_student_progress_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: progress
+            schemaName: student
+            indexName: idx_student_progress_enrollment_id
+            columns:
+              - column: { name: enrollment_id }
+        - createIndex:
+            tableName: progress
+            schemaName: student
+            indexName: idx_student_progress_student_course
+            columns:
+              - column: { name: student_id }
+              - column: { name: course_id }
+        - createIndex:
+            tableName: progress
+            schemaName: student
+            indexName: idx_student_progress_lecture
+            columns:
+              - column: { name: lecture_id }
+              - column: { name: student_id }
+        - sql:
+            sql: |
+              ALTER TABLE student.progress 
+              ALTER COLUMN progress_percentage TYPE numeric(5,2);
+

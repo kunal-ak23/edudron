@@ -15,10 +15,13 @@ public class Assessment {
     @Column(nullable = false)
     private UUID clientId;
 
-    @Column(nullable = false)
+    @Column(name = "course_id", nullable = false, insertable = true, updatable = true)
     private String courseId;
 
+    @Column(name = "section_id", insertable = true, updatable = true)
     private String sectionId;
+    
+    @Column(name = "lecture_id", insertable = true, updatable = true)
     private String lectureId;
 
     @Enumerated(EnumType.STRING)
@@ -55,7 +58,7 @@ public class Assessment {
     @Column(nullable = false)
     private OffsetDateTime updatedAt;
 
-    // Relationships
+    // Relationships (read-only, for navigation only)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_id", insertable = false, updatable = false)
     private Course course;

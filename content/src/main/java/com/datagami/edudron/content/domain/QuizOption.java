@@ -13,7 +13,7 @@ public class QuizOption {
     @Column(nullable = false)
     private UUID clientId;
 
-    @Column(nullable = false)
+    @Column(name = "question_id", nullable = false, insertable = true, updatable = true)
     private String questionId;
 
     @Column(nullable = false, columnDefinition = "text")

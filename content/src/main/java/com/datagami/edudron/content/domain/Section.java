@@ -15,7 +15,7 @@ public class Section {
     @Column(nullable = false)
     private UUID clientId;
 
-    @Column(nullable = false)
+    @Column(name = "course_id", nullable = false, insertable = true, updatable = true)
     private String courseId;
 
     @Column(nullable = false)

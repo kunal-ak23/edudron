@@ -1,0 +1,52 @@
+databaseChangeLog:
+  - changeSet:
+      id: payment-0003-payments
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: payments
+                schemaName: payment
+      changes:
+        - createTable:
+            tableName: payments
+            schemaName: payment
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26) }
+              - column: { name: subscription_id, type: varchar(26) }
+              - column: { name: amount_paise, type: bigint, constraints: { nullable: false } }
+              - column: { name: currency, type: varchar(3), defaultValue: "INR" }
+              - column: { name: status, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: payment_method, type: varchar(50) }
+              - column: { name: provider, type: varchar(50) }
+              - column: { name: provider_payment_id, type: varchar(255) }
+              - column: { name: provider_order_id, type: varchar(255) }
+              - column: { name: failure_reason, type: text }
+              - column: { name: paid_at, type: timestamptz }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: payments
+            schemaName: payment
+            indexName: idx_payment_payments_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: payments
+            schemaName: payment
+            indexName: idx_payment_payments_student_id
+            columns:
+              - column: { name: student_id }
+              - column: { name: status }
+        - createIndex:
+            tableName: payments
+            schemaName: payment
+            indexName: idx_payment_payments_provider_payment_id
+            columns:
+              - column: { name: provider_payment_id }
+

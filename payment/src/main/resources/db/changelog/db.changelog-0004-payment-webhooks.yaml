@@ -1,0 +1,39 @@
+databaseChangeLog:
+  - changeSet:
+      id: payment-0004-payment-webhooks
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: payment_webhooks
+                schemaName: payment
+      changes:
+        - createTable:
+            tableName: payment_webhooks
+            schemaName: payment
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: provider, type: varchar(50), constraints: { nullable: false } }
+              - column: { name: event_type, type: varchar(100), constraints: { nullable: false } }
+              - column: { name: provider_event_id, type: varchar(255) }
+              - column: { name: payload_json, type: jsonb }
+              - column: { name: processed, type: boolean, defaultValueBoolean: false }
+              - column: { name: processed_at, type: timestamptz }
+              - column: { name: error_message, type: text }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: payment_webhooks
+            schemaName: payment
+            indexName: idx_payment_webhooks_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: payment_webhooks
+            schemaName: payment
+            indexName: idx_payment_webhooks_provider_event_id
+            columns:
+              - column: { name: provider_event_id }
+

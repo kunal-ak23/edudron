@@ -1,0 +1,62 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0003-assessment-submissions
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: assessment_submissions
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: assessment_submissions
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: enrollment_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: assessment_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column:
+                  name: score
+                  type: numeric
+              - column:
+                  name: max_score
+                  type: numeric
+              - column:
+                  name: percentage
+                  type: numeric
+              - column: { name: is_passed, type: boolean, defaultValueBoolean: false }
+              - column: { name: answers_json, type: jsonb }
+              - column: { name: submitted_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: graded_at, type: timestamptz }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: assessment_submissions
+            schemaName: student
+            indexName: idx_student_assessment_submissions_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: assessment_submissions
+            schemaName: student
+            indexName: idx_student_assessment_submissions_student_assessment
+            columns:
+              - column: { name: student_id }
+              - column: { name: assessment_id }
+        - createIndex:
+            tableName: assessment_submissions
+            schemaName: student
+            indexName: idx_student_assessment_submissions_enrollment
+            columns:
+              - column: { name: enrollment_id }
+        - sql:
+            sql: |
+              ALTER TABLE student.assessment_submissions 
+              ALTER COLUMN score TYPE numeric(5,2),
+              ALTER COLUMN max_score TYPE numeric(5,2),
+              ALTER COLUMN percentage TYPE numeric(5,2);
+

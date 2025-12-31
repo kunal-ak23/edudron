@@ -13,10 +13,10 @@ public class CoursePrerequisite {
     @Column(nullable = false)
     private UUID clientId;
 
-    @Column(nullable = false)
+    @Column(name = "course_id", nullable = false, insertable = true, updatable = true)
     private String courseId;
 
-    @Column(nullable = false)
+    @Column(name = "prerequisite_course_id", nullable = false, insertable = true, updatable = true)
     private String prerequisiteCourseId;
 
     @Column(nullable = false)

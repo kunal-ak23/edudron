@@ -14,7 +14,7 @@ databaseChangeLog:
               - column: { name: price_paise, type: bigint }
               - column: { name: currency, type: varchar(3), defaultValue: "INR" }
               - column: { name: category_id, type: varchar(26) }
-              - column: { name: tags, type: text[] }
+              - column: { name: tags, type: "text[]" }
               - column: { name: difficulty_level, type: varchar(20) }
               - column: { name: language, type: varchar(10), defaultValue: "en" }
               - column: { name: total_duration_seconds, type: integer, defaultValueNumeric: 0 }

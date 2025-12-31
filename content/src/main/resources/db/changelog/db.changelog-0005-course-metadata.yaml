@@ -26,7 +26,6 @@ databaseChangeLog:
             referencedTableSchemaName: content
             referencedColumnNames: id
             constraintName: fk_course_categories_parent
-            onDelete: SET_NULL
         - createIndex:
             tableName: course_categories
             schemaName: content

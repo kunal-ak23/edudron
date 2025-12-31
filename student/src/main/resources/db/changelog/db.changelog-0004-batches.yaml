@@ -1,0 +1,67 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0004-batches
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: batches
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: batches
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: start_date, type: date }
+              - column: { name: end_date, type: date }
+              - column: { name: max_students, type: integer }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: batches
+            schemaName: student
+            indexName: idx_student_batches_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: batches
+            schemaName: student
+            indexName: idx_student_batches_course_id
+            columns:
+              - column: { name: course_id }
+  - changeSet:
+      id: student-0004-add-batch-id-to-enrollments
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - and:
+            - tableExists:
+                tableName: enrollments
+                schemaName: student
+            - not:
+                - columnExists:
+                    tableName: enrollments
+                    schemaName: student
+                    columnName: batch_id
+      changes:
+        - addColumn:
+            tableName: enrollments
+            schemaName: student
+            columns:
+              - column: { name: batch_id, type: varchar(26) }
+        - createIndex:
+            tableName: enrollments
+            schemaName: student
+            indexName: idx_student_enrollments_batch_id
+            columns:
+              - column: { name: batch_id }
+

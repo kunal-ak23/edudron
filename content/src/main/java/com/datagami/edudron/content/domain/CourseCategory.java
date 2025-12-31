@@ -19,6 +19,7 @@ public class CourseCategory {
     @Column(columnDefinition = "text")
     private String description;
 
+    @Column(name = "parent_category_id", insertable = true, updatable = true)
     private String parentCategoryId;
 
     private String iconUrl;

@@ -38,3 +38,13 @@ springdoc:
 server:
   port: ${CONTENT_SERVICE_PORT:8082}
 
+# Azure Storage Configuration
+azure:
+  storage:
+    # Option 1: Use connection string (recommended for development)
+    connection-string: ${AZURE_STORAGE_CONNECTION_STRING:}
+    # Option 2: Use account name with managed identity (recommended for production)
+    account-name: ${AZURE_STORAGE_ACCOUNT_NAME:}
+    container-name: ${AZURE_STORAGE_CONTAINER_NAME:edudron-media}
+    base-url: ${AZURE_STORAGE_BASE_URL:}
+

@@ -1,0 +1,43 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-schema-0001-create
+      author: edudron
+      changes:
+        - sql:
+            sql: |
+              create schema if not exists student;
+  - changeSet:
+      id: student-0001-enrollments
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: enrollments
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: enrollments
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: enrolled_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: enrollments
+            schemaName: student
+            indexName: idx_student_enrollments_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: enrollments
+            schemaName: student
+            indexName: idx_student_enrollments_student_course
+            columns:
+              - column: { name: student_id }
+              - column: { name: course_id }
+              - column: { name: client_id }
+

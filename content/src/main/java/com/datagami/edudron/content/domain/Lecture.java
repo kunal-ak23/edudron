@@ -15,10 +15,10 @@ public class Lecture {
     @Column(nullable = false)
     private UUID clientId;
 
-    @Column(nullable = false)
+    @Column(name = "section_id", nullable = false, insertable = true, updatable = true)
     private String sectionId;
 
-    @Column(nullable = false)
+    @Column(name = "course_id", nullable = false, insertable = true, updatable = true)
     private String courseId;
 
     @Column(nullable = false)

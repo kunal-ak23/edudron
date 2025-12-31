@@ -16,7 +16,7 @@ public class LectureContent {
     @Column(nullable = false)
     private UUID clientId;
 
-    @Column(nullable = false)
+    @Column(name = "lecture_id", nullable = false, insertable = true, updatable = true)
     private String lectureId;
 
     @Enumerated(EnumType.STRING)

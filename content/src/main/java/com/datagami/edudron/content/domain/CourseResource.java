@@ -13,7 +13,7 @@ public class CourseResource {
     @Column(nullable = false)
     private UUID clientId;
 
-    @Column(nullable = false)
+    @Column(name = "course_id", nullable = false, insertable = true, updatable = true)
     private String courseId;
 
     @Enumerated(EnumType.STRING)

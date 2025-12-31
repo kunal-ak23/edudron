@@ -20,6 +20,8 @@ public interface CourseRepository extends JpaRepository<Course, String> {
     
     List<Course> findByClientId(UUID clientId);
     
+    Page<Course> findByClientId(UUID clientId, Pageable pageable);
+    
     Optional<Course> findByIdAndClientId(String id, UUID clientId);
     
     // Search and filter
@@ -42,9 +44,9 @@ public interface CourseRepository extends JpaRepository<Course, String> {
         Pageable pageable
     );
     
-    // Find by tag
-    @Query("SELECT c FROM Course c WHERE c.clientId = :clientId " +
-           "AND :tag = ANY(c.tags)")
+    // Find by tag - using native query for PostgreSQL array contains operator
+    @Query(value = "SELECT * FROM content.courses c WHERE c.client_id = :clientId " +
+           "AND :tag = ANY(c.tags)", nativeQuery = true)
     List<Course> findByClientIdAndTag(@Param("clientId") UUID clientId, @Param("tag") String tag);
     
     // Count by tenant
