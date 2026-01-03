@@ -16,6 +16,11 @@ spring:
     change-log: classpath:/db/changelog/db.changelog-master.yaml
     default-schema: public
     liquibase-schema: public
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
 
 management:
   endpoints:

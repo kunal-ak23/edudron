@@ -30,17 +30,44 @@ export default function CoursesPage() {
   }, [])
 
   useEffect(() => {
+    console.log('[CoursesPage] Filtering courses - courses:', courses.length, 'searchQuery:', searchQuery, 'statusFilter:', statusFilter)
     filterCourses()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courses, searchQuery, statusFilter])
 
   const loadCourses = async () => {
     try {
+      console.log('[CoursesPage] Starting to load courses...')
+      console.log('[CoursesPage] coursesApi:', coursesApi)
+      console.log('[CoursesPage] coursesApi.listCourses:', coursesApi.listCourses)
+      
+      // Make the API call and log the raw response
+      console.log('[CoursesPage] Calling coursesApi.listCourses()...')
       const data = await coursesApi.listCourses()
+      
+      console.log('[CoursesPage] ✅ API call completed')
+      console.log('[CoursesPage] Received data from API:', data)
+      console.log('[CoursesPage] Data type:', typeof data)
+      console.log('[CoursesPage] Is array?:', Array.isArray(data))
+      console.log('[CoursesPage] Data length:', Array.isArray(data) ? data.length : 'N/A')
+      console.log('[CoursesPage] Full data:', JSON.stringify(data, null, 2))
+      
+      if (!Array.isArray(data)) {
+        console.error('[CoursesPage] ❌ Data is not an array! Type:', typeof data, 'Value:', data)
+      }
+      
       setCourses(data)
       setFilteredCourses(data)
+      console.log('[CoursesPage] ✅ State updated - courses:', data.length, 'filteredCourses:', data.length)
     } catch (error) {
-      console.error('Failed to load courses:', error)
+      console.error('[CoursesPage] ❌ Failed to load courses:', error)
+      console.error('[CoursesPage] Error type:', error?.constructor?.name)
+      console.error('[CoursesPage] Error details:', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        response: (error as any)?.response?.data,
+        fullError: error
+      })
       toast({
         variant: 'destructive',
         title: 'Failed to load courses',
@@ -48,29 +75,40 @@ export default function CoursesPage() {
       })
     } finally {
       setLoading(false)
+      console.log('[CoursesPage] Loading finished')
     }
   }
 
   const filterCourses = () => {
+    console.log('[CoursesPage.filterCourses] Starting filter - courses:', courses.length)
     let filtered = [...courses]
+    console.log('[CoursesPage.filterCourses] Initial filtered count:', filtered.length)
 
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
+      console.log('[CoursesPage.filterCourses] Applying search filter:', query)
       filtered = filtered.filter(
         (course) =>
           course.title.toLowerCase().includes(query) ||
           course.description?.toLowerCase().includes(query)
       )
+      console.log('[CoursesPage.filterCourses] After search filter:', filtered.length)
     }
 
     // Status filter
     if (statusFilter === 'published') {
+      console.log('[CoursesPage.filterCourses] Applying published filter')
       filtered = filtered.filter((course) => course.isPublished)
+      console.log('[CoursesPage.filterCourses] After published filter:', filtered.length)
     } else if (statusFilter === 'draft') {
+      console.log('[CoursesPage.filterCourses] Applying draft filter')
       filtered = filtered.filter((course) => !course.isPublished)
+      console.log('[CoursesPage.filterCourses] After draft filter:', filtered.length)
     }
 
+    console.log('[CoursesPage.filterCourses] Final filtered count:', filtered.length)
+    console.log('[CoursesPage.filterCourses] Filtered courses:', filtered.map(c => ({ id: c.id, title: c.title, isPublished: c.isPublished })))
     setFilteredCourses(filtered)
   }
 
@@ -97,46 +135,9 @@ export default function CoursesPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-8">
-                <h1
-                  className="text-2xl font-bold text-blue-600 cursor-pointer"
-                  onClick={() => router.push('/dashboard')}
-                >
-                  EduDron Admin
-                </h1>
-                <nav className="hidden md:flex space-x-6">
-                  <button
-                    onClick={() => router.push('/dashboard')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Dashboard
-                  </button>
-                  <button
-                    onClick={() => router.push('/courses')}
-                    className="text-gray-700 hover:text-blue-600 font-medium"
-                  >
-                    Courses
-                  </button>
-                  <button
-                    onClick={() => router.push('/batches')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Batches
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="space-y-6">
           {/* Page Header */}
-          <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center justify-between">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">Course Management</h2>
               <p className="text-gray-600">Create and manage your courses</p>
@@ -291,7 +292,6 @@ export default function CoursesPage() {
               ))}
             </div>
           )}
-        </main>
       </div>
     </ProtectedRoute>
   )

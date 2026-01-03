@@ -3,8 +3,11 @@ package com.datagami.edudron.content.service;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.content.domain.Lecture;
+import com.datagami.edudron.content.domain.LectureContent;
 import com.datagami.edudron.content.domain.Section;
+import com.datagami.edudron.content.dto.LectureContentDTO;
 import com.datagami.edudron.content.dto.LectureDTO;
+import com.datagami.edudron.content.repo.LectureContentRepository;
 import com.datagami.edudron.content.repo.LectureRepository;
 import com.datagami.edudron.content.repo.SectionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +27,9 @@ public class LectureService {
     
     @Autowired
     private SectionRepository sectionRepository;
+    
+    @Autowired
+    private LectureContentRepository lectureContentRepository;
     
     public LectureDTO createLecture(String sectionId, String title, String description, 
                                    Lecture.ContentType contentType) {
@@ -135,6 +141,39 @@ public class LectureService {
         dto.setIsPublished(lecture.getIsPublished());
         dto.setCreatedAt(lecture.getCreatedAt());
         dto.setUpdatedAt(lecture.getUpdatedAt());
+        
+        // Load and include lecture contents
+        List<LectureContent> contents = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(
+            lecture.getId(), lecture.getClientId());
+        List<LectureContentDTO> contentDTOs = contents.stream()
+            .map(this::toContentDTO)
+            .collect(Collectors.toList());
+        dto.setContents(contentDTOs);
+        
+        return dto;
+    }
+    
+    private LectureContentDTO toContentDTO(LectureContent content) {
+        LectureContentDTO dto = new LectureContentDTO();
+        dto.setId(content.getId());
+        dto.setClientId(content.getClientId());
+        dto.setLectureId(content.getLectureId());
+        dto.setContentType(content.getContentType());
+        dto.setTitle(content.getTitle());
+        dto.setDescription(content.getDescription());
+        dto.setFileUrl(content.getFileUrl());
+        dto.setFileSizeBytes(content.getFileSizeBytes());
+        dto.setMimeType(content.getMimeType());
+        dto.setVideoUrl(content.getVideoUrl());
+        dto.setTranscriptUrl(content.getTranscriptUrl());
+        dto.setSubtitleUrls(content.getSubtitleUrls());
+        dto.setThumbnailUrl(content.getThumbnailUrl());
+        dto.setTextContent(content.getTextContent());
+        dto.setExternalUrl(content.getExternalUrl());
+        dto.setEmbeddedCode(content.getEmbeddedCode());
+        dto.setSequence(content.getSequence());
+        dto.setCreatedAt(content.getCreatedAt());
+        dto.setUpdatedAt(content.getUpdatedAt());
         return dto;
     }
 }

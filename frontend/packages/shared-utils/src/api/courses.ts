@@ -63,6 +63,22 @@ export interface Chapter {
   updatedAt: string
 }
 
+export interface LectureContent {
+  id: string
+  lectureId: string
+  contentType: 'VIDEO' | 'PDF' | 'IMAGE' | 'AUDIO' | 'TEXT' | 'LINK' | 'EMBEDDED'
+  title?: string
+  description?: string
+  fileUrl?: string
+  videoUrl?: string
+  textContent?: string
+  externalUrl?: string
+  embeddedCode?: string
+  sequence: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Lecture {
   id: string
   chapterId: string
@@ -73,6 +89,7 @@ export interface Lecture {
   duration?: number
   order: number
   isPublished: boolean
+  contents?: LectureContent[]
   createdAt: string
   updatedAt: string
 }
@@ -103,8 +120,27 @@ export class CoursesApi {
   constructor(private apiClient: ApiClient) {}
 
   async listCourses(params?: { status?: string; instructorId?: string }): Promise<Course[]> {
-    const response = await this.apiClient.get<Course[]>('/content/courses', { params })
-    return Array.isArray(response.data) ? response.data : []
+    console.log('[CoursesApi.listCourses] Starting request with params:', params)
+    const response = await this.apiClient.get<any>('/content/courses', { params })
+    console.log('[CoursesApi.listCourses] Raw response:', response)
+    console.log('[CoursesApi.listCourses] Response data:', response.data)
+    console.log('[CoursesApi.listCourses] Response data type:', typeof response.data)
+    console.log('[CoursesApi.listCourses] Response data is array?:', Array.isArray(response.data))
+    
+    // Handle Spring Data Page response structure: {content: [...], totalElements: ...}
+    if (response.data && response.data.content && Array.isArray(response.data.content)) {
+      console.log('[CoursesApi.listCourses] Found content array, length:', response.data.content.length)
+      console.log('[CoursesApi.listCourses] Content:', response.data.content)
+      return response.data.content
+    }
+    // Fallback: if response is already an array, return it
+    if (Array.isArray(response.data)) {
+      console.log('[CoursesApi.listCourses] Response.data is already an array, length:', response.data.length)
+      return response.data
+    }
+    console.warn('[CoursesApi.listCourses] No valid course data found in response. Returning empty array.')
+    console.warn('[CoursesApi.listCourses] Response structure:', JSON.stringify(response.data, null, 2))
+    return []
   }
 
   async getCourse(id: string): Promise<Course> {

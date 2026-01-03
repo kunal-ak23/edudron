@@ -140,16 +140,27 @@ export class ApiClient {
   }
 
   async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+    console.log('[ApiClient.get] Making request to:', url, 'with config:', config)
     const response: AxiosResponse<any> = await this.client.get(url, config)
+    console.log('[ApiClient.get] Raw axios response:', response)
+    console.log('[ApiClient.get] Response.data:', response.data)
+    console.log('[ApiClient.get] Response.data type:', typeof response.data)
+    console.log('[ApiClient.get] Response.data is array?:', Array.isArray(response.data))
+    console.log('[ApiClient.get] Response.data keys:', response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'N/A')
+    
     const responseData = response.data
     
     // If the response is already in ApiResponse format { data: ... }, return it
     if (responseData && typeof responseData === 'object' && 'data' in responseData && !Array.isArray(responseData)) {
+      console.log('[ApiClient.get] Response already has data property, returning as-is')
       return responseData as ApiResponse<T>
     }
     
     // If the response is a direct value (array, object, etc.), wrap it in ApiResponse format
-    return { data: responseData } as ApiResponse<T>
+    console.log('[ApiClient.get] Wrapping response in ApiResponse format')
+    const wrapped = { data: responseData } as ApiResponse<T>
+    console.log('[ApiClient.get] Wrapped response:', wrapped)
+    return wrapped
   }
 
   async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {

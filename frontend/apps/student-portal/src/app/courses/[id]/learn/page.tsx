@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, Button, Card } from '@edudron/ui-components'
 import { coursesApi, enrollmentsApi } from '@/lib/api'
 import type { Course, Section, Lecture, Progress } from '@edudron/shared-utils'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -207,6 +208,39 @@ export default function LearnPage() {
                         Your browser does not support the video tag.
                       </video>
                     </div>
+                  ) : selectedLecture.contentType === 'TEXT' ? (
+                    <div className="w-full h-full overflow-y-auto bg-gray-900 p-8">
+                      <div className="max-w-4xl mx-auto">
+                        <h2 className="text-3xl font-bold text-white mb-4">{selectedLecture.title}</h2>
+                        {selectedLecture.description && (
+                          <div className="text-gray-400 mb-6">
+                            <MarkdownRenderer content={selectedLecture.description} />
+                          </div>
+                        )}
+                        {/* Text content will be rendered here when available */}
+                        {selectedLecture.contents && selectedLecture.contents.length > 0 ? (
+                          <div className="mt-6 space-y-6">
+                            {selectedLecture.contents
+                              .filter((content: any) => content.contentType === 'TEXT' && content.textContent)
+                              .map((content: any) => (
+                                <div key={content.id}>
+                                  {content.title && (
+                                    <h3 className="text-2xl font-semibold text-white mb-3">{content.title}</h3>
+                                  )}
+                                  <MarkdownRenderer
+                                    content={content.textContent}
+                                    className="text-gray-300"
+                                  />
+                                </div>
+                              ))}
+                          </div>
+                        ) : (
+                          <div className="text-center text-gray-400 mt-8">
+                            <p>Content is being generated. Please check back soon.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   ) : (
                     <div className="text-center text-white p-8">
                       <div className="mb-4">
@@ -226,7 +260,9 @@ export default function LearnPage() {
                       </div>
                       <h3 className="text-xl font-semibold mb-2">{selectedLecture.title}</h3>
                       {selectedLecture.description && (
-                        <p className="text-gray-400">{selectedLecture.description}</p>
+                        <div className="text-gray-400">
+                          <MarkdownRenderer content={selectedLecture.description} />
+                        </div>
                       )}
                     </div>
                   )}
@@ -241,7 +277,9 @@ export default function LearnPage() {
                           {selectedLecture.title}
                         </h2>
                         {selectedLecture.description && (
-                          <p className="text-gray-400 text-sm">{selectedLecture.description}</p>
+                          <div className="text-gray-400 text-sm">
+                            <MarkdownRenderer content={selectedLecture.description} />
+                          </div>
                         )}
                       </div>
                       <Button

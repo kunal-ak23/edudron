@@ -61,7 +61,8 @@ spring:
       # Explicitly ensure custom headers are forwarded
       httpclient:
         connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:10000}
-        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:30s}
+        # Increased timeout to 10 minutes to support long-running operations like course generation
+        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:600s}
         pool:
           type: ELASTIC
           max-connections: 500

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { RichTextEditor } from '@/components/RichTextEditor'
 import {
   Select,
   SelectContent,
@@ -197,11 +198,10 @@ export default function CourseEditPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>Description</Label>
-                        <Textarea
-                          rows={6}
-                          value={course.description || ''}
-                          onChange={(e) => setCourse({ ...course, description: e.target.value })}
-                          placeholder="Enter course description"
+                        <RichTextEditor
+                          content={course.description || ''}
+                          onChange={(content) => setCourse({ ...course, description: content })}
+                          placeholder="Enter course description (supports rich text formatting)"
                         />
                       </div>
                     </div>
