@@ -1,0 +1,18 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0009-course-assignments
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - tableExists:
+            tableName: courses
+            schemaName: content
+      changes:
+        - addColumn:
+            tableName: courses
+            schemaName: content
+            columns:
+              - column: { name: assigned_to_class_ids, type: "text[]" }
+              - column: { name: assigned_to_section_ids, type: "text[]" }
+

@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0008-update-enrollments
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - tableExists:
+            tableName: enrollments
+            schemaName: student
+      changes:
+        - addColumn:
+            tableName: enrollments
+            schemaName: student
+            columns:
+              - column: { name: institute_id, type: varchar(26) }
+              - column: { name: class_id, type: varchar(26) }
+        - createIndex:
+            tableName: enrollments
+            schemaName: student
+            indexName: idx_student_enrollments_institute_id
+            columns:
+              - column: { name: institute_id }
+        - createIndex:
+            tableName: enrollments
+            schemaName: student
+            indexName: idx_student_enrollments_class_id
+            columns:
+              - column: { name: class_id }
+

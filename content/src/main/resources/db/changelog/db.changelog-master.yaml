@@ -35,4 +35,8 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0004-media-assets.yaml
   - include:
       file: db/changelog/db.changelog-0005-course-metadata.yaml
+  - include:
+      file: db/changelog/db.changelog-0006-course-generation-index.yaml
+  - include:
+      file: db/changelog/db.changelog-0009-course-assignments.yaml
 

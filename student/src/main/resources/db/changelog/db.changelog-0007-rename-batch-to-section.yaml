@@ -1,0 +1,50 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0007-rename-batch-to-section
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - tableExists:
+            tableName: batches
+            schemaName: student
+      changes:
+        - createTable:
+            tableName: sections
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: class_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: start_date, type: date }
+              - column: { name: end_date, type: date }
+              - column: { name: max_students, type: integer }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - sql:
+            sql: |
+              -- Migrate data from batches to sections
+              -- Note: This migration sets class_id to NULL initially as we don't have a mapping
+              -- Existing batches will need to be manually mapped to classes or can be migrated later
+              INSERT INTO student.sections (id, client_id, name, description, class_id, start_date, end_date, max_students, is_active, created_at, updated_at)
+              SELECT id, client_id, name, description, NULL as class_id, start_date, end_date, max_students, is_active, created_at, updated_at
+              FROM student.batches;
+        - createIndex:
+            tableName: sections
+            schemaName: student
+            indexName: idx_student_sections_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: sections
+            schemaName: student
+            indexName: idx_student_sections_class_id
+            columns:
+              - column: { name: class_id }
+        - dropTable:
+            tableName: batches
+            schemaName: student
+

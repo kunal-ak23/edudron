@@ -26,6 +26,8 @@ public class CreateCourseRequest {
     
     private Boolean certificateEligible = false;
     private Integer maxCompletionDays;
+    private List<String> assignedToClassIds;
+    private List<String> assignedToSectionIds;
     
     // Getters and Setters
     public String getTitle() { return title; }
@@ -66,5 +68,11 @@ public class CreateCourseRequest {
     
     public Integer getMaxCompletionDays() { return maxCompletionDays; }
     public void setMaxCompletionDays(Integer maxCompletionDays) { this.maxCompletionDays = maxCompletionDays; }
+    
+    public List<String> getAssignedToClassIds() { return assignedToClassIds; }
+    public void setAssignedToClassIds(List<String> assignedToClassIds) { this.assignedToClassIds = assignedToClassIds; }
+    
+    public List<String> getAssignedToSectionIds() { return assignedToSectionIds; }
+    public void setAssignedToSectionIds(List<String> assignedToSectionIds) { this.assignedToSectionIds = assignedToSectionIds; }
 }
 

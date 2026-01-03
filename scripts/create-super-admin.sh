@@ -47,7 +47,9 @@ try:
     import bcrypt
     import sys
     password = sys.argv[1]
-    salt = bcrypt.gensalt()
+    # Use strength 10 (rounds) to match Spring Security BCryptPasswordEncoder default
+    # Strength 10 = 2^10 = 1024 rounds
+    salt = bcrypt.gensalt(rounds=10)
     hash = bcrypt.hashpw(password.encode('utf-8'), salt)
     print(hash.decode('utf-8'))
 except ImportError:

@@ -21,6 +21,8 @@ spring:
             - Path=/api/tenant/**
         
         # Content Service (8082)
+        # Note: Content service routes forward paths as-is (no StripPrefix)
+        # because controllers expect full paths: /content/**, /api/content/**
         - id: content-service
           uri: ${CONTENT_SERVICE_URL:http://localhost:8082}
           predicates:
@@ -30,7 +32,7 @@ spring:
         - id: student-service
           uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
           predicates:
-            - Path=/student/**, /api/student/**
+            - Path=/student/**, /api/student/**, /api/institutes/**, /api/classes/**, /api/sections/**, /api/batches/**, /api/enrollments/**, /api/**
         
         # Payment Service (8084)
         - id: payment-service

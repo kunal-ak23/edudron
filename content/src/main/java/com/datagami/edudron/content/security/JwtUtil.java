@@ -11,10 +11,15 @@ import java.util.function.Function;
 @Component
 public class JwtUtil {
 
-    @Value("${jwt.secret:mySecretKey}")
+    @Value("${jwt.secret:mySecretKey123456789012345678901234567890}")
     private String secret;
 
     private SecretKey getSigningKey() {
+        // Ensure secret is at least 32 bytes (256 bits) for HS256
+        if (secret == null || secret.length() < 32) {
+            throw new IllegalStateException("JWT secret must be at least 32 characters long. Current length: " + 
+                (secret != null ? secret.length() : 0));
+        }
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 

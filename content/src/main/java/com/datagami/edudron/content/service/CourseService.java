@@ -48,6 +48,12 @@ public class CourseService {
         course.setLanguage(request.getLanguage() != null ? request.getLanguage() : "en");
         course.setCertificateEligible(request.getCertificateEligible() != null ? request.getCertificateEligible() : false);
         course.setMaxCompletionDays(request.getMaxCompletionDays());
+        if (request.getAssignedToClassIds() != null) {
+            course.setAssignedToClassIds(request.getAssignedToClassIds());
+        }
+        if (request.getAssignedToSectionIds() != null) {
+            course.setAssignedToSectionIds(request.getAssignedToSectionIds());
+        }
         
         Course saved = courseRepository.save(course);
         return toDTO(saved);
@@ -127,6 +133,12 @@ public class CourseService {
             course.setCertificateEligible(request.getCertificateEligible());
         }
         course.setMaxCompletionDays(request.getMaxCompletionDays());
+        if (request.getAssignedToClassIds() != null) {
+            course.setAssignedToClassIds(request.getAssignedToClassIds());
+        }
+        if (request.getAssignedToSectionIds() != null) {
+            course.setAssignedToSectionIds(request.getAssignedToSectionIds());
+        }
         
         Course saved = courseRepository.save(course);
         return toDTO(saved);
@@ -191,6 +203,8 @@ public class CourseService {
         dto.setCreatedAt(course.getCreatedAt());
         dto.setUpdatedAt(course.getUpdatedAt());
         dto.setPublishedAt(course.getPublishedAt());
+        dto.setAssignedToClassIds(course.getAssignedToClassIds());
+        dto.setAssignedToSectionIds(course.getAssignedToSectionIds());
         // Note: Sections, objectives, instructors, resources are loaded separately
         return dto;
     }

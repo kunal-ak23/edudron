@@ -2,12 +2,16 @@ package com.datagami.edudron.student.service;
 
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.UlidGenerator;
-import com.datagami.edudron.student.domain.Batch;
+import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.Enrollment;
+import com.datagami.edudron.student.domain.Institute;
+import com.datagami.edudron.student.domain.Section;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
 import com.datagami.edudron.student.dto.EnrollmentDTO;
-import com.datagami.edudron.student.repo.BatchRepository;
+import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
+import com.datagami.edudron.student.repo.InstituteRepository;
+import com.datagami.edudron.student.repo.SectionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,7 +32,13 @@ public class EnrollmentService {
     private EnrollmentRepository enrollmentRepository;
     
     @Autowired
-    private BatchRepository batchRepository;
+    private SectionRepository sectionRepository;
+    
+    @Autowired
+    private ClassRepository classRepository;
+    
+    @Autowired
+    private InstituteRepository instituteRepository;
     
     public EnrollmentDTO enrollStudent(String studentId, CreateEnrollmentRequest request) {
         String clientIdStr = TenantContext.getClientId();
@@ -42,26 +52,84 @@ public class EnrollmentService {
             throw new IllegalArgumentException("Student is already enrolled in this course");
         }
         
-        // Validate batch if provided
+        String instituteId = null;
+        String classId = null;
+        String sectionId = null;
+        
+        // Validate hierarchy if provided
         if (request.getBatchId() != null && !request.getBatchId().isBlank()) {
-            Batch batch = batchRepository.findByIdAndClientId(request.getBatchId(), clientId)
-                .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + request.getBatchId()));
+            // batchId now represents sectionId
+            final String finalSectionId = request.getBatchId();
+            Section section = sectionRepository.findByIdAndClientId(finalSectionId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Section not found: " + finalSectionId));
             
-            if (!batch.getCourseId().equals(request.getCourseId())) {
-                throw new IllegalArgumentException("Batch does not belong to the specified course");
+            if (!section.getIsActive()) {
+                throw new IllegalArgumentException("Section is not active");
             }
             
-            if (!batch.getIsActive()) {
-                throw new IllegalArgumentException("Batch is not active");
+            // Get class from section
+            final String finalClassId = section.getClassId();
+            Class classEntity = classRepository.findByIdAndClientId(finalClassId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Class not found: " + finalClassId));
+            
+            if (!classEntity.getIsActive()) {
+                throw new IllegalArgumentException("Class is not active");
             }
             
-            // Check batch capacity
-            if (batch.getMaxStudents() != null) {
-                long currentCount = batchRepository.countStudentsInBatch(clientId, batch.getId());
-                if (currentCount >= batch.getMaxStudents()) {
-                    throw new IllegalArgumentException("Batch is full");
+            // Get institute from class
+            final String finalInstituteId = classEntity.getInstituteId();
+            Institute institute = instituteRepository.findByIdAndClientId(finalInstituteId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Institute not found: " + finalInstituteId));
+            
+            if (!institute.getIsActive()) {
+                throw new IllegalArgumentException("Institute is not active");
+            }
+            
+            // Check section capacity
+            if (section.getMaxStudents() != null) {
+                long currentCount = sectionRepository.countStudentsInSection(clientId, section.getId());
+                if (currentCount >= section.getMaxStudents()) {
+                    throw new IllegalArgumentException("Section is full");
                 }
             }
+            
+            // Assign to outer variables after validation
+            sectionId = finalSectionId;
+            classId = finalClassId;
+            instituteId = finalInstituteId;
+        } else if (request.getClassId() != null && !request.getClassId().isBlank()) {
+            // If classId is provided but no sectionId, validate class
+            final String finalClassId = request.getClassId();
+            Class classEntity = classRepository.findByIdAndClientId(finalClassId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Class not found: " + finalClassId));
+            
+            if (!classEntity.getIsActive()) {
+                throw new IllegalArgumentException("Class is not active");
+            }
+            
+            final String finalInstituteId = classEntity.getInstituteId();
+            Institute institute = instituteRepository.findByIdAndClientId(finalInstituteId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Institute not found: " + finalInstituteId));
+            
+            if (!institute.getIsActive()) {
+                throw new IllegalArgumentException("Institute is not active");
+            }
+            
+            // Assign to outer variables after validation
+            classId = finalClassId;
+            instituteId = finalInstituteId;
+        } else if (request.getInstituteId() != null && !request.getInstituteId().isBlank()) {
+            // If only instituteId is provided, validate it
+            final String finalInstituteId = request.getInstituteId();
+            Institute institute = instituteRepository.findByIdAndClientId(finalInstituteId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Institute not found: " + finalInstituteId));
+            
+            if (!institute.getIsActive()) {
+                throw new IllegalArgumentException("Institute is not active");
+            }
+            
+            // Assign to outer variable after validation
+            instituteId = finalInstituteId;
         }
         
         Enrollment enrollment = new Enrollment();
@@ -69,7 +137,9 @@ public class EnrollmentService {
         enrollment.setClientId(clientId);
         enrollment.setStudentId(studentId);
         enrollment.setCourseId(request.getCourseId());
-        enrollment.setBatchId(request.getBatchId());
+        enrollment.setBatchId(sectionId); // Keep batchId for backward compatibility
+        enrollment.setInstituteId(instituteId);
+        enrollment.setClassId(classId);
         
         Enrollment saved = enrollmentRepository.save(enrollment);
         return toDTO(saved);
@@ -154,7 +224,9 @@ public class EnrollmentService {
         dto.setClientId(enrollment.getClientId());
         dto.setStudentId(enrollment.getStudentId());
         dto.setCourseId(enrollment.getCourseId());
-        dto.setBatchId(enrollment.getBatchId());
+        dto.setBatchId(enrollment.getBatchId()); // Keep for backward compatibility
+        dto.setInstituteId(enrollment.getInstituteId());
+        dto.setClassId(enrollment.getClassId());
         dto.setEnrolledAt(enrollment.getEnrolledAt());
         return dto;
     }

@@ -1,0 +1,232 @@
+package com.datagami.edudron.content.service;
+
+import com.azure.storage.blob.BlobClient;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.models.BlobHttpHeaders;
+import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.content.constants.MediaFolderConstants;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.UUID;
+
+@Service
+public class MediaUploadService {
+
+    @Autowired(required = false)
+    private BlobServiceClient blobServiceClient;
+
+    @Value("${azure.storage.container-name:edudron-media}")
+    private String containerName;
+
+    @Value("${azure.storage.base-url:}")
+    private String baseUrl;
+
+    private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+    private static final long MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
+
+    public String uploadImage(MultipartFile file, String folder) throws IOException {
+        return uploadImage(file, folder, null);
+    }
+
+    public String uploadImage(MultipartFile file, String folder, String tenantId) throws IOException {
+        if (blobServiceClient == null) {
+            throw new IllegalStateException("Azure Storage is not configured");
+        }
+
+        // Validate file
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty");
+        }
+
+        // Validate file type
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("image/")) {
+            throw new IllegalArgumentException("File must be an image");
+        }
+
+        // Validate file size
+        if (file.getSize() > MAX_IMAGE_SIZE) {
+            throw new IllegalArgumentException("Image size must be less than 10MB");
+        }
+
+        // Validate folder name
+        if (!MediaFolderConstants.isValidFolder(folder)) {
+            throw new IllegalArgumentException("Invalid folder name. Allowed folders: " + 
+                String.join(", ",
+                    MediaFolderConstants.COURSES,
+                    MediaFolderConstants.THUMBNAILS,
+                    MediaFolderConstants.VIDEOS,
+                    MediaFolderConstants.PREVIEW_VIDEOS,
+                    MediaFolderConstants.LECTURES,
+                    MediaFolderConstants.ASSESSMENTS,
+                    MediaFolderConstants.RESOURCES,
+                    MediaFolderConstants.INSTRUCTORS,
+                    MediaFolderConstants.TEMP,
+                    MediaFolderConstants.LOGOS,
+                    MediaFolderConstants.FAVICONS));
+        }
+
+        // Get tenant ID from context if not provided
+        if (tenantId == null) {
+            tenantId = TenantContext.getClientId();
+            if (tenantId == null) {
+                throw new IllegalStateException("Tenant context is not set");
+            }
+        }
+
+        // Generate unique filename with tenant-based structure
+        String originalFilename = file.getOriginalFilename();
+        String extension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+        String uniqueId = UUID.randomUUID().toString();
+        // Structure: tenantId/folder/yyyy/MM/dd/uniqueId.extension
+        String fileName = String.format("%s/%s/%s/%s%s", tenantId, folder, timestamp, uniqueId, extension);
+
+        // Get container client
+        BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
+        
+        // Create container if it doesn't exist
+        if (!containerClient.exists()) {
+            containerClient.create();
+        }
+
+        // Get blob client
+        BlobClient blobClient = containerClient.getBlobClient(fileName);
+
+        // Set content type
+        BlobHttpHeaders headers = new BlobHttpHeaders()
+                .setContentType(contentType);
+
+        // Upload file
+        blobClient.upload(file.getInputStream(), file.getSize(), true);
+        blobClient.setHttpHeaders(headers);
+
+        // Return public URL
+        if (!baseUrl.isEmpty()) {
+            return String.format("%s/%s/%s", baseUrl, containerName, fileName);
+        } else {
+            return blobClient.getBlobUrl();
+        }
+    }
+
+    public String uploadVideo(MultipartFile file, String folder) throws IOException {
+        return uploadVideo(file, folder, null);
+    }
+
+    public String uploadVideo(MultipartFile file, String folder, String tenantId) throws IOException {
+        if (blobServiceClient == null) {
+            throw new IllegalStateException("Azure Storage is not configured");
+        }
+
+        // Validate file
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty");
+        }
+
+        // Validate file type
+        String contentType = file.getContentType();
+        if (contentType == null || !contentType.startsWith("video/")) {
+            throw new IllegalArgumentException("File must be a video");
+        }
+
+        // Validate file size
+        if (file.getSize() > MAX_VIDEO_SIZE) {
+            throw new IllegalArgumentException("Video size must be less than 500MB");
+        }
+
+        // Validate folder name
+        if (!MediaFolderConstants.isValidFolder(folder)) {
+            throw new IllegalArgumentException("Invalid folder name");
+        }
+
+        // Get tenant ID from context if not provided
+        if (tenantId == null) {
+            tenantId = TenantContext.getClientId();
+            if (tenantId == null) {
+                throw new IllegalStateException("Tenant context is not set");
+            }
+        }
+
+        // Generate unique filename with tenant-based structure
+        String originalFilename = file.getOriginalFilename();
+        String extension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+        String uniqueId = UUID.randomUUID().toString();
+        // Structure: tenantId/folder/yyyy/MM/dd/uniqueId.extension
+        String fileName = String.format("%s/%s/%s/%s%s", tenantId, folder, timestamp, uniqueId, extension);
+
+        // Get container client
+        BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
+        
+        // Create container if it doesn't exist
+        if (!containerClient.exists()) {
+            containerClient.create();
+        }
+
+        // Get blob client
+        BlobClient blobClient = containerClient.getBlobClient(fileName);
+
+        // Set content type
+        BlobHttpHeaders headers = new BlobHttpHeaders()
+                .setContentType(contentType);
+
+        // Upload file
+        blobClient.upload(file.getInputStream(), file.getSize(), true);
+        blobClient.setHttpHeaders(headers);
+
+        // Return public URL
+        if (!baseUrl.isEmpty()) {
+            return String.format("%s/%s/%s", baseUrl, containerName, fileName);
+        } else {
+            return blobClient.getBlobUrl();
+        }
+    }
+
+    public void deleteMedia(String mediaUrl) {
+        if (blobServiceClient == null) {
+            return; // Silently fail if Azure Storage is not configured
+        }
+        
+        try {
+            // Extract blob name from URL
+            String blobName = extractBlobNameFromUrl(mediaUrl);
+            if (blobName != null) {
+                BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
+                BlobClient blobClient = containerClient.getBlobClient(blobName);
+                blobClient.deleteIfExists();
+            }
+        } catch (Exception e) {
+            // Log error but don't throw exception to avoid breaking the main operation
+            System.err.println("Failed to delete media: " + mediaUrl + ", Error: " + e.getMessage());
+        }
+    }
+
+    private String extractBlobNameFromUrl(String mediaUrl) {
+        try {
+            // Extract blob name from URL like: https://account.blob.core.windows.net/container/folder/file.jpg
+            String[] parts = mediaUrl.split("/" + containerName + "/");
+            if (parts.length > 1) {
+                return parts[1];
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to extract blob name from URL: " + mediaUrl);
+        }
+        return null;
+    }
+}
+

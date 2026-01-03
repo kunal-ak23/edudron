@@ -7,4 +7,12 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0003-assessment-submissions.yaml
   - include:
       file: db/changelog/db.changelog-0004-batches.yaml
+  - include:
+      file: db/changelog/db.changelog-0005-institutes.yaml
+  - include:
+      file: db/changelog/db.changelog-0006-classes.yaml
+  - include:
+      file: db/changelog/db.changelog-0007-rename-batch-to-section.yaml
+  - include:
+      file: db/changelog/db.changelog-0008-update-enrollments.yaml
 

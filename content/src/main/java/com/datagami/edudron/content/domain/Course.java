@@ -44,6 +44,12 @@ public class Course {
     @Column(length = 10)
     private String language = "en";
 
+    // Class/Section Assignments
+    @Column(columnDefinition = "text[]")
+    private List<String> assignedToClassIds = new ArrayList<>();
+    @Column(columnDefinition = "text[]")
+    private List<String> assignedToSectionIds = new ArrayList<>();
+
     // Statistics
     @Column(nullable = false)
     private Integer totalDurationSeconds = 0;
@@ -142,6 +148,12 @@ public class Course {
 
     public String getLanguage() { return language; }
     public void setLanguage(String language) { this.language = language; }
+
+    public List<String> getAssignedToClassIds() { return assignedToClassIds; }
+    public void setAssignedToClassIds(List<String> assignedToClassIds) { this.assignedToClassIds = assignedToClassIds; }
+
+    public List<String> getAssignedToSectionIds() { return assignedToSectionIds; }
+    public void setAssignedToSectionIds(List<String> assignedToSectionIds) { this.assignedToSectionIds = assignedToSectionIds; }
 
     public Integer getTotalDurationSeconds() { return totalDurationSeconds; }
     public void setTotalDurationSeconds(Integer totalDurationSeconds) { this.totalDurationSeconds = totalDurationSeconds; }

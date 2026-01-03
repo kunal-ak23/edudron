@@ -19,7 +19,11 @@ public class Enrollment {
     @Column(nullable = false)
     private String courseId;
 
-    private String batchId;
+    private String batchId; // Now represents Section ID (kept for backward compatibility)
+
+    private String instituteId;
+
+    private String classId;
 
     @Column(nullable = false)
     private OffsetDateTime enrolledAt;
@@ -52,6 +56,12 @@ public class Enrollment {
 
     public String getBatchId() { return batchId; }
     public void setBatchId(String batchId) { this.batchId = batchId; }
+
+    public String getInstituteId() { return instituteId; }
+    public void setInstituteId(String instituteId) { this.instituteId = instituteId; }
+
+    public String getClassId() { return classId; }
+    public void setClassId(String classId) { this.classId = classId; }
 
     public OffsetDateTime getEnrolledAt() { return enrolledAt; }
     public void setEnrolledAt(OffsetDateTime enrolledAt) { this.enrolledAt = enrolledAt; }

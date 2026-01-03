@@ -1,0 +1,256 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { ProtectedRoute } from '@edudron/ui-components'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { apiClient } from '@/lib/api'
+
+export const dynamic = 'force-dynamic'
+
+interface CreateUserRequest {
+  email: string
+  password: string
+  name: string
+  phone?: string
+  role: string
+  active?: boolean
+}
+
+export default function NewUserPage() {
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [formData, setFormData] = useState<CreateUserRequest>({
+    email: '',
+    password: '',
+    name: '',
+    phone: '',
+    role: 'STUDENT',
+    active: true
+  })
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  const handleRoleChange = (value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      role: value
+    }))
+  }
+
+  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: checked
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setLoading(true)
+
+    try {
+      await apiClient.post('/idp/users', formData)
+      router.push('/users')
+    } catch (err: any) {
+      console.error('Failed to create user:', err)
+      setError(err.response?.data?.message || err.message || 'Failed to create user')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white shadow-sm border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between items-center h-16">
+              <div className="flex items-center space-x-8">
+                <h1
+                  className="text-2xl font-bold text-blue-600 cursor-pointer"
+                  onClick={() => router.push('/dashboard')}
+                >
+                  EduDron Admin
+                </h1>
+                <nav className="hidden md:flex space-x-6">
+                  <button
+                    onClick={() => router.push('/dashboard')}
+                    className="text-gray-700 hover:text-blue-600"
+                  >
+                    Dashboard
+                  </button>
+                  <button
+                    onClick={() => router.push('/users')}
+                    className="text-gray-700 hover:text-blue-600 font-medium"
+                  >
+                    Users
+                  </button>
+                </nav>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-6">
+            <Button variant="ghost" onClick={() => router.back()}>
+              ← Back to Users
+            </Button>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New User</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {error && (
+                <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-md">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="name">
+                    Full Name <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="name"
+                    name="name"
+                    type="text"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    required
+                    placeholder="John Doe"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">
+                    Email <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="email"
+                    name="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    required
+                    placeholder="john.doe@example.com"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password">
+                    Password <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    required
+                    minLength={8}
+                    placeholder="At least 8 characters"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Password must be at least 8 characters long
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone (Optional)</Label>
+                  <Input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    placeholder="+1234567890"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="role">
+                    Role <span className="text-destructive">*</span>
+                  </Label>
+                  <Select value={formData.role} onValueChange={handleRoleChange}>
+                    <SelectTrigger id="role">
+                      <SelectValue placeholder="Select a role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="STUDENT">Student</SelectItem>
+                      <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
+                      <SelectItem value="CONTENT_MANAGER">Content Manager</SelectItem>
+                      <SelectItem value="TENANT_ADMIN">Tenant Admin</SelectItem>
+                      <SelectItem value="SUPPORT_STAFF">Support Staff</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground">
+                    Note: SYSTEM_ADMIN cannot be created through this interface
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    id="active"
+                    name="active"
+                    type="checkbox"
+                    checked={formData.active}
+                    onChange={handleCheckboxChange}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <Label htmlFor="active" className="font-normal cursor-pointer">
+                    Active (User can login)
+                  </Label>
+                </div>
+
+                <div className="flex justify-end space-x-4 pt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => router.back()}
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={loading}>
+                    {loading ? 'Creating...' : 'Create User'}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    </ProtectedRoute>
+  )
+}
+

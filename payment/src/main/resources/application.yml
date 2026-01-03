@@ -38,3 +38,7 @@ springdoc:
 server:
   port: ${PAYMENT_SERVICE_PORT:8084}
 
+# JWT Configuration (must match Identity service)
+jwt:
+  secret: ${JWT_SECRET:mySecretKey123456789012345678901234567890}
+

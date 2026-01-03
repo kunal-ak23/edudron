@@ -25,6 +25,31 @@ dependencies {
 	implementation 'com.azure:azure-storage-blob:12.23.1'
 	implementation 'com.azure:azure-identity:1.10.4'
 
+	// Azure OpenAI SDK
+	implementation 'com.azure:azure-ai-openai:1.0.0-beta.8'
+	
+	// Resolve Netty version conflict
+	// Force Netty to match Spring Boot's expected version (4.1.101.Final)
+	// This prevents version mismatch warnings between Azure SDK and Spring Boot
+	configurations.all {
+		resolutionStrategy {
+			force 'io.netty:netty-common:4.1.101.Final'
+			force 'io.netty:netty-handler:4.1.101.Final'
+			force 'io.netty:netty-handler-proxy:4.1.101.Final'
+			force 'io.netty:netty-buffer:4.1.101.Final'
+			force 'io.netty:netty-codec:4.1.101.Final'
+			force 'io.netty:netty-codec-http:4.1.101.Final'
+			force 'io.netty:netty-codec-http2:4.1.101.Final'
+			force 'io.netty:netty-transport-native-unix-common:4.1.101.Final'
+			force 'io.netty:netty-transport-native-epoll:4.1.101.Final'
+			force 'io.netty:netty-transport-native-kqueue:4.1.101.Final'
+		}
+	}
+
+	// Text extraction libraries
+	implementation 'org.apache.tika:tika-core:2.9.1'
+	implementation 'org.apache.tika:tika-parsers-standard-package:2.9.1'
+
 	// Dotenv for loading .env files
 	implementation 'io.github.cdimascio:dotenv-java:3.0.0'
 

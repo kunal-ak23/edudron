@@ -1,0 +1,46 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0005-institutes
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: institutes
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: institutes
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: code, type: varchar(100), constraints: { nullable: false } }
+              - column: { name: type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: address, type: text }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: institutes
+            schemaName: student
+            indexName: idx_student_institutes_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: institutes
+            schemaName: student
+            indexName: idx_student_institutes_client_code
+            columns:
+              - column: { name: client_id }
+              - column: { name: code }
+            unique: true
+        - createIndex:
+            tableName: institutes
+            schemaName: student
+            indexName: idx_student_institutes_is_active
+            columns:
+              - column: { name: is_active }
+

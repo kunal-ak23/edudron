@@ -1,0 +1,172 @@
+services:
+  # Database
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    container_name: edudron-postgres-dev
+    environment:
+      POSTGRES_DB: edudron
+      POSTGRES_USER: edudron
+      POSTGRES_PASSWORD: edudron
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edudron -d edudron"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - edudron-dev
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    container_name: edudron-redis-dev
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata-dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - edudron-dev
+
+  # Identity Service
+  identity-service:
+    build:
+      context: .
+      dockerfile: identity/Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: edudron-identity-dev
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=edudron
+      - DB_USERNAME=edudron
+      - DB_PASSWORD=edudron
+      - IDENTITY_SERVICE_PORT=8081
+      - JWT_SECRET=devSecretKey123456789012345678901234567890
+      - JWT_EXPIRATION=86400
+      - JWT_REFRESH_EXPIRATION=604800
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - edudron-dev
+    restart: unless-stopped
+
+  # Content Service
+  content-service:
+    build:
+      context: .
+      dockerfile: content/Dockerfile
+    container_name: edudron-content-dev
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=edudron
+      - DB_USERNAME=edudron
+      - DB_PASSWORD=edudron
+      - CONTENT_SERVICE_PORT=8082
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - edudron-dev
+    restart: unless-stopped
+
+  # Student Service
+  student-service:
+    build:
+      context: .
+      dockerfile: student/Dockerfile
+    container_name: edudron-student-dev
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=edudron
+      - DB_USERNAME=edudron
+      - DB_PASSWORD=edudron
+      - STUDENT_SERVICE_PORT=8083
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - edudron-dev
+    restart: unless-stopped
+
+  # Payment Service
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment/Dockerfile
+    container_name: edudron-payment-dev
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=edudron
+      - DB_USERNAME=edudron
+      - DB_PASSWORD=edudron
+      - PAYMENT_SERVICE_PORT=8084
+    ports:
+      - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - edudron-dev
+    restart: unless-stopped
+
+  # Gateway Service
+  gateway-service:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: edudron-gateway-dev
+    environment:
+      - GATEWAY_SERVICE_PORT=8080
+      - IDENTITY_SERVICE_URL=http://identity-service:8081
+      - CONTENT_SERVICE_URL=http://content-service:8082
+      - STUDENT_SERVICE_URL=http://student-service:8083
+      - PAYMENT_SERVICE_URL=http://payment-service:8084
+    ports:
+      - "8080:8080"
+    depends_on:
+      - identity-service
+      - content-service
+      - student-service
+      - payment-service
+    networks:
+      - edudron-dev
+    restart: unless-stopped
+
+volumes:
+  pgdata-dev:
+  redisdata-dev:
+
+networks:
+  edudron-dev:
+    driver: bridge
+

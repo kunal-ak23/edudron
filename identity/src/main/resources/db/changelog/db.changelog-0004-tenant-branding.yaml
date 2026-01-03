@@ -1,0 +1,42 @@
+databaseChangeLog:
+  - changeSet:
+      id: common-0004-tenant-branding
+      author: edudron
+      changes:
+        - createTable:
+            tableName: tenant_branding
+            schemaName: common
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false, unique: true } }
+              - column: { name: primary_color, type: varchar(7), defaultValue: '#3b82f6', constraints: { nullable: false } }
+              - column: { name: secondary_color, type: varchar(7), defaultValue: '#64748b', constraints: { nullable: false } }
+              - column: { name: accent_color, type: varchar(7) }
+              - column: { name: background_color, type: varchar(7), defaultValue: '#ffffff' }
+              - column: { name: surface_color, type: varchar(7), defaultValue: '#f8fafc' }
+              - column: { name: text_primary_color, type: varchar(7), defaultValue: '#0f172a' }
+              - column: { name: text_secondary_color, type: varchar(7), defaultValue: '#64748b' }
+              - column: { name: logo_url, type: text }
+              - column: { name: favicon_url, type: text }
+              - column: { name: font_family, type: varchar(100), defaultValue: 'Inter' }
+              - column: { name: font_heading, type: varchar(100) }
+              - column: { name: border_radius, type: varchar(20), defaultValue: '0.5rem' }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: tenant_branding
+            schemaName: common
+            indexName: idx_tenant_branding_client_id
+            columns:
+              - column: { name: client_id }
+        - addForeignKeyConstraint:
+            baseTableName: tenant_branding
+            baseTableSchemaName: common
+            constraintName: fk_tenant_branding_client_id
+            referencedTableName: clients
+            referencedTableSchemaName: common
+            baseColumnNames: client_id
+            referencedColumnNames: id
+            onDelete: CASCADE
+

@@ -42,13 +42,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String username = jwtUtil.extractUsername(token);
                 
                 // Set tenant context from token or header
-                if (tenantId != null) {
+                // For SYSTEM_ADMIN users, token may have "PENDING_TENANT_SELECTION" or "SYSTEM"
+                // In that case, use the X-Client-Id header if provided
+                boolean isPlaceholderTenant = tenantId != null && 
+                    ("PENDING_TENANT_SELECTION".equals(tenantId) || "SYSTEM".equals(tenantId));
+                
+                if (tenantId != null && !isPlaceholderTenant) {
+                    // Use tenant from token if it's a valid tenant ID
                     TenantContext.setClientId(tenantId);
                 } else {
-                    // Fallback to header if token doesn't have tenant
+                    // Fallback to header if token doesn't have tenant or has placeholder
                     String tenantHeader = request.getHeader("X-Client-Id");
-                    if (tenantHeader != null) {
+                    if (tenantHeader != null && !tenantHeader.isBlank()) {
                         TenantContext.setClientId(tenantHeader);
+                    } else if (isPlaceholderTenant) {
+                        // Log warning if we have placeholder but no header
+                        logger.warn("JWT token has placeholder tenant (" + tenantId + ") but no X-Client-Id header provided");
                     }
                 }
                 

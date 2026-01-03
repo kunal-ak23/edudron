@@ -6,7 +6,11 @@ public class CreateEnrollmentRequest {
     @NotBlank(message = "Course ID is required")
     private String courseId;
     
-    private String batchId; // Optional: enroll in a specific batch
+    private String batchId; // Now represents Section ID (kept for backward compatibility)
+    
+    private String instituteId;
+    
+    private String classId; // Optional: enroll in a specific batch
 
     // Constructors
     public CreateEnrollmentRequest() {}
@@ -17,5 +21,11 @@ public class CreateEnrollmentRequest {
 
     public String getBatchId() { return batchId; }
     public void setBatchId(String batchId) { this.batchId = batchId; }
+
+    public String getInstituteId() { return instituteId; }
+    public void setInstituteId(String instituteId) { this.instituteId = instituteId; }
+
+    public String getClassId() { return classId; }
+    public void setClassId(String classId) { this.classId = classId; }
 }
 

@@ -2,6 +2,8 @@ package com.datagami.edudron.content.web;
 
 import com.datagami.edudron.content.dto.CourseDTO;
 import com.datagami.edudron.content.dto.CreateCourseRequest;
+import com.datagami.edudron.content.dto.GenerateCourseRequest;
+import com.datagami.edudron.content.service.CourseGenerationService;
 import com.datagami.edudron.content.service.CourseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -14,12 +16,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/courses")
+@RequestMapping("/content/courses")
 @Tag(name = "Courses", description = "Course management endpoints")
 public class CourseController {
 
     @Autowired
     private CourseService courseService;
+    
+    @Autowired
+    private CourseGenerationService courseGenerationService;
 
     @GetMapping
     @Operation(summary = "List courses", description = "Get paginated list of courses with optional filters")
@@ -81,6 +86,16 @@ public class CourseController {
     public ResponseEntity<CourseDTO> publishCourse(@PathVariable String id) {
         CourseDTO course = courseService.publishCourse(id);
         return ResponseEntity.ok(course);
+    }
+
+    @PostMapping("/generate")
+    @Operation(
+        summary = "Generate course from prompt",
+        description = "Automatically generate a complete course with sections, lectures, and content from a natural language prompt. This is a long-running operation that may take several minutes."
+    )
+    public ResponseEntity<CourseDTO> generateCourse(@Valid @RequestBody GenerateCourseRequest request) {
+        CourseDTO course = courseGenerationService.generateCourseFromPrompt(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(course);
     }
 }
 

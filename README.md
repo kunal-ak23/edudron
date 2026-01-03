@@ -29,11 +29,26 @@ EduDron follows a microservices architecture with the following services:
 - Docker and Docker Compose
 - Gradle 8.5+
 
+### Quick Dev Deployment
+
+For a complete development deployment guide with multiple options, see [DEV_DEPLOYMENT.md](DEV_DEPLOYMENT.md).
+
+**Quick start with Docker (recommended):**
+```bash
+# Option 1: Full deployment (database + services)
+./scripts/deploy-dev.sh
+# Select option 1 when prompted
+
+# Option 2: Services only (if DB/Redis already running)
+./scripts/deploy-dev.sh
+# Select option 2 when prompted
+```
+
 ### Local Development
 
 1. **Start database and Redis:**
    ```bash
-   docker-compose up -d
+   docker-compose -f docker-compose.db-only.yml up -d
    ```
 
 2. **Start all services:**

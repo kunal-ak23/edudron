@@ -48,8 +48,11 @@ public class AuthController {
             AuthResponse response = authService.refreshToken(refreshToken);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
+            // Re-throw with more specific error message
+            // This will be handled by global exception handler if configured
             throw new RuntimeException("Token refresh failed: " + e.getMessage());
         } catch (Exception e) {
+            // Log unexpected errors but don't expose internal details
             throw new RuntimeException("Token refresh failed: Invalid refresh token");
         }
     }

@@ -1,0 +1,54 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0006-classes
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: classes
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: classes
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: institute_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: code, type: varchar(100), constraints: { nullable: false } }
+              - column: { name: academic_year, type: varchar(20) }
+              - column: { name: grade, type: varchar(50) }
+              - column: { name: level, type: varchar(50) }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: classes
+            schemaName: student
+            indexName: idx_student_classes_institute_id
+            columns:
+              - column: { name: institute_id }
+        - createIndex:
+            tableName: classes
+            schemaName: student
+            indexName: idx_student_classes_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: classes
+            schemaName: student
+            indexName: idx_student_classes_institute_code
+            columns:
+              - column: { name: institute_id }
+              - column: { name: code }
+            unique: true
+        - createIndex:
+            tableName: classes
+            schemaName: student
+            indexName: idx_student_classes_is_active
+            columns:
+              - column: { name: is_active }
+

@@ -1,0 +1,42 @@
+databaseChangeLog:
+  # Course Generation Index table
+  - changeSet:
+      id: content-0012-course-generation-index
+      author: edudron
+      changes:
+        - createTable:
+            tableName: course_generation_index
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: title, type: text, constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: index_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: file_url, type: text }
+              - column: { name: file_size_bytes, type: bigint }
+              - column: { name: mime_type, type: varchar(100) }
+              - column: { name: extracted_text, type: text }
+              - column: { name: writing_format, type: text }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: course_generation_index
+            schemaName: content
+            indexName: idx_content_course_gen_index_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: course_generation_index
+            schemaName: content
+            indexName: idx_content_course_gen_index_type
+            columns:
+              - column: { name: index_type }
+        - createIndex:
+            tableName: course_generation_index
+            schemaName: content
+            indexName: idx_content_course_gen_index_active
+            columns:
+              - column: { name: is_active }
+

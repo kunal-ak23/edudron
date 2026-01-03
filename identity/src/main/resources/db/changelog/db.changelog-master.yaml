@@ -48,4 +48,6 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0002-users-auth.yaml
   - include:
       file: db/changelog/db.changelog-0003-system-admin-fix.yaml
+  - include:
+      file: db/changelog/db.changelog-0004-tenant-branding.yaml
 

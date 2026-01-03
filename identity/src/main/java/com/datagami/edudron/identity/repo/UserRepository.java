@@ -23,5 +23,8 @@ public interface UserRepository extends JpaRepository<User, String> {
     
     // Find all active users for a specific tenant
     List<User> findByClientIdAndActiveTrue(UUID clientId);
+    
+    // Find all users for a specific tenant (active and inactive)
+    List<User> findByClientId(UUID clientId);
 }
 

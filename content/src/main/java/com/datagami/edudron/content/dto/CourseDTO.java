@@ -27,6 +27,8 @@ public class CourseDTO {
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
     private OffsetDateTime publishedAt;
+    private List<String> assignedToClassIds;
+    private List<String> assignedToSectionIds;
     
     // Nested DTOs
     private List<SectionDTO> sections;
@@ -112,5 +114,11 @@ public class CourseDTO {
     
     public List<CourseResourceDTO> getResources() { return resources; }
     public void setResources(List<CourseResourceDTO> resources) { this.resources = resources; }
+    
+    public List<String> getAssignedToClassIds() { return assignedToClassIds; }
+    public void setAssignedToClassIds(List<String> assignedToClassIds) { this.assignedToClassIds = assignedToClassIds; }
+    
+    public List<String> getAssignedToSectionIds() { return assignedToSectionIds; }
+    public void setAssignedToSectionIds(List<String> assignedToSectionIds) { this.assignedToSectionIds = assignedToSectionIds; }
 }
 
