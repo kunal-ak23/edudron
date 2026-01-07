@@ -1,5 +1,6 @@
 package com.datagami.edudron.student.web;
 
+import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -54,6 +55,15 @@ public class GlobalExceptionHandler {
         }
         
         return ResponseEntity.status(status).body(error);
+    }
+
+    @ExceptionHandler(IncorrectResultSizeDataAccessException.class)
+    public ResponseEntity<Map<String, Object>> handleIncorrectResultSizeDataAccessException(IncorrectResultSizeDataAccessException ex) {
+        Map<String, Object> error = new HashMap<>();
+        error.put("error", "An unexpected error occurred: " + ex.getMessage());
+        // Log the full exception for debugging
+        ex.printStackTrace();
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
 
     @ExceptionHandler(Exception.class)

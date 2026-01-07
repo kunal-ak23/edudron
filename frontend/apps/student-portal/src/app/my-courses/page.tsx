@@ -27,15 +27,18 @@ export default function MyCoursesPage() {
       const enrollmentsData = await enrollmentsApi.listEnrollments()
       setEnrollments(enrollmentsData)
 
-      // Load course details and progress for each enrollment
-      const coursePromises = enrollmentsData.map((enrollment) =>
-        coursesApi.getCourse(enrollment.courseId).catch(() => null)
+      // Deduplicate course IDs to avoid fetching the same course multiple times
+      const uniqueCourseIds = Array.from(new Set(enrollmentsData.map(e => e.courseId)))
+      
+      // Load course details only for unique courses
+      const coursePromises = uniqueCourseIds.map((courseId) =>
+        coursesApi.getCourse(courseId).catch(() => null)
       )
       const coursesData = await Promise.all(coursePromises)
       const coursesMap: Record<string, Course> = {}
       coursesData.forEach((course, index) => {
         if (course) {
-          coursesMap[enrollmentsData[index].courseId] = course
+          coursesMap[uniqueCourseIds[index]] = course
         }
       })
       setCourses(coursesMap)

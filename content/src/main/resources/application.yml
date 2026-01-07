@@ -16,6 +16,15 @@ spring:
     change-log: classpath:/db/changelog/db.changelog-master.yaml
     default-schema: public
     liquibase-schema: public
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
+      repositories:
+        enabled: false
   jackson:
     serialization:
       write-dates-as-timestamps: false

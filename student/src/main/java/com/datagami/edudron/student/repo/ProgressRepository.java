@@ -20,7 +20,13 @@ public interface ProgressRepository extends JpaRepository<Progress, String> {
         @Param("lectureId") String lectureId
     );
     
-    List<Progress> findByClientIdAndStudentIdAndCourseId(UUID clientId, String studentId, String courseId);
+    @Query("SELECT p FROM Progress p WHERE p.clientId = :clientId AND p.studentId = :studentId " +
+           "AND p.courseId = :courseId ORDER BY p.lastAccessedAt DESC NULLS LAST, p.updatedAt DESC")
+    List<Progress> findByClientIdAndStudentIdAndCourseId(
+        @Param("clientId") UUID clientId,
+        @Param("studentId") String studentId,
+        @Param("courseId") String courseId
+    );
     
     List<Progress> findByClientIdAndEnrollmentId(UUID clientId, String enrollmentId);
     

@@ -33,7 +33,13 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, String> 
     
     long countByClientIdAndCourseId(UUID clientId, String courseId);
     
-    boolean existsByClientIdAndStudentIdAndCourseId(UUID clientId, String studentId, String courseId);
+    @Query("SELECT COUNT(e) > 0 FROM Enrollment e WHERE e.clientId = :clientId AND e.studentId = :studentId " +
+           "AND e.courseId = :courseId")
+    boolean existsByClientIdAndStudentIdAndCourseId(
+        @Param("clientId") UUID clientId,
+        @Param("studentId") String studentId,
+        @Param("courseId") String courseId
+    );
     
     List<Enrollment> findByClientIdAndBatchId(UUID clientId, String batchId);
     

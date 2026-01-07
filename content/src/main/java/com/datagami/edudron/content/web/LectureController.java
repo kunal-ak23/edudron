@@ -112,9 +112,11 @@ public class LectureController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
     
-    @GetMapping("/generate/jobs/{jobId}")
+    @GetMapping("/sections/{sectionId}/lectures/generate/jobs/{jobId}")
     @Operation(summary = "Get sub-lecture generation job status", description = "Get the status of a sub-lecture generation job")
-    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> getSubLectureGenerationJobStatus(@PathVariable String jobId) {
+    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> getSubLectureGenerationJobStatus(
+            @PathVariable String sectionId,
+            @PathVariable String jobId) {
         com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.getJob(jobId);
         if (job == null) {
             return ResponseEntity.notFound().build();
