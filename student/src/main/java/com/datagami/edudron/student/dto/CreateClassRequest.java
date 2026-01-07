@@ -44,3 +44,4 @@ public class CreateClassRequest {
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
 }
 
+

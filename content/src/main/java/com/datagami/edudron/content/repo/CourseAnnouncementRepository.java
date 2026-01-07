@@ -15,3 +15,4 @@ public interface CourseAnnouncementRepository extends JpaRepository<CourseAnnoun
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);
 }
 
+

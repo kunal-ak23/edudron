@@ -48,3 +48,4 @@ public class SectionDTO {
     public void setLectures(List<LectureDTO> lectures) { this.lectures = lectures; }
 }
 
+

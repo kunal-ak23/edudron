@@ -23,3 +23,4 @@ public interface CourseTagRepository extends JpaRepository<CourseTag, String> {
     List<CourseTag> findByClientIdOrderByUsageCountDesc(UUID clientId);
 }
 
+

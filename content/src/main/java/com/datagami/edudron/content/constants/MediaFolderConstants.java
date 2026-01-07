@@ -16,19 +16,24 @@ public class MediaFolderConstants {
     public static final String FAVICONS = "favicons";
     
     // Helper method to validate folder name
+    // Also accepts nested folders like "lectures/videos", "lectures/audio", "lectures/attachments"
     public static boolean isValidFolder(String folder) {
-        return folder != null && !folder.isEmpty() && 
-               (folder.equals(COURSES) || 
-                folder.equals(THUMBNAILS) || 
-                folder.equals(VIDEOS) || 
-                folder.equals(PREVIEW_VIDEOS) ||
-                folder.equals(LECTURES) ||
-                folder.equals(ASSESSMENTS) ||
-                folder.equals(RESOURCES) ||
-                folder.equals(INSTRUCTORS) ||
-                folder.equals(TEMP) ||
-                folder.equals(LOGOS) ||
-                folder.equals(FAVICONS));
+        if (folder == null || folder.isEmpty()) {
+            return false;
+        }
+        // Extract base folder (first part before /)
+        String baseFolder = folder.contains("/") ? folder.split("/")[0] : folder;
+        return baseFolder.equals(COURSES) || 
+               baseFolder.equals(THUMBNAILS) || 
+               baseFolder.equals(VIDEOS) || 
+               baseFolder.equals(PREVIEW_VIDEOS) ||
+               baseFolder.equals(LECTURES) ||
+               baseFolder.equals(ASSESSMENTS) ||
+               baseFolder.equals(RESOURCES) ||
+               baseFolder.equals(INSTRUCTORS) ||
+               baseFolder.equals(TEMP) ||
+               baseFolder.equals(LOGOS) ||
+               baseFolder.equals(FAVICONS);
     }
 }
 

@@ -43,3 +43,4 @@ public class SectionProgressDTO {
     public void setStudentProgress(List<StudentProgressDTO> studentProgress) { this.studentProgress = studentProgress; }
 }
 
+

@@ -26,3 +26,4 @@ public class StudentProgressDTO {
     public void setTimeSpentSeconds(Integer timeSpentSeconds) { this.timeSpentSeconds = timeSpentSeconds; }
 }
 
+

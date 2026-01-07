@@ -115,3 +115,4 @@ print_info "  docker.io/$CONTAINER_REGISTRY_SERVER/content:0.1.0"
 print_info "  docker.io/$CONTAINER_REGISTRY_SERVER/student:0.1.0"
 print_info "  docker.io/$CONTAINER_REGISTRY_SERVER/payment:0.1.0"
 
+

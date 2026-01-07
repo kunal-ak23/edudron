@@ -23,3 +23,4 @@ public interface SectionRepository extends JpaRepository<Section, String> {
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);
 }
 
+

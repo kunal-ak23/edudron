@@ -56,3 +56,4 @@ public class BatchDTO {
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
 
+

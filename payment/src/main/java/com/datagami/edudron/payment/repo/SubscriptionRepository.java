@@ -20,3 +20,4 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Stri
     Optional<Subscription> findByIdAndClientId(String id, UUID clientId);
 }
 
+

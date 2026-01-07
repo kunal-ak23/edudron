@@ -28,3 +28,4 @@ databaseChangeLog:
             columns:
               - column: { name: class_id }
 
+

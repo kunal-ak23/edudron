@@ -20,3 +20,4 @@ public interface CourseCategoryRepository extends JpaRepository<CourseCategory, 
     Optional<CourseCategory> findByIdAndClientId(String id, UUID clientId);
 }
 
+

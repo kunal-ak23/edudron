@@ -17,11 +17,13 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ArrowLeft, Loader2, Save } from 'lucide-react'
-import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi } from '@/lib/api'
-import type { Course, Institute, Class, Section } from '@edudron/shared-utils'
+import { Badge } from '@/components/ui/badge'
+import { ArrowLeft, Loader2, Save, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2 } from 'lucide-react'
+import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi } from '@/lib/api'
+import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
+import { LectureEditModal } from '@/components/LectureEditModal'
 
 // Force dynamic rendering - disable static generation
 export const dynamic = 'force-dynamic'
@@ -39,6 +41,11 @@ export default function CourseEditPage() {
   const [sections, setSections] = useState<Section[]>([])
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([])
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([])
+  const [courseSections, setCourseSections] = useState<CourseSection[]>([])
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
+  const [loadingSections, setLoadingSections] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [editingLecture, setEditingLecture] = useState<{ sectionId: string; lecture?: Lecture; isMain?: boolean } | null>(null)
 
   useEffect(() => {
     loadHierarchyData()
@@ -84,6 +91,7 @@ export default function CourseEditPage() {
       setCourse(data)
       setSelectedClassIds(data.assignedToClassIds || [])
       setSelectedSectionIds(data.assignedToSectionIds || [])
+      await loadCourseSections()
     } catch (error) {
       console.error('Failed to load course:', error)
       toast({
@@ -94,6 +102,51 @@ export default function CourseEditPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const loadCourseSections = async () => {
+    if (!courseId || courseId === 'new') return
+    
+    try {
+      setLoadingSections(true)
+      const sections = await coursesApi.getSections(courseId)
+      
+      // Load sub-lectures for each lecture (section)
+      const sectionsWithLectures = await Promise.all(
+        sections.map(async (section) => {
+          try {
+            const lectures = await lecturesApi.getSubLecturesByLecture(courseId, section.id)
+            return { ...section, lectures }
+          } catch (error) {
+            console.error(`Failed to load sub-lectures for lecture ${section.id}:`, error)
+            return { ...section, lectures: [] }
+          }
+        })
+      )
+      
+      setCourseSections(sectionsWithLectures)
+      // Expand all sections by default
+      setExpandedSections(new Set(sectionsWithLectures.map(s => s.id)))
+    } catch (error) {
+      console.error('Failed to load course sections:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to load course structure',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setLoadingSections(false)
+    }
+  }
+
+  const toggleSection = (sectionId: string) => {
+    const newExpanded = new Set(expandedSections)
+    if (newExpanded.has(sectionId)) {
+      newExpanded.delete(sectionId)
+    } else {
+      newExpanded.add(sectionId)
+    }
+    setExpandedSections(newExpanded)
   }
 
   const handleSave = async () => {
@@ -128,6 +181,62 @@ export default function CourseEditPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handlePublish = async () => {
+    if (!courseId || courseId === 'new') return
+    setPublishing(true)
+    try {
+      const updatedCourse = await coursesApi.publishCourse(courseId)
+      setCourse(updatedCourse)
+      toast({
+        title: 'Course published',
+        description: 'The course has been published and is now visible to students.',
+      })
+    } catch (error) {
+      console.error('Failed to publish course:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to publish course',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const handleUnpublish = async () => {
+    if (!courseId || courseId === 'new') return
+    setPublishing(true)
+    try {
+      const updatedCourse = await coursesApi.unpublishCourse(courseId)
+      setCourse(updatedCourse)
+      toast({
+        title: 'Course unpublished',
+        description: 'The course has been unpublished and is no longer visible to students.',
+      })
+    } catch (error) {
+      console.error('Failed to unpublish course:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to unpublish course',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const handlePreview = () => {
+    if (!courseId || courseId === 'new') return
+    // Open student portal course view in a new tab
+    // Student portal runs on port 3001 by default
+    const studentPortalUrl = typeof window !== 'undefined' 
+      ? (window.location.origin.includes('localhost') 
+          ? 'http://localhost:3001' 
+          : window.location.origin.replace('admin', 'student').replace('dashboard', 'portal'))
+      : 'http://localhost:3001'
+    window.open(`${studentPortalUrl}/courses/${courseId}`, '_blank')
   }
 
   const getClassDisplayName = (classId: string) => {
@@ -247,14 +356,14 @@ export default function CourseEditPage() {
                       <div className="space-y-2">
                         <Label>Difficulty Level</Label>
                         <Select
-                          value={course.difficultyLevel || ''}
-                          onValueChange={(value) => setCourse({ ...course, difficultyLevel: value as any })}
+                          value={course.difficultyLevel || undefined}
+                          onValueChange={(value) => setCourse({ ...course, difficultyLevel: value === 'none' ? undefined : value as any })}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select difficulty" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Select difficulty</SelectItem>
+                            <SelectItem value="none">None</SelectItem>
                             <SelectItem value="BEGINNER">Beginner</SelectItem>
                             <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
                             <SelectItem value="ADVANCED">Advanced</SelectItem>
@@ -383,6 +492,125 @@ export default function CourseEditPage() {
                     </div>
                   </div>
 
+                  {/* Course Structure - Lectures */}
+                  {courseId !== 'new' && (
+                    <div className="border-t pt-6">
+                      <h2 className="text-lg font-semibold mb-4">Course Structure</h2>
+                      {loadingSections ? (
+                        <div className="flex items-center justify-center py-8">
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          <span className="ml-2 text-sm text-gray-600">Loading course structure...</span>
+                        </div>
+                      ) : courseSections.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <BookOpen className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                          <p className="text-sm">No lectures found. Generate course content to see lectures.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {courseSections.map((section) => (
+                            <div key={section.id} className="border rounded-lg">
+                              <button
+                                onClick={() => toggleSection(section.id)}
+                                className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors"
+                              >
+                                <div className="flex items-center flex-1 text-left">
+                                  {expandedSections.has(section.id) ? (
+                                    <ChevronDown className="h-4 w-4 mr-2 text-gray-500" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 mr-2 text-gray-500" />
+                                  )}
+                                  <BookOpen className="h-4 w-4 mr-2 text-blue-600" />
+                                  <div>
+                                    <div className="font-medium text-gray-900">
+                                      Lecture {section.sequence}: {section.title}
+                                    </div>
+                                    {section.description && (
+                                      <div className="text-sm text-gray-500 mt-1 line-clamp-1">
+                                        {section.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4 text-sm text-gray-500">
+                                  <span>{section.lectures?.length || 0} sub-lectures</span>
+                                  <Badge variant={section.isPublished ? 'default' : 'secondary'}>
+                                    {section.isPublished ? 'Published' : 'Draft'}
+                                  </Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setEditingLecture({ sectionId: section.id, isMain: true })
+                                    }}
+                                    className="h-8 w-8 p-0"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </button>
+                              {expandedSections.has(section.id) && section.lectures && section.lectures.length > 0 && (
+                                <div className="border-t bg-gray-50">
+                                  <div className="p-4 space-y-2">
+                                    {section.lectures.map((lecture, idx) => (
+                                      <div
+                                        key={lecture.id}
+                                        className="flex items-center justify-between p-3 bg-white rounded border border-gray-200 hover:border-gray-300 transition-colors"
+                                      >
+                                        <div className="flex items-center flex-1">
+                                          <Play className="h-4 w-4 mr-3 text-gray-400" />
+                                          <div>
+                                            <div className="font-medium text-sm text-gray-900">
+                                              {idx + 1}. {lecture.title}
+                                            </div>
+                                            {lecture.description && (
+                                              <div className="text-xs text-gray-500 mt-1 line-clamp-1">
+                                                {lecture.description}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            {lecture.duration && (
+                                              <span>{Math.floor(lecture.duration / 60)}m</span>
+                                            )}
+                                            <Badge variant="outline" className="text-xs">
+                                              {lecture.contentType}
+                                            </Badge>
+                                          </div>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => setEditingLecture({ sectionId: section.id, lecture })}
+                                            className="h-8 w-8 p-0"
+                                          >
+                                            <Edit className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {/* Add Sub-Lecture Button */}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setEditingLecture({ sectionId: section.id })}
+                                      className="w-full mt-2"
+                                    >
+                                      <Plus className="h-4 w-4 mr-2" />
+                                      Add Sub-Lecture
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Media */}
                   <div className="border-t pt-6">
                     <h2 className="text-lg font-semibold mb-4">Media</h2>
@@ -408,16 +636,62 @@ export default function CourseEditPage() {
                     </div>
                   </div>
 
+                  {/* Course Actions */}
+                  {courseId !== 'new' && (
+                    <div className="border-t pt-6">
+                      <h2 className="text-lg font-semibold mb-4">Course Actions</h2>
+                      <div className="flex items-center gap-4">
+                        <Badge variant={course.isPublished ? 'default' : 'secondary'} className="text-sm">
+                          {course.isPublished ? 'Published' : 'Draft'}
+                        </Badge>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={handlePreview}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            Preview as Student
+                          </Button>
+                          {course.isPublished ? (
+                            <Button
+                              variant="outline"
+                              onClick={handleUnpublish}
+                              disabled={publishing}
+                            >
+                              {publishing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                              <Archive className="h-4 w-4 mr-2" />
+                              Unpublish
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={handlePublish}
+                              disabled={publishing}
+                            >
+                              {publishing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                              <Globe className="h-4 w-4 mr-2" />
+                              Publish Course
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {!course.isPublished && (
+                        <p className="text-sm text-gray-500 mt-2">
+                          Publish the course to make it visible to students. You can preview it once published.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div className="border-t pt-6 flex justify-end space-x-4">
                     <Button
                       variant="outline"
                       onClick={() => router.push('/courses')}
-                      disabled={saving}
+                      disabled={saving || publishing}
                     >
                       Cancel
                     </Button>
-                    <Button onClick={handleSave} disabled={saving}>
+                    <Button onClick={handleSave} disabled={saving || publishing}>
                       {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                       {courseId === 'new' ? 'Create Course' : 'Save Changes'}
                     </Button>
@@ -427,6 +701,22 @@ export default function CourseEditPage() {
             </CardContent>
           </Card>
         </main>
+
+        {/* Lecture Edit Modal */}
+        {editingLecture && (
+          <LectureEditModal
+            isOpen={!!editingLecture}
+            onClose={() => setEditingLecture(null)}
+            courseId={courseId}
+            lectureId={editingLecture.sectionId}
+            lecture={editingLecture.lecture}
+            isMainLecture={editingLecture.isMain}
+            onSave={() => {
+              loadCourseSections()
+              setEditingLecture(null)
+            }}
+          />
+        )}
       </div>
     </ProtectedRoute>
   )

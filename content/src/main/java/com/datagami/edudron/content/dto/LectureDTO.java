@@ -69,3 +69,4 @@ public class LectureDTO {
     public void setSubLessons(List<SubLessonDTO> subLessons) { this.subLessons = subLessons; }
 }
 
+

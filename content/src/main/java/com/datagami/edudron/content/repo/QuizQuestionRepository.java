@@ -18,3 +18,4 @@ public interface QuizQuestionRepository extends JpaRepository<QuizQuestion, Stri
     void deleteByAssessmentIdAndClientId(String assessmentId, UUID clientId);
 }
 
+

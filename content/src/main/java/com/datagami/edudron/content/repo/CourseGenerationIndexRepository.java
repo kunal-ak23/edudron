@@ -23,3 +23,4 @@ public interface CourseGenerationIndexRepository extends JpaRepository<CourseGen
     void deleteByIdAndClientId(String id, UUID clientId);
 }
 
+

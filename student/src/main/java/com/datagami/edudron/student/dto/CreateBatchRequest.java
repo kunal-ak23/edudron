@@ -37,3 +37,4 @@ public class CreateBatchRequest {
     public void setMaxStudents(Integer maxStudents) { this.maxStudents = maxStudents; }
 }
 
+

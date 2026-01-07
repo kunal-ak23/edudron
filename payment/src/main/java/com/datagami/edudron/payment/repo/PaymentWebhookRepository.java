@@ -16,3 +16,4 @@ public interface PaymentWebhookRepository extends JpaRepository<PaymentWebhook, 
     List<PaymentWebhook> findByClientIdAndProcessed(UUID clientId, Boolean processed);
 }
 
+

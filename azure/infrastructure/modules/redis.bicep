@@ -39,3 +39,4 @@ output accessKeys object = {
 }
 output connectionString string = '${redisCache.properties.hostName}:${redisCache.properties.sslPort},ssl=true,password=${redisCache.listKeys().primaryKey}'
 
+

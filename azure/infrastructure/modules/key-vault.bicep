@@ -40,3 +40,4 @@ output id string = keyVault.id
 output name string = keyVault.name
 output vaultUri string = keyVault.properties.vaultUri
 
+

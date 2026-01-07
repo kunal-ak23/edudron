@@ -3,8 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, Button, Card } from '@edudron/ui-components'
-import { coursesApi, enrollmentsApi } from '@/lib/api'
+import { coursesApi, enrollmentsApi, lecturesApi } from '@/lib/api'
 import type { Course, Section } from '@edudron/shared-utils'
+import { CommitmentModal } from '@/components/CommitmentModal'
+import { EnrollmentSuccessModal } from '@/components/EnrollmentSuccessModal'
+import { useAuth } from '@edudron/shared-utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -13,10 +16,14 @@ export default function CourseDetailPage() {
   const router = useRouter()
   const params = useParams()
   const courseId = params.id as string
+  const { user } = useAuth()
   const [course, setCourse] = useState<Course | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [enrolled, setEnrolled] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [progress, setProgress] = useState<any>(null)
+  const [showCommitmentModal, setShowCommitmentModal] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
 
   useEffect(() => {
     loadCourse()
@@ -24,14 +31,34 @@ export default function CourseDetailPage() {
 
   const loadCourse = async () => {
     try {
-      const [courseData, sectionsData, enrollmentStatus] = await Promise.all([
+      const [courseData, sectionsData, enrollmentStatus, progressData] = await Promise.all([
         coursesApi.getCourse(courseId),
         coursesApi.getChapters(courseId).catch(() => []),
-        enrollmentsApi.checkEnrollment(courseId).catch(() => false)
+        enrollmentsApi.checkEnrollment(courseId).catch(() => false),
+        enrollmentsApi.getProgress(courseId).catch(() => null)
       ])
       setCourse(courseData)
-      setSections(sectionsData as any)
+      
+      // Load sub-lectures for each section
+      if (sectionsData && sectionsData.length > 0) {
+        const sectionsWithLectures = await Promise.all(
+          sectionsData.map(async (section: any) => {
+            try {
+              const lectures = await lecturesApi.getSubLecturesByLecture(courseId, section.id)
+              return { ...section, lectures }
+            } catch (error) {
+              console.warn(`Failed to load sub-lectures for section ${section.id}:`, error)
+              return { ...section, lectures: [] }
+            }
+          })
+        )
+        setSections(sectionsWithLectures)
+      } else {
+        setSections(sectionsData as any)
+      }
+      
       setEnrolled(enrollmentStatus)
+      setProgress(progressData)
     } catch (error) {
       console.error('Failed to load course:', error)
     } finally {
@@ -39,32 +66,73 @@ export default function CourseDetailPage() {
     }
   }
 
-  const handleEnroll = async () => {
+  const handleEnrollClick = () => {
+    // Show commitment modal first
+    setShowCommitmentModal(true)
+  }
+
+  const handleCommit = async () => {
+    setShowCommitmentModal(false)
+    
     try {
+      const alreadyEnrolled = await enrollmentsApi.checkEnrollment(courseId).catch(() => false)
+      if (alreadyEnrolled) {
+        setEnrolled(true)
+        router.push(`/courses/${courseId}/learn`)
+        return
+      }
+
       await enrollmentsApi.enrollInCourse(courseId)
       setEnrolled(true)
-      router.push(`/courses/${courseId}/learn`)
+      
+      // Show success modal
+      setShowSuccessModal(true)
     } catch (error: any) {
-      alert(error.message || 'Failed to enroll')
+      const statusCode = error.response?.status
+      const errorMessage = error.response?.data?.error || error.message || error.response?.data?.message || ''
+      const lowerMessage = errorMessage.toLowerCase()
+      
+      if (statusCode === 409 || statusCode === 403 || lowerMessage.includes('already enrolled')) {
+        setEnrolled(true)
+        router.push(`/courses/${courseId}/learn`)
+        return
+      }
+      
+      alert(errorMessage || 'Failed to enroll')
     }
   }
 
-  const formatPrice = () => {
-    if (course?.isFree) return 'Free'
-    if (course?.pricePaise) {
-      return `₹${(course.pricePaise / 100).toLocaleString('en-IN')}`
-    }
-    return 'Free'
+  const handleGetStarted = () => {
+    setShowSuccessModal(false)
+    router.push(`/courses/${courseId}/learn`)
   }
 
   const formatDuration = () => {
     if (!course?.totalDurationSeconds) return null
     const hours = Math.floor(course.totalDurationSeconds / 3600)
-    const minutes = Math.floor((course.totalDurationSeconds % 3600) / 60)
     if (hours > 0) {
-      return `${hours} hour${hours > 1 ? 's' : ''} ${minutes} minute${minutes !== 1 ? 's' : ''}`
+      return `${hours} hour${hours > 1 ? 's' : ''}`
     }
-    return `${minutes} minute${minutes !== 1 ? 's' : ''}`
+    return null
+  }
+
+  const getTotalLectures = () => {
+    return sections.reduce((total, section) => total + (section.lectures?.length || 0), 0)
+  }
+
+  const getProgressPercentage = () => {
+    if (!progress || !progress.totalLectures) return 0
+    return Math.round((progress.completedLectures / progress.totalLectures) * 100)
+  }
+
+  const getNextLecture = () => {
+    if (!sections || sections.length === 0) return null
+    for (const section of sections) {
+      if (section.lectures && section.lectures.length > 0) {
+        return section.lectures[0]
+      }
+    }
+    return null
   }
 
   if (loading) {
@@ -94,279 +162,191 @@ export default function CourseDetailPage() {
     )
   }
 
+  const totalLectures = getTotalLectures()
+  const progressPercentage = getProgressPercentage()
+  const nextLecture = getNextLecture()
+
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <button
-                onClick={() => router.push('/courses')}
-                className="text-gray-600 hover:text-gray-900 flex items-center"
-              >
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-                Back to Courses
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main Content */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Course Header */}
-              <div>
-                <div className="mb-2">
-                  {course.difficultyLevel && (
-                    <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
-                      {course.difficultyLevel}
-                    </span>
-                  )}
-                </div>
-                <h1 className="text-4xl font-bold text-gray-900 mb-4">{course.title}</h1>
-                <p className="text-lg text-gray-600 mb-6">{course.description}</p>
-
-                {/* Course Stats */}
-                <div className="flex flex-wrap gap-6 text-sm text-gray-600 mb-6">
-                  {course.instructors && course.instructors.length > 0 && (
-                    <div>
-                      <span className="font-medium">Instructor{course.instructors.length > 1 ? 's' : ''}: </span>
-                      {course.instructors.map((i, idx) => (
-                        <span key={i.id}>
-                          {i.name}
-                          {idx < course.instructors!.length - 1 && ', '}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {formatDuration() && (
-                    <div>
-                      <span className="font-medium">Duration: </span>
-                      {formatDuration()}
-                    </div>
-                  )}
-                  {course.totalLecturesCount && (
-                    <div>
-                      <span className="font-medium">Lectures: </span>
-                      {course.totalLecturesCount}
-                    </div>
-                  )}
-                  {course.totalStudentsCount && (
-                    <div>
-                      <span className="font-medium">Students: </span>
-                      {course.totalStudentsCount.toLocaleString()}
-                    </div>
-                  )}
-                </div>
-
-                {/* Tags */}
-                {course.tags && course.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mb-6">
-                    {course.tags.map((tag, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 bg-gray-100 text-gray-700 text-sm rounded-full"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
+        {/* Hero Section */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_0.9fr] gap-6 items-start">
+            {/* Left: Course Info */}
+            <div>
+              <p className="text-sm text-gray-500 mb-2">
+                Home / Courses / {course.categoryId || 'Programming'}
+              </p>
+              <h1 className="text-4xl font-bold text-gray-900 mb-3 leading-tight">
+                {course.title}
+              </h1>
+              <p className="text-gray-600 mb-4 max-w-3xl">
+                {course.description}
+              </p>
+              <div className="flex items-center gap-3 mb-4 flex-wrap">
+                {course.difficultyLevel && (
+                  <span className="px-3 py-1 border border-gray-200 bg-white rounded-full text-sm font-semibold">
+                    {course.difficultyLevel}
+                  </span>
+                )}
+                {formatDuration() && (
+                  <span className="text-gray-500 text-sm">• {formatDuration()}</span>
+                )}
+                {totalLectures > 0 && (
+                  <span className="text-gray-500 text-sm">• {totalLectures} lessons</span>
                 )}
               </div>
-
-              {/* Learning Objectives */}
-              {course.learningObjectives && course.learningObjectives.length > 0 && (
-                <Card title="What you'll learn">
-                  <ul className="space-y-3">
-                    {course.learningObjectives.map((objective) => (
-                      <li key={objective.id} className="flex items-start">
-                        <svg
-                          className="w-5 h-5 text-green-500 mr-3 mt-0.5 flex-shrink-0"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <span className="text-gray-700">{objective.objective}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              )}
-
-              {/* Course Content */}
-              {sections && sections.length > 0 && (
-                <Card title="Course Content">
-                  <div className="space-y-4">
-                    {sections.map((section, sectionIdx) => (
-                      <div key={section.id} className="border-b border-gray-200 pb-4 last:border-0">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-semibold text-gray-900">
-                            Week {sectionIdx + 1}: {section.title}
-                          </h3>
-                          <span className="text-sm text-gray-500">
-                            {section.lectures?.length || 0} lectures
-                          </span>
-                        </div>
-                        {section.description && (
-                          <p className="text-sm text-gray-600 mb-2">{section.description}</p>
-                        )}
-                        {section.lectures && section.lectures.length > 0 && (
-                          <ul className="ml-4 space-y-1">
-                            {section.lectures.map((lecture) => (
-                              <li key={lecture.id} className="text-sm text-gray-600 flex items-center">
-                                <svg
-                                  className="w-4 h-4 mr-2 text-gray-400"
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                >
-                                  <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" />
-                                </svg>
-                                {lecture.title}
-                                {lecture.duration && (
-                                  <span className="ml-2 text-gray-400">
-                                    {Math.floor(lecture.duration / 60)}m
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
-
-              {/* Instructors */}
-              {course.instructors && course.instructors.length > 0 && (
-                <Card title="Instructor{course.instructors.length > 1 ? 's' : ''}">
-                  <div className="space-y-4">
-                    {course.instructors.map((instructor) => (
-                      <div key={instructor.id} className="flex items-start">
-                        {instructor.imageUrl ? (
-                          <img
-                            src={instructor.imageUrl}
-                            alt={instructor.name}
-                            className="w-16 h-16 rounded-full mr-4"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-xl mr-4">
-                            {instructor.name.charAt(0)}
-                          </div>
-                        )}
-                        <div>
-                          <h4 className="font-semibold text-gray-900">{instructor.name}</h4>
-                          {instructor.title && (
-                            <p className="text-sm text-gray-600 mb-2">{instructor.title}</p>
-                          )}
-                          {instructor.bio && (
-                            <p className="text-sm text-gray-600">{instructor.bio}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              )}
-            </div>
-
-            {/* Sidebar - Enrollment Card */}
-            <div className="lg:col-span-1">
-              <div className="sticky top-4">
-                <Card className="border-2 border-gray-200">
-                  {/* Course Preview Video/Image */}
-                  {course.thumbnailUrl && (
-                    <div className="mb-4 -mx-6 -mt-6">
-                      <div className="relative w-full h-48 bg-gray-200">
-                        <img
-                          src={course.thumbnailUrl}
-                          alt={course.title}
-                          className="w-full h-full object-cover"
-                        />
-                        {course.previewVideoUrl && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30">
-                            <button className="w-16 h-16 bg-white rounded-full flex items-center justify-center hover:scale-110 transition-transform">
-                              <svg
-                                className="w-8 h-8 text-blue-600 ml-1"
-                                fill="currentColor"
-                                viewBox="0 0 20 20"
-                              >
-                                <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                    <div>
-                      <div className="text-3xl font-bold text-gray-900 mb-2">
-                        {formatPrice()}
-                      </div>
-                      {!course.isFree && course.pricePaise && (
-                        <div className="text-sm text-gray-500 line-through">
-                          ₹{((course.pricePaise * 1.2) / 100).toLocaleString('en-IN')}
-                        </div>
-                      )}
-                    </div>
-
-                    {enrolled ? (
-                      <Button
-                        onClick={() => router.push(`/courses/${courseId}/learn`)}
-                        className="w-full"
-                        size="lg"
-                      >
-                        Continue Learning
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handleEnroll}
-                        className="w-full"
-                        size="lg"
-                      >
-                        {course.isFree ? 'Enroll for Free' : 'Enroll Now'}
-                      </Button>
-                    )}
-
-                    <div className="text-sm text-gray-600 space-y-2 pt-4 border-t border-gray-200">
-                      <div className="flex items-center">
-                        <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        Full lifetime access
-                      </div>
-                      {course.certificateEligible && (
-                        <div className="flex items-center">
-                          <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          Certificate of completion
-                        </div>
-                      )}
-                      <div className="flex items-center">
-                        <svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        Learn at your own pace
-                      </div>
-                    </div>
-                  </div>
-                </Card>
+              <div className="flex gap-3">
+                {enrolled ? (
+                  <Button
+                    onClick={() => router.push(`/courses/${courseId}/learn`)}
+                    className="px-6 py-3 font-bold rounded-xl"
+                  >
+                    Continue Learning
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleEnrollClick}
+                    className="px-6 py-3 font-bold rounded-xl"
+                  >
+                    {course.isFree ? 'Start learning' : 'Enroll for Free'}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/courses/${courseId}/learn`)}
+                  className="px-6 py-3 font-bold rounded-xl border-gray-300"
+                >
+                  Preview
+                </Button>
               </div>
             </div>
+
+            {/* Right: Progress Card (if enrolled) */}
+            {enrolled && progress && (
+              <aside className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4">
+                <h3 className="font-semibold text-gray-900 mb-3">Your progress</h3>
+                <div className="h-2.5 bg-blue-50 border border-blue-100 rounded-full overflow-hidden mb-3">
+                  <div
+                    className="h-full bg-blue-600 rounded-full transition-all"
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
+                <p className="text-sm text-gray-500 mb-4">
+                  {progressPercentage}% complete • {progress.completedLectures || 0} of {progress.totalLectures || totalLectures} lessons
+                </p>
+                <div className="h-px bg-gray-200 my-4" />
+                {nextLecture && (
+                  <p className="text-sm mb-4">
+                    <strong>Next up:</strong> {nextLecture.title}
+                  </p>
+                )}
+                <Button
+                  onClick={() => router.push(`/courses/${courseId}/learn`)}
+                  className="w-full py-3 font-bold rounded-xl"
+                >
+                  Continue
+                </Button>
+              </aside>
+            )}
           </div>
         </div>
+
+        {/* Syllabus and Lessons Grid */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.7fr] gap-6">
+            {/* Sidebar: Syllabus */}
+            <aside className="bg-white rounded-2xl border border-gray-200 p-4">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Syllabus</h2>
+              <div className="space-y-2.5">
+                {sections.map((section, sectionIdx) => (
+                  <button
+                    key={section.id}
+                    className="w-full text-left bg-white border border-gray-200 rounded-xl p-3 cursor-pointer flex justify-between items-center hover:border-blue-300 transition-colors"
+                  >
+                    <span className="font-bold text-gray-900">
+                      Module {sectionIdx + 1}: {section.title}
+                    </span>
+                    <span className="text-gray-500 text-sm">
+                      {section.lectures?.length || 0} lessons
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </aside>
+
+            {/* Main Content: Lessons */}
+            <section className="bg-white rounded-2xl border border-gray-200 p-4">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Lessons</h2>
+              <div className="space-y-3">
+                {sections.map((section, sectionIdx) => (
+                  <div key={section.id}>
+                    {section.lectures && section.lectures.map((lecture, lectureIdx) => {
+                      const globalIndex = sections.slice(0, sectionIdx).reduce(
+                        (acc, s) => acc + (s.lectures?.length || 0),
+                        lectureIdx + 1
+                      )
+                      return (
+                        <div
+                          key={lecture.id}
+                          className="bg-white border border-gray-200 rounded-xl p-4 flex justify-between items-center shadow-sm mb-3"
+                        >
+                          <div className="flex gap-3 items-center">
+                            <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center font-bold text-gray-900">
+                              {globalIndex}
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-gray-900 mb-1">
+                                {lecture.title}
+                              </h3>
+                              <p className="text-sm text-gray-500">
+                                {lecture.contentType === 'VIDEO' ? 'Video' : 'Reading'} •{' '}
+                                {lecture.duration ? `${Math.floor(lecture.duration / 60)} min` : 'N/A'}
+                                {lecture.contentType === 'TEXT' && ' • Practice'}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              if (enrolled) {
+                                router.push(`/courses/${courseId}/learn`)
+                              } else {
+                                handleEnrollClick()
+                              }
+                            }}
+                            className="px-4 py-2 font-bold rounded-xl border-gray-300"
+                          >
+                            {enrolled ? 'Open' : 'Preview'}
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
+
+        {/* Commitment Modal */}
+        <CommitmentModal
+          courseTitle={course.title}
+          isOpen={showCommitmentModal}
+          onClose={() => setShowCommitmentModal(false)}
+          onCommit={handleCommit}
+        />
+
+        {/* Success Modal */}
+        <EnrollmentSuccessModal
+          userName={user?.name || user?.email?.split('@')[0] || 'Learner'}
+          isOpen={showSuccessModal}
+          onClose={() => {
+            setShowSuccessModal(false)
+            router.push(`/courses/${courseId}/learn`)
+          }}
+          onGetStarted={handleGetStarted}
+        />
       </div>
     </ProtectedRoute>
   )

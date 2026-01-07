@@ -105,3 +105,4 @@ If you still see CORS errors, check:
 - Network tab in DevTools for actual request/response
 - Verify the request is going to `http://localhost:8080`
 
+

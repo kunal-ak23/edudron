@@ -4,3 +4,4 @@ const GATEWAY_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost
 
 export const authService = new AuthService(GATEWAY_URL)
 
+

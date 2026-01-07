@@ -22,3 +22,4 @@ public interface InstituteRepository extends JpaRepository<Institute, String> {
     boolean existsByClientIdAndCode(UUID clientId, String code);
 }
 
+

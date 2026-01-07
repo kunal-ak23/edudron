@@ -71,3 +71,4 @@ Currently, services are designed to work independently. Full integration require
 4. Student Service creates enrollment
 5. Student Service notifies Content Service to update statistics
 
+

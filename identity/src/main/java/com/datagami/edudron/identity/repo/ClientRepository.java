@@ -15,3 +15,4 @@ public interface ClientRepository extends JpaRepository<Client, UUID> {
     List<Client> findAllByOrderByName();
 }
 
+

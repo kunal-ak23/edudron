@@ -59,3 +59,4 @@ public class UserDTO {
     public void setLastLoginAt(OffsetDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
 }
 
+

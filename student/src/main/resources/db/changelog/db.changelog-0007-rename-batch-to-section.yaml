@@ -48,3 +48,4 @@ databaseChangeLog:
             tableName: batches
             schemaName: student
 
+

@@ -26,7 +26,7 @@ spring:
         - id: content-service
           uri: ${CONTENT_SERVICE_URL:http://localhost:8082}
           predicates:
-            - Path=/content/**, /api/content/**
+            - Path=/content/**, /api/content/**, /content/api/**
         
         # Student Service (8083)
         - id: student-service

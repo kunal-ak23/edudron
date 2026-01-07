@@ -34,3 +34,4 @@ databaseChangeLog:
                 (role != 'SYSTEM_ADMIN' AND client_id IS NOT NULL)
               );
 
+

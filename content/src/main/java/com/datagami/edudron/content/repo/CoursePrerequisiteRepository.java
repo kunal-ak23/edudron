@@ -15,3 +15,4 @@ public interface CoursePrerequisiteRepository extends JpaRepository<CoursePrereq
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);
 }
 
+

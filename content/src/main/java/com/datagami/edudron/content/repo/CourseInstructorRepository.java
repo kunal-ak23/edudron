@@ -22,3 +22,4 @@ public interface CourseInstructorRepository extends JpaRepository<CourseInstruct
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);
 }
 
+

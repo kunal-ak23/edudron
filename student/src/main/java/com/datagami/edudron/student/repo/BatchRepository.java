@@ -25,3 +25,4 @@ public interface BatchRepository extends JpaRepository<Batch, String> {
     long countStudentsInBatch(@Param("clientId") UUID clientId, @Param("batchId") String batchId);
 }
 
+

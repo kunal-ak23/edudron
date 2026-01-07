@@ -44,3 +44,4 @@ public class CourseTag {
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
 }
 
+

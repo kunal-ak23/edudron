@@ -31,3 +31,4 @@ public interface ClassRepository extends JpaRepository<Class, String> {
     long countByInstituteId(@Param("instituteId") String instituteId);
 }
 
+

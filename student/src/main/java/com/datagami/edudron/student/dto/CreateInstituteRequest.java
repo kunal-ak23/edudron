@@ -35,3 +35,4 @@ public class CreateInstituteRequest {
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
 }
 
+

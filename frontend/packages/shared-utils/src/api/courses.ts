@@ -144,8 +144,53 @@ export class CoursesApi {
   }
 
   async getCourse(id: string): Promise<Course> {
-    const response = await this.apiClient.get<Course>(`/content/courses/${id}`)
-    return response.data
+    try {
+      console.log('[CoursesApi.getCourse] Fetching course with id:', id)
+      const response = await this.apiClient.get<Course>(`/content/courses/${id}`)
+      console.log('[CoursesApi.getCourse] Full response object:', response)
+      console.log('[CoursesApi.getCourse] Response.data:', response.data)
+      console.log('[CoursesApi.getCourse] Response.data type:', typeof response.data)
+      
+      // ApiClient.get wraps responses in { data: ... } format
+      // So response.data should be the Course object
+      let course = response.data
+      
+      // Handle potential double-wrapping (if backend also wraps)
+      if (course && typeof course === 'object' && 'data' in course && !('id' in course) && !('title' in course)) {
+        console.log('[CoursesApi.getCourse] Detected double-wrapping, unwrapping...')
+        course = (course as any).data
+      }
+      
+      console.log('[CoursesApi.getCourse] Final course object:', course)
+      console.log('[CoursesApi.getCourse] Course keys:', course && typeof course === 'object' ? Object.keys(course) : 'N/A')
+      
+      if (!course) {
+        console.error('[CoursesApi.getCourse] Course data is null or undefined after parsing')
+        throw new Error('Course not found')
+      }
+      
+      // Validate it's a Course object
+      if (typeof course !== 'object') {
+        console.error('[CoursesApi.getCourse] Course data is not an object:', typeof course)
+        throw new Error('Invalid course data received: not an object')
+      }
+      
+      if (!('id' in course) || !('title' in course)) {
+        console.error('[CoursesApi.getCourse] Invalid course data structure - missing id or title:', course)
+        throw new Error('Invalid course data received: missing required fields')
+      }
+      
+      console.log('[CoursesApi.getCourse] Successfully parsed course:', { id: course.id, title: course.title })
+      return course as Course
+    } catch (error: any) {
+      console.error('[CoursesApi.getCourse] Error fetching course:', error)
+      console.error('[CoursesApi.getCourse] Error response:', error.response)
+      console.error('[CoursesApi.getCourse] Error status:', error.response?.status)
+      console.error('[CoursesApi.getCourse] Error data:', error.response?.data)
+      console.error('[CoursesApi.getCourse] Error message:', error.message)
+      // Re-throw to let the caller handle it
+      throw error
+    }
   }
 
   async createCourse(course: Partial<Course>): Promise<Course> {
@@ -162,8 +207,36 @@ export class CoursesApi {
     await this.apiClient.delete(`/content/courses/${id}`)
   }
 
+  async publishCourse(id: string): Promise<Course> {
+    const response = await this.apiClient.post<Course>(`/content/courses/${id}/publish`, {})
+    return response.data
+  }
+
+  async unpublishCourse(id: string): Promise<Course> {
+    // Unpublish by updating isPublished to false
+    const course = await this.getCourse(id)
+    return await this.updateCourse(id, { ...course, isPublished: false })
+  }
+
   async getChapters(courseId: string): Promise<Chapter[]> {
-    const response = await this.apiClient.get<Chapter[]>(`/content/courses/${courseId}/chapters`)
+    // Use lectures endpoint (sections are now called lectures)
+    const response = await this.apiClient.get<Section[]>(`/content/courses/${courseId}/lectures`)
+    // Map Section[] to Chapter[] for backward compatibility
+    const sections = Array.isArray(response.data) ? response.data : []
+    return sections.map(s => ({
+      id: s.id,
+      courseId: s.courseId,
+      title: s.title,
+      description: s.description,
+      order: s.sequence,
+      isPublished: s.isPublished,
+      createdAt: '',
+      updatedAt: ''
+    }))
+  }
+
+  async getSections(courseId: string): Promise<Section[]> {
+    const response = await this.apiClient.get<Section[]>(`/content/courses/${courseId}/lectures`)
     return Array.isArray(response.data) ? response.data : []
   }
 

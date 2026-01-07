@@ -45,7 +45,7 @@ export default function CourseCard({ course, onClick, className }: CourseCardPro
   return (
     <div
       className={cn(
-        'bg-white rounded-lg shadow-sm hover:shadow-lg transition-shadow cursor-pointer overflow-hidden border border-gray-200',
+        'bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all cursor-pointer overflow-hidden border border-gray-200 hover:scale-[1.02] active:scale-[0.98]',
         className
       )}
       onClick={onClick}
@@ -75,7 +75,7 @@ export default function CourseCard({ course, onClick, className }: CourseCardPro
         {/* Difficulty Badge */}
         {course.difficultyLevel && (
           <div className="mb-2">
-            <span className="inline-block px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+            <span className="inline-block px-3 py-1 border border-gray-200 bg-white text-gray-900 text-xs font-semibold rounded-full">
               {course.difficultyLevel}
             </span>
           </div>

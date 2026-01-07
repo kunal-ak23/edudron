@@ -15,3 +15,4 @@ public interface LearningObjectiveRepository extends JpaRepository<LearningObjec
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);
 }
 
+

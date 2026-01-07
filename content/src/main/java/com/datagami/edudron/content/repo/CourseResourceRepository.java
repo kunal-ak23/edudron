@@ -18,3 +18,4 @@ public interface CourseResourceRepository extends JpaRepository<CourseResource, 
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);
 }
 
+

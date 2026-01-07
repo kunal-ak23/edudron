@@ -121,3 +121,4 @@ public class TenantBranding {
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
 
+

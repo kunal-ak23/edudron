@@ -28,11 +28,39 @@ export interface Batch {
 
 export interface Progress {
   courseId: string
-  studentId: string
-  overallProgress: number
-  chaptersCompleted: number
-  totalChapters: number
+  studentId?: string
+  enrollmentId?: string
+  overallProgress?: number
+  chaptersCompleted?: number
+  totalChapters?: number
+  totalLectures?: number
+  completedLectures?: number
+  completionPercentage?: number
+  totalTimeSpentSeconds?: number
   lastAccessedAt?: string
+  lectureProgress?: LectureProgress[]
+  sectionProgress?: SectionProgress[]
+}
+
+export interface LectureProgress {
+  id: string
+  lectureId: string
+  sectionId?: string
+  isCompleted: boolean
+  progressPercentage: number
+  timeSpentSeconds: number
+  lastAccessedAt?: string
+  completedAt?: string
+}
+
+export interface SectionProgress {
+  id: string
+  sectionId: string
+  isCompleted: boolean
+  progressPercentage: number
+  timeSpentSeconds: number
+  lastAccessedAt?: string
+  completedAt?: string
 }
 
 export class EnrollmentsApi {
@@ -76,10 +104,21 @@ export class EnrollmentsApi {
     return response.data
   }
 
-  async updateProgress(courseId: string, progress: Partial<Progress>): Promise<Progress> {
-    const response = await this.apiClient.put<Progress>(
+  async getLectureProgress(courseId: string): Promise<LectureProgress[]> {
+    const response = await this.apiClient.get<LectureProgress[]>(`/api/courses/${courseId}/lectures/progress`)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async updateProgress(courseId: string, request: {
+    lectureId?: string
+    sectionId?: string
+    isCompleted?: boolean
+    progressPercentage?: number
+    timeSpentSeconds?: number
+  }): Promise<LectureProgress | SectionProgress> {
+    const response = await this.apiClient.put<LectureProgress | SectionProgress>(
       `/api/courses/${courseId}/progress`,
-      progress
+      request
     )
     return response.data
   }

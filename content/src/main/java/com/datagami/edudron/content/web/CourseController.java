@@ -3,8 +3,10 @@ package com.datagami.edudron.content.web;
 import com.datagami.edudron.content.dto.CourseDTO;
 import com.datagami.edudron.content.dto.CreateCourseRequest;
 import com.datagami.edudron.content.dto.GenerateCourseRequest;
+import com.datagami.edudron.content.dto.SectionDTO;
 import com.datagami.edudron.content.service.CourseGenerationService;
 import com.datagami.edudron.content.service.CourseService;
+import com.datagami.edudron.content.service.SectionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -14,6 +16,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/content/courses")
@@ -25,6 +29,9 @@ public class CourseController {
     
     @Autowired
     private CourseGenerationService courseGenerationService;
+    
+    @Autowired
+    private SectionService sectionService;
 
     @GetMapping
     @Operation(summary = "List courses", description = "Get paginated list of courses with optional filters")
@@ -96,6 +103,14 @@ public class CourseController {
     public ResponseEntity<CourseDTO> generateCourse(@Valid @RequestBody GenerateCourseRequest request) {
         CourseDTO course = courseGenerationService.generateCourseFromPrompt(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(course);
+    }
+
+    // Backward compatibility: redirect /sections to /lectures
+    @GetMapping("/{id}/sections")
+    @Operation(summary = "Get course sections (deprecated)", description = "Deprecated: Use /lectures instead. Get all sections (modules) for a course")
+    public ResponseEntity<List<SectionDTO>> getCourseSections(@PathVariable String id) {
+        List<SectionDTO> sections = sectionService.getSectionsByCourse(id);
+        return ResponseEntity.ok(sections);
     }
 }
 

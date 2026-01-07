@@ -231,3 +231,4 @@ edudron-media/
 - The existing `MediaAssetService` and `MediaAssetController` remain for more complex use cases (database tracking, metadata, etc.)
 - The new `MediaUploadService` is simpler and focused on direct upload-to-URL workflow
 
+

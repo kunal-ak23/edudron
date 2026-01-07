@@ -18,3 +18,4 @@ public interface SubLessonRepository extends JpaRepository<SubLesson, String> {
     void deleteByLectureIdAndClientId(String lectureId, UUID clientId);
 }
 
+

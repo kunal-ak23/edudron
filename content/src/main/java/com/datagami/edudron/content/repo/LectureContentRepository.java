@@ -16,5 +16,9 @@ public interface LectureContentRepository extends JpaRepository<LectureContent, 
     Optional<LectureContent> findByIdAndClientId(String id, UUID clientId);
     
     void deleteByLectureIdAndClientId(String lectureId, UUID clientId);
+    
+    @org.springframework.data.jpa.repository.Query("SELECT MAX(lc.sequence) FROM LectureContent lc WHERE lc.lectureId = :lectureId AND lc.clientId = :clientId")
+    Integer findMaxSequenceByLectureIdAndClientId(String lectureId, UUID clientId);
 }
+
 

@@ -56,3 +56,4 @@ public class CourseResourceDTO {
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
 
+

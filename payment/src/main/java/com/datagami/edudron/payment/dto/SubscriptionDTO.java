@@ -48,3 +48,4 @@ public class SubscriptionDTO {
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
 
+

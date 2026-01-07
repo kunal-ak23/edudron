@@ -29,3 +29,4 @@ public class UpdateProgressRequest {
     public void setTimeSpentSeconds(Integer timeSpentSeconds) { this.timeSpentSeconds = timeSpentSeconds; }
 }
 
+

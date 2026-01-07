@@ -27,3 +27,4 @@ public interface AssessmentRepository extends JpaRepository<Assessment, String> 
     void deleteByLectureIdAndClientId(String lectureId, UUID clientId);
 }
 
+

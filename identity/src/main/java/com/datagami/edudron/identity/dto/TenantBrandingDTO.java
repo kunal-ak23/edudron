@@ -91,3 +91,4 @@ public class TenantBrandingDTO {
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
 }
 
+

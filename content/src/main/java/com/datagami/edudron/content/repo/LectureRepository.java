@@ -33,3 +33,4 @@ public interface LectureRepository extends JpaRepository<Lecture, String> {
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);
 }
 
+

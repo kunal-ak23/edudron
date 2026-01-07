@@ -13,3 +13,4 @@ public interface TenantBrandingRepository extends JpaRepository<TenantBranding, 
     Optional<TenantBranding> findByClientIdAndIsActiveTrue(UUID clientId);
 }
 
+

@@ -30,6 +30,7 @@ public class MediaUploadService {
 
     private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
     private static final long MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
+    private static final long MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB for generic files
 
     public String uploadImage(MultipartFile file, String folder) throws IOException {
         return uploadImage(file, folder, null);
@@ -213,6 +214,94 @@ public class MediaUploadService {
         } catch (Exception e) {
             // Log error but don't throw exception to avoid breaking the main operation
             System.err.println("Failed to delete media: " + mediaUrl + ", Error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Generic file upload method that accepts any file type
+     * @param file The file to upload
+     * @param folder The folder name (must be a valid folder from MediaFolderConstants)
+     * @return The URL of the uploaded file
+     */
+    public String uploadFile(MultipartFile file, String folder) throws IOException {
+        return uploadFile(file, folder, null);
+    }
+
+    /**
+     * Generic file upload method that accepts any file type
+     * @param file The file to upload
+     * @param folder The folder name (must be a valid folder from MediaFolderConstants)
+     * @param tenantId Optional tenant ID (uses TenantContext if not provided)
+     * @return The URL of the uploaded file
+     */
+    public String uploadFile(MultipartFile file, String folder, String tenantId) throws IOException {
+        if (blobServiceClient == null) {
+            throw new IllegalStateException("Azure Storage is not configured");
+        }
+
+        // Validate file
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File is empty");
+        }
+
+        // Validate file size
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException("File size must be less than 100MB");
+        }
+
+        // Validate folder name - allow nested folders like "lectures/videos"
+        String baseFolder = folder.contains("/") ? folder.split("/")[0] : folder;
+        if (!MediaFolderConstants.isValidFolder(baseFolder)) {
+            throw new IllegalArgumentException("Invalid folder name");
+        }
+
+        // Get tenant ID from context if not provided
+        if (tenantId == null) {
+            tenantId = TenantContext.getClientId();
+            if (tenantId == null) {
+                throw new IllegalStateException("Tenant context is not set");
+            }
+        }
+
+        // Generate unique filename with tenant-based structure
+        String originalFilename = file.getOriginalFilename();
+        String extension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        }
+
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+        String uniqueId = UUID.randomUUID().toString();
+        // Structure: tenantId/folder/yyyy/MM/dd/uniqueId.extension
+        String fileName = String.format("%s/%s/%s/%s%s", tenantId, folder, timestamp, uniqueId, extension);
+
+        // Get container client
+        BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
+        
+        // Create container if it doesn't exist
+        if (!containerClient.exists()) {
+            containerClient.create();
+        }
+
+        // Get blob client
+        BlobClient blobClient = containerClient.getBlobClient(fileName);
+
+        // Set content type
+        String contentType = file.getContentType();
+        if (contentType != null) {
+            BlobHttpHeaders headers = new BlobHttpHeaders()
+                    .setContentType(contentType);
+            blobClient.setHttpHeaders(headers);
+        }
+
+        // Upload file
+        blobClient.upload(file.getInputStream(), file.getSize(), true);
+
+        // Return public URL
+        if (!baseUrl.isEmpty()) {
+            return String.format("%s/%s/%s", baseUrl, containerName, fileName);
+        } else {
+            return blobClient.getBlobUrl();
         }
     }
 

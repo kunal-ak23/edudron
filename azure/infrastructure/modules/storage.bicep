@@ -47,3 +47,4 @@ output accountName string = storageAccount.name
 output containerName string = containerName
 output baseUrl string = 'https://${storageAccount.name}.blob.core.windows.net'
 
+

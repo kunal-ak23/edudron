@@ -32,3 +32,4 @@ public interface MediaAssetRepository extends JpaRepository<MediaAsset, String> 
     List<MediaAsset> findByClientIdAndAssetType(UUID clientId, MediaAsset.AssetType assetType);
 }
 
+

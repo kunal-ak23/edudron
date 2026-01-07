@@ -25,3 +25,4 @@ public interface SectionRepository extends JpaRepository<Section, String> {
     long countStudentsInSection(@Param("clientId") UUID clientId, @Param("sectionId") String sectionId);
 }
 
+

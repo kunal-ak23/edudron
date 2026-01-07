@@ -18,3 +18,4 @@ public interface SubscriptionPlanRepository extends JpaRepository<SubscriptionPl
     Optional<SubscriptionPlan> findByIdAndClientId(String id, UUID clientId);
 }
 
+

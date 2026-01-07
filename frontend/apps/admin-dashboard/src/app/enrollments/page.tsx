@@ -39,9 +39,9 @@ export default function EnrollmentsPage() {
   const [classes, setClasses] = useState<Class[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedInstituteId, setSelectedInstituteId] = useState<string>('')
-  const [selectedClassId, setSelectedClassId] = useState<string>('')
-  const [selectedSectionId, setSelectedSectionId] = useState<string>('')
+  const [selectedInstituteId, setSelectedInstituteId] = useState<string>('all')
+  const [selectedClassId, setSelectedClassId] = useState<string>('all')
+  const [selectedSectionId, setSelectedSectionId] = useState<string>('all')
 
   useEffect(() => {
     loadData()
@@ -101,13 +101,13 @@ export default function EnrollmentsPage() {
   const filterEnrollments = () => {
     let filtered = [...enrollments]
 
-    if (selectedInstituteId) {
+    if (selectedInstituteId && selectedInstituteId !== 'all') {
       filtered = filtered.filter(e => e.instituteId === selectedInstituteId)
     }
-    if (selectedClassId) {
+    if (selectedClassId && selectedClassId !== 'all') {
       filtered = filtered.filter(e => e.classId === selectedClassId)
     }
-    if (selectedSectionId) {
+    if (selectedSectionId && selectedSectionId !== 'all') {
       filtered = filtered.filter(e => e.batchId === selectedSectionId)
     }
 
@@ -132,19 +132,19 @@ export default function EnrollmentsPage() {
   }
 
   const getFilteredClasses = () => {
-    if (!selectedInstituteId) return classes
+    if (!selectedInstituteId || selectedInstituteId === 'all') return classes
     return classes.filter(c => c.instituteId === selectedInstituteId)
   }
 
   const getFilteredSections = () => {
-    if (!selectedClassId) return sections
+    if (!selectedClassId || selectedClassId === 'all') return sections
     return sections.filter(s => s.classId === selectedClassId)
   }
 
   const clearFilters = () => {
-    setSelectedInstituteId('')
-    setSelectedClassId('')
-    setSelectedSectionId('')
+    setSelectedInstituteId('all')
+    setSelectedClassId('all')
+    setSelectedSectionId('all')
   }
 
   if (loading) {
@@ -181,14 +181,14 @@ export default function EnrollmentsPage() {
                   <Label>Institute</Label>
                   <Select value={selectedInstituteId} onValueChange={(value) => {
                     setSelectedInstituteId(value)
-                    setSelectedClassId('')
-                    setSelectedSectionId('')
+                    setSelectedClassId('all')
+                    setSelectedSectionId('all')
                   }}>
                     <SelectTrigger>
                       <SelectValue placeholder="All Institutes" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Institutes</SelectItem>
+                      <SelectItem value="all">All Institutes</SelectItem>
                       {institutes.map(inst => (
                         <SelectItem key={inst.id} value={inst.id}>{inst.name}</SelectItem>
                       ))}
@@ -201,15 +201,15 @@ export default function EnrollmentsPage() {
                     value={selectedClassId} 
                     onValueChange={(value) => {
                       setSelectedClassId(value)
-                      setSelectedSectionId('')
+                      setSelectedSectionId('all')
                     }}
-                    disabled={!selectedInstituteId}
+                    disabled={!selectedInstituteId || selectedInstituteId === 'all'}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="All Classes" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Classes</SelectItem>
+                      <SelectItem value="all">All Classes</SelectItem>
                       {getFilteredClasses().map(classItem => (
                         <SelectItem key={classItem.id} value={classItem.id}>{classItem.name}</SelectItem>
                       ))}
@@ -221,13 +221,13 @@ export default function EnrollmentsPage() {
                   <Select 
                     value={selectedSectionId} 
                     onValueChange={setSelectedSectionId}
-                    disabled={!selectedClassId}
+                    disabled={!selectedClassId || selectedClassId === 'all'}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="All Sections" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Sections</SelectItem>
+                      <SelectItem value="all">All Sections</SelectItem>
                       {getFilteredSections().map(section => (
                         <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>
                       ))}
@@ -239,7 +239,7 @@ export default function EnrollmentsPage() {
                     variant="outline" 
                     onClick={clearFilters}
                     className="w-full"
-                    disabled={!selectedInstituteId && !selectedClassId && !selectedSectionId}
+                    disabled={selectedInstituteId === 'all' && selectedClassId === 'all' && selectedSectionId === 'all'}
                   >
                     <X className="h-4 w-4 mr-2" />
                     Clear Filters
@@ -305,4 +305,5 @@ export default function EnrollmentsPage() {
     </ProtectedRoute>
   )
 }
+
 

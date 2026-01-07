@@ -150,3 +150,4 @@ output appInsightsConnectionString string = appInsights.outputs.connectionString
 output appInsightsInstrumentationKey string = appInsights.outputs.instrumentationKey
 output logAnalyticsWorkspaceId string = appInsights.outputs.logAnalyticsWorkspaceId
 
+
