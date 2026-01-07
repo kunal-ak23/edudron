@@ -7,13 +7,18 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Repository
 public interface ProgressRepository extends JpaRepository<Progress, String> {
     
-    Optional<Progress> findByClientIdAndStudentIdAndLectureId(UUID clientId, String studentId, String lectureId);
+    @Query("SELECT p FROM Progress p WHERE p.clientId = :clientId AND p.studentId = :studentId " +
+           "AND p.lectureId = :lectureId ORDER BY p.lastAccessedAt DESC NULLS LAST, p.updatedAt DESC")
+    List<Progress> findAllByClientIdAndStudentIdAndLectureId(
+        @Param("clientId") UUID clientId,
+        @Param("studentId") String studentId,
+        @Param("lectureId") String lectureId
+    );
     
     List<Progress> findByClientIdAndStudentIdAndCourseId(UUID clientId, String studentId, String courseId);
     

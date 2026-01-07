@@ -19,11 +19,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Sparkles, Loader2, ArrowLeft } from 'lucide-react'
 import { coursesApi, courseGenerationIndexApi } from '@/lib/api'
 import type { GenerateCourseRequest, CourseGenerationIndex } from '@edudron/shared-utils'
+import { useToast } from '@/hooks/use-toast'
+import { extractErrorMessage } from '@/lib/error-utils'
 
 export const dynamic = 'force-dynamic'
 
 export default function GenerateCoursePage() {
   const router = useRouter()
+  const { toast } = useToast()
   const [prompt, setPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
   const [referenceIndexes, setReferenceIndexes] = useState<CourseGenerationIndex[]>([])
@@ -60,7 +63,11 @@ export default function GenerateCoursePage() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-      alert('Please enter a course description prompt')
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'Please enter a course description prompt',
+      })
       return
     }
 
@@ -80,10 +87,18 @@ export default function GenerateCoursePage() {
       }
 
       const course = await coursesApi.generateCourse(request)
+      toast({
+        title: 'Course Generated',
+        description: 'The course has been generated successfully.',
+      })
       router.push(`/courses/${course.id}`)
     } catch (error: any) {
       console.error('Failed to generate course:', error)
-      alert(error.response?.data?.message || 'Failed to generate course. Please try again.')
+      toast({
+        variant: 'destructive',
+        title: 'Failed to generate course',
+        description: extractErrorMessage(error) || 'Failed to generate course. Please try again.',
+      })
     } finally {
       setGenerating(false)
     }

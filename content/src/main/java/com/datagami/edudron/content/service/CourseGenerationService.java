@@ -9,6 +9,8 @@ import com.datagami.edudron.content.dto.CourseDTO;
 import com.datagami.edudron.content.dto.CourseGenerationIndexDTO;
 import com.datagami.edudron.content.dto.CourseRequirements;
 import com.datagami.edudron.content.dto.GenerateCourseRequest;
+import com.datagami.edudron.content.dto.LectureDTO;
+import com.datagami.edudron.content.dto.SectionDTO;
 import com.datagami.edudron.content.repo.LearningObjectiveRepository;
 import com.datagami.edudron.content.repo.LectureContentRepository;
 import com.datagami.edudron.content.service.FoundryAIService.LectureInfo;
@@ -249,6 +251,150 @@ public class CourseGenerationService {
         }
         
         return null;
+    }
+    
+    /**
+     * Generate a single lecture (section) with sub-lectures based on a prompt.
+     * This is a subset of the full course generation feature.
+     */
+    public SectionDTO generateLectureWithSubLectures(String courseId, String prompt) {
+        logger.info("Starting lecture generation from prompt for course: {}", courseId);
+        
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Get course context
+        CourseDTO course = courseService.getCourseById(courseId);
+        String courseContext = String.format("%s: %s", course.getTitle(), course.getDescription());
+        
+        // Generate lecture structure with sub-lectures
+        logger.info("Generating lecture structure from prompt: {}", prompt);
+        FoundryAIService.SectionInfo sectionInfo = foundryAIService.generateLectureWithSubLectures(prompt, courseContext);
+        
+        // Generate section description if not provided
+        String sectionDescription = sectionInfo.getDescription();
+        if (sectionDescription == null || sectionDescription.isEmpty()) {
+            sectionDescription = foundryAIService.generateSectionContent(sectionInfo.getTitle(), courseContext);
+        }
+        
+        // Create section (main lecture)
+        logger.info("Creating section: {}", sectionInfo.getTitle());
+        SectionDTO section = sectionService.createSection(courseId, sectionInfo.getTitle(), sectionDescription);
+        
+        // Create sub-lectures with content
+        if (sectionInfo.getLectures() != null && !sectionInfo.getLectures().isEmpty()) {
+            for (FoundryAIService.LectureInfo lectureInfo : sectionInfo.getLectures()) {
+                logger.info("Creating sub-lecture: {}", lectureInfo.getTitle());
+                
+                // Create sub-lecture
+                com.datagami.edudron.content.dto.LectureDTO lecture = 
+                    lectureService.createLecture(
+                        section.getId(),
+                        lectureInfo.getTitle(),
+                        lectureInfo.getDescription(),
+                        Lecture.ContentType.TEXT
+                    );
+                
+                // Generate full lecture content
+                logger.info("Generating content for sub-lecture: {}", lectureInfo.getTitle());
+                String lectureContent = foundryAIService.generateLectureContent(
+                    lectureInfo.getTitle(),
+                    sectionInfo.getTitle() + ": " + sectionDescription,
+                    courseContext,
+                    null, // No writing format for single lecture generation
+                    null  // No reference content for single lecture generation
+                );
+                
+                // Create LectureContent entity
+                LectureContent content = new LectureContent();
+                content.setId(UlidGenerator.nextUlid());
+                content.setClientId(clientId);
+                content.setLectureId(lecture.getId());
+                content.setContentType(LectureContent.ContentType.TEXT);
+                content.setTitle(lectureInfo.getTitle());
+                content.setTextContent(lectureContent);
+                content.setSequence(0);
+                
+                lectureContentRepository.save(content);
+            }
+        }
+        
+        logger.info("Lecture generation completed. Section ID: {}", section.getId());
+        
+        // Get the section with sub-lectures populated
+        SectionDTO result = sectionService.getSectionById(section.getId());
+        
+        // Populate lectures in the DTO
+        List<com.datagami.edudron.content.dto.LectureDTO> lectures = 
+            lectureService.getLecturesBySection(section.getId());
+        result.setLectures(lectures);
+        
+        return result;
+    }
+    
+    /**
+     * Generate a single sub-lecture with AI content based on a prompt.
+     * This creates a sub-lecture within an existing section (main lecture).
+     */
+    public LectureDTO generateSubLectureWithAI(String courseId, String sectionId, String prompt) {
+        logger.info("Starting sub-lecture generation from prompt for section: {}", sectionId);
+        
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Get course and section context
+        CourseDTO course = courseService.getCourseById(courseId);
+        SectionDTO section = sectionService.getSectionById(sectionId);
+        String courseContext = String.format("%s: %s", course.getTitle(), course.getDescription());
+        String sectionContext = String.format("%s: %s", section.getTitle(), section.getDescription());
+        
+        // Use the prompt as the lecture title, or generate a title from the prompt
+        String lectureTitle = prompt.trim();
+        
+        // Generate a description for the sub-lecture based on the prompt
+        String lectureDescription = foundryAIService.generateSectionContent(lectureTitle, courseContext);
+        
+        // Create the sub-lecture
+        logger.info("Creating sub-lecture: {}", lectureTitle);
+        com.datagami.edudron.content.dto.LectureDTO lecture = 
+            lectureService.createLecture(
+                sectionId,
+                lectureTitle,
+                lectureDescription,
+                Lecture.ContentType.TEXT
+            );
+        
+        // Generate full lecture content
+        logger.info("Generating content for sub-lecture: {}", lectureTitle);
+        String lectureContent = foundryAIService.generateLectureContent(
+            lectureTitle,
+            sectionContext,
+            courseContext,
+            null, // No writing format for single sub-lecture generation
+            null  // No reference content for single sub-lecture generation
+        );
+        
+        // Create LectureContent entity
+        LectureContent content = new LectureContent();
+        content.setId(UlidGenerator.nextUlid());
+        content.setClientId(clientId);
+        content.setLectureId(lecture.getId());
+        content.setContentType(LectureContent.ContentType.TEXT);
+        content.setTitle(lectureTitle);
+        content.setTextContent(lectureContent);
+        content.setSequence(0);
+        
+        lectureContentRepository.save(content);
+        
+        logger.info("Sub-lecture generation completed. Lecture ID: {}", lecture.getId());
+        
+        return lecture;
     }
 }
 

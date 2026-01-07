@@ -93,8 +93,8 @@ export function AppLayout({ children }: AppLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
+    <div className="min-h-screen bg-background">
+      {/* Sidebar - Fixed, doesn't scroll */}
       <Sidebar 
         isOpen={isSidebarOpen} 
         onToggle={toggleSidebar}
@@ -102,17 +102,15 @@ export function AppLayout({ children }: AppLayoutProps) {
         onCollapseToggle={toggleSidebarCollapse}
       />
       
-      {/* Main content area */}
+      {/* Main content area - scrolls independently */}
       <div 
         className={cn(
-          "flex-1 flex flex-col transition-all duration-300 w-full"
+          "flex flex-col min-h-screen transition-all duration-300",
+          !isSidebarCollapsed && "lg:ml-64"
         )}
       >
-        {/* Top Header - Fixed */}
-        <header className={cn(
-          "fixed top-0 right-0 left-0 z-30 bg-card border-b shadow-sm bg-gradient-to-r from-primary/5 to-accent/5 transition-all duration-300",
-          !isSidebarCollapsed && "lg:left-64"
-        )}>
+        {/* Top Header - Sticky */}
+        <header className="sticky top-0 z-30 bg-card border-b shadow-sm bg-gradient-to-r from-primary/5 to-accent/5">
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center space-x-4">
               <SidebarToggle onToggle={toggleSidebar} />
@@ -182,7 +180,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </header>
 
         {/* Page Content - Scrollable */}
-        <main className="flex-1 pt-20 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto">
           <div className="p-6">
             {children}
           </div>

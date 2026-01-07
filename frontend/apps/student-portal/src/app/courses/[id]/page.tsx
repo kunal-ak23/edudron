@@ -8,6 +8,7 @@ import type { Course, Section } from '@edudron/shared-utils'
 import { CommitmentModal } from '@/components/CommitmentModal'
 import { EnrollmentSuccessModal } from '@/components/EnrollmentSuccessModal'
 import { StudentLayout } from '@/components/StudentLayout'
+import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useAuth } from '@edudron/shared-utils'
 
 // Force dynamic rendering
@@ -217,9 +218,11 @@ export default function CourseDetailPage() {
               <h1 className="text-4xl font-bold text-gray-900 mb-3 leading-tight">
                 {course.title}
               </h1>
-              <p className="text-gray-600 mb-4 max-w-3xl">
-                {course.description}
-              </p>
+              {course.description && (
+                <div className="text-gray-600 mb-4 max-w-3xl">
+                  <MarkdownRenderer content={course.description} className="prose-sm" />
+                </div>
+              )}
               <div className="flex items-center gap-3 mb-4 flex-wrap">
                 {course.difficultyLevel && (
                   <span className="px-3 py-1 border border-gray-200 bg-white rounded-full text-sm font-semibold">

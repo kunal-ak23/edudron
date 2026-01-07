@@ -89,19 +89,46 @@ public class UserService {
             throw new IllegalArgumentException("User already exists with this email in this tenant");
         }
         
-        User user = new User(
-            UlidGenerator.nextUlid(),
-            clientId,
-            request.getEmail(),
-            passwordEncoder.encode(request.getPassword()),
-            request.getName(),
-            request.getPhone(),
-            role
-        );
-        user.setActive(request.getActive() != null ? request.getActive() : true);
-        user.setCreatedAt(OffsetDateTime.now());
+        User user = null;
+        int maxRetries = 3;
+        int attempts = 0;
         
-        user = userRepository.save(user);
+        while (user == null && attempts < maxRetries) {
+            try {
+                String userId = UlidGenerator.nextUlid();
+                user = new User(
+                    userId,
+                    clientId,
+                    request.getEmail(),
+                    passwordEncoder.encode(request.getPassword()),
+                    request.getName(),
+                    request.getPhone(),
+                    role
+                );
+                user.setActive(request.getActive() != null ? request.getActive() : true);
+                user.setCreatedAt(OffsetDateTime.now());
+                
+                user = userRepository.save(user);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                // Handle duplicate key violation (ID collision)
+                attempts++;
+                if (attempts >= maxRetries) {
+                    // Check if user was actually created (by email)
+                    var existingUser = userRepository.findByEmailAndClientId(request.getEmail(), clientId);
+                    if (existingUser.isPresent()) {
+                        user = existingUser.get();
+                        break; // User already exists, use it
+                    }
+                    throw new IllegalArgumentException("Failed to create user after multiple attempts. Please try again.", e);
+                }
+                // Retry with a new ULID
+                user = null;
+            }
+        }
+        
+        if (user == null) {
+            throw new IllegalArgumentException("Failed to create user. Please try again.");
+        }
         return toDTO(user);
     }
     

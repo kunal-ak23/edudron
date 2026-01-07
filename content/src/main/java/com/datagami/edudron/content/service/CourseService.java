@@ -69,7 +69,11 @@ public class CourseService {
         Course course = courseRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
         
-        return toDTO(course);
+        try {
+            return toDTO(course);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to convert course to DTO: " + e.getMessage(), e);
+        }
     }
     
     public Page<CourseDTO> getCourses(Boolean isPublished, Pageable pageable) {
@@ -180,31 +184,35 @@ public class CourseService {
     }
     
     private CourseDTO toDTO(Course course) {
+        if (course == null) {
+            throw new IllegalArgumentException("Course cannot be null");
+        }
+        
         CourseDTO dto = new CourseDTO();
         dto.setId(course.getId());
         dto.setClientId(course.getClientId());
         dto.setTitle(course.getTitle());
         dto.setDescription(course.getDescription());
-        dto.setIsPublished(course.getIsPublished());
+        dto.setIsPublished(course.getIsPublished() != null ? course.getIsPublished() : false);
         dto.setThumbnailUrl(course.getThumbnailUrl());
         dto.setPreviewVideoUrl(course.getPreviewVideoUrl());
-        dto.setIsFree(course.getIsFree());
+        dto.setIsFree(course.getIsFree() != null ? course.getIsFree() : false);
         dto.setPricePaise(course.getPricePaise());
-        dto.setCurrency(course.getCurrency());
+        dto.setCurrency(course.getCurrency() != null ? course.getCurrency() : "INR");
         dto.setCategoryId(course.getCategoryId());
-        dto.setTags(course.getTags());
+        dto.setTags(course.getTags() != null ? course.getTags() : new java.util.ArrayList<>());
         dto.setDifficultyLevel(course.getDifficultyLevel());
-        dto.setLanguage(course.getLanguage());
-        dto.setTotalDurationSeconds(course.getTotalDurationSeconds());
-        dto.setTotalLecturesCount(course.getTotalLecturesCount());
-        dto.setTotalStudentsCount(course.getTotalStudentsCount());
-        dto.setCertificateEligible(course.getCertificateEligible());
+        dto.setLanguage(course.getLanguage() != null ? course.getLanguage() : "en");
+        dto.setTotalDurationSeconds(course.getTotalDurationSeconds() != null ? course.getTotalDurationSeconds() : 0);
+        dto.setTotalLecturesCount(course.getTotalLecturesCount() != null ? course.getTotalLecturesCount() : 0);
+        dto.setTotalStudentsCount(course.getTotalStudentsCount() != null ? course.getTotalStudentsCount() : 0);
+        dto.setCertificateEligible(course.getCertificateEligible() != null ? course.getCertificateEligible() : false);
         dto.setMaxCompletionDays(course.getMaxCompletionDays());
         dto.setCreatedAt(course.getCreatedAt());
         dto.setUpdatedAt(course.getUpdatedAt());
         dto.setPublishedAt(course.getPublishedAt());
-        dto.setAssignedToClassIds(course.getAssignedToClassIds());
-        dto.setAssignedToSectionIds(course.getAssignedToSectionIds());
+        dto.setAssignedToClassIds(course.getAssignedToClassIds() != null ? course.getAssignedToClassIds() : new java.util.ArrayList<>());
+        dto.setAssignedToSectionIds(course.getAssignedToSectionIds() != null ? course.getAssignedToSectionIds() : new java.util.ArrayList<>());
         // Note: Sections, objectives, instructors, resources are loaded separately
         return dto;
     }

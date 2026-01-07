@@ -8,6 +8,7 @@ import type { Course, Section, Lecture, Progress } from '@edudron/shared-utils'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useAuth } from '@edudron/shared-utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Switch } from '@/components/ui/switch'
 import { StudentLayout } from '@/components/StudentLayout'
 
 // Force dynamic rendering
@@ -31,9 +32,98 @@ export default function LearnPage() {
   const [activeTab, setActiveTab] = useState<TabType>('transcript')
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Helper function to get localStorage key for course position
+  const getStorageKey = (courseId: string) => `course_position_${courseId}`
+
+  // Helper function to find last accessed lecture from progress data
+  const findLastAccessedLecture = (lectureProgressData: any[], sectionsData: any[]): Lecture | null => {
+    if (!lectureProgressData || lectureProgressData.length === 0 || !sectionsData || sectionsData.length === 0) {
+      return null
+    }
+
+    // Filter progress entries that have lastAccessedAt and lectureId
+    const accessedLectures = lectureProgressData
+      .filter((lp: any) => lp.lastAccessedAt && lp.lectureId)
+      .sort((a: any, b: any) => {
+        // Sort by lastAccessedAt descending (most recent first)
+        const dateA = new Date(a.lastAccessedAt).getTime()
+        const dateB = new Date(b.lastAccessedAt).getTime()
+        return dateB - dateA
+      })
+
+    if (accessedLectures.length === 0) {
+      return null
+    }
+
+    // Find the most recently accessed lecture in the sections
+    for (const progressEntry of accessedLectures) {
+      for (const section of sectionsData) {
+        if (section.lectures) {
+          const lecture = section.lectures.find((l: Lecture) => l.id === progressEntry.lectureId)
+          if (lecture) {
+            return lecture
+          }
+        }
+      }
+    }
+
+    return null
+  }
+
+  // Helper function to restore position from localStorage
+  const restorePositionFromStorage = (sectionsData: any[]): { lecture: Lecture | null; section: Section | null } => {
+    try {
+      const stored = localStorage.getItem(getStorageKey(courseId))
+      if (!stored) return { lecture: null, section: null }
+
+      const position = JSON.parse(stored)
+      if (!position.lectureId) return { lecture: null, section: null }
+
+      // Find the lecture in sections
+      for (const section of sectionsData) {
+        if (section.lectures) {
+          const lecture = section.lectures.find((l: Lecture) => l.id === position.lectureId)
+          if (lecture) {
+            return { lecture, section: null }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[LearnPage] Error restoring position from localStorage:', error)
+    }
+    return { lecture: null, section: null }
+  }
+
+  // Save current position to localStorage
+  const savePositionToStorage = (lecture: Lecture | null) => {
+    try {
+      if (lecture) {
+        localStorage.setItem(getStorageKey(courseId), JSON.stringify({ lectureId: lecture.id }))
+      } else {
+        localStorage.removeItem(getStorageKey(courseId))
+      }
+    } catch (error) {
+      console.warn('[LearnPage] Error saving position to localStorage:', error)
+    }
+  }
+
   useEffect(() => {
     loadCourseData()
   }, [courseId])
+
+  // Save position to localStorage when selectedLecture changes
+  useEffect(() => {
+    if (selectedLecture) {
+      savePositionToStorage(selectedLecture)
+      // Update progress to track last accessed position
+      enrollmentsApi.updateProgress(courseId, {
+        lectureId: selectedLecture.id,
+        progressPercentage: completedLectures.has(selectedLecture.id) ? 100 : 0
+      }).catch((error) => {
+        console.warn('[LearnPage] Failed to update progress for last accessed position:', error)
+      })
+    }
+  }, [selectedLecture, courseId])
 
   const loadCourseData = async () => {
     try {
@@ -126,11 +216,34 @@ export default function LearnPage() {
       })
       setCompletedLectures(completed)
 
+      // Restore position: Try from progress data first, then localStorage, then default to first section
       if (sectionsData && sectionsData.length > 0) {
-        const firstSection = sectionsData[0] as any
-        if (firstSection.lectures && firstSection.lectures.length > 0) {
-          // Show module landing page by default
-          setSelectedSection(firstSection)
+        let restoredLecture: Lecture | null = null
+        let restoredSection: Section | null = null
+
+        // Try to find last accessed lecture from progress data
+        restoredLecture = findLastAccessedLecture(lectureProgressData, sectionsData)
+        
+        // If not found in progress, try localStorage
+        if (!restoredLecture) {
+          const storagePosition = restorePositionFromStorage(sectionsData)
+          restoredLecture = storagePosition.lecture
+          restoredSection = storagePosition.section
+        }
+
+        if (restoredLecture) {
+          // Restore the last accessed lecture
+          console.log('[LearnPage] Restoring last accessed lecture:', restoredLecture.id)
+          setSelectedLecture(restoredLecture)
+          setSelectedSection(null)
+        } else {
+          // Default to first section if no progress found
+          const firstSection = sectionsData[0] as any
+          if (firstSection.lectures && firstSection.lectures.length > 0) {
+            console.log('[LearnPage] No previous progress found, showing first module')
+            setSelectedSection(firstSection)
+            setSelectedLecture(null)
+          }
         }
       }
     } catch (error) {
@@ -146,6 +259,7 @@ export default function LearnPage() {
   const handleLectureSelect = (lecture: Lecture) => {
     setSelectedLecture(lecture)
     setSelectedSection(null) // Clear module selection when selecting a lecture
+    // Position will be saved via useEffect hook
   }
 
   const handleSectionSelect = (section: Section) => {
@@ -557,21 +671,21 @@ export default function LearnPage() {
                     </div>
                   ) : selectedLecture.contentType === 'TEXT' ? (
                     <div className="w-full h-full overflow-y-auto bg-white">
-                      <div className="max-w-4xl mx-auto p-8">
-                        <h1 className="text-4xl font-bold text-gray-900 mb-3">{selectedLecture.title}</h1>
+                      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">{selectedLecture.title}</h1>
                         {selectedLecture.description && (
-                          <div className="text-gray-600 mb-8 text-lg font-normal leading-relaxed">
+                          <div className="text-gray-600 mb-6 text-base sm:text-lg font-normal leading-relaxed">
                             <MarkdownRenderer content={selectedLecture.description} />
                           </div>
                         )}
                         {selectedLecture.contents && selectedLecture.contents.length > 0 ? (
-                          <div className="mt-8 space-y-8">
+                          <div className="mt-6 space-y-6">
                             {selectedLecture.contents
                               .filter((content: any) => content.contentType === 'TEXT' && content.textContent)
                               .map((content: any, index: number) => (
                                 <div key={content.id || index}>
                                   {content.title && content.title.trim() !== selectedLecture.title.trim() && (
-                                    <h2 className="text-3xl font-bold text-gray-900 mb-4">{content.title}</h2>
+                                    <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">{content.title}</h2>
                                   )}
                                   <MarkdownRenderer
                                     content={content.textContent}
@@ -580,7 +694,7 @@ export default function LearnPage() {
                               ))}
                           </div>
                         ) : (
-                          <div className="text-center text-gray-400 mt-8">
+                          <div className="text-center text-gray-400 mt-6">
                             <p>Content is being generated. Please check back soon.</p>
                           </div>
                         )}
@@ -614,9 +728,9 @@ export default function LearnPage() {
                 </div>
 
                 {/* Content Below Video */}
-                <div className="border-t border-gray-200 bg-white">
-                  <div className="px-6 py-4">
-                    <div className="flex items-center justify-between mb-4">
+                <div className="border-t border-gray-200 bg-white pb-20 md:pb-4">
+                  <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+                    <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-4">
                         <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Report an issue</a>
                       </div>
@@ -627,11 +741,11 @@ export default function LearnPage() {
 
                     {/* Tabs */}
                     {selectedLecture.contentType === 'VIDEO' && (
-                      <div className="border-b border-gray-200 mb-4">
+                      <div className="border-b border-gray-200 mb-3">
                         <div className="flex space-x-6">
                           <button
                             onClick={() => setActiveTab('transcript')}
-                            className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
                               activeTab === 'transcript'
                                 ? 'border-primary-600 text-primary-600'
                                 : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -641,7 +755,7 @@ export default function LearnPage() {
                           </button>
                           <button
                             onClick={() => setActiveTab('notes')}
-                            className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
                               activeTab === 'notes'
                                 ? 'border-primary-600 text-primary-600'
                                 : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -651,7 +765,7 @@ export default function LearnPage() {
                           </button>
                           <button
                             onClick={() => setActiveTab('downloads')}
-                            className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
                               activeTab === 'downloads'
                                 ? 'border-primary-600 text-primary-600'
                                 : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -665,17 +779,17 @@ export default function LearnPage() {
 
                     {/* Tab Content */}
                     {selectedLecture.contentType === 'VIDEO' && (
-                      <div className="mb-6">
+                      <div className="mb-4">
                         {activeTab === 'transcript' && (
                           <div>
-                            <div className="flex justify-between items-center mb-4">
+                            <div className="flex justify-between items-center mb-3">
                               <div className="text-sm text-gray-600">0:00</div>
                               <select className="text-sm text-gray-600 border border-gray-300 rounded px-2 py-1">
                                 <option>Transcript language: English</option>
                               </select>
                             </div>
                             <div className="text-gray-700">
-                              <p className="text-sm text-gray-500 mb-4">
+                              <p className="text-sm text-gray-500 mb-3">
                                 Transcript will be available here once the video transcript is generated.
                               </p>
                             </div>
@@ -684,7 +798,7 @@ export default function LearnPage() {
 
                         {activeTab === 'notes' && (
                           <div>
-                            <p className="text-gray-700 mb-4">
+                            <p className="text-gray-700 mb-3">
                               Click the 'Save Note' button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you've captured.
                             </p>
                             <a href="#" className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center space-x-1">
@@ -697,18 +811,18 @@ export default function LearnPage() {
                         )}
 
                         {activeTab === 'downloads' && (
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                              <span className="text-gray-700">Lecture Video (240p) mp4</span>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                              <span className="text-gray-700 text-sm">Lecture Video (240p) mp4</span>
                             </div>
-                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                              <span className="text-gray-700">Lecture Video (1080p) mp4</span>
+                            <div className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                              <span className="text-gray-700 text-sm">Lecture Video (1080p) mp4</span>
                             </div>
-                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                              <span className="text-gray-700">Subtitles (English) WebVTT</span>
+                            <div className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                              <span className="text-gray-700 text-sm">Subtitles (English) WebVTT</span>
                             </div>
-                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                              <span className="text-gray-700">Transcript (English) txt</span>
+                            <div className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                              <span className="text-gray-700 text-sm">Transcript (English) txt</span>
                             </div>
                           </div>
                         )}
@@ -716,21 +830,21 @@ export default function LearnPage() {
                     )}
 
                     {/* Engagement Buttons */}
-                    <div className="flex items-center space-x-4 pb-4">
-                      <button className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex items-center space-x-3 pb-3">
+                      <button className="flex items-center space-x-2 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
                         </svg>
                         <span className="text-sm font-medium">Like</span>
                       </button>
-                      <button className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <button className="flex items-center space-x-2 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
                         </svg>
                         <span className="text-sm font-medium">Dislike</span>
                       </button>
-                      <button className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <button className="flex items-center space-x-2 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                         </svg>
                         <span className="text-sm font-medium">Share</span>
@@ -738,22 +852,23 @@ export default function LearnPage() {
                     </div>
 
                     {/* Mark Complete and Next Button */}
-                    <div className="border-t border-gray-200 pt-4 flex items-center justify-between">
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="checkbox"
+                    <div className="border-t border-gray-200 pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                      <div className="flex items-center space-x-3">
+                        <Switch
                           checked={completedLectures.has(selectedLecture.id)}
-                          onChange={(e) => handleMarkComplete(selectedLecture.id, e.target.checked)}
-                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                          onCheckedChange={(checked) => handleMarkComplete(selectedLecture.id, checked)}
                         />
-                        <span className="text-sm font-medium text-gray-700">
+                        <span 
+                          className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                          onClick={() => handleMarkComplete(selectedLecture.id, !completedLectures.has(selectedLecture.id))}
+                        >
                           {completedLectures.has(selectedLecture.id) ? 'Completed' : 'Mark as complete'}
                         </span>
-                      </label>
+                      </div>
                       {nextLecture && (
                         <button
                           onClick={() => handleLectureSelect(nextLecture)}
-                          className="px-6 py-2 bg-primary-600 text-white font-medium rounded-md hover:bg-primary-700 transition-colors flex items-center space-x-2"
+                          className="w-full sm:w-auto px-6 py-2 bg-primary-600 text-white font-medium rounded-md hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2 sm:ml-auto"
                         >
                           <span>Next</span>
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -773,8 +888,11 @@ export default function LearnPage() {
           </div>
 
           {/* Floating Chat Button */}
-          <button className="fixed bottom-6 right-6 w-12 h-12 bg-primary-600 text-white rounded-lg shadow-lg hover:bg-primary-700 flex items-center justify-center z-50">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button 
+            className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 flex items-center justify-center z-50 transition-all hover:scale-105"
+            aria-label="Open chat"
+          >
+            <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
           </button>

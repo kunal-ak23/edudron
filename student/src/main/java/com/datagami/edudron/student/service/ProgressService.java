@@ -15,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -36,25 +38,40 @@ public class ProgressService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        // Verify enrollment
-        Enrollment enrollment = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId)
-            .orElseThrow(() -> new IllegalArgumentException("Student is not enrolled in this course"));
+        // Verify enrollment - handle potential duplicates
+        List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId);
+        if (enrollments.isEmpty()) {
+            throw new IllegalArgumentException("Student is not enrolled in this course");
+        }
+        Enrollment enrollment = enrollments.get(0); // Use first (most recent) enrollment if duplicates exist
         
         Progress progress;
         
         if (request.getLectureId() != null) {
-            // Lecture progress
-            progress = progressRepository.findByClientIdAndStudentIdAndLectureId(clientId, studentId, request.getLectureId())
-                .orElseGet(() -> {
-                    Progress p = new Progress();
-                    p.setId(UlidGenerator.nextUlid());
-                    p.setClientId(clientId);
-                    p.setEnrollmentId(enrollment.getId());
-                    p.setStudentId(studentId);
-                    p.setCourseId(courseId);
-                    p.setLectureId(request.getLectureId());
-                    return p;
-                });
+            // Lecture progress - handle duplicates by taking the most recent one
+            List<Progress> existingProgress = progressRepository.findAllByClientIdAndStudentIdAndLectureId(
+                clientId, studentId, request.getLectureId());
+            
+            if (!existingProgress.isEmpty()) {
+                // Take the most recent one (first in the sorted list)
+                progress = existingProgress.get(0);
+                
+                // If there are duplicates, delete the older ones
+                if (existingProgress.size() > 1) {
+                    for (int i = 1; i < existingProgress.size(); i++) {
+                        progressRepository.delete(existingProgress.get(i));
+                    }
+                }
+            } else {
+                // Create new progress record
+                progress = new Progress();
+                progress.setId(UlidGenerator.nextUlid());
+                progress.setClientId(clientId);
+                progress.setEnrollmentId(enrollment.getId());
+                progress.setStudentId(studentId);
+                progress.setCourseId(courseId);
+                progress.setLectureId(request.getLectureId());
+            }
         } else if (request.getSectionId() != null) {
             // Section progress
             List<Progress> sectionProgress = progressRepository.findSectionProgressByClientIdAndStudentIdAndCourseId(
@@ -99,16 +116,40 @@ public class ProgressService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        // Verify enrollment
-        Enrollment enrollment = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId)
-            .orElseThrow(() -> new IllegalArgumentException("Student is not enrolled in this course"));
-        
-        List<Progress> lectureProgress = progressRepository.findLectureProgressByClientIdAndStudentIdAndCourseId(
+        // Verify enrollment - handle potential duplicates
+        List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(
             clientId, studentId, courseId);
+        if (enrollments.isEmpty()) {
+            throw new IllegalArgumentException("Student is not enrolled in this course");
+        }
+        Enrollment enrollment = enrollments.get(0); // Use first (most recent) enrollment if duplicates exist
+        
+        List<Progress> allLectureProgress = progressRepository.findLectureProgressByClientIdAndStudentIdAndCourseId(
+            clientId, studentId, courseId);
+        
+        // Deduplicate lecture progress - keep only the most recent for each lecture
+        Map<String, Progress> uniqueLectureProgress = allLectureProgress.stream()
+            .collect(Collectors.toMap(
+                p -> p.getLectureId(),
+                p -> p,
+                (existing, replacement) -> {
+                    // If duplicate, keep the one with more recent lastAccessedAt or updatedAt
+                    if (replacement.getLastAccessedAt() != null && existing.getLastAccessedAt() != null) {
+                        return replacement.getLastAccessedAt().isAfter(existing.getLastAccessedAt()) ? replacement : existing;
+                    }
+                    if (replacement.getLastAccessedAt() != null) return replacement;
+                    if (existing.getLastAccessedAt() != null) return existing;
+                    return replacement.getUpdatedAt().isAfter(existing.getUpdatedAt()) ? replacement : existing;
+                }
+            ));
+        
+        List<Progress> lectureProgress = new ArrayList<>(uniqueLectureProgress.values());
         List<Progress> sectionProgress = progressRepository.findSectionProgressByClientIdAndStudentIdAndCourseId(
             clientId, studentId, courseId);
         
-        long completedLectures = progressRepository.countCompletedLectures(clientId, studentId, courseId);
+        long completedLectures = lectureProgress.stream()
+            .filter(p -> p.getIsCompleted() != null && p.getIsCompleted())
+            .count();
         long totalLectures = lectureProgress.size();
         
         BigDecimal completionPercentage = totalLectures > 0
@@ -141,9 +182,26 @@ public class ProgressService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        List<Progress> progress = progressRepository.findLectureProgressByClientIdAndStudentIdAndCourseId(
+        List<Progress> allProgress = progressRepository.findLectureProgressByClientIdAndStudentIdAndCourseId(
             clientId, studentId, courseId);
-        return progress.stream().map(this::toDTO).collect(Collectors.toList());
+        
+        // Deduplicate progress - keep only the most recent for each lecture
+        Map<String, Progress> uniqueProgress = allProgress.stream()
+            .collect(Collectors.toMap(
+                p -> p.getLectureId(),
+                p -> p,
+                (existing, replacement) -> {
+                    // If duplicate, keep the one with more recent lastAccessedAt or updatedAt
+                    if (replacement.getLastAccessedAt() != null && existing.getLastAccessedAt() != null) {
+                        return replacement.getLastAccessedAt().isAfter(existing.getLastAccessedAt()) ? replacement : existing;
+                    }
+                    if (replacement.getLastAccessedAt() != null) return replacement;
+                    if (existing.getLastAccessedAt() != null) return existing;
+                    return replacement.getUpdatedAt().isAfter(existing.getUpdatedAt()) ? replacement : existing;
+                }
+            ));
+        
+        return uniqueProgress.values().stream().map(this::toDTO).collect(Collectors.toList());
     }
     
     private ProgressDTO toDTO(Progress progress) {

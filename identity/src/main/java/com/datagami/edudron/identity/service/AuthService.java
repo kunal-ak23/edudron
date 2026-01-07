@@ -177,17 +177,44 @@ public class AuthService {
             throw new RuntimeException("User already exists with this email in this tenant");
         }
 
-        User user = new User(
-                UlidGenerator.nextUlid(),
-                clientId,
-                request.email(),
-                passwordEncoder.encode(request.password()),
-                request.name(),
-                request.phone(),
-                role
-        );
-
-        user = userRepository.save(user);
+        User user = null;
+        int maxRetries = 3;
+        int attempts = 0;
+        
+        while (user == null && attempts < maxRetries) {
+            try {
+                String userId = UlidGenerator.nextUlid();
+                user = new User(
+                        userId,
+                        clientId,
+                        request.email(),
+                        passwordEncoder.encode(request.password()),
+                        request.name(),
+                        request.phone(),
+                        role
+                );
+                
+                user = userRepository.save(user);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                // Handle duplicate key violation (ID collision)
+                attempts++;
+                if (attempts >= maxRetries) {
+                    // Check if user was actually created (by email)
+                    var existingUser = userRepository.findByEmailAndClientId(request.email(), clientId);
+                    if (existingUser.isPresent()) {
+                        user = existingUser.get();
+                        break; // User already exists, use it
+                    }
+                    throw new RuntimeException("Failed to create user after multiple attempts. Please try again.", e);
+                }
+                // Retry with a new ULID
+                user = null;
+            }
+        }
+        
+        if (user == null) {
+            throw new RuntimeException("Failed to create user. Please try again.");
+        }
 
         // Generate tokens
         String token = jwtUtil.generateToken(user.getEmail(), tenantId, user.getRole().name());

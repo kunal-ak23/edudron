@@ -267,13 +267,13 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
       
       {/* Sidebar */}
       <div className={cn(
-        'fixed left-0 top-0 z-50 h-full transform transition-all duration-300 ease-in-out flex flex-col overflow-visible relative',
+        'fixed left-0 top-0 bottom-0 z-50 transform transition-all duration-300 ease-in-out flex flex-col',
         'bg-card',
         collapsed ? 'w-0 border-0 pointer-events-none overflow-hidden' : 'w-64 border-r',
         isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       )}>
         {!collapsed && (
-          <div className="w-full h-full flex flex-col">
+          <div className="w-full h-screen flex flex-col overflow-hidden">
             {/* Toggle Menu Button - Right edge of sidebar */}
             {onCollapseToggle && (
               <button

@@ -95,14 +95,33 @@ public class CourseController {
         return ResponseEntity.ok(course);
     }
 
+    @Autowired
+    private com.datagami.edudron.content.service.AIJobQueueService aiJobQueueService;
+    
+    @Autowired
+    private com.datagami.edudron.content.service.AIJobWorker aiJobWorker;
+    
     @PostMapping("/generate")
     @Operation(
         summary = "Generate course from prompt",
-        description = "Automatically generate a complete course with sections, lectures, and content from a natural language prompt. This is a long-running operation that may take several minutes."
+        description = "Submit a course generation job to the queue. Returns a job ID that can be used to check status."
     )
-    public ResponseEntity<CourseDTO> generateCourse(@Valid @RequestBody GenerateCourseRequest request) {
-        CourseDTO course = courseGenerationService.generateCourseFromPrompt(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(course);
+    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateCourse(@Valid @RequestBody GenerateCourseRequest request) {
+        com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.submitCourseGenerationJob(request, aiJobWorker);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
+    }
+    
+    @GetMapping("/generate/jobs/{jobId}")
+    @Operation(
+        summary = "Get course generation job status",
+        description = "Get the status of a course generation job"
+    )
+    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> getCourseGenerationJobStatus(@PathVariable String jobId) {
+        com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.getJob(jobId);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(job);
     }
 
     // Backward compatibility: redirect /sections to /lectures

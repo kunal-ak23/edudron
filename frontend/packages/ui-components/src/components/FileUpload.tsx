@@ -8,6 +8,7 @@ export interface FileUploadProps {
   value?: string // URL of uploaded file
   onChange?: (url: string) => void
   onUpload?: (file: File) => Promise<string> // Upload function that returns URL
+  onError?: (message: string) => void // Error callback for displaying errors
   error?: string
   helperText?: string
   className?: string
@@ -22,6 +23,7 @@ export default function FileUpload({
   value,
   onChange,
   onUpload,
+  onError,
   error,
   helperText,
   className,
@@ -38,7 +40,10 @@ export default function FileUpload({
 
     // Validate file size
     if (file.size > maxSize) {
-      alert(`File size must be less than ${(maxSize / 1024 / 1024).toFixed(1)}MB`)
+      const errorMsg = `File size must be less than ${(maxSize / 1024 / 1024).toFixed(1)}MB`
+      if (onError) {
+        onError(errorMsg)
+      }
       return
     }
 
@@ -53,7 +58,10 @@ export default function FileUpload({
         return fileType === type
       })
       if (!isValidType) {
-        alert(`File type not supported. Accepted types: ${accept}`)
+        const errorMsg = `File type not supported. Accepted types: ${accept}`
+        if (onError) {
+          onError(errorMsg)
+        }
         return
       }
     }
@@ -75,7 +83,10 @@ export default function FileUpload({
         setPreview(url)
         onChange?.(url)
       } catch (err: any) {
-        alert(`Upload failed: ${err.message || 'Unknown error'}`)
+        const errorMsg = `Upload failed: ${err.message || 'Unknown error'}`
+        if (onError) {
+          onError(errorMsg)
+        }
         setPreview(null)
       } finally {
         setUploading(false)

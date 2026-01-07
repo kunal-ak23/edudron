@@ -10,6 +10,16 @@ import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
   Bold,
   Italic,
   Underline,
@@ -27,7 +37,7 @@ import {
   Redo,
   Table as TableIcon,
 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 interface RichTextEditorProps {
   content: string
@@ -37,6 +47,11 @@ interface RichTextEditorProps {
 }
 
 export function RichTextEditor({ content, onChange, placeholder = 'Start typing...', className = '' }: RichTextEditorProps) {
+  const [showImageDialog, setShowImageDialog] = useState(false)
+  const [showLinkDialog, setShowLinkDialog] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
+  const [linkUrl, setLinkUrl] = useState('')
+  
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -91,16 +106,28 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
   }
 
   const addImage = () => {
-    const url = window.prompt('Enter image URL:')
-    if (url) {
-      editor.chain().focus().setImage({ src: url }).run()
+    setImageUrl('')
+    setShowImageDialog(true)
+  }
+
+  const handleImageSubmit = () => {
+    if (imageUrl.trim()) {
+      editor.chain().focus().setImage({ src: imageUrl.trim() }).run()
+      setShowImageDialog(false)
+      setImageUrl('')
     }
   }
 
   const addLink = () => {
-    const url = window.prompt('Enter URL:')
-    if (url) {
-      editor.chain().focus().setLink({ href: url }).run()
+    setLinkUrl('')
+    setShowLinkDialog(true)
+  }
+
+  const handleLinkSubmit = () => {
+    if (linkUrl.trim()) {
+      editor.chain().focus().setLink({ href: linkUrl.trim() }).run()
+      setShowLinkDialog(false)
+      setLinkUrl('')
     }
   }
 
@@ -262,6 +289,78 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
       <div className="bg-white">
         <EditorContent editor={editor} />
       </div>
+
+      {/* Image URL Dialog */}
+      <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Image</DialogTitle>
+            <DialogDescription>
+              Enter the URL of the image you want to add.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="image-url">Image URL</Label>
+              <Input
+                id="image-url"
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://example.com/image.jpg"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleImageSubmit()
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImageDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleImageSubmit} disabled={!imageUrl.trim()}>
+              Add Image
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link URL Dialog */}
+      <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Link</DialogTitle>
+            <DialogDescription>
+              Enter the URL you want to link to.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="link-url">URL</Label>
+              <Input
+                id="link-url"
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://example.com"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleLinkSubmit()
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLinkDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleLinkSubmit} disabled={!linkUrl.trim()}>
+              Add Link
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

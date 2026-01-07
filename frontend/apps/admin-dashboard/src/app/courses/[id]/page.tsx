@@ -18,8 +18,16 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Loader2, Save, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2 } from 'lucide-react'
-import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi } from '@/lib/api'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { ArrowLeft, Loader2, Save, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles } from 'lucide-react'
+import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi, apiClient } from '@/lib/api'
 import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -46,6 +54,16 @@ export default function CourseEditPage() {
   const [publishing, setPublishing] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const initialCourseRef = useRef<string | null>(null)
+  const [showCreateLectureDialog, setShowCreateLectureDialog] = useState(false)
+  const [showAIGenerateDialog, setShowAIGenerateDialog] = useState(false)
+  const [lectureTitle, setLectureTitle] = useState('')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiDialogType, setAiDialogType] = useState<{ isSubLecture: boolean; sectionId?: string } | null>(null)
+  const [showDeleteLectureDialog, setShowDeleteLectureDialog] = useState(false)
+  const [showDeleteSubLectureDialog, setShowDeleteSubLectureDialog] = useState(false)
+  const [lectureToDelete, setLectureToDelete] = useState<{ sectionId: string; lectureId?: string; title: string } | null>(null)
+  const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false)
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
 
   useEffect(() => {
     loadHierarchyData()
@@ -54,8 +72,10 @@ export default function CourseEditPage() {
     } else {
       setLoading(false)
     }
-    
-    // Warn before leaving if there are unsaved changes
+  }, [courseId])
+
+  // Separate effect for beforeunload warning
+  useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
         e.preventDefault()
@@ -65,8 +85,7 @@ export default function CourseEditPage() {
     
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, hasUnsavedChanges])
+  }, [hasUnsavedChanges])
 
   const loadHierarchyData = async () => {
     try {
@@ -171,11 +190,31 @@ export default function CourseEditPage() {
   const handleSave = async () => {
     setSaving(true)
     try {
+      // Prepare course data, excluding fields that shouldn't be sent in CreateCourseRequest
+      const { 
+        id, 
+        clientId, 
+        isPublished,
+        status,
+        totalDurationSeconds, 
+        totalLecturesCount, 
+        totalStudentsCount, 
+        createdAt, 
+        updatedAt, 
+        publishedAt,
+        sections,
+        learningObjectives,
+        instructors,
+        resources,
+        ...courseData 
+      } = course
+
       const courseToSave = {
-        ...course,
+        ...courseData,
         assignedToClassIds: selectedClassIds,
         assignedToSectionIds: selectedSectionIds
       }
+      
       if (courseId === 'new') {
         await coursesApi.createCourse(courseToSave)
         toast({
@@ -220,11 +259,178 @@ export default function CourseEditPage() {
     }
   }, [course, selectedClassIds, selectedSectionIds, courseId])
 
+  const handleCreateMainLecture = () => {
+    if (!courseId || courseId === 'new') return
+    setLectureTitle('')
+    setShowCreateLectureDialog(true)
+  }
+
+  const handleCreateMainLectureSubmit = async () => {
+    if (!lectureTitle.trim()) return
+    
+    try {
+      setLoadingSections(true)
+      setShowCreateLectureDialog(false)
+      // Create a new section (main lecture) using the API client
+      await apiClient.post<any>(
+        `/content/courses/${courseId}/lectures`,
+        {
+          title: lectureTitle.trim(),
+          description: ''
+        }
+      )
+      
+      await loadCourseSections()
+      toast({
+        title: 'Lecture created',
+        description: 'The lecture has been created successfully.',
+      })
+      setLectureTitle('')
+    } catch (error) {
+      console.error('Failed to create lecture:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to create lecture',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setLoadingSections(false)
+    }
+  }
+
+  const handleGenerateWithAI = (sectionId?: string, isSubLecture: boolean = false) => {
+    if (!courseId || courseId === 'new') return
+    setAiPrompt('')
+    setAiDialogType({ isSubLecture, sectionId })
+    setShowAIGenerateDialog(true)
+  }
+
+  const handleAIGenerateSubmit = async () => {
+    if (!aiPrompt.trim() || !aiDialogType) return
+    
+    try {
+      setLoadingSections(true)
+      setShowAIGenerateDialog(false)
+      
+      if (aiDialogType.isSubLecture && aiDialogType.sectionId) {
+        // Generate sub-lecture with AI - creates a sub-lecture with full AI-generated content
+        await apiClient.post<any>(
+          `/content/api/sections/${aiDialogType.sectionId}/lectures/generate`,
+          {
+            prompt: aiPrompt.trim(),
+            courseId: courseId
+          }
+        )
+        toast({
+          title: 'Sub-lecture generated',
+          description: 'The sub-lecture has been generated with AI content successfully.',
+        })
+      } else {
+        // Generate main lecture with AI - this will create a lecture with sub-lectures
+        const response = await apiClient.post<any>(
+          `/content/courses/${courseId}/lectures/generate`,
+          {
+            prompt: aiPrompt.trim()
+          }
+        )
+        
+        toast({
+          title: 'Lecture generated',
+          description: `Lecture "${response.title}" has been generated with ${response.lectures?.length || 0} sub-lectures.`,
+        })
+      }
+      
+      await loadCourseSections()
+      setAiPrompt('')
+      setAiDialogType(null)
+    } catch (error) {
+      console.error('Failed to generate with AI:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to generate with AI',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setLoadingSections(false)
+    }
+  }
+
+  const handleDeleteLecture = (sectionId: string, title: string) => {
+    setLectureToDelete({ sectionId, title })
+    setShowDeleteLectureDialog(true)
+  }
+
+  const handleDeleteLectureConfirm = async () => {
+    if (!lectureToDelete || !courseId || courseId === 'new') return
+    
+    try {
+      setLoadingSections(true)
+      setShowDeleteLectureDialog(false)
+      
+      await apiClient.delete(`/content/courses/${courseId}/lectures/${lectureToDelete.sectionId}`)
+      
+      await loadCourseSections()
+      toast({
+        title: 'Lecture deleted',
+        description: 'The lecture has been deleted successfully.',
+      })
+      setLectureToDelete(null)
+    } catch (error) {
+      console.error('Failed to delete lecture:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to delete lecture',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setLoadingSections(false)
+    }
+  }
+
+  const handleDeleteSubLecture = (sectionId: string, lectureId: string, title: string) => {
+    setLectureToDelete({ sectionId, lectureId, title })
+    setShowDeleteSubLectureDialog(true)
+  }
+
+  const handleDeleteSubLectureConfirm = async () => {
+    if (!lectureToDelete || !lectureToDelete.lectureId || !courseId || courseId === 'new') return
+    
+    try {
+      setLoadingSections(true)
+      setShowDeleteSubLectureDialog(false)
+      
+      await lecturesApi.deleteSubLecture(courseId, lectureToDelete.sectionId, lectureToDelete.lectureId)
+      
+      await loadCourseSections()
+      toast({
+        title: 'Sub-lecture deleted',
+        description: 'The sub-lecture has been deleted successfully.',
+      })
+      setLectureToDelete(null)
+    } catch (error) {
+      console.error('Failed to delete sub-lecture:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to delete sub-lecture',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setLoadingSections(false)
+    }
+  }
+
   const handleEditLecture = (sectionId: string, lecture?: Lecture, isMain?: boolean) => {
     if (hasUnsavedChanges) {
-      if (!confirm('You have unsaved changes on this page. Are you sure you want to leave? Your changes will be lost.')) {
-        return
-      }
+      setPendingNavigation(() => () => {
+        // Navigation will happen after dialog confirmation
+        if (isMain) {
+          router.push(`/courses/${courseId}/lectures/${sectionId}/edit`)
+        } else if (lecture) {
+          router.push(`/courses/${courseId}/lectures/${sectionId}/sub-lectures/${lecture.id}/edit`)
+        }
+      })
+      setShowUnsavedChangesDialog(true)
+      return
     }
     
     if (isMain) {
@@ -244,7 +450,16 @@ export default function CourseEditPage() {
     setPublishing(true)
     try {
       const updatedCourse = await coursesApi.publishCourse(courseId)
-      setCourse(updatedCourse)
+      if (updatedCourse) {
+        setCourse(updatedCourse)
+        // Update initial course ref to reflect published state
+        initialCourseRef.current = JSON.stringify({
+          ...updatedCourse,
+          assignedToClassIds: selectedClassIds,
+          assignedToSectionIds: selectedSectionIds
+        })
+        setHasUnsavedChanges(false)
+      }
       toast({
         title: 'Course published',
         description: 'The course has been published and is now visible to students.',
@@ -266,7 +481,16 @@ export default function CourseEditPage() {
     setPublishing(true)
     try {
       const updatedCourse = await coursesApi.unpublishCourse(courseId)
-      setCourse(updatedCourse)
+      if (updatedCourse) {
+        setCourse(updatedCourse)
+        // Update initial course ref to reflect unpublished state
+        initialCourseRef.current = JSON.stringify({
+          ...updatedCourse,
+          assignedToClassIds: selectedClassIds,
+          assignedToSectionIds: selectedSectionIds
+        })
+        setHasUnsavedChanges(false)
+      }
       toast({
         title: 'Course unpublished',
         description: 'The course has been unpublished and is no longer visible to students.',
@@ -315,7 +539,7 @@ export default function CourseEditPage() {
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
+        <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-4">
@@ -329,6 +553,19 @@ export default function CourseEditPage() {
                 <h1 className="text-xl font-bold text-gray-900">
                   {courseId === 'new' ? 'Create Course' : 'Edit Course'}
                 </h1>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/courses')}
+                  disabled={saving || publishing}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={saving || publishing}>
+                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {courseId === 'new' ? 'Create Course' : 'Save Changes'}
+                </Button>
               </div>
             </div>
           </div>
@@ -355,7 +592,7 @@ export default function CourseEditPage() {
                           Course Title <span className="text-destructive">*</span>
                         </Label>
                         <Input
-                          value={course.title || ''}
+                          value={course?.title || ''}
                           onChange={(e) => setCourse({ ...course, title: e.target.value })}
                           required
                           placeholder="Enter course title"
@@ -364,7 +601,7 @@ export default function CourseEditPage() {
                       <div className="space-y-2">
                         <Label>Description</Label>
                         <RichTextEditor
-                          content={course.description || ''}
+                          content={course?.description || ''}
                           onChange={(content) => setCourse({ ...course, description: content })}
                           placeholder="Enter course description (supports rich text formatting)"
                         />
@@ -379,19 +616,19 @@ export default function CourseEditPage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="isFree"
-                          checked={course.isFree || false}
+                          checked={course?.isFree || false}
                           onCheckedChange={(checked) => setCourse({ ...course, isFree: checked as boolean })}
                         />
                         <Label htmlFor="isFree" className="font-normal cursor-pointer">
                           Free Course
                         </Label>
                       </div>
-                      {!course.isFree && (
+                      {!course?.isFree && (
                         <div className="space-y-2">
                           <Label>Price (₹)</Label>
                           <Input
                             type="number"
-                            value={course.pricePaise ? (course.pricePaise / 100).toString() : ''}
+                            value={course?.pricePaise ? (course.pricePaise / 100).toString() : ''}
                             onChange={(e) =>
                               setCourse({
                                 ...course,
@@ -412,7 +649,7 @@ export default function CourseEditPage() {
                       <div className="space-y-2">
                         <Label>Difficulty Level</Label>
                         <Select
-                          value={course.difficultyLevel || undefined}
+                          value={course?.difficultyLevel || undefined}
                           onValueChange={(value) => setCourse({ ...course, difficultyLevel: value === 'none' ? undefined : value as any })}
                         >
                           <SelectTrigger>
@@ -429,7 +666,7 @@ export default function CourseEditPage() {
                       <div className="space-y-2">
                         <Label>Status</Label>
                         <Select
-                          value={course.isPublished ? 'PUBLISHED' : 'DRAFT'}
+                          value={course?.isPublished ? 'PUBLISHED' : 'DRAFT'}
                           onValueChange={(value) =>
                             setCourse({
                               ...course,
@@ -449,7 +686,7 @@ export default function CourseEditPage() {
                       <div className="flex items-center space-x-2">
                         <Checkbox
                           id="certificateEligible"
-                          checked={course.certificateEligible || false}
+                          checked={course?.certificateEligible || false}
                           onCheckedChange={(checked) =>
                             setCourse({ ...course, certificateEligible: checked as boolean })
                           }
@@ -551,7 +788,29 @@ export default function CourseEditPage() {
                   {/* Course Structure - Lectures */}
                   {courseId !== 'new' && (
                     <div className="border-t pt-6">
-                      <h2 className="text-lg font-semibold mb-4">Course Structure</h2>
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-semibold">Course Structure</h2>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCreateMainLecture}
+                            disabled={loadingSections}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Lecture
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateWithAI(undefined, false)}
+                            disabled={loadingSections}
+                          >
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Generate with AI
+                          </Button>
+                        </div>
+                      </div>
                       {loadingSections ? (
                         <div className="flex items-center justify-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -560,7 +819,25 @@ export default function CourseEditPage() {
                       ) : courseSections.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                           <BookOpen className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                          <p className="text-sm">No lectures found. Generate course content to see lectures.</p>
+                          <p className="text-sm mb-4">No lectures found. Create a new lecture or generate with AI.</p>
+                          <div className="flex gap-2 justify-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleCreateMainLecture}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add Lecture
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleGenerateWithAI(undefined, false)}
+                            >
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Generate with AI
+                            </Button>
+                          </div>
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -604,6 +881,17 @@ export default function CourseEditPage() {
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleDeleteLecture(section.id, section.title)
+                                    }}
+                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 </div>
                               </button>
                               {expandedSections.has(section.id) && section.lectures && section.lectures.length > 0 && (
@@ -644,19 +932,38 @@ export default function CourseEditPage() {
                                           >
                                             <Edit className="h-4 w-4" />
                                           </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => handleDeleteSubLecture(section.id, lecture.id, lecture.title)}
+                                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
                                         </div>
                                       </div>
                                     ))}
-                                    {/* Add Sub-Lecture Button */}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => handleEditLecture(section.id)}
-                                      className="w-full mt-2"
-                                    >
-                                      <Plus className="h-4 w-4 mr-2" />
-                                      Add Sub-Lecture
-                                    </Button>
+                                    {/* Add Sub-Lecture Buttons */}
+                                    <div className="flex gap-2 mt-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleEditLecture(section.id)}
+                                        className="flex-1"
+                                      >
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        Add Sub-Lecture
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleGenerateWithAI(section.id, true)}
+                                        className="flex-1"
+                                      >
+                                        <Sparkles className="h-4 w-4 mr-2" />
+                                        Generate with AI
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                               )}
@@ -675,7 +982,7 @@ export default function CourseEditPage() {
                         label="Thumbnail Image"
                         accept="image/*"
                         maxSize={10 * 1024 * 1024} // 10MB
-                        value={course.thumbnailUrl}
+                        value={course?.thumbnailUrl || ''}
                         onChange={(url) => setCourse({ ...course, thumbnailUrl: url })}
                         onUpload={async (file) => await mediaApi.uploadImage(file, 'thumbnails')}
                         helperText="Upload a thumbnail image for the course (PNG, JPG, GIF up to 10MB)"
@@ -684,7 +991,7 @@ export default function CourseEditPage() {
                         label="Preview Video"
                         accept="video/*"
                         maxSize={500 * 1024 * 1024} // 500MB
-                        value={course.previewVideoUrl}
+                        value={course?.previewVideoUrl || ''}
                         onChange={(url) => setCourse({ ...course, previewVideoUrl: url })}
                         onUpload={async (file) => await mediaApi.uploadVideo(file, 'preview-videos')}
                         helperText="Upload a preview video for the course (MP4, MOV, etc. up to 500MB)"
@@ -697,8 +1004,8 @@ export default function CourseEditPage() {
                     <div className="border-t pt-6">
                       <h2 className="text-lg font-semibold mb-4">Course Actions</h2>
                       <div className="flex items-center gap-4">
-                        <Badge variant={course.isPublished ? 'default' : 'secondary'} className="text-sm">
-                          {course.isPublished ? 'Published' : 'Draft'}
+                        <Badge variant={course?.isPublished ? 'default' : 'secondary'} className="text-sm">
+                          {course?.isPublished ? 'Published' : 'Draft'}
                         </Badge>
                         <div className="flex gap-2">
                           <Button
@@ -708,7 +1015,7 @@ export default function CourseEditPage() {
                             <Eye className="h-4 w-4 mr-2" />
                             Preview as Student
                           </Button>
-                          {course.isPublished ? (
+                          {course?.isPublished ? (
                             <Button
                               variant="outline"
                               onClick={handleUnpublish}
@@ -730,7 +1037,7 @@ export default function CourseEditPage() {
                           )}
                         </div>
                       </div>
-                      {!course.isPublished && (
+                      {!course?.isPublished && (
                         <p className="text-sm text-gray-500 mt-2">
                           Publish the course to make it visible to students. You can preview it once published.
                         </p>
@@ -773,6 +1080,207 @@ export default function CourseEditPage() {
           </div>
         )}
       </div>
+
+      {/* Create Lecture Dialog */}
+      <Dialog open={showCreateLectureDialog} onOpenChange={setShowCreateLectureDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Lecture</DialogTitle>
+            <DialogDescription>
+              Enter a title for the new lecture (module).
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="lecture-title">Lecture Title</Label>
+              <Input
+                id="lecture-title"
+                value={lectureTitle}
+                onChange={(e) => setLectureTitle(e.target.value)}
+                placeholder="e.g., Introduction to Python"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && lectureTitle.trim()) {
+                    handleCreateMainLectureSubmit()
+                  }
+                }}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowCreateLectureDialog(false)
+                setLectureTitle('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateMainLectureSubmit}
+              disabled={!lectureTitle.trim() || loadingSections}
+            >
+              {loadingSections && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Create Lecture
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Generate Dialog */}
+      <Dialog open={showAIGenerateDialog} onOpenChange={setShowAIGenerateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              <Sparkles className="h-5 w-5 inline mr-2" />
+              Generate with AI
+            </DialogTitle>
+            <DialogDescription>
+              {aiDialogType?.isSubLecture
+                ? 'Enter a prompt to generate sub-lecture content (e.g., "Introduction to Python variables")'
+                : 'Enter a prompt to generate lecture content (e.g., "Python Basics Module with 5 lessons")'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="ai-prompt">Prompt</Label>
+              <Textarea
+                id="ai-prompt"
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                placeholder={
+                  aiDialogType?.isSubLecture
+                    ? 'e.g., Introduction to Python variables'
+                    : 'e.g., Python Basics Module with 5 lessons'
+                }
+                rows={4}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAIGenerateDialog(false)
+                setAiPrompt('')
+                setAiDialogType(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAIGenerateSubmit}
+              disabled={!aiPrompt.trim() || loadingSections}
+            >
+              {loadingSections && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Sparkles className="h-4 w-4 mr-2" />
+              Generate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Lecture Dialog */}
+      <Dialog open={showDeleteLectureDialog} onOpenChange={setShowDeleteLectureDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Lecture</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the lecture "{lectureToDelete?.title}"? This will also delete all sub-lectures within it. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteLectureDialog(false)
+                setLectureToDelete(null)
+              }}
+              disabled={loadingSections}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteLectureConfirm}
+              disabled={loadingSections}
+            >
+              {loadingSections && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete Lecture
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Sub-Lecture Dialog */}
+      <Dialog open={showDeleteSubLectureDialog} onOpenChange={setShowDeleteSubLectureDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Sub-Lecture</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the sub-lecture "{lectureToDelete?.title}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteSubLectureDialog(false)
+                setLectureToDelete(null)
+              }}
+              disabled={loadingSections}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteSubLectureConfirm}
+              disabled={loadingSections}
+            >
+              {loadingSections && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete Sub-Lecture
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unsaved Changes Dialog */}
+      <Dialog open={showUnsavedChangesDialog} onOpenChange={setShowUnsavedChangesDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes on this page. Are you sure you want to leave? Your changes will be lost.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowUnsavedChangesDialog(false)
+                setPendingNavigation(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setHasUnsavedChanges(false)
+                setShowUnsavedChangesDialog(false)
+                if (pendingNavigation) {
+                  pendingNavigation()
+                  setPendingNavigation(null)
+                }
+              }}
+            >
+              Leave Without Saving
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ProtectedRoute>
   )
 }

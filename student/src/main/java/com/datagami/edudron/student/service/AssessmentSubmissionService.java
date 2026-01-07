@@ -37,9 +37,12 @@ public class AssessmentSubmissionService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        // Verify enrollment
-        Enrollment enrollment = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId)
-            .orElseThrow(() -> new IllegalArgumentException("Student is not enrolled in this course"));
+        // Verify enrollment - handle potential duplicates
+        List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId);
+        if (enrollments.isEmpty()) {
+            throw new IllegalArgumentException("Student is not enrolled in this course");
+        }
+        Enrollment enrollment = enrollments.get(0); // Use first (most recent) enrollment if duplicates exist
         
         AssessmentSubmission submission = new AssessmentSubmission();
         submission.setId(UlidGenerator.nextUlid());

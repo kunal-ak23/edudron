@@ -2,6 +2,7 @@ package com.datagami.edudron.content.web;
 
 import com.datagami.edudron.content.domain.Lecture;
 import com.datagami.edudron.content.dto.LectureDTO;
+import com.datagami.edudron.content.service.CourseGenerationService;
 import com.datagami.edudron.content.service.LectureService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,6 +21,15 @@ public class LectureController {
 
     @Autowired
     private LectureService lectureService;
+    
+    @Autowired
+    private CourseGenerationService courseGenerationService;
+    
+    @Autowired
+    private com.datagami.edudron.content.service.AIJobQueueService aiJobQueueService;
+    
+    @Autowired
+    private com.datagami.edudron.content.service.AIJobWorker aiJobWorker;
 
     @GetMapping("/sections/{sectionId}/lectures")
     @Operation(summary = "List lectures", description = "Get all lectures for a section")
@@ -80,6 +90,36 @@ public class LectureController {
     public ResponseEntity<Void> deleteLecture(@PathVariable String id) {
         lectureService.deleteLecture(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/sections/{sectionId}/lectures/generate")
+    @Operation(summary = "Generate sub-lecture with AI", description = "Submit a sub-lecture generation job to the queue. Returns a job ID that can be used to check status.")
+    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateSubLectureWithAI(
+            @PathVariable String sectionId,
+            @RequestBody Map<String, String> request) {
+        String prompt = request.get("prompt");
+        String courseId = request.get("courseId");
+        if (prompt == null || prompt.trim().isEmpty() || courseId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        
+        Map<String, String> jobRequest = new java.util.HashMap<>();
+        jobRequest.put("courseId", courseId);
+        jobRequest.put("sectionId", sectionId);
+        jobRequest.put("prompt", prompt);
+        
+        com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.submitSubLectureGenerationJob(jobRequest, aiJobWorker);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
+    }
+    
+    @GetMapping("/generate/jobs/{jobId}")
+    @Operation(summary = "Get sub-lecture generation job status", description = "Get the status of a sub-lecture generation job")
+    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> getSubLectureGenerationJobStatus(@PathVariable String jobId) {
+        com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.getJob(jobId);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(job);
     }
 }
 

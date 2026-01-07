@@ -298,6 +298,66 @@ public class FoundryAIService {
         }
     }
     
+    public SectionInfo generateLectureWithSubLectures(String prompt, String courseContext) {
+        if (client == null) {
+            throw new IllegalStateException("Azure OpenAI is not configured");
+        }
+        
+        String systemPrompt = """
+            You are an expert course designer. Generate a single lecture (module) with multiple sub-lectures (lessons) based on the user's prompt.
+            Return a JSON object with this structure:
+            {
+                "title": "Lecture title",
+                "description": "Lecture description",
+                "lectures": [
+                    {"title": "Sub-lecture title", "description": "Brief sub-lecture description"}
+                ]
+            }
+            
+            Generate 3-8 sub-lectures that comprehensively cover the topic in the prompt.
+            Return ONLY valid JSON object, no additional text.
+            """;
+        
+        String userPrompt = "Course Context: " + courseContext + "\n\nUser Request: " + prompt;
+        
+        try {
+            String response = callOpenAI(systemPrompt, userPrompt);
+            // Clean response
+            response = response.trim();
+            if (response.startsWith("```json")) {
+                response = response.substring(7);
+            }
+            if (response.startsWith("```")) {
+                response = response.substring(3);
+            }
+            if (response.endsWith("```")) {
+                response = response.substring(0, response.length() - 3);
+            }
+            response = response.trim();
+            
+            JsonNode jsonObject = objectMapper.readTree(response);
+            SectionInfo section = new SectionInfo();
+            section.setTitle(jsonObject.get("title").asText());
+            section.setDescription(jsonObject.has("description") ? jsonObject.get("description").asText() : "");
+            
+            List<LectureInfo> lectures = new ArrayList<>();
+            if (jsonObject.has("lectures")) {
+                for (JsonNode lectureNode : jsonObject.get("lectures")) {
+                    LectureInfo lecture = new LectureInfo();
+                    lecture.setTitle(lectureNode.get("title").asText());
+                    lecture.setDescription(lectureNode.has("description") ? lectureNode.get("description").asText() : "");
+                    lectures.add(lecture);
+                }
+            }
+            section.setLectures(lectures);
+            
+            return section;
+        } catch (Exception e) {
+            logger.error("Error generating lecture with sub-lectures", e);
+            throw new RuntimeException("Failed to generate lecture with sub-lectures: " + e.getMessage(), e);
+        }
+    }
+    
     public List<String> generateLearningObjectives(String courseTitle, String courseDescription, List<String> sectionTitles) {
         if (client == null) {
             throw new IllegalStateException("Azure OpenAI is not configured");

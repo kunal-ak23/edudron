@@ -212,8 +212,11 @@ public class EnrollmentService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        Enrollment enrollment = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId)
-            .orElseThrow(() -> new IllegalArgumentException("Enrollment not found"));
+        List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId);
+        if (enrollments.isEmpty()) {
+            throw new IllegalArgumentException("Enrollment not found");
+        }
+        Enrollment enrollment = enrollments.get(0); // Use first (most recent) enrollment if duplicates exist
         
         enrollmentRepository.delete(enrollment);
     }

@@ -7,6 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Plus, Sparkles, BookOpen, Users, Video, Trash2, Edit, Loader2 } from 'lucide-react'
 import { coursesApi } from '@/lib/api'
 import type { Course } from '@edudron/shared-utils'
@@ -16,6 +24,33 @@ import { extractErrorMessage } from '@/lib/error-utils'
 // Force dynamic rendering - disable static generation
 export const dynamic = 'force-dynamic'
 
+// Utility function to strip HTML tags and convert to plain text
+function stripHtmlTags(html: string): string {
+  if (!html) return ''
+  
+  // Remove script and style tags
+  let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+  
+  // Replace common HTML entities
+  text = text.replace(/&nbsp;/g, ' ')
+  text = text.replace(/&amp;/g, '&')
+  text = text.replace(/&lt;/g, '<')
+  text = text.replace(/&gt;/g, '>')
+  text = text.replace(/&quot;/g, '"')
+  text = text.replace(/&#39;/g, "'")
+  text = text.replace(/&apos;/g, "'")
+  
+  // Remove HTML tags
+  text = text.replace(/<[^>]+>/g, '')
+  
+  // Clean up whitespace
+  text = text.replace(/\s+/g, ' ')
+  text = text.trim()
+  
+  return text
+}
+
 export default function CoursesPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -24,6 +59,8 @@ export default function CoursesPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all')
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [courseToDelete, setCourseToDelete] = useState<string | null>(null)
 
   useEffect(() => {
     loadCourses()
@@ -112,24 +149,31 @@ export default function CoursesPage() {
     setFilteredCourses(filtered)
   }
 
-  const handleDelete = async (courseId: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (courseId: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (confirm('Are you sure you want to delete this course?')) {
-      try {
-        await coursesApi.deleteCourse(courseId)
-        toast({
-          title: 'Course deleted',
-          description: 'The course has been deleted successfully.',
-        })
-        await loadCourses()
-      } catch (error) {
-        console.error('Failed to delete course:', error)
-        toast({
-          variant: 'destructive',
-          title: 'Failed to delete course',
-          description: extractErrorMessage(error),
-        })
-      }
+    setCourseToDelete(courseId)
+    setShowDeleteDialog(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!courseToDelete) return
+    
+    try {
+      await coursesApi.deleteCourse(courseToDelete)
+      toast({
+        title: 'Course deleted',
+        description: 'The course has been deleted successfully.',
+      })
+      await loadCourses()
+      setShowDeleteDialog(false)
+      setCourseToDelete(null)
+    } catch (error) {
+      console.error('Failed to delete course:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to delete course',
+        description: extractErrorMessage(error),
+      })
     }
   }
 
@@ -242,7 +286,7 @@ export default function CoursesPage() {
                         </div>
                         {course.description && (
                           <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                            {course.description}
+                            {stripHtmlTags(course.description)}
                           </p>
                         )}
                         <div className="flex items-center space-x-6 text-sm text-muted-foreground">
@@ -280,7 +324,7 @@ export default function CoursesPage() {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={(e) => handleDelete(course.id, e)}
+                          onClick={(e) => handleDeleteClick(course.id, e)}
                         >
                           <Trash2 className="h-4 w-4 mr-1" />
                           Delete
@@ -292,6 +336,35 @@ export default function CoursesPage() {
               ))}
             </div>
           )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Course</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this course? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteDialog(false)
+                setCourseToDelete(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
     </ProtectedRoute>
   )

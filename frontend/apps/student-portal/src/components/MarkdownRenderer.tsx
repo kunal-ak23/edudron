@@ -15,11 +15,33 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     return null
   }
 
+  // Configure sanitize to allow links with target and rel attributes
+  const sanitizeConfig = {
+    tagNames: [
+      'p', 'br', 'strong', 'em', 'u', 's', 'del', 'ins',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'ul', 'ol', 'li',
+      'blockquote', 'code', 'pre',
+      'a', 'img',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'hr', 'div', 'span'
+    ],
+    attributes: {
+      a: ['href', 'title', 'target', 'rel', 'class', 'nofollow'],
+      img: ['src', 'alt', 'title', 'width', 'height'],
+      '*': ['class']
+    },
+    protocols: {
+      a: { href: ['http', 'https', 'mailto'] },
+      img: { src: ['http', 'https', 'data'] }
+    }
+  }
+
   return (
     <div className={`prose prose-lg max-w-none ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, rehypeSanitize]}
+        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeConfig]]}
         components={{
           h1: ({ node, ...props }) => <h1 className="text-3xl font-bold mt-6 mb-4 text-gray-900" {...props} />,
           h2: ({ node, ...props }) => <h2 className="text-2xl font-bold mt-5 mb-3 text-gray-900" {...props} />,
