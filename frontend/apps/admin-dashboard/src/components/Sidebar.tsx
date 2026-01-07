@@ -119,9 +119,11 @@ const menuItems: MenuItem[] = [
 interface SidebarProps {
   isOpen: boolean
   onToggle: () => void
+  collapsed?: boolean
+  onCollapseToggle?: () => void
 }
 
-export function Sidebar({ isOpen, onToggle }: SidebarProps) {
+export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle }: SidebarProps) {
   const pathname = usePathname()
   const { user } = useAuth()
   
@@ -265,57 +267,65 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
       
       {/* Sidebar */}
       <div className={cn(
-        'fixed left-0 top-0 z-50 h-full w-64 border-r transform transition-transform duration-300 ease-in-out flex flex-col',
+        'fixed left-0 top-0 z-50 h-full transform transition-all duration-300 ease-in-out flex flex-col overflow-visible relative',
         'bg-card',
+        collapsed ? 'w-0 border-0 pointer-events-none overflow-hidden' : 'w-64 border-r',
         isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       )}>
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b flex-shrink-0 bg-primary/5">
-          <div className="flex items-center space-x-2">
-            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-              <span className="text-primary-foreground font-bold text-sm">E</span>
+        {!collapsed && (
+          <div className="w-full h-full flex flex-col">
+            {/* Toggle Menu Button - Right edge of sidebar */}
+            {onCollapseToggle && (
+              <button
+                onClick={onCollapseToggle}
+                className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-full z-30 bg-white hover:bg-gray-50 rounded-r-lg px-2 py-4 shadow-md border-r border-t border-b border-gray-200"
+                aria-label="Toggle menu"
+                style={{ right: '-1px' }}
+              >
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+            )}
+            
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b flex-shrink-0 bg-primary/5">
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+                  <span className="text-primary-foreground font-bold text-sm">E</span>
+                </div>
+                <span className="text-xl font-bold text-primary">EduDron</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onToggle}
+                className="lg:hidden hover:bg-primary/10"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-            <span className="text-xl font-bold text-primary">EduDron</span>
+
+            {/* Navigation */}
+            <nav className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0">
+              {filteredMenuItems.map(item => renderMenuItem(item))}
+            </nav>
+
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggle}
-            className="lg:hidden hover:bg-primary/10"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0">
-          {filteredMenuItems.map(item => renderMenuItem(item))}
-        </nav>
-
-        {/* Footer */}
-        <div className="p-4 border-t flex-shrink-0 bg-primary/5">
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-left font-normal h-8 px-3 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-            onClick={async () => {
-              const { useAuth } = await import('@edudron/shared-utils')
-              // Note: This won't work directly in the component, need to use hook properly
-              // For now, just redirect and clear localStorage
-              localStorage.removeItem('auth_token')
-              localStorage.removeItem('refresh_token')
-              localStorage.removeItem('tenant_id')
-              localStorage.removeItem('clientId')
-              localStorage.removeItem('selectedTenantId')
-              localStorage.removeItem('user')
-              localStorage.removeItem('available_tenants')
-              window.location.href = '/login'
-            }}
-          >
-            <LogOut className="h-4 w-4 mr-3" />
-            <span>Sign Out</span>
-          </Button>
-        </div>
+        )}
       </div>
+      
+      {/* Toggle button when sidebar is collapsed */}
+      {collapsed && onCollapseToggle && (
+        <button
+          onClick={onCollapseToggle}
+          className="fixed left-0 top-1/2 transform -translate-y-1/2 z-30 bg-white border-l border-t border-b border-gray-200 rounded-r-lg px-2 py-4 shadow-md hover:bg-gray-50"
+        >
+          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
     </>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, FileUpload } from '@edudron/ui-components'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,6 @@ import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesA
 import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
-import { LectureEditModal } from '@/components/LectureEditModal'
 
 // Force dynamic rendering - disable static generation
 export const dynamic = 'force-dynamic'
@@ -45,7 +44,8 @@ export default function CourseEditPage() {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set())
   const [loadingSections, setLoadingSections] = useState(false)
   const [publishing, setPublishing] = useState(false)
-  const [editingLecture, setEditingLecture] = useState<{ sectionId: string; lecture?: Lecture; isMain?: boolean } | null>(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const initialCourseRef = useRef<string | null>(null)
 
   useEffect(() => {
     loadHierarchyData()
@@ -54,8 +54,19 @@ export default function CourseEditPage() {
     } else {
       setLoading(false)
     }
+    
+    // Warn before leaving if there are unsaved changes
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId])
+  }, [courseId, hasUnsavedChanges])
 
   const loadHierarchyData = async () => {
     try {
@@ -92,6 +103,14 @@ export default function CourseEditPage() {
       setSelectedClassIds(data.assignedToClassIds || [])
       setSelectedSectionIds(data.assignedToSectionIds || [])
       await loadCourseSections()
+      
+      // Store initial state for unsaved changes detection
+      initialCourseRef.current = JSON.stringify({
+        ...data,
+        assignedToClassIds: data.assignedToClassIds || [],
+        assignedToSectionIds: data.assignedToSectionIds || []
+      })
+      setHasUnsavedChanges(false)
     } catch (error) {
       console.error('Failed to load course:', error)
       toast({
@@ -170,6 +189,7 @@ export default function CourseEditPage() {
           description: 'The course has been updated successfully.',
         })
       }
+      setHasUnsavedChanges(false)
       router.push('/courses')
     } catch (error) {
       console.error('Failed to save course:', error)
@@ -180,6 +200,42 @@ export default function CourseEditPage() {
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Track unsaved changes
+  useEffect(() => {
+    if (courseId === 'new' || !initialCourseRef.current) return
+    
+    const currentData = JSON.stringify({
+      ...course,
+      assignedToClassIds: selectedClassIds,
+      assignedToSectionIds: selectedSectionIds
+    })
+    
+    if (currentData !== initialCourseRef.current) {
+      setHasUnsavedChanges(true)
+    } else {
+      setHasUnsavedChanges(false)
+    }
+  }, [course, selectedClassIds, selectedSectionIds, courseId])
+
+  const handleEditLecture = (sectionId: string, lecture?: Lecture, isMain?: boolean) => {
+    if (hasUnsavedChanges) {
+      if (!confirm('You have unsaved changes on this page. Are you sure you want to leave? Your changes will be lost.')) {
+        return
+      }
+    }
+    
+    if (isMain) {
+      router.push(`/courses/${courseId}/lectures/${sectionId}/edit`)
+    } else if (lecture) {
+      // For sub-lectures, we'll use the same route but pass the sub-lecture ID as a query param
+      // Or we can use the lectureId as the sub-lecture ID
+      router.push(`/courses/${courseId}/lectures/${sectionId}/edit?subLectureId=${lecture.id}`)
+    } else {
+      // Create new sub-lecture - navigate to main lecture edit page
+      router.push(`/courses/${courseId}/lectures/${sectionId}/edit`)
     }
   }
 
@@ -542,7 +598,7 @@ export default function CourseEditPage() {
                                     size="sm"
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      setEditingLecture({ sectionId: section.id, isMain: true })
+                                      handleEditLecture(section.id, undefined, true)
                                     }}
                                     className="h-8 w-8 p-0"
                                   >
@@ -583,7 +639,7 @@ export default function CourseEditPage() {
                                           <Button
                                             variant="ghost"
                                             size="sm"
-                                            onClick={() => setEditingLecture({ sectionId: section.id, lecture })}
+                                            onClick={() => handleEditLecture(section.id, lecture)}
                                             className="h-8 w-8 p-0"
                                           >
                                             <Edit className="h-4 w-4" />
@@ -595,7 +651,7 @@ export default function CourseEditPage() {
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => setEditingLecture({ sectionId: section.id })}
+                                      onClick={() => handleEditLecture(section.id)}
                                       className="w-full mt-2"
                                     >
                                       <Plus className="h-4 w-4 mr-2" />
@@ -702,20 +758,19 @@ export default function CourseEditPage() {
           </Card>
         </main>
 
-        {/* Lecture Edit Modal */}
-        {editingLecture && (
-          <LectureEditModal
-            isOpen={!!editingLecture}
-            onClose={() => setEditingLecture(null)}
-            courseId={courseId}
-            lectureId={editingLecture.sectionId}
-            lecture={editingLecture.lecture}
-            isMainLecture={editingLecture.isMain}
-            onSave={() => {
-              loadCourseSections()
-              setEditingLecture(null)
-            }}
-          />
+        {/* Unsaved Changes Indicator */}
+        {hasUnsavedChanges && (
+          <div className="fixed bottom-4 right-4 bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50">
+            <span className="text-sm font-medium">You have unsaved changes</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleSave}
+              className="text-white hover:bg-amber-600 h-auto py-1"
+            >
+              Save Now
+            </Button>
+          </div>
         )}
       </div>
     </ProtectedRoute>

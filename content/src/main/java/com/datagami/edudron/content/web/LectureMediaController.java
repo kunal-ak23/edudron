@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/content/api/lectures")
@@ -72,6 +73,29 @@ public class LectureMediaController {
     public ResponseEntity<Void> deleteMedia(@PathVariable String contentId) {
         lectureMediaService.deleteMedia(contentId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{lectureId}/media/text")
+    @Operation(summary = "Create text content", description = "Create a new text content item for a lecture")
+    public ResponseEntity<LectureContentDTO> createTextContent(
+            @PathVariable String lectureId,
+            @RequestBody Map<String, Object> request) {
+        String textContent = (String) request.get("textContent");
+        String title = (String) request.get("title");
+        Integer sequence = request.get("sequence") != null ? (Integer) request.get("sequence") : null;
+        LectureContentDTO content = lectureMediaService.createTextContent(lectureId, textContent, title, sequence);
+        return ResponseEntity.status(HttpStatus.CREATED).body(content);
+    }
+
+    @PutMapping("/media/{contentId}/text")
+    @Operation(summary = "Update text content", description = "Update an existing text content item")
+    public ResponseEntity<LectureContentDTO> updateTextContent(
+            @PathVariable String contentId,
+            @RequestBody Map<String, Object> request) {
+        String textContent = (String) request.get("textContent");
+        String title = (String) request.get("title");
+        LectureContentDTO content = lectureMediaService.updateTextContent(contentId, textContent, title);
+        return ResponseEntity.ok(content);
     }
 }
 

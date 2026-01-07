@@ -29,10 +29,10 @@ export function CommitmentModal({ courseTitle, isOpen, onClose, onCommit }: Comm
       <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-gray-200">
-          <div className="text-blue-600 font-bold text-2xl tracking-tight">coursera</div>
+          <div className="text-primary-600 font-bold text-2xl tracking-tight">coursera</div>
           <button
             onClick={onClose}
-            className="text-blue-600 hover:text-blue-700 font-semibold text-xl leading-none"
+            className="text-primary-600 hover:text-primary-700 font-semibold text-xl leading-none"
             aria-label="Close"
           >
             ✕
@@ -60,7 +60,7 @@ export function CommitmentModal({ courseTitle, isOpen, onClose, onCommit }: Comm
           <div className="grid grid-cols-2 gap-4 mb-8">
             {solutions.map((solution, index) => (
               <div key={index} className="flex items-start">
-                <span className="text-blue-600 mr-3 text-xl font-bold leading-none">•</span>
+                <span className="text-primary-600 mr-3 text-xl font-bold leading-none">•</span>
                 <span className="text-gray-900 text-base">{solution}</span>
               </div>
             ))}
@@ -73,7 +73,7 @@ export function CommitmentModal({ courseTitle, isOpen, onClose, onCommit }: Comm
               id="commitment"
               checked={isCommitted}
               onChange={(e) => setIsCommitted(e.target.checked)}
-              className="w-6 h-6 text-blue-600 border-2 border-gray-300 rounded mt-0.5 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer"
+              className="w-6 h-6 text-primary-600 border-2 border-gray-300 rounded mt-0.5 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 cursor-pointer"
             />
             <label htmlFor="commitment" className="ml-3 text-gray-900 font-medium text-base cursor-pointer leading-relaxed">
               I commit to completing this course

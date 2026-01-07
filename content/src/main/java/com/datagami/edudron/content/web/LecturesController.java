@@ -33,10 +33,33 @@ public class LecturesController {
     }
 
     @GetMapping("/{courseId}/lectures/{id}")
-    @Operation(summary = "Get lecture", description = "Get lecture (module) details by ID")
-    public ResponseEntity<SectionDTO> getLecture(@PathVariable String courseId, @PathVariable String id) {
-        SectionDTO section = sectionService.getSectionById(id);
-        return ResponseEntity.ok(section);
+    @Operation(summary = "Get lecture", description = "Get lecture (module or sub-lecture) details by ID")
+    public ResponseEntity<?> getLecture(@PathVariable String courseId, @PathVariable String id) {
+        // First try to get it as a section (main lecture/module)
+        try {
+            SectionDTO section = sectionService.getSectionById(id);
+            // Verify it belongs to this course
+            if (section.getCourseId() != null && section.getCourseId().equals(courseId)) {
+                return ResponseEntity.ok(section);
+            } else {
+                // Section exists but doesn't belong to this course
+                throw new IllegalArgumentException("Section not found in course: " + id);
+            }
+        } catch (IllegalArgumentException e) {
+            // Not a section or doesn't belong to course, try as a sub-lecture
+            try {
+                LectureDTO lecture = lectureService.getLectureById(id);
+                // Verify it belongs to this course
+                if (lecture.getCourseId() != null && lecture.getCourseId().equals(courseId)) {
+                    return ResponseEntity.ok(lecture);
+                } else {
+                    throw new IllegalArgumentException("Lecture not found in course: " + id);
+                }
+            } catch (IllegalArgumentException le) {
+                // Neither section nor lecture found, or doesn't belong to course
+                throw new IllegalArgumentException("Lecture not found: " + id);
+            }
+        }
     }
 
     @PostMapping("/{courseId}/lectures")

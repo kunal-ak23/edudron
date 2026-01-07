@@ -15,6 +15,7 @@ interface AuthContextType {
   logout: () => Promise<void>
   selectTenant: (tenantId: string) => Promise<void>
   isAuthenticated: () => boolean
+  updateToken: (token: string) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -134,6 +135,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, baseUrl = 
       localStorage.removeItem('tenant_id')
       localStorage.removeItem('user')
       localStorage.removeItem('available_tenants')
+      localStorage.removeItem('clientId')
+      localStorage.removeItem('selectedTenantId')
+      
+      // Redirect to login page
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
     }
   }
 
@@ -169,6 +177,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, baseUrl = 
     return !!token && !!user
   }
 
+  const updateToken = (newToken: string) => {
+    setToken(newToken)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('auth_token', newToken)
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -182,6 +197,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, baseUrl = 
         logout,
         selectTenant,
         isAuthenticated,
+        updateToken,
       }}
     >
       {children}

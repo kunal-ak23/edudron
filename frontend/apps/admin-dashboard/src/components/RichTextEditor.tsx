@@ -81,7 +81,13 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
   }, [content, editor])
 
   if (!editor) {
-    return null
+    return (
+      <div className={`border border-gray-300 rounded-lg overflow-hidden ${className}`}>
+        <div className="min-h-[300px] p-4 flex items-center justify-center text-gray-500">
+          Loading editor...
+        </div>
+      </div>
+    )
   }
 
   const addImage = () => {

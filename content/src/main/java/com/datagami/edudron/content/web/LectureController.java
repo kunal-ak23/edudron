@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/content/api")
 @Tag(name = "Lectures", description = "Lecture (Lesson) management endpoints")
 public class LectureController {
 
@@ -54,12 +54,23 @@ public class LectureController {
     public ResponseEntity<LectureDTO> updateLecture(
             @PathVariable String id,
             @RequestBody Map<String, Object> request) {
+        Lecture.ContentType contentType = null;
+        if (request.get("contentType") != null) {
+            try {
+                contentType = Lecture.ContentType.valueOf((String) request.get("contentType"));
+            } catch (IllegalArgumentException e) {
+                // Invalid contentType, will be ignored
+            }
+        }
+        
         LectureDTO lecture = lectureService.updateLecture(
             id,
             (String) request.get("title"),
             (String) request.get("description"),
             request.get("durationSeconds") != null ? (Integer) request.get("durationSeconds") : null,
-            request.get("isPreview") != null ? (Boolean) request.get("isPreview") : null
+            request.get("isPreview") != null ? (Boolean) request.get("isPreview") : null,
+            contentType,
+            request.get("isPublished") != null ? (Boolean) request.get("isPublished") : null
         );
         return ResponseEntity.ok(lecture);
     }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ProtectedRoute, CourseCard, SearchBar, FilterBar } from '@edudron/ui-components'
 import { coursesApi, enrollmentsApi } from '@/lib/api'
+import { StudentLayout } from '@/components/StudentLayout'
 import type { Course } from '@edudron/shared-utils'
 
 // Force dynamic rendering
@@ -87,10 +88,6 @@ export default function CoursesPage() {
     }))
   }
 
-  const handleLogout = () => {
-    localStorage.clear()
-    router.push('/login')
-  }
 
   const difficultyOptions = [
     { label: 'Beginner', value: 'BEGINNER' },
@@ -105,50 +102,7 @@ export default function CoursesPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-8">
-                <h1
-                  className="text-2xl font-bold text-blue-600 cursor-pointer"
-                  onClick={() => router.push('/courses')}
-                >
-                  EduDron
-                </h1>
-                <nav className="hidden md:flex space-x-6">
-                  <button
-                    onClick={() => router.push('/courses')}
-                    className="text-gray-700 hover:text-blue-600 font-medium"
-                  >
-                    Browse
-                  </button>
-                  <button
-                    onClick={() => router.push('/my-courses')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    My Courses
-                  </button>
-                </nav>
-              </div>
-              <div className="flex items-center space-x-4">
-                {user && (
-                  <span className="text-sm text-gray-700 hidden md:block">
-                    {user.name}
-                  </span>
-                )}
-                <button
-                  onClick={handleLogout}
-                  className="text-sm text-gray-600 hover:text-gray-900 px-4 py-2 rounded-md hover:bg-gray-100"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-          </div>
-        </header>
-
+      <StudentLayout>
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Hero Section */}
           <div className="mb-8">
@@ -225,7 +179,7 @@ export default function CoursesPage() {
             </div>
           )}
         </main>
-      </div>
+      </StudentLayout>
     </ProtectedRoute>
   )
 }

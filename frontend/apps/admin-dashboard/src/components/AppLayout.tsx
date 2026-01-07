@@ -7,7 +7,16 @@ import { TenantSelector } from './TenantSelector'
 import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Bell, X } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Bell, LogOut, User } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -69,6 +78,7 @@ function getPageSubtitle(pathname: string): string {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const { user, logout } = useAuth()
   const pathname = usePathname()
   const pageTitle = getPageTitle(pathname)
@@ -78,15 +88,31 @@ export function AppLayout({ children }: AppLayoutProps) {
     setIsSidebarOpen(!isSidebarOpen)
   }
 
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed(!isSidebarCollapsed)
+  }
+
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
-      <Sidebar isOpen={isSidebarOpen} onToggle={toggleSidebar} />
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onToggle={toggleSidebar}
+        collapsed={isSidebarCollapsed}
+        onCollapseToggle={toggleSidebarCollapse}
+      />
       
       {/* Main content area */}
-      <div className="flex-1 flex flex-col ml-0 lg:ml-64">
+      <div 
+        className={cn(
+          "flex-1 flex flex-col transition-all duration-300 w-full"
+        )}
+      >
         {/* Top Header - Fixed */}
-        <header className="fixed top-0 right-0 left-0 lg:left-64 z-30 bg-card border-b shadow-sm bg-gradient-to-r from-primary/5 to-accent/5">
+        <header className={cn(
+          "fixed top-0 right-0 left-0 z-30 bg-card border-b shadow-sm bg-gradient-to-r from-primary/5 to-accent/5 transition-all duration-300",
+          !isSidebarCollapsed && "lg:left-64"
+        )}>
           <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center space-x-4">
               <SidebarToggle onToggle={toggleSidebar} />
@@ -107,29 +133,50 @@ export function AppLayout({ children }: AppLayoutProps) {
               </Button>
               
               {/* User menu */}
-              <div className="flex items-center space-x-2">
-                <Avatar className="h-8 w-8 ring-2 ring-primary/20">
-                  <AvatarImage src="" />
-                  <AvatarFallback className="bg-primary text-primary-foreground">
-                    {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="hidden sm:block">
-                  <p className="text-sm font-medium">{user?.name || 'Admin User'}</p>
-                  <p className="text-xs text-muted-foreground">{user?.email || 'admin@edudron.com'}</p>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={async () => {
-                    await logout()
-                    window.location.href = '/login'
-                  }} 
-                  className="hover:bg-primary/10 hover:text-primary transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center space-x-2 hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-lg p-1">
+                    <Avatar className="h-8 w-8 ring-2 ring-primary/20">
+                      <AvatarImage src="" />
+                      <AvatarFallback className="bg-primary text-primary-foreground">
+                        {user?.name ? user.name.charAt(0).toUpperCase() : 'A'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="hidden sm:block text-left">
+                      <p className="text-sm font-medium">{user?.name || 'Admin User'}</p>
+                      <p className="text-xs text-muted-foreground">{user?.email || 'admin@edudron.com'}</p>
+                    </div>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium">{user?.name || 'Admin User'}</p>
+                      <p className="text-xs text-muted-foreground">{user?.email || 'admin@edudron.com'}</p>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    <span>Profile</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="cursor-pointer">
+                    <Bell className="mr-2 h-4 w-4" />
+                    <span>Notifications</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    className="cursor-pointer text-destructive focus:text-destructive"
+                    onClick={async () => {
+                      await logout()
+                      window.location.href = '/login'
+                    }}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Sign Out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </header>

@@ -185,6 +185,69 @@ public class LectureMediaService {
         lectureContentRepository.delete(content);
     }
     
+    /**
+     * Create a text content item for a lecture
+     */
+    public LectureContentDTO createTextContent(String lectureId, String textContent, String title, Integer sequence) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Verify lecture exists
+        Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
+        
+        // Get next sequence number if not provided
+        Integer nextSequence = sequence;
+        if (nextSequence == null) {
+            Integer maxSequence = lectureContentRepository.findMaxSequenceByLectureIdAndClientId(lectureId, clientId);
+            nextSequence = (maxSequence != null ? maxSequence : 0) + 1;
+        }
+        
+        // Create new LectureContent
+        LectureContent content = new LectureContent();
+        content.setId(UlidGenerator.nextUlid());
+        content.setClientId(clientId);
+        content.setLectureId(lectureId);
+        content.setContentType(LectureContent.ContentType.TEXT);
+        content.setTitle(title != null ? title : lecture.getTitle());
+        content.setTextContent(textContent);
+        content.setSequence(nextSequence);
+        
+        LectureContent saved = lectureContentRepository.save(content);
+        return toDTO(saved);
+    }
+    
+    /**
+     * Update an existing text content item
+     */
+    public LectureContentDTO updateTextContent(String contentId, String textContent, String title) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        LectureContent content = lectureContentRepository.findByIdAndClientId(contentId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Content not found: " + contentId));
+        
+        if (content.getContentType() != LectureContent.ContentType.TEXT) {
+            throw new IllegalArgumentException("Content is not a text content item");
+        }
+        
+        if (textContent != null) {
+            content.setTextContent(textContent);
+        }
+        if (title != null) {
+            content.setTitle(title);
+        }
+        
+        LectureContent saved = lectureContentRepository.save(content);
+        return toDTO(saved);
+    }
+    
     private LectureContent.ContentType determineContentType(MultipartFile file) {
         String contentType = file.getContentType();
         String filename = file.getOriginalFilename();

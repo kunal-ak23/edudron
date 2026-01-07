@@ -20,6 +20,8 @@ export interface PaginatedResponse<T = any> {
 export class ApiClient {
   private client: AxiosInstance
   private tokenManager: TokenManager
+  private onTokenRefresh?: (token: string) => void
+  private onLogout?: () => void
 
   constructor(baseURL: string, tokenManager?: TokenManager) {
     this.tokenManager = tokenManager || new TokenManager()
@@ -33,6 +35,22 @@ export class ApiClient {
     })
 
     this.setupInterceptors()
+  }
+
+  /**
+   * Set callback to be called when token is refreshed
+   */
+  setOnTokenRefresh(callback: (token: string) => void) {
+    console.log('[ApiClient] Setting onTokenRefresh callback')
+    this.onTokenRefresh = callback
+  }
+
+  /**
+   * Set callback to be called when logout is needed
+   */
+  setOnLogout(callback: () => void) {
+    console.log('[ApiClient] Setting onLogout callback')
+    this.onLogout = callback
   }
 
   private setupInterceptors() {
@@ -89,49 +107,83 @@ export class ApiClient {
       (response) => response,
       async (error) => {
         const originalRequest = error.config
+        const status = error.response?.status
 
-        // If 401 and not already retrying, try to refresh token
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        // Handle 401 (Unauthorized) and 403 (Forbidden) as potential token expiration
+        // 403 can also mean token expired or invalid permissions
+        if ((status === 401 || status === 403) && !originalRequest._retry) {
+          console.log(`[ApiClient] Received ${status} error for ${originalRequest.url}, attempting token refresh...`)
           originalRequest._retry = true
 
           try {
             const refreshToken = this.tokenManager.getRefreshToken()
+            console.log('[ApiClient] Refresh token available:', !!refreshToken)
+            
             if (refreshToken) {
-              const response = await axios.post(
-                `${this.client.defaults.baseURL}/auth/refresh`,
-                null,
-                {
-                  params: { refreshToken }
-                }
+              // Create a new axios instance without interceptors to avoid infinite loop
+              // The refresh endpoint should not require authentication
+              const refreshClient = axios.create({
+                baseURL: this.client.defaults.baseURL,
+                timeout: 10000,
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              })
+              
+              console.log('[ApiClient] Attempting to refresh token...')
+              
+              // Try refresh endpoint - send refreshToken in request body
+              const response = await refreshClient.post(
+                '/auth/refresh',
+                { refreshToken }
               )
 
-              const newToken = response.data.token || response.data.data?.token
+              console.log('[ApiClient] Token refresh response:', response.status, response.data)
+
+              const newToken = response.data.token || response.data.data?.token || (response.data as any)?.token
               if (newToken) {
+                console.log('[ApiClient] Token refresh successful, updating token...')
                 this.tokenManager.setToken(newToken)
-                if (response.data.refreshToken || response.data.data?.refreshToken) {
-                  this.tokenManager.setRefreshToken(response.data.refreshToken || response.data.data.refreshToken)
+                if (response.data.refreshToken || response.data.data?.refreshToken || (response.data as any)?.refreshToken) {
+                  const newRefreshToken = response.data.refreshToken || response.data.data?.refreshToken || (response.data as any)?.refreshToken
+                  this.tokenManager.setRefreshToken(newRefreshToken)
+                }
+                
+                // Notify AuthContext about token refresh
+                if (this.onTokenRefresh) {
+                  console.log('[ApiClient] Notifying AuthContext about token refresh...')
+                  this.onTokenRefresh(newToken)
+                } else {
+                  console.warn('[ApiClient] onTokenRefresh callback not set!')
                 }
                 
                 originalRequest.headers.Authorization = `Bearer ${newToken}`
+                console.log('[ApiClient] Retrying original request with new token...')
                 return this.client(originalRequest)
+              } else {
+                console.error('[ApiClient] Token refresh response did not contain a new token')
               }
+            } else {
+              console.warn('[ApiClient] No refresh token available, cannot refresh')
             }
-          } catch (refreshError) {
-            // Refresh failed, clear tokens and redirect to login
-            this.tokenManager.clearToken()
-            if (typeof window !== 'undefined') {
-              window.location.href = '/login'
-            }
+          } catch (refreshError: any) {
+            console.error('[ApiClient] Token refresh failed:', refreshError?.message || refreshError)
+            console.error('[ApiClient] Refresh error details:', {
+              status: refreshError?.response?.status,
+              data: refreshError?.response?.data,
+              message: refreshError?.message
+            })
+            // Refresh failed, trigger logout
+            console.log('[ApiClient] Triggering logout due to refresh failure...')
+            this.handleLogout()
             return Promise.reject(refreshError)
           }
         }
 
-        // If refresh didn't work or other error, clear token and redirect
-        if (error.response?.status === 401) {
-          this.tokenManager.clearToken()
-          if (typeof window !== 'undefined') {
-            window.location.href = '/login'
-          }
+        // If refresh didn't work or other 401/403 error, trigger logout
+        if (status === 401 || status === 403) {
+          console.log(`[ApiClient] ${status} error not handled by refresh, triggering logout...`)
+          this.handleLogout()
         }
 
         return Promise.reject(error)
@@ -204,6 +256,38 @@ export class ApiClient {
 
   clearToken() {
     this.tokenManager.clearToken()
+  }
+
+  /**
+   * Handle logout - clear tokens and notify AuthContext
+   */
+  private handleLogout() {
+    console.log('[ApiClient] handleLogout called')
+    this.tokenManager.clearToken()
+    
+    // Clear all auth-related localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('user')
+      localStorage.removeItem('tenant_id')
+      localStorage.removeItem('clientId')
+      localStorage.removeItem('selectedTenantId')
+      localStorage.removeItem('available_tenants')
+      console.log('[ApiClient] Cleared all auth data from localStorage')
+    }
+    
+    // Notify AuthContext to update state
+    if (this.onLogout) {
+      console.log('[ApiClient] Calling onLogout callback...')
+      this.onLogout()
+    } else {
+      console.warn('[ApiClient] onLogout callback not set! Redirecting to login...')
+      // Fallback: redirect to login if no callback is set
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
+    }
   }
 }
 

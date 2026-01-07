@@ -7,6 +7,7 @@ import { coursesApi, enrollmentsApi, lecturesApi } from '@/lib/api'
 import type { Course, Section } from '@edudron/shared-utils'
 import { CommitmentModal } from '@/components/CommitmentModal'
 import { EnrollmentSuccessModal } from '@/components/EnrollmentSuccessModal'
+import { StudentLayout } from '@/components/StudentLayout'
 import { useAuth } from '@edudron/shared-utils'
 
 // Force dynamic rendering
@@ -24,6 +25,7 @@ export default function CourseDetailPage() {
   const [progress, setProgress] = useState<any>(null)
   const [showCommitmentModal, setShowCommitmentModal] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [openModuleId, setOpenModuleId] = useState<string | null>(null)
 
   useEffect(() => {
     loadCourse()
@@ -31,11 +33,9 @@ export default function CourseDetailPage() {
 
   const loadCourse = async () => {
     try {
-      const [courseData, sectionsData, enrollmentStatus, progressData] = await Promise.all([
+      const [courseData, sectionsData] = await Promise.all([
         coursesApi.getCourse(courseId),
-        coursesApi.getChapters(courseId).catch(() => []),
-        enrollmentsApi.checkEnrollment(courseId).catch(() => false),
-        enrollmentsApi.getProgress(courseId).catch(() => null)
+        coursesApi.getChapters(courseId).catch(() => [])
       ])
       setCourse(courseData)
       
@@ -53,12 +53,47 @@ export default function CourseDetailPage() {
           })
         )
         setSections(sectionsWithLectures)
+        // Open the first module by default
+        if (sectionsWithLectures.length > 0 && sectionsWithLectures[0].lectures && sectionsWithLectures[0].lectures.length > 0) {
+          setOpenModuleId(sectionsWithLectures[0].id)
+        }
       } else {
         setSections(sectionsData as any)
       }
       
-      setEnrolled(enrollmentStatus)
-      setProgress(progressData)
+      // Check enrollment status - try enroll API, if it returns 409, user is already enrolled
+      let isEnrolled = false
+      try {
+        await enrollmentsApi.enrollInCourse(courseId)
+        // If enroll succeeds, user is now enrolled
+        isEnrolled = true
+      } catch (error: any) {
+        const statusCode = error.response?.status
+        const errorMessage = error.response?.data?.error || error.message || error.response?.data?.message || ''
+        const lowerMessage = errorMessage.toLowerCase()
+        
+        // If 409 (Conflict) or message indicates already enrolled, user is enrolled
+        if (statusCode === 409 || lowerMessage.includes('already enrolled')) {
+          isEnrolled = true
+        } else {
+          // User is not enrolled - try checkEnrollment as fallback
+          try {
+            isEnrolled = await enrollmentsApi.checkEnrollment(courseId)
+          } catch {
+            isEnrolled = false
+          }
+        }
+      }
+      
+      setEnrolled(isEnrolled)
+      
+      // Load progress if enrolled
+      if (isEnrolled) {
+        const progressData = await enrollmentsApi.getProgress(courseId).catch(() => null)
+        setProgress(progressData)
+      } else {
+        setProgress(null)
+      }
     } catch (error) {
       console.error('Failed to load course:', error)
     } finally {
@@ -121,8 +156,9 @@ export default function CourseDetailPage() {
   }
 
   const getProgressPercentage = () => {
-    if (!progress || !progress.totalLectures) return 0
-    return Math.round((progress.completedLectures / progress.totalLectures) * 100)
+    const total = getTotalLectures()
+    if (!progress || !progress.completedLectures || total === 0) return 0
+    return Math.round((progress.completedLectures / total) * 100)
   }
 
   const getNextLecture = () => {
@@ -168,9 +204,10 @@ export default function CourseDetailPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        {/* Hero Section */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <StudentLayout>
+        <div className="min-h-screen bg-gray-50">
+          {/* Hero Section */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_0.9fr] gap-6 items-start">
             {/* Left: Course Info */}
             <div>
@@ -200,14 +237,17 @@ export default function CourseDetailPage() {
                 {enrolled ? (
                   <Button
                     onClick={() => router.push(`/courses/${courseId}/learn`)}
-                    className="px-6 py-3 font-bold rounded-xl"
+                    size="lg"
+                    className="font-bold !text-white"
                   >
                     Continue Learning
                   </Button>
                 ) : (
                   <Button
                     onClick={handleEnrollClick}
-                    className="px-6 py-3 font-bold rounded-xl"
+                    variant="primary"
+                    size="lg"
+                    className="font-bold !text-white"
                   >
                     {course.isFree ? 'Start learning' : 'Enroll for Free'}
                   </Button>
@@ -215,7 +255,8 @@ export default function CourseDetailPage() {
                 <Button
                   variant="outline"
                   onClick={() => router.push(`/courses/${courseId}/learn`)}
-                  className="px-6 py-3 font-bold rounded-xl border-gray-300"
+                  size="lg"
+                  className="font-bold border-gray-300"
                 >
                   Preview
                 </Button>
@@ -226,14 +267,14 @@ export default function CourseDetailPage() {
             {enrolled && progress && (
               <aside className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4">
                 <h3 className="font-semibold text-gray-900 mb-3">Your progress</h3>
-                <div className="h-2.5 bg-blue-50 border border-blue-100 rounded-full overflow-hidden mb-3">
+                <div className="h-2.5 bg-primary-50 border border-primary-100 rounded-full overflow-hidden mb-3">
                   <div
-                    className="h-full bg-blue-600 rounded-full transition-all"
+                    className="h-full bg-primary-600 rounded-full transition-all"
                     style={{ width: `${progressPercentage}%` }}
                   />
                 </div>
                 <p className="text-sm text-gray-500 mb-4">
-                  {progressPercentage}% complete • {progress.completedLectures || 0} of {progress.totalLectures || totalLectures} lessons
+                  {progressPercentage}% complete • {progress.completedLectures || 0} of {totalLectures} lessons
                 </p>
                 <div className="h-px bg-gray-200 my-4" />
                 {nextLecture && (
@@ -252,81 +293,113 @@ export default function CourseDetailPage() {
           </div>
         </div>
 
-        {/* Syllabus and Lessons Grid */}
+        {/* Lessons Section */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[0.85fr_1.7fr] gap-6">
-            {/* Sidebar: Syllabus */}
-            <aside className="bg-white rounded-2xl border border-gray-200 p-4">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Syllabus</h2>
-              <div className="space-y-2.5">
-                {sections.map((section, sectionIdx) => (
-                  <button
-                    key={section.id}
-                    className="w-full text-left bg-white border border-gray-200 rounded-xl p-3 cursor-pointer flex justify-between items-center hover:border-blue-300 transition-colors"
-                  >
-                    <span className="font-bold text-gray-900">
-                      Module {sectionIdx + 1}: {section.title}
-                    </span>
-                    <span className="text-gray-500 text-sm">
-                      {section.lectures?.length || 0} lessons
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </aside>
-
-            {/* Main Content: Lessons */}
-            <section className="bg-white rounded-2xl border border-gray-200 p-4">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Lessons</h2>
-              <div className="space-y-3">
-                {sections.map((section, sectionIdx) => (
-                  <div key={section.id}>
-                    {section.lectures && section.lectures.map((lecture, lectureIdx) => {
-                      const globalIndex = sections.slice(0, sectionIdx).reduce(
-                        (acc, s) => acc + (s.lectures?.length || 0),
-                        lectureIdx + 1
-                      )
-                      return (
-                        <div
-                          key={lecture.id}
-                          className="bg-white border border-gray-200 rounded-xl p-4 flex justify-between items-center shadow-sm mb-3"
+          <section className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-6">Lessons</h2>
+            <div className="space-y-4">
+              {sections.map((section, sectionIdx) => {
+                if (!section.lectures || section.lectures.length === 0) return null
+                
+                const isOpen = openModuleId === section.id
+                
+                return (
+                  <div key={section.id} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                    {/* Section Header - Clickable */}
+                    <button
+                      onClick={() => setOpenModuleId(isOpen ? null : section.id)}
+                      className="w-full flex items-center gap-3 p-4 bg-primary-50 hover:bg-primary-100 transition-colors text-left rounded-t-xl"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-primary-100 border border-primary-300 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-5 h-5 text-primary-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-primary-900">
+                          {sectionIdx + 1}. {section.title}
+                        </h3>
+                        <p className="text-sm text-primary-700 mt-0.5">
+                          {section.lectures.length} {section.lectures.length === 1 ? 'lesson' : 'lessons'}
+                        </p>
+                      </div>
+                      <div className="flex-shrink-0">
+                        <svg
+                          className={`w-5 h-5 text-primary-600 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <div className="flex gap-3 items-center">
-                            <div className="w-9 h-9 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center font-bold text-gray-900">
-                              {globalIndex}
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </button>
+                    
+                    {/* Lessons in this section - Collapsible */}
+                    {isOpen && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-gray-200 pt-3">
+                        {section.lectures.map((lecture, lectureIdx) => {
+                          const isVideo = lecture.contentType === 'VIDEO'
+                          const isReading = lecture.contentType === 'TEXT' || lecture.contentType === 'READING'
+                          
+                          return (
+                            <div
+                              key={lecture.id}
+                              className="bg-white border border-gray-200 rounded-xl p-4 flex justify-between items-center shadow-sm hover:border-primary-300 transition-colors"
+                            >
+                              <div className="flex gap-3 items-center">
+                                <div className="w-9 h-9 rounded-lg bg-primary-50 border border-primary-200 flex items-center justify-center font-bold text-gray-900 flex-shrink-0">
+                                  {lectureIdx + 1}
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {isVideo ? (
+                                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                  ) : isReading ? (
+                                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                  )}
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold text-gray-900 mb-1">
+                                    {lecture.title}
+                                  </h3>
+                                  <p className="text-sm text-gray-500">
+                                    {lecture.contentType === 'VIDEO' ? 'Video' : 'Reading'} •{' '}
+                                    {lecture.duration ? `${Math.floor(lecture.duration / 60)} min` : 'N/A'}
+                                    {lecture.contentType === 'TEXT' && ' • Practice'}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  if (enrolled) {
+                                    router.push(`/courses/${courseId}/learn`)
+                                  } else {
+                                    handleEnrollClick()
+                                  }
+                                }}
+                                className="px-4 py-2 font-bold rounded-xl border-gray-300 flex-shrink-0"
+                              >
+                                {enrolled ? 'Open' : 'Preview'}
+                              </Button>
                             </div>
-                            <div>
-                              <h3 className="font-semibold text-gray-900 mb-1">
-                                {lecture.title}
-                              </h3>
-                              <p className="text-sm text-gray-500">
-                                {lecture.contentType === 'VIDEO' ? 'Video' : 'Reading'} •{' '}
-                                {lecture.duration ? `${Math.floor(lecture.duration / 60)} min` : 'N/A'}
-                                {lecture.contentType === 'TEXT' && ' • Practice'}
-                              </p>
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              if (enrolled) {
-                                router.push(`/courses/${courseId}/learn`)
-                              } else {
-                                handleEnrollClick()
-                              }
-                            }}
-                            className="px-4 py-2 font-bold rounded-xl border-gray-300"
-                          >
-                            {enrolled ? 'Open' : 'Preview'}
-                          </Button>
-                        </div>
-                      )
-                    })}
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            </section>
-          </div>
+                )
+              })}
+            </div>
+          </section>
         </div>
 
         {/* Commitment Modal */}
@@ -347,7 +420,8 @@ export default function CourseDetailPage() {
           }}
           onGetStarted={handleGetStarted}
         />
-      </div>
+        </div>
+      </StudentLayout>
     </ProtectedRoute>
   )
 }

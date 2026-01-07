@@ -51,7 +51,7 @@ export default function CourseCard({ course, onClick, className }: CourseCardPro
       onClick={onClick}
     >
       {/* Course Image */}
-      <div className="relative w-full h-40 bg-gradient-to-br from-blue-500 to-purple-600">
+      <div className="relative w-full h-40 bg-gradient-to-br from-primary-500 to-purple-600">
         {course.thumbnailUrl ? (
           <img
             src={course.thumbnailUrl}

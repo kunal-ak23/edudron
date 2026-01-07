@@ -51,12 +51,15 @@ export class LecturesApi {
 
   async updateSubLecture(courseId: string, lectureId: string, subLectureId: string, request: UpdateLectureRequest): Promise<Lecture> {
     // Use the lecture update endpoint: /api/lectures/{id}
+    // Gateway routes /content/api/** to content service, which has controller at /api/lectures/{id}
     const response = await this.apiClient.put<Lecture>(
       `/content/api/lectures/${subLectureId}`,
       {
         title: request.title,
         description: request.description,
+        contentType: request.contentType,
         durationSeconds: request.durationSeconds,
+        isPublished: request.isPublished,
         isPreview: false
       }
     )
@@ -117,6 +120,29 @@ export class LecturesApi {
 
   async deleteMedia(contentId: string): Promise<void> {
     await this.apiClient.delete(`/content/api/lectures/media/${contentId}`)
+  }
+
+  async createTextContent(lectureId: string, textContent: string, title?: string, sequence?: number): Promise<LectureContent> {
+    const response = await this.apiClient.post<LectureContent>(
+      `/content/api/lectures/${lectureId}/media/text`,
+      {
+        textContent,
+        title,
+        sequence
+      }
+    )
+    return response.data
+  }
+
+  async updateTextContent(contentId: string, textContent: string, title?: string): Promise<LectureContent> {
+    const response = await this.apiClient.put<LectureContent>(
+      `/content/api/lectures/media/${contentId}/text`,
+      {
+        textContent,
+        title
+      }
+    )
+    return response.data
   }
 }
 

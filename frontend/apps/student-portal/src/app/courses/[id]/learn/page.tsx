@@ -7,6 +7,8 @@ import { coursesApi, enrollmentsApi, lecturesApi } from '@/lib/api'
 import type { Course, Section, Lecture, Progress } from '@edudron/shared-utils'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useAuth } from '@edudron/shared-utils'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { StudentLayout } from '@/components/StudentLayout'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -22,6 +24,7 @@ export default function LearnPage() {
   const [sections, setSections] = useState<Section[]>([])
   const [progress, setProgress] = useState<Progress | null>(null)
   const [selectedLecture, setSelectedLecture] = useState<Lecture | null>(null)
+  const [selectedSection, setSelectedSection] = useState<Section | null>(null)
   const [completedLectures, setCompletedLectures] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -126,7 +129,8 @@ export default function LearnPage() {
       if (sectionsData && sectionsData.length > 0) {
         const firstSection = sectionsData[0] as any
         if (firstSection.lectures && firstSection.lectures.length > 0) {
-          setSelectedLecture(firstSection.lectures[0])
+          // Show module landing page by default
+          setSelectedSection(firstSection)
         }
       }
     } catch (error) {
@@ -141,18 +145,28 @@ export default function LearnPage() {
 
   const handleLectureSelect = (lecture: Lecture) => {
     setSelectedLecture(lecture)
+    setSelectedSection(null) // Clear module selection when selecting a lecture
   }
 
-  const handleMarkComplete = async (lectureId: string) => {
+  const handleSectionSelect = (section: Section) => {
+    setSelectedSection(section)
+    setSelectedLecture(null) // Clear lecture selection when selecting a module
+  }
+
+  const handleMarkComplete = async (lectureId: string, isCompleted: boolean) => {
     try {
       const newCompleted = new Set(completedLectures)
-      newCompleted.add(lectureId)
+      if (isCompleted) {
+        newCompleted.add(lectureId)
+      } else {
+        newCompleted.delete(lectureId)
+      }
       setCompletedLectures(newCompleted)
 
       await enrollmentsApi.updateProgress(courseId, {
         lectureId,
-        isCompleted: true,
-        progressPercentage: 100
+        isCompleted,
+        progressPercentage: isCompleted ? 100 : 0
       })
 
       let updatedProgress = null
@@ -182,9 +196,14 @@ export default function LearnPage() {
       })
       setCompletedLectures(completed)
     } catch (error) {
-      console.error('Failed to mark lecture as complete:', error)
+      console.error('Failed to update lecture completion:', error)
+      // Revert to previous state on error
       const reverted = new Set(completedLectures)
-      reverted.delete(lectureId)
+      if (isCompleted) {
+        reverted.delete(lectureId)
+      } else {
+        reverted.add(lectureId)
+      }
       setCompletedLectures(reverted)
     }
   }
@@ -239,21 +258,21 @@ export default function LearnPage() {
     switch (contentType) {
       case 'VIDEO':
         return (
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" />
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         )
       case 'TEXT':
       case 'READING':
         return (
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804v12.392A7.962 7.962 0 0110.5 14c-1.669 0-3.218.51-4.5 1.385V4.804z" />
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
           </svg>
         )
       default:
         return (
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
         )
     }
@@ -262,9 +281,11 @@ export default function LearnPage() {
   if (loading) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-white">
-          <div className="animate-pulse">Loading...</div>
-        </div>
+        <StudentLayout>
+          <div className="min-h-screen bg-white flex items-center justify-center">
+            <div className="animate-pulse">Loading...</div>
+          </div>
+        </StudentLayout>
       </ProtectedRoute>
     )
   }
@@ -272,9 +293,11 @@ export default function LearnPage() {
   if (!course) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-white flex items-center justify-center">
-          <p className="text-gray-500">Course not found</p>
-        </div>
+        <StudentLayout>
+          <div className="min-h-screen bg-white flex items-center justify-center">
+            <p className="text-gray-500">Course not found</p>
+          </div>
+        </StudentLayout>
       </ProtectedRoute>
     )
   }
@@ -284,162 +307,240 @@ export default function LearnPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-white">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-          <div className="px-6 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="text-blue-600 font-bold text-xl">coursera</div>
-                <div className="text-gray-400">|</div>
-                <div className="text-gray-700 font-medium">{course.instructors?.[0]?.name || 'Course'}</div>
-              </div>
-              <div className="flex-1 max-w-md mx-8">
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search in course"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button className="absolute right-2 top-1/2 transform -translate-y-1/2 px-3 py-1 bg-blue-600 text-white rounded text-sm font-medium">
-                    Search
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-1 text-gray-700 cursor-pointer">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
-                  </svg>
-                  <span className="text-sm">English</span>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-                <button className="text-gray-700 hover:text-gray-900">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      <StudentLayout>
+        <div className="flex h-[calc(100vh-4rem)] bg-white">
+          {/* Left Sidebar */}
+          <div className={`${sidebarCollapsed ? 'w-0 border-l-0' : 'w-80 border-r'} bg-white border-gray-200 overflow-visible transition-all duration-300 flex-shrink-0 relative`}>
+            {!sidebarCollapsed && (
+              <>
+                {/* Toggle Menu Button - Right edge of sidebar */}
+                <button
+                  onClick={() => setSidebarCollapsed(true)}
+                  className="absolute right-0 top-1/2 transform -translate-y-1/2 translate-x-full z-30 bg-white hover:bg-gray-50 rounded-r-lg px-2 py-4 shadow-md border-r border-t border-b border-gray-200"
+                  aria-label="Toggle menu"
+                  style={{ right: '-1px' }}
+                >
+                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                 </button>
-                <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-semibold cursor-pointer">
-                  {user?.name?.charAt(0).toUpperCase() || 'A'}
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
+                <div className="p-4 overflow-y-auto h-full">
+                  <TooltipProvider>
+                    <div className="space-y-4">
+                      {sections.map((section, sectionIdx) => {
+                        if (!section.lectures || section.lectures.length === 0) return null
+                        
+                        return (
+                          <div key={section.id} className="mb-4">
+                            {/* Module Header - Clickable */}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  onClick={() => handleSectionSelect(section)}
+                                  className={`w-full text-left mb-2 px-2 py-1.5 rounded transition-colors ${
+                                    selectedSection?.id === section.id
+                                      ? 'bg-primary-50'
+                                      : 'hover:bg-gray-50'
+                                  }`}
+                                >
+                                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    Module {sectionIdx + 1}
+                                  </h4>
+                                  <p className={`text-sm font-medium mt-0.5 truncate ${
+                                    selectedSection?.id === section.id
+                                      ? 'text-primary-700'
+                                      : 'text-gray-900'
+                                  }`}>
+                                    {section.title}
+                                  </p>
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{section.title}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            
+                            {/* Lessons in this module */}
+                            <div className="space-y-1">
+                              {section.lectures.map((lecture) => {
+                                const isSelected = selectedLecture?.id === lecture.id
+                                const isCompleted = completedLectures.has(lecture.id)
+                                const contentType = lecture.contentType || 'TEXT'
 
-        <div className="flex h-[calc(100vh-4rem)]">
-          {/* Left Sidebar */}
+                                return (
+                                  <Tooltip key={lecture.id}>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        onClick={() => handleLectureSelect(lecture)}
+                                        className={`w-full text-left px-3 py-2 rounded text-xs transition-colors relative ${
+                                          isSelected
+                                            ? 'bg-primary-50 text-primary-700'
+                                            : 'text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                      >
+                                        {isSelected && (
+                                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-600 rounded-r"></div>
+                                        )}
+                                        <div className="flex items-center space-x-2">
+                                          <div className={`flex-shrink-0 ${isSelected ? 'text-primary-600' : 'text-gray-400'}`}>
+                                            {getContentTypeIcon(contentType)}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center space-x-2">
+                                              <span className="font-normal truncate">
+                                                {lecture.title}
+                                              </span>
+                                              {isCompleted && (
+                                                <svg className="w-3.5 h-3.5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                </svg>
+                                              )}
+                                            </div>
+                                            {lecture.duration && (
+                                              <div className="text-xs text-gray-400 mt-0.5">
+                                                {Math.floor(lecture.duration / 60)} min
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>{lecture.title}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </TooltipProvider>
+                </div>
+              </>
+            )}
+          </div>
           {sidebarCollapsed && (
             <button
               onClick={() => setSidebarCollapsed(false)}
-              className="fixed left-0 top-1/2 transform -translate-y-1/2 z-30 bg-white border-r border-t border-b border-gray-200 rounded-r-lg px-2 py-4 shadow-md hover:bg-gray-50"
+              className="fixed left-0 top-1/2 transform -translate-y-1/2 z-30 bg-white border-l border-t border-b border-gray-200 rounded-r-lg px-2 py-4 shadow-md hover:bg-gray-50"
             >
               <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           )}
-          <div className={`${sidebarCollapsed ? 'w-0' : 'w-80'} bg-white border-r border-gray-200 overflow-y-auto transition-all duration-300 flex-shrink-0`}>
-            {!sidebarCollapsed && (
-              <div className="p-4">
-                <button
-                  onClick={() => setSidebarCollapsed(true)}
-                  className="text-gray-600 hover:text-gray-900 mb-4 text-sm font-medium flex items-center space-x-1"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  <span>Hide menu</span>
-                </button>
-                
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Start the program</h3>
-                  <div className="space-y-1">
-                    {sections.map((section, sectionIdx) => (
-                      <div key={section.id}>
-                        {section.lectures && section.lectures.map((lecture) => {
-                          const isSelected = selectedLecture?.id === lecture.id
-                          const isCompleted = completedLectures.has(lecture.id)
-                          const contentType = lecture.contentType || 'TEXT'
-
-                          return (
-                            <button
-                              key={lecture.id}
-                              onClick={() => handleLectureSelect(lecture)}
-                              className={`w-full text-left px-3 py-2.5 rounded text-sm transition-colors relative ${
-                                isSelected
-                                  ? 'bg-blue-50 text-blue-700'
-                                  : 'text-gray-700 hover:bg-gray-50'
-                              }`}
-                            >
-                              {isSelected && (
-                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600 rounded-r"></div>
-                              )}
-                              <div className="flex items-center space-x-2">
-                                <div className={`flex-shrink-0 ${isSelected ? 'text-blue-600' : 'text-gray-500'}`}>
-                                  {getContentTypeIcon(contentType)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="font-medium truncate">
-                                      {contentType === 'VIDEO' ? 'Video' : contentType === 'TEXT' ? 'Reading' : 'Content'}: {lecture.title}
-                                    </span>
-                                    {isCompleted && (
-                                      <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                      </svg>
-                                    )}
-                                  </div>
-                                  {lecture.duration && (
-                                    <div className="text-xs text-gray-500 mt-0.5">
-                                      {Math.floor(lecture.duration / 60)} min
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* Main Content */}
           <div className="flex-1 flex flex-col min-w-0 bg-white overflow-y-auto">
-            {selectedLecture ? (
+            {selectedSection && !selectedLecture ? (
               <>
-                {/* Breadcrumbs */}
+                {/* Module Landing Page */}
                 <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <span>{course.title}</span>
-                    <span>></span>
+                    <button
+                      onClick={() => router.push(`/courses/${courseId}`)}
+                      className="hover:text-primary-600 transition-colors"
+                    >
+                      {course.title}
+                    </button>
+                    <span>{'>'}</span>
+                    <span className="text-gray-900 font-medium">{selectedSection.title}</span>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto bg-white">
+                  <div className="max-w-4xl mx-auto p-8">
+                    <h1 className="text-4xl font-bold text-gray-900 mb-4">
+                      {selectedSection.title}
+                    </h1>
+                    
+                    {selectedSection.description && (
+                      <div className="text-gray-600 mb-8 text-lg leading-relaxed">
+                        <MarkdownRenderer content={selectedSection.description} />
+                      </div>
+                    )}
+
+                    <div className="mt-8">
+                      <h2 className="text-2xl font-semibold text-gray-900 mb-6">
+                        Lessons in this module
+                      </h2>
+                      <div className="space-y-3">
+                        {selectedSection.lectures?.map((lecture, lectureIdx) => {
+                          const isCompleted = completedLectures.has(lecture.id)
+                          const contentType = lecture.contentType || 'TEXT'
+                          
+                          return (
+                            <div
+                              key={lecture.id}
+                              className="bg-white border border-gray-200 rounded-xl p-4 flex justify-between items-center shadow-sm hover:border-primary-300 transition-colors cursor-pointer"
+                              onClick={() => handleLectureSelect(lecture)}
+                            >
+                              <div className="flex gap-3 items-center flex-1">
+                                <div className="w-9 h-9 rounded-lg bg-primary-50 border border-primary-200 flex items-center justify-center font-bold text-gray-900 flex-shrink-0">
+                                  {lectureIdx + 1}
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {getContentTypeIcon(contentType)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-gray-900 mb-1">
+                                    {lecture.title}
+                                  </h3>
+                                  <p className="text-sm text-gray-500">
+                                    {contentType === 'VIDEO' ? 'Video' : 'Reading'} •{' '}
+                                    {lecture.duration ? `${Math.floor(lecture.duration / 60)} min` : 'N/A'}
+                                  </p>
+                                </div>
+                                {isCompleted && (
+                                  <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleLectureSelect(lecture)
+                                }}
+                                className="px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-600 rounded-md flex-shrink-0"
+                              >
+                                Open
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : selectedLecture ? (
+              <>
+                {/* Breadcrumbs */}
+                <div className="px-6 py-3 border-b border-gray-200">
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <button
+                      onClick={() => router.push(`/courses/${courseId}`)}
+                      className="hover:text-primary-600 transition-colors"
+                    >
+                      {course.title}
+                    </button>
+                    <span>{'>'}</span>
                     {currentSection && (
                       <>
-                        <span>Module {currentSectionIndex + 1}</span>
-                        <span>></span>
+                        <button
+                          onClick={() => handleSectionSelect(currentSection)}
+                          className="hover:text-primary-600 transition-colors"
+                        >
+                          {currentSection.title}
+                        </button>
+                        <span>{'>'}</span>
                       </>
                     )}
                     <span className="text-gray-900 font-medium">{selectedLecture.title}</span>
                   </div>
-                  {nextLecture && (
-                    <button
-                      onClick={() => handleLectureSelect(nextLecture)}
-                      className="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center space-x-1"
-                    >
-                      <span>Next</span>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  )}
                 </div>
 
                 {/* Video/Content Player */}
@@ -467,9 +568,9 @@ export default function LearnPage() {
                           <div className="mt-8 space-y-8">
                             {selectedLecture.contents
                               .filter((content: any) => content.contentType === 'TEXT' && content.textContent)
-                              .map((content: any) => (
-                                <div key={content.id}>
-                                  {content.title && (
+                              .map((content: any, index: number) => (
+                                <div key={content.id || index}>
+                                  {content.title && content.title.trim() !== selectedLecture.title.trim() && (
                                     <h2 className="text-3xl font-bold text-gray-900 mb-4">{content.title}</h2>
                                   )}
                                   <MarkdownRenderer
@@ -519,107 +620,100 @@ export default function LearnPage() {
                       <div className="flex items-center space-x-4">
                         <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Report an issue</a>
                       </div>
-                      <button className="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-600 rounded-md">
+                      <button className="px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-600 rounded-md">
                         Save note
                       </button>
                     </div>
 
                     {/* Tabs */}
-                    <div className="border-b border-gray-200 mb-4">
-                      <div className="flex space-x-6">
-                        <button
-                          onClick={() => setActiveTab('transcript')}
-                          className={`py-3 px-1 border-b-2 font-medium text-sm ${
-                            activeTab === 'transcript'
-                              ? 'border-blue-600 text-blue-600'
-                              : 'border-transparent text-gray-600 hover:text-gray-900'
-                          }`}
-                        >
-                          Transcript
-                        </button>
-                        <button
-                          onClick={() => setActiveTab('notes')}
-                          className={`py-3 px-1 border-b-2 font-medium text-sm ${
-                            activeTab === 'notes'
-                              ? 'border-blue-600 text-blue-600'
-                              : 'border-transparent text-gray-600 hover:text-gray-900'
-                          }`}
-                        >
-                          Notes
-                        </button>
-                        <button
-                          onClick={() => setActiveTab('downloads')}
-                          className={`py-3 px-1 border-b-2 font-medium text-sm ${
-                            activeTab === 'downloads'
-                              ? 'border-blue-600 text-blue-600'
-                              : 'border-transparent text-gray-600 hover:text-gray-900'
-                          }`}
-                        >
-                          Downloads
-                        </button>
+                    {selectedLecture.contentType === 'VIDEO' && (
+                      <div className="border-b border-gray-200 mb-4">
+                        <div className="flex space-x-6">
+                          <button
+                            onClick={() => setActiveTab('transcript')}
+                            className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                              activeTab === 'transcript'
+                                ? 'border-primary-600 text-primary-600'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            Transcript
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('notes')}
+                            className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                              activeTab === 'notes'
+                                ? 'border-primary-600 text-primary-600'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            Notes
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('downloads')}
+                            className={`py-3 px-1 border-b-2 font-medium text-sm ${
+                              activeTab === 'downloads'
+                                ? 'border-primary-600 text-primary-600'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            Downloads
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Tab Content */}
-                    <div className="mb-6">
-                      {activeTab === 'transcript' && (
-                        <div>
-                          <div className="flex justify-between items-center mb-4">
-                            <div className="text-sm text-gray-600">0:00</div>
-                            <select className="text-sm text-gray-600 border border-gray-300 rounded px-2 py-1">
-                              <option>Transcript language: English</option>
-                            </select>
-                          </div>
+                    {selectedLecture.contentType === 'VIDEO' && (
+                      <div className="mb-6">
+                        {activeTab === 'transcript' && (
                           <div>
-                            {selectedLecture.description && (
-                              <MarkdownRenderer content={selectedLecture.description} />
-                            )}
-                            {selectedLecture.contents && selectedLecture.contents.length > 0 && (
-                              <div className="mt-4">
-                                {selectedLecture.contents
-                                  .filter((content: any) => content.contentType === 'TEXT' && content.textContent)
-                                  .map((content: any) => (
-                                    <div key={content.id} className="mb-4">
-                                      <MarkdownRenderer content={content.textContent} />
-                                    </div>
-                                  ))}
-                              </div>
-                            )}
+                            <div className="flex justify-between items-center mb-4">
+                              <div className="text-sm text-gray-600">0:00</div>
+                              <select className="text-sm text-gray-600 border border-gray-300 rounded px-2 py-1">
+                                <option>Transcript language: English</option>
+                              </select>
+                            </div>
+                            <div className="text-gray-700">
+                              <p className="text-sm text-gray-500 mb-4">
+                                Transcript will be available here once the video transcript is generated.
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
-                      {activeTab === 'notes' && (
-                        <div>
-                          <p className="text-gray-700 mb-4">
-                            Click the 'Save Note' button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you've captured.
-                          </p>
-                          <a href="#" className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center space-x-1">
-                            <span>View all notes</span>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </a>
-                        </div>
-                      )}
+                        {activeTab === 'notes' && (
+                          <div>
+                            <p className="text-gray-700 mb-4">
+                              Click the 'Save Note' button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you've captured.
+                            </p>
+                            <a href="#" className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center space-x-1">
+                              <span>View all notes</span>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          </div>
+                        )}
 
-                      {activeTab === 'downloads' && (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                            <span className="text-gray-700">Lecture Video (240p) mp4</span>
+                        {activeTab === 'downloads' && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                              <span className="text-gray-700">Lecture Video (240p) mp4</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                              <span className="text-gray-700">Lecture Video (1080p) mp4</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                              <span className="text-gray-700">Subtitles (English) WebVTT</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
+                              <span className="text-gray-700">Transcript (English) txt</span>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                            <span className="text-gray-700">Lecture Video (1080p) mp4</span>
-                          </div>
-                          <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                            <span className="text-gray-700">Subtitles (English) WebVTT</span>
-                          </div>
-                          <div className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                            <span className="text-gray-700">Transcript (English) txt</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Engagement Buttons */}
                     <div className="flex items-center space-x-4 pb-4">
@@ -642,35 +736,50 @@ export default function LearnPage() {
                         <span className="text-sm font-medium">Share</span>
                       </button>
                     </div>
+
+                    {/* Mark Complete and Next Button */}
+                    <div className="border-t border-gray-200 pt-4 flex items-center justify-between">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={completedLectures.has(selectedLecture.id)}
+                          onChange={(e) => handleMarkComplete(selectedLecture.id, e.target.checked)}
+                          className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700">
+                          {completedLectures.has(selectedLecture.id) ? 'Completed' : 'Mark as complete'}
+                        </span>
+                      </label>
+                      {nextLecture && (
+                        <button
+                          onClick={() => handleLectureSelect(nextLecture)}
+                          className="px-6 py-2 bg-primary-600 text-white font-medium rounded-md hover:bg-primary-700 transition-colors flex items-center space-x-2"
+                        >
+                          <span>Next</span>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-500">
-                <p>Select a lecture to begin</p>
+                <p>Select a module or lecture to begin</p>
               </div>
             )}
           </div>
+
+          {/* Floating Chat Button */}
+          <button className="fixed bottom-6 right-6 w-12 h-12 bg-primary-600 text-white rounded-lg shadow-lg hover:bg-primary-700 flex items-center justify-center z-50">
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+          </button>
         </div>
-
-        {/* Footer */}
-        <footer className="bg-gray-800 text-white py-4 px-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-6 h-6 bg-blue-600 rounded flex items-center justify-center text-white font-bold text-xs">c</div>
-              <span className="text-sm">Coursera</span>
-            </div>
-            <div className="text-sm text-gray-400">curated by Mobbin</div>
-          </div>
-        </footer>
-
-        {/* Floating Chat Button */}
-        <button className="fixed bottom-6 right-6 w-12 h-12 bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-700 flex items-center justify-center z-50">
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-        </button>
-      </div>
+      </StudentLayout>
     </ProtectedRoute>
   )
 }

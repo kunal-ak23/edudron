@@ -120,7 +120,7 @@ export default function LoginPage() {
                 setIsLogin(!isLogin)
                 setError('')
               }}
-              className="text-sm text-blue-600 hover:text-blue-500"
+              className="text-sm text-primary-600 hover:text-primary-500"
             >
               {isLogin
                 ? "Don't have an account? Sign up"

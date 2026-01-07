@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { RichTextEditor } from '@/components/RichTextEditor'
+import { SplitMarkdownEditor } from '@/components/SplitMarkdownEditor'
 import { FileUpload } from '@edudron/ui-components'
 import {
   Select,
@@ -17,7 +18,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Loader2, X, Video, FileText, Upload } from 'lucide-react'
 import { lecturesApi, mediaApi } from '@/lib/api'
-import type { Lecture, CreateLectureRequest, UpdateLectureRequest } from '@edudron/shared-utils'
+import type { Lecture, CreateLectureRequest, UpdateLectureRequest, LectureContent } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 
@@ -43,6 +44,8 @@ export function LectureEditModal({
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [textContents, setTextContents] = useState<LectureContent[]>([])
+  const [currentLectureId, setCurrentLectureId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -55,6 +58,7 @@ export function LectureEditModal({
   useEffect(() => {
     if (isOpen) {
       if (lecture) {
+        setCurrentLectureId(lecture.id)
         setFormData({
           title: lecture.title || '',
           description: lecture.description || '',
@@ -63,11 +67,15 @@ export function LectureEditModal({
           durationSeconds: lecture.duration || 0,
           isPublished: lecture.isPublished || false
         })
+        // Load text contents for this lecture
+        loadTextContents(lecture.id)
       } else if (isMainLecture) {
+        setCurrentLectureId(lectureId)
         // Load main lecture data
         loadMainLecture()
       } else {
         // New sub-lecture
+        setCurrentLectureId(null)
         setFormData({
           title: '',
           description: '',
@@ -76,9 +84,22 @@ export function LectureEditModal({
           durationSeconds: 0,
           isPublished: false
         })
+        setTextContents([])
       }
     }
   }, [isOpen, lecture, isMainLecture, courseId, lectureId])
+
+  const loadTextContents = async (lectureId: string) => {
+    try {
+      const media = await lecturesApi.getLectureMedia(lectureId)
+      // Filter only TEXT content items
+      const textItems = media.filter((content: LectureContent) => content.contentType === 'TEXT')
+      setTextContents(textItems)
+    } catch (error) {
+      console.error('Failed to load text contents:', error)
+      setTextContents([])
+    }
+  }
 
   const loadMainLecture = async () => {
     setLoading(true)
@@ -131,15 +152,16 @@ export function LectureEditModal({
         })
         
         // Update local state with saved lecture so media can be uploaded
-        // Note: We'll need to pass this back to parent or reload
-        console.log('Created lecture:', savedLecture)
+        setCurrentLectureId(savedLecture.id)
+        // Load text contents for the new lecture
+        await loadTextContents(savedLecture.id)
       }
       
       toast({
         title: 'Lecture saved',
         description: lecture 
           ? 'The lecture has been saved successfully.' 
-          : 'The lecture has been created. You can now upload media files.',
+          : 'The lecture has been created. You can now upload media files and add content sections.',
       })
       onSave() // This will reload the course sections
       // Don't close immediately for new lectures - allow media upload
@@ -242,12 +264,138 @@ export function LectureEditModal({
             {/* Description */}
             <div className="space-y-2">
               <Label>Description</Label>
-              <RichTextEditor
-                content={formData.description}
-                onChange={(content) => setFormData({ ...formData, description: content })}
-                placeholder="Enter lecture description (supports rich text)"
-              />
+              <div className="w-full">
+                <SplitMarkdownEditor
+                  content={formData.description || ''}
+                  onChange={(content) => setFormData({ ...formData, description: content })}
+                  placeholder="Enter lecture description (markdown supported)"
+                  className="w-full"
+                />
+              </div>
             </div>
+
+            {/* Text Content Items (only for sub-lectures) */}
+            {!isMainLecture && currentLectureId && (
+              <div className="space-y-4 border-t pt-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base font-semibold">Content Sections</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (!currentLectureId) return
+                      try {
+                        const newContent = await lecturesApi.createTextContent(currentLectureId, '', 'New Content Section')
+                        setTextContents([...textContents, newContent])
+                        toast({
+                          title: 'Content section created',
+                          description: 'You can now edit the content.',
+                        })
+                      } catch (error) {
+                        toast({
+                          variant: 'destructive',
+                          title: 'Failed to create content section',
+                          description: extractErrorMessage(error),
+                        })
+                      }
+                    }}
+                    disabled={saving || !currentLectureId}
+                  >
+                    + Add Content Section
+                  </Button>
+                </div>
+                {textContents.length === 0 ? (
+                  <p className="text-sm text-gray-500">No content sections yet. Click "Add Content Section" to create one.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {textContents.map((content, index) => (
+                      <div key={content.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">
+                            Content Section {index + 1}
+                            {content.title && `: ${content.title}`}
+                          </Label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={async () => {
+                              if (confirm('Are you sure you want to delete this content section?')) {
+                                try {
+                                  await lecturesApi.deleteMedia(content.id)
+                                  setTextContents(textContents.filter(c => c.id !== content.id))
+                                  toast({
+                                    title: 'Content section deleted',
+                                  })
+                                } catch (error) {
+                                  toast({
+                                    variant: 'destructive',
+                                    title: 'Failed to delete content section',
+                                    description: extractErrorMessage(error),
+                                  })
+                                }
+                              }
+                            }}
+                            disabled={saving}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Title (optional)</Label>
+                          <Input
+                            value={content.title || ''}
+                            onChange={async (e) => {
+                              const newTitle = e.target.value
+                              const updatedContents = textContents.map(c =>
+                                c.id === content.id ? { ...c, title: newTitle } : c
+                              )
+                              setTextContents(updatedContents)
+                              // Auto-save title
+                              try {
+                                await lecturesApi.updateTextContent(content.id, content.textContent || '', newTitle)
+                              } catch (error) {
+                                console.error('Failed to update title:', error)
+                              }
+                            }}
+                            placeholder="Content section title"
+                            className="text-sm"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs">Content (Markdown/Rich Text)</Label>
+                          <div className="w-full">
+                            <SplitMarkdownEditor
+                              content={content.textContent || ''}
+                              onChange={async (newContent) => {
+                                const updatedContents = textContents.map(c =>
+                                  c.id === content.id ? { ...c, textContent: newContent } : c
+                                )
+                                setTextContents(updatedContents)
+                                // Auto-save content
+                                try {
+                                  await lecturesApi.updateTextContent(content.id, newContent, content.title)
+                                } catch (error) {
+                                  console.error('Failed to update content:', error)
+                                  toast({
+                                    variant: 'destructive',
+                                    title: 'Failed to save content',
+                                    description: extractErrorMessage(error),
+                                  })
+                                }
+                              }}
+                              placeholder="Start typing markdown... Use # for headings, ** for bold, * for italic, etc."
+                              className="w-full"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Content Type and Media (only for sub-lectures) */}
             {!isMainLecture && (

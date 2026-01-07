@@ -170,7 +170,7 @@ export default function FileUpload({
             'border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors',
             error
               ? 'border-red-300 bg-red-50'
-              : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50',
+              : 'border-gray-300 hover:border-primary-400 hover:bg-primary-50',
             disabled || uploading ? 'opacity-50 cursor-not-allowed' : ''
           )}
         >
@@ -185,7 +185,7 @@ export default function FileUpload({
           <div className="text-center">
             {uploading ? (
               <div className="flex flex-col items-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mb-2"></div>
                 <p className="text-sm text-gray-600">Uploading...</p>
               </div>
             ) : (
@@ -205,7 +205,7 @@ export default function FileUpload({
                 </svg>
                 <div className="mt-2">
                   <p className="text-sm text-gray-600">
-                    <span className="font-medium text-blue-600 hover:text-blue-500">
+                    <span className="font-medium text-primary-600 hover:text-primary-500">
                       Click to upload
                     </span>{' '}
                     or drag and drop

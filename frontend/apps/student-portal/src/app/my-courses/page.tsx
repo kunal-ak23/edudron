@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ProtectedRoute, CourseCard, Card } from '@edudron/ui-components'
 import { enrollmentsApi, coursesApi } from '@/lib/api'
+import { StudentLayout } from '@/components/StudentLayout'
 import type { Enrollment, Course, Progress } from '@edudron/shared-utils'
 
 // Force dynamic rendering
@@ -73,37 +74,7 @@ export default function MyCoursesPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-8">
-                <h1
-                  className="text-2xl font-bold text-blue-600 cursor-pointer"
-                  onClick={() => router.push('/courses')}
-                >
-                  EduDron
-                </h1>
-                <nav className="hidden md:flex space-x-6">
-                  <button
-                    onClick={() => router.push('/courses')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Browse
-                  </button>
-                  <button
-                    onClick={() => router.push('/my-courses')}
-                    className="text-gray-700 hover:text-blue-600 font-medium"
-                  >
-                    My Courses
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        </header>
-
+      <StudentLayout>
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* Page Header */}
           <div className="mb-8">
@@ -126,7 +97,7 @@ export default function MyCoursesPage() {
                   onClick={() => setActiveTab(tab.id as any)}
                   className={`py-4 px-1 border-b-2 font-medium text-sm ${
                     activeTab === tab.id
-                      ? 'border-blue-600 text-blue-600'
+                      ? 'border-primary-600 text-primary-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
@@ -182,7 +153,7 @@ export default function MyCoursesPage() {
                 <div className="mt-6">
                   <button
                     onClick={() => router.push('/courses')}
-                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700"
                   >
                     Browse Courses
                   </button>
@@ -210,14 +181,14 @@ export default function MyCoursesPage() {
                       <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-3 rounded-b-lg">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs font-medium text-gray-700">Progress</span>
-                          <span className="text-xs font-semibold text-blue-600">
+                          <span className="text-xs font-semibold text-primary-600">
                             {Math.round(progressPercent * 100)}%
                           </span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-1.5">
                           <div
                             className={`h-1.5 rounded-full transition-all ${
-                              isCompleted ? 'bg-green-500' : 'bg-blue-600'
+                              isCompleted ? 'bg-green-500' : 'bg-primary-600'
                             }`}
                             style={{ width: `${progressPercent * 100}%` }}
                           />
@@ -242,7 +213,7 @@ export default function MyCoursesPage() {
             </div>
           )}
         </main>
-      </div>
+      </StudentLayout>
     </ProtectedRoute>
   )
 }

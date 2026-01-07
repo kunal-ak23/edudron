@@ -39,7 +39,7 @@ export default function SearchBar({
         type="text"
         className={cn(
           'block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg',
-          'focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
+          'focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
           'text-sm placeholder-gray-400',
           className
         )}

@@ -17,14 +17,14 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     disabled,
     ...props 
   }, ref) => {
-    const baseClasses = 'inline-flex items-center justify-center rounded-xl font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer'
+    const baseClasses = 'inline-flex items-center justify-center rounded-xl font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer'
     
     const variants = {
-      primary: 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md active:scale-[0.98]',
-      secondary: 'bg-gray-600 text-white hover:bg-gray-700 shadow-sm hover:shadow-md active:scale-[0.98]',
+      primary: 'bg-primary-600 !text-white hover:bg-primary-700 shadow-sm hover:shadow-md active:scale-[0.98]',
+      secondary: 'bg-gray-600 !text-white hover:bg-gray-700 shadow-sm hover:shadow-md active:scale-[0.98]',
       outline: 'border border-gray-300 bg-white text-gray-900 hover:bg-gray-50 hover:border-gray-400 shadow-sm hover:shadow-md active:scale-[0.98]',
       ghost: 'hover:bg-gray-100 text-gray-700 active:scale-[0.98]',
-      destructive: 'bg-red-600 text-white hover:bg-red-700 shadow-sm hover:shadow-md active:scale-[0.98]'
+      destructive: 'bg-red-600 !text-white hover:bg-red-700 shadow-sm hover:shadow-md active:scale-[0.98]'
     }
     
     const sizes = {

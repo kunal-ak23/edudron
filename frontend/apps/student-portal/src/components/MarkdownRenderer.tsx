@@ -40,10 +40,10 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
           },
           pre: ({ node, ...props }) => <pre className="bg-gray-100 text-gray-900 p-4 rounded-lg overflow-x-auto my-4 font-mono text-sm" {...props} />,
           blockquote: ({ node, ...props }) => (
-            <blockquote className="border-l-4 border-blue-500 pl-4 italic my-4 text-gray-700" {...props} />
+            <blockquote className="border-l-4 border-primary-500 pl-4 italic my-4 text-gray-700" {...props} />
           ),
           a: ({ node, ...props }) => (
-            <a className="text-blue-600 hover:text-blue-700 underline font-medium" target="_blank" rel="noopener noreferrer" {...props} />
+            <a className="text-primary-600 hover:text-primary-700 underline font-medium" target="_blank" rel="noopener noreferrer" {...props} />
           ),
           p: ({ node, ...props }) => <p className="my-4 leading-relaxed text-gray-900 text-base font-normal" {...props} />,
           strong: ({ node, ...props }) => <strong className="font-semibold text-gray-900" {...props} />,

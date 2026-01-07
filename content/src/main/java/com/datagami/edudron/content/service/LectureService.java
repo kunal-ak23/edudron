@@ -86,7 +86,8 @@ public class LectureService {
     }
     
     public LectureDTO updateLecture(String id, String title, String description, 
-                                   Integer durationSeconds, Boolean isPreview) {
+                                   Integer durationSeconds, Boolean isPreview, 
+                                   Lecture.ContentType contentType, Boolean isPublished) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -107,6 +108,12 @@ public class LectureService {
         }
         if (isPreview != null) {
             lecture.setIsPreview(isPreview);
+        }
+        if (contentType != null) {
+            lecture.setContentType(contentType);
+        }
+        if (isPublished != null) {
+            lecture.setIsPublished(isPublished);
         }
         
         Lecture saved = lectureRepository.save(lecture);
