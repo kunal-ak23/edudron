@@ -18,6 +18,12 @@ export type { Section, CreateSectionRequest } from './api/sections'
 export { LecturesApi } from './api/lectures'
 export type { CreateLectureRequest, UpdateLectureRequest } from './api/lectures'
 export type { LectureContent } from './api/courses'
+export { FeedbackApi } from './api/feedback'
+export type { Feedback, CreateFeedbackRequest, FeedbackType } from './api/feedback'
+export { NotesApi } from './api/notes'
+export type { Note, CreateNoteRequest } from './api/notes'
+export { IssuesApi } from './api/issues'
+export type { IssueReport, CreateIssueReportRequest, IssueType, IssueStatus } from './api/issues'
 
 // Auth
 export { AuthService } from './auth/AuthService'

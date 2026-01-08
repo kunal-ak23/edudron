@@ -3,13 +3,16 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, Button } from '@edudron/ui-components'
-import { coursesApi, enrollmentsApi, lecturesApi } from '@/lib/api'
-import type { Course, Section, Lecture, Progress } from '@edudron/shared-utils'
+import { coursesApi, enrollmentsApi, lecturesApi, feedbackApi, notesApi, issuesApi } from '@/lib/api'
+import type { Course, Section, Lecture, Progress, Feedback, Note, FeedbackType, IssueType } from '@edudron/shared-utils'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useAuth } from '@edudron/shared-utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Switch } from '@/components/ui/switch'
 import { StudentLayout } from '@/components/StudentLayout'
+import { FeedbackDialog } from '@/components/FeedbackDialog'
+import { IssueReportDialog } from '@/components/IssueReportDialog'
+import { HighlightNoteDialog } from '@/components/HighlightNoteDialog'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -31,6 +34,20 @@ export default function LearnPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('transcript')
   const [searchQuery, setSearchQuery] = useState('')
+  
+  // Feedback state
+  const [currentFeedback, setCurrentFeedback] = useState<Feedback | null>(null)
+  const [showFeedbackDialog, setShowFeedbackDialog] = useState(false)
+  const [pendingFeedbackType, setPendingFeedbackType] = useState<FeedbackType | null>(null)
+  
+  // Issue report state
+  const [showIssueDialog, setShowIssueDialog] = useState(false)
+  
+  // Notes state
+  const [notes, setNotes] = useState<Note[]>([])
+  const [showHighlightDialog, setShowHighlightDialog] = useState(false)
+  const [selectedText, setSelectedText] = useState('')
+  const [selectedRange, setSelectedRange] = useState<Range | null>(null)
 
   // Helper function to get localStorage key for course position
   const getStorageKey = (courseId: string) => `course_position_${courseId}`
@@ -260,6 +277,102 @@ export default function LearnPage() {
     setSelectedLecture(lecture)
     setSelectedSection(null) // Clear module selection when selecting a lecture
     // Position will be saved via useEffect hook
+    // Load feedback and notes for the selected lecture
+    if (lecture) {
+      loadFeedbackAndNotes(lecture.id)
+    }
+  }
+
+  // Load feedback and notes for a lecture
+  const loadFeedbackAndNotes = async (lectureId: string) => {
+    try {
+      const [feedback, lectureNotes] = await Promise.all([
+        feedbackApi.getFeedback(lectureId).catch(() => null),
+        notesApi.getNotesByLecture(lectureId).catch(() => [])
+      ])
+      setCurrentFeedback(feedback)
+      setNotes(lectureNotes)
+    } catch (error) {
+      console.error('Failed to load feedback and notes:', error)
+    }
+  }
+
+  // Handle like/dislike button click
+  const handleFeedbackClick = (type: FeedbackType) => {
+    setPendingFeedbackType(type)
+    setShowFeedbackDialog(true)
+  }
+
+  // Handle feedback submission
+  const handleFeedbackSubmit = async (type: FeedbackType, comment?: string) => {
+    if (!selectedLecture) return
+    
+    try {
+      const feedback = await feedbackApi.createOrUpdateFeedback(selectedLecture.id, {
+        lectureId: selectedLecture.id,
+        courseId: courseId,
+        type,
+        comment
+      })
+      setCurrentFeedback(feedback)
+    } catch (error) {
+      console.error('Failed to submit feedback:', error)
+      throw error
+    }
+  }
+
+  // Handle issue report
+  const handleReportIssue = async (issueType: IssueType, description: string) => {
+    if (!selectedLecture) return
+    
+    try {
+      await issuesApi.reportIssue(selectedLecture.id, {
+        lectureId: selectedLecture.id,
+        courseId: courseId,
+        issueType,
+        description
+      })
+    } catch (error) {
+      console.error('Failed to report issue:', error)
+      throw error
+    }
+  }
+
+  // Handle text selection for highlighting
+  const handleTextSelection = () => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
+    const range = selection.getRangeAt(0)
+    const text = range.toString().trim()
+
+    if (text.length > 0) {
+      setSelectedText(text)
+      setSelectedRange(range.cloneRange())
+      setShowHighlightDialog(true)
+    }
+  }
+
+  // Handle save note with highlight
+  const handleSaveNote = async (color: string, noteText: string) => {
+    if (!selectedLecture || !selectedText) return
+
+    try {
+      const note = await notesApi.createNote(selectedLecture.id, {
+        lectureId: selectedLecture.id,
+        courseId: courseId,
+        highlightedText: selectedText,
+        highlightColor: color,
+        noteText: noteText || undefined,
+        context: selectedRange?.toString() || undefined
+      })
+      setNotes([...notes, note])
+      setSelectedText('')
+      setSelectedRange(null)
+    } catch (error) {
+      console.error('Failed to save note:', error)
+      throw error
+    }
   }
 
   const handleSectionSelect = (section: Section) => {
@@ -422,7 +535,7 @@ export default function LearnPage() {
   return (
     <ProtectedRoute>
       <StudentLayout>
-        <div className="flex h-[calc(100vh-4rem)] bg-white">
+        <div className="flex h-full bg-white">
           {/* Left Sidebar */}
           <div className={`${sidebarCollapsed ? 'w-0 border-l-0' : 'w-80 border-r'} bg-white border-gray-200 overflow-visible transition-all duration-300 flex-shrink-0 relative`}>
             {!sidebarCollapsed && (
@@ -551,7 +664,7 @@ export default function LearnPage() {
             {selectedSection && !selectedLecture ? (
               <>
                 {/* Module Landing Page */}
-                <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between">
+                <div className="px-6 py-3 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
                     <button
                       onClick={() => router.push(`/courses/${courseId}`)}
@@ -564,8 +677,8 @@ export default function LearnPage() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto bg-white">
-                  <div className="max-w-4xl mx-auto p-8">
+                <div className="flex-1 bg-white">
+                  <div className="mx-[36px] p-8">
                     <h1 className="text-4xl font-bold text-gray-900 mb-4">
                       {selectedSection.title}
                     </h1>
@@ -633,7 +746,7 @@ export default function LearnPage() {
             ) : selectedLecture ? (
               <>
                 {/* Breadcrumbs */}
-                <div className="px-6 py-3 border-b border-gray-200">
+                <div className="px-6 py-3 border-b border-gray-200 flex-shrink-0">
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
                     <button
                       onClick={() => router.push(`/courses/${courseId}`)}
@@ -658,7 +771,7 @@ export default function LearnPage() {
                 </div>
 
                 {/* Video/Content Player */}
-                <div className="bg-black flex-1 flex items-center justify-center relative">
+                <div className="bg-black flex-1 flex items-center justify-center relative min-h-0">
                   {selectedLecture.contentType === 'VIDEO' && selectedLecture.contentUrl ? (
                     <div className="w-full h-full">
                       <video
@@ -670,8 +783,8 @@ export default function LearnPage() {
                       </video>
                     </div>
                   ) : selectedLecture.contentType === 'TEXT' ? (
-                    <div className="w-full h-full overflow-y-auto bg-white">
-                      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                    <div className="w-full h-full bg-white overflow-y-auto">
+                      <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-6">
                         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">{selectedLecture.title}</h1>
                         {selectedLecture.description && (
                           <div className="text-gray-600 mb-6 text-base sm:text-lg font-normal leading-relaxed">
@@ -698,6 +811,90 @@ export default function LearnPage() {
                             <p>Content is being generated. Please check back soon.</p>
                           </div>
                         )}
+
+                        {/* Controls at end of TEXT content */}
+                        <div className="mt-12 pt-6 border-t border-gray-200">
+                          {/* Save note and Report issue */}
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center space-x-4">
+                              <button 
+                                onClick={() => setShowIssueDialog(true)}
+                                className="text-sm text-gray-600 hover:text-gray-900"
+                              >
+                                Report an issue
+                              </button>
+                            </div>
+                            <button 
+                              onClick={handleTextSelection}
+                              className="px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-600 rounded-md"
+                            >
+                              Save note
+                            </button>
+                          </div>
+
+                          {/* Engagement Buttons */}
+                          <div className="flex items-center space-x-3 mb-4">
+                            <button 
+                              onClick={() => handleFeedbackClick('LIKE')}
+                              className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${
+                                currentFeedback?.type === 'LIKE'
+                                  ? 'bg-primary-50 text-primary-700'
+                                  : 'text-gray-700 hover:bg-gray-100'
+                              }`}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+                              </svg>
+                              <span className="text-sm font-medium">Like</span>
+                            </button>
+                            <button 
+                              onClick={() => handleFeedbackClick('DISLIKE')}
+                              className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${
+                                currentFeedback?.type === 'DISLIKE'
+                                  ? 'bg-primary-50 text-primary-700'
+                                  : 'text-gray-700 hover:bg-gray-100'
+                              }`}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
+                              </svg>
+                              <span className="text-sm font-medium">Dislike</span>
+                            </button>
+                            <button className="flex items-center space-x-2 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                              </svg>
+                              <span className="text-sm font-medium">Share</span>
+                            </button>
+                          </div>
+
+                          {/* Mark Complete and Next Button */}
+                          <div className="border-t border-gray-200 pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                            <div className="flex items-center space-x-3">
+                              <Switch
+                                checked={completedLectures.has(selectedLecture.id)}
+                                onCheckedChange={(checked) => handleMarkComplete(selectedLecture.id, checked)}
+                              />
+                              <span 
+                                className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                                onClick={() => handleMarkComplete(selectedLecture.id, !completedLectures.has(selectedLecture.id))}
+                              >
+                                {completedLectures.has(selectedLecture.id) ? 'Completed' : 'Mark as complete'}
+                              </span>
+                            </div>
+                            {nextLecture && (
+                              <button
+                                onClick={() => handleLectureSelect(nextLecture)}
+                                className="w-full sm:w-auto px-6 py-2 bg-primary-600 text-white font-medium rounded-md hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2 sm:ml-auto"
+                              >
+                                <span>Next</span>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -727,59 +924,12 @@ export default function LearnPage() {
                   )}
                 </div>
 
-                {/* Content Below Video */}
-                <div className="border-t border-gray-200 bg-white pb-20 md:pb-4">
-                  <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-4">
-                        <a href="#" className="text-sm text-gray-600 hover:text-gray-900">Report an issue</a>
-                      </div>
-                      <button className="px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-600 rounded-md">
-                        Save note
-                      </button>
-                    </div>
-
-                    {/* Tabs */}
-                    {selectedLecture.contentType === 'VIDEO' && (
-                      <div className="border-b border-gray-200 mb-3">
-                        <div className="flex space-x-6">
-                          <button
-                            onClick={() => setActiveTab('transcript')}
-                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              activeTab === 'transcript'
-                                ? 'border-primary-600 text-primary-600'
-                                : 'border-transparent text-gray-600 hover:text-gray-900'
-                            }`}
-                          >
-                            Transcript
-                          </button>
-                          <button
-                            onClick={() => setActiveTab('notes')}
-                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              activeTab === 'notes'
-                                ? 'border-primary-600 text-primary-600'
-                                : 'border-transparent text-gray-600 hover:text-gray-900'
-                            }`}
-                          >
-                            Notes
-                          </button>
-                          <button
-                            onClick={() => setActiveTab('downloads')}
-                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              activeTab === 'downloads'
-                                ? 'border-primary-600 text-primary-600'
-                                : 'border-transparent text-gray-600 hover:text-gray-900'
-                            }`}
-                          >
-                            Downloads
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Tab Content */}
-                    {selectedLecture.contentType === 'VIDEO' && (
-                      <div className="mb-4">
+                {/* Content Below Video - Only for VIDEO content */}
+                {selectedLecture.contentType === 'VIDEO' && (
+                  <div className="border-t border-gray-200 bg-white pb-20 md:pb-4">
+                    <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-3">
+                      {/* Tab Content */}
+                      <div className="mb-6">
                         {activeTab === 'transcript' && (
                           <div>
                             <div className="flex justify-between items-center mb-3">
@@ -829,15 +979,90 @@ export default function LearnPage() {
                       </div>
                     )}
 
+                    {/* Controls moved to end - Tabs, Save note, Report issue, Engagement buttons */}
+                    {selectedLecture.contentType === 'VIDEO' && (
+                      <>
+                        {/* Tabs */}
+                        <div className="border-t border-gray-200 pt-4 mt-6">
+                          <div className="border-b border-gray-200 mb-4">
+                            <div className="flex space-x-6">
+                              <button
+                                onClick={() => setActiveTab('transcript')}
+                                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                                  activeTab === 'transcript'
+                                    ? 'border-primary-600 text-primary-600'
+                                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                              >
+                                Transcript
+                              </button>
+                              <button
+                                onClick={() => setActiveTab('notes')}
+                                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                                  activeTab === 'notes'
+                                    ? 'border-primary-600 text-primary-600'
+                                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                              >
+                                Notes
+                              </button>
+                              <button
+                                onClick={() => setActiveTab('downloads')}
+                                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                                  activeTab === 'downloads'
+                                    ? 'border-primary-600 text-primary-600'
+                                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                              >
+                                Downloads
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Save note and Report issue */}
+                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                      <div className="flex items-center space-x-4">
+                        <button 
+                          onClick={() => setShowIssueDialog(true)}
+                          className="text-sm text-gray-600 hover:text-gray-900"
+                        >
+                          Report an issue
+                        </button>
+                      </div>
+                      <button 
+                        onClick={handleTextSelection}
+                        className="px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-600 rounded-md"
+                      >
+                        Save note
+                      </button>
+                    </div>
+
                     {/* Engagement Buttons */}
-                    <div className="flex items-center space-x-3 pb-3">
-                      <button className="flex items-center space-x-2 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md">
+                    <div className="flex items-center space-x-3 pt-3">
+                      <button 
+                        onClick={() => handleFeedbackClick('LIKE')}
+                        className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${
+                          currentFeedback?.type === 'LIKE'
+                            ? 'bg-primary-50 text-primary-700'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
                         </svg>
                         <span className="text-sm font-medium">Like</span>
                       </button>
-                      <button className="flex items-center space-x-2 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md">
+                      <button 
+                        onClick={() => handleFeedbackClick('DISLIKE')}
+                        className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${
+                          currentFeedback?.type === 'DISLIKE'
+                            ? 'bg-primary-50 text-primary-700'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                      >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
                         </svg>
@@ -852,7 +1077,7 @@ export default function LearnPage() {
                     </div>
 
                     {/* Mark Complete and Next Button */}
-                    <div className="border-t border-gray-200 pt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                    <div className="border-t border-gray-200 pt-3 mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                       <div className="flex items-center space-x-3">
                         <Switch
                           checked={completedLectures.has(selectedLecture.id)}
@@ -879,6 +1104,7 @@ export default function LearnPage() {
                     </div>
                   </div>
                 </div>
+                )}
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center text-gray-500">
@@ -897,6 +1123,38 @@ export default function LearnPage() {
             </svg>
           </button>
         </div>
+
+        {/* Feedback Dialog */}
+        <FeedbackDialog
+          isOpen={showFeedbackDialog}
+          onClose={() => {
+            setShowFeedbackDialog(false)
+            setPendingFeedbackType(null)
+          }}
+          onSubmit={handleFeedbackSubmit}
+          initialType={pendingFeedbackType || undefined}
+          initialComment={currentFeedback?.comment}
+        />
+
+        {/* Issue Report Dialog */}
+        <IssueReportDialog
+          isOpen={showIssueDialog}
+          onClose={() => setShowIssueDialog(false)}
+          onSubmit={handleReportIssue}
+        />
+
+        {/* Highlight Note Dialog */}
+        <HighlightNoteDialog
+          isOpen={showHighlightDialog}
+          onClose={() => {
+            setShowHighlightDialog(false)
+            setSelectedText('')
+            setSelectedRange(null)
+            window.getSelection()?.removeAllRanges()
+          }}
+          onSubmit={handleSaveNote}
+          selectedText={selectedText}
+        />
       </StudentLayout>
     </ProtectedRoute>
   )
