@@ -12,7 +12,8 @@ import { Switch } from '@/components/ui/switch'
 import { StudentLayout } from '@/components/StudentLayout'
 import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { IssueReportDialog } from '@/components/IssueReportDialog'
-import { HighlightNoteDialog } from '@/components/HighlightNoteDialog'
+import { MarkdownWithHighlights } from '@/components/MarkdownWithHighlights'
+import { NotesSidebar } from '@/components/NotesSidebar'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -45,9 +46,7 @@ export default function LearnPage() {
   
   // Notes state
   const [notes, setNotes] = useState<Note[]>([])
-  const [showHighlightDialog, setShowHighlightDialog] = useState(false)
-  const [selectedText, setSelectedText] = useState('')
-  const [selectedRange, setSelectedRange] = useState<Range | null>(null)
+  const [showNotesSidebar, setShowNotesSidebar] = useState(false)
 
   // Helper function to get localStorage key for course position
   const getStorageKey = (courseId: string) => `course_position_${courseId}`
@@ -338,24 +337,9 @@ export default function LearnPage() {
     }
   }
 
-  // Handle text selection for highlighting
-  const handleTextSelection = () => {
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return
-
-    const range = selection.getRangeAt(0)
-    const text = range.toString().trim()
-
-    if (text.length > 0) {
-      setSelectedText(text)
-      setSelectedRange(range.cloneRange())
-      setShowHighlightDialog(true)
-    }
-  }
-
-  // Handle save note with highlight
-  const handleSaveNote = async (color: string, noteText: string) => {
-    if (!selectedLecture || !selectedText) return
+  // Handle add note with highlight (called from GoogleDocsStyleHighlighter)
+  const handleAddNote = async (selectedText: string, range: Range, color: string, noteText: string) => {
+    if (!selectedLecture) return
 
     try {
       const note = await notesApi.createNote(selectedLecture.id, {
@@ -364,14 +348,59 @@ export default function LearnPage() {
         highlightedText: selectedText,
         highlightColor: color,
         noteText: noteText || undefined,
-        context: selectedRange?.toString() || undefined
+        context: range.toString() || undefined
       })
       setNotes([...notes, note])
-      setSelectedText('')
-      setSelectedRange(null)
     } catch (error) {
       console.error('Failed to save note:', error)
       throw error
+    }
+  }
+
+  // Handle update note
+  const handleUpdateNote = async (noteId: string, noteText: string) => {
+    try {
+      const note = notes.find(n => n.id === noteId)
+      if (!note) return
+
+      const updatedNote = await notesApi.updateNote(noteId, {
+        lectureId: note.lectureId,
+        courseId: note.courseId,
+        highlightedText: note.highlightedText,
+        highlightColor: note.highlightColor,
+        noteText: noteText || undefined,
+        context: note.context
+      })
+      
+      setNotes(notes.map(n => n.id === noteId ? updatedNote : n))
+    } catch (error) {
+      console.error('Failed to update note:', error)
+      throw error
+    }
+  }
+
+  // Handle delete note
+  const handleDeleteNote = async (noteId: string) => {
+    try {
+      await notesApi.deleteNote(noteId)
+      setNotes(notes.filter(n => n.id !== noteId))
+    } catch (error) {
+      console.error('Failed to delete note:', error)
+      throw error
+    }
+  }
+
+  // Handle note click (scroll to highlight)
+  const handleNoteClick = (noteId: string) => {
+    // Find the highlight in the DOM and scroll to it
+    const highlight = document.querySelector(`[data-note-id="${noteId}"]`)
+    if (highlight) {
+      highlight.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // Add a temporary highlight effect
+      highlight.classList.add('animate-pulse')
+      setTimeout(() => {
+        highlight.classList.remove('animate-pulse')
+      }, 2000)
     }
   }
 
@@ -800,8 +829,12 @@ export default function LearnPage() {
                                   {content.title && content.title.trim() !== selectedLecture.title.trim() && (
                                     <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">{content.title}</h2>
                                   )}
-                                  <MarkdownRenderer
+                                  <MarkdownWithHighlights
                                     content={content.textContent}
+                                    notes={notes.filter(n => n.lectureId === selectedLecture.id)}
+                                    onAddNote={handleAddNote}
+                                    onUpdateNote={handleUpdateNote}
+                                    onDeleteNote={handleDeleteNote}
                                   />
                                 </div>
                               ))}
@@ -824,12 +857,18 @@ export default function LearnPage() {
                                 Report an issue
                               </button>
                             </div>
-                            <button 
-                              onClick={handleTextSelection}
-                              className="px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-600 rounded-md"
-                            >
-                              Save note
-                            </button>
+                            <div className="flex items-center space-x-2">
+                              <button 
+                                onClick={() => setShowNotesSidebar(!showNotesSidebar)}
+                                className={`px-4 py-2 text-sm font-medium border rounded-md transition-colors ${
+                                  showNotesSidebar
+                                    ? 'bg-primary-600 text-white border-primary-600'
+                                    : 'text-primary-600 hover:text-primary-700 border-primary-600'
+                                }`}
+                              >
+                                {showNotesSidebar ? 'Hide Notes' : `View Notes (${notes.length})`}
+                              </button>
+                            </div>
                           </div>
 
                           {/* Engagement Buttons */}
@@ -1033,10 +1072,14 @@ export default function LearnPage() {
                         </button>
                       </div>
                       <button 
-                        onClick={handleTextSelection}
-                        className="px-4 py-2 text-sm font-medium text-primary-600 hover:text-primary-700 border border-primary-600 rounded-md"
+                        onClick={() => setShowNotesSidebar(!showNotesSidebar)}
+                        className={`px-4 py-2 text-sm font-medium border rounded-md transition-colors ${
+                          showNotesSidebar
+                            ? 'bg-primary-600 text-white border-primary-600'
+                            : 'text-primary-600 hover:text-primary-700 border-primary-600'
+                        }`}
                       >
-                        Save note
+                        {showNotesSidebar ? 'Hide Notes' : `View Notes (${notes.length})`}
                       </button>
                     </div>
 
@@ -1143,17 +1186,14 @@ export default function LearnPage() {
           onSubmit={handleReportIssue}
         />
 
-        {/* Highlight Note Dialog */}
-        <HighlightNoteDialog
-          isOpen={showHighlightDialog}
-          onClose={() => {
-            setShowHighlightDialog(false)
-            setSelectedText('')
-            setSelectedRange(null)
-            window.getSelection()?.removeAllRanges()
-          }}
-          onSubmit={handleSaveNote}
-          selectedText={selectedText}
+        {/* Notes Sidebar */}
+        <NotesSidebar
+          notes={notes.filter(n => selectedLecture?.id === n.lectureId)}
+          isOpen={showNotesSidebar}
+          onClose={() => setShowNotesSidebar(false)}
+          onNoteClick={handleNoteClick}
+          onDeleteNote={handleDeleteNote}
+          onUpdateNote={handleUpdateNote}
         />
       </StudentLayout>
     </ProtectedRoute>
