@@ -1,0 +1,159 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0009-feedback-notes-issues
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: feedback
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: feedback
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: lecture_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: comment, type: text }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: feedback
+            schemaName: student
+            indexName: idx_student_feedback_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: feedback
+            schemaName: student
+            indexName: idx_student_feedback_lecture
+            columns:
+              - column: { name: lecture_id }
+              - column: { name: client_id }
+        - createIndex:
+            tableName: feedback
+            schemaName: student
+            indexName: idx_student_feedback_student_lecture
+            columns:
+              - column: { name: student_id }
+              - column: { name: lecture_id }
+              - column: { name: client_id }
+        - createIndex:
+            tableName: feedback
+            schemaName: student
+            indexName: idx_student_feedback_student_course
+            columns:
+              - column: { name: student_id }
+              - column: { name: course_id }
+              - column: { name: client_id }
+
+  - changeSet:
+      id: student-0009-notes
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: notes
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: notes
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: lecture_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: highlighted_text, type: text }
+              - column: { name: highlight_color, type: varchar(50) }
+              - column: { name: note_text, type: text }
+              - column: { name: context, type: text }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: notes
+            schemaName: student
+            indexName: idx_student_notes_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: notes
+            schemaName: student
+            indexName: idx_student_notes_student_lecture
+            columns:
+              - column: { name: student_id }
+              - column: { name: lecture_id }
+              - column: { name: client_id }
+        - createIndex:
+            tableName: notes
+            schemaName: student
+            indexName: idx_student_notes_student_course
+            columns:
+              - column: { name: student_id }
+              - column: { name: course_id }
+              - column: { name: client_id }
+
+  - changeSet:
+      id: student-0009-issue-reports
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: issue_reports
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: issue_reports
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: lecture_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: issue_type, type: varchar(50), constraints: { nullable: false } }
+              - column: { name: description, type: text, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(20), defaultValue: 'OPEN', constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: issue_reports
+            schemaName: student
+            indexName: idx_student_issue_reports_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: issue_reports
+            schemaName: student
+            indexName: idx_student_issue_reports_student_lecture
+            columns:
+              - column: { name: student_id }
+              - column: { name: lecture_id }
+              - column: { name: client_id }
+        - createIndex:
+            tableName: issue_reports
+            schemaName: student
+            indexName: idx_student_issue_reports_student_course
+            columns:
+              - column: { name: student_id }
+              - column: { name: course_id }
+              - column: { name: client_id }
+        - createIndex:
+            tableName: issue_reports
+            schemaName: student
+            indexName: idx_student_issue_reports_status
+            columns:
+              - column: { name: client_id }
+              - column: { name: status }
+
