@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, Button } from '@edudron/ui-components'
 import { coursesApi, enrollmentsApi, lecturesApi, feedbackApi, notesApi, issuesApi } from '@/lib/api'
@@ -123,6 +123,32 @@ export default function LearnPage() {
     }
   }
 
+  // Load feedback and notes for a lecture
+  const loadFeedbackAndNotes = useCallback(async (lectureId: string) => {
+    try {
+      console.log('[LearnPage] Loading feedback and notes for lecture:', lectureId)
+      const [feedback, lectureNotes] = await Promise.all([
+        feedbackApi.getFeedback(lectureId).catch((err) => {
+          console.warn('[LearnPage] Failed to load feedback:', err)
+          return null
+        }),
+        notesApi.getNotesByLecture(lectureId).catch((err) => {
+          console.warn('[LearnPage] Failed to load notes:', err)
+          return []
+        })
+      ])
+      console.log('[LearnPage] Loaded notes:', lectureNotes.length, lectureNotes)
+      setCurrentFeedback(feedback)
+      // Merge with existing notes, replacing notes for this lecture
+      setNotes(prevNotes => {
+        const otherNotes = prevNotes.filter(n => n.lectureId !== lectureId)
+        return [...otherNotes, ...lectureNotes]
+      })
+    } catch (error) {
+      console.error('[LearnPage] Failed to load feedback and notes:', error)
+    }
+  }, [])
+
   useEffect(() => {
     loadCourseData()
   }, [courseId])
@@ -140,6 +166,18 @@ export default function LearnPage() {
       })
     }
   }, [selectedLecture, courseId])
+
+  // Load feedback and notes whenever selectedLecture changes
+  useEffect(() => {
+    if (selectedLecture?.id) {
+      console.log('[LearnPage] selectedLecture changed, loading notes for:', selectedLecture.id)
+      loadFeedbackAndNotes(selectedLecture.id)
+    } else {
+      // Clear notes when no lecture is selected
+      setNotes([])
+      setCurrentFeedback(null)
+    }
+  }, [selectedLecture?.id, loadFeedbackAndNotes])
 
   const loadCourseData = async () => {
     try {
@@ -276,24 +314,7 @@ export default function LearnPage() {
     setSelectedLecture(lecture)
     setSelectedSection(null) // Clear module selection when selecting a lecture
     // Position will be saved via useEffect hook
-    // Load feedback and notes for the selected lecture
-    if (lecture) {
-      loadFeedbackAndNotes(lecture.id)
-    }
-  }
-
-  // Load feedback and notes for a lecture
-  const loadFeedbackAndNotes = async (lectureId: string) => {
-    try {
-      const [feedback, lectureNotes] = await Promise.all([
-        feedbackApi.getFeedback(lectureId).catch(() => null),
-        notesApi.getNotesByLecture(lectureId).catch(() => [])
-      ])
-      setCurrentFeedback(feedback)
-      setNotes(lectureNotes)
-    } catch (error) {
-      console.error('Failed to load feedback and notes:', error)
-    }
+    // Notes will be loaded via useEffect hook when selectedLecture changes
   }
 
   // Handle like/dislike button click
@@ -350,7 +371,8 @@ export default function LearnPage() {
         noteText: noteText || undefined,
         context: range.toString() || undefined
       })
-      setNotes([...notes, note])
+      // Reload all notes for this lecture to ensure we have the latest data
+      await loadFeedbackAndNotes(selectedLecture.id)
     } catch (error) {
       console.error('Failed to save note:', error)
       throw error
@@ -361,7 +383,7 @@ export default function LearnPage() {
   const handleUpdateNote = async (noteId: string, noteText: string) => {
     try {
       const note = notes.find(n => n.id === noteId)
-      if (!note) return
+      if (!note || !selectedLecture) return
 
       const updatedNote = await notesApi.updateNote(noteId, {
         lectureId: note.lectureId,
@@ -372,7 +394,8 @@ export default function LearnPage() {
         context: note.context
       })
       
-      setNotes(notes.map(n => n.id === noteId ? updatedNote : n))
+      // Reload notes to ensure consistency
+      await loadFeedbackAndNotes(selectedLecture.id)
     } catch (error) {
       console.error('Failed to update note:', error)
       throw error
@@ -382,8 +405,10 @@ export default function LearnPage() {
   // Handle delete note
   const handleDeleteNote = async (noteId: string) => {
     try {
+      if (!selectedLecture) return
       await notesApi.deleteNote(noteId)
-      setNotes(notes.filter(n => n.id !== noteId))
+      // Reload notes to ensure consistency
+      await loadFeedbackAndNotes(selectedLecture.id)
     } catch (error) {
       console.error('Failed to delete note:', error)
       throw error
