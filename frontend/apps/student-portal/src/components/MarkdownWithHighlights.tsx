@@ -81,91 +81,215 @@ export function MarkdownWithHighlights({
 
   // Find markdown text in the rendered content
   // Since we store markdown source, we need to find where that markdown text appears in the rendered HTML
-  const findMarkdownTextInRendered = (markdownText: string, container: Node): { node: Text; start: number; end: number } | null => {
+  // Returns either a single node match or a multi-node range
+  const findMarkdownTextInRendered = (
+    markdownText: string, 
+    container: Node
+  ): { node: Text; start: number; end: number } | { startNode: Text; startOffset: number; endNode: Text; endOffset: number } | null => {
     if (!markdownText) return null
 
     // Remove markdown syntax to get plain text for searching
     // This handles: **bold**, *italic*, `code`, # headers, etc.
-    const plainText = markdownText
-      .replace(/\*\*([^*]+)\*\*/g, '$1')  // Remove **bold**
-      .replace(/\*([^*]+)\*/g, '$1')      // Remove *italic*
-      .replace(/`([^`]+)`/g, '$1')        // Remove `code`
-      .replace(/#+\s*/g, '')              // Remove # headers
-      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Remove [link](url) -> link
-      .replace(/[*_`#\[\]()]/g, '')       // Remove any remaining markdown chars
-      .trim()
+    // Process in order to avoid partial matches
+    let plainText = markdownText
+    
+    // First, handle nested/overlapping markdown (like **bold*italic**)
+    // Remove bold first (longer pattern) - handle multiple asterisks
+    plainText = plainText.replace(/\*\*([^*]+)\*\*/g, '$1')
+    // Then remove italic (single asterisk that's not part of **)
+    // Use a pattern that matches *text* but not **text**
+    plainText = plainText.replace(/\*([^*\n]+?)\*/g, '$1')
+    // Remove code blocks
+    plainText = plainText.replace(/`([^`]+)`/g, '$1')
+    // Remove headers
+    plainText = plainText.replace(/#+\s+/g, '')
+    // Remove links but keep the text
+    plainText = plainText.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    // Clean up any remaining markdown chars that are standalone
+    plainText = plainText.replace(/\s+[*_`#\[\]()]\s+/g, ' ')
+    // Remove markdown chars from start/end
+    plainText = plainText.replace(/^[*_`#\[\]()\s]+/, '')
+    plainText = plainText.replace(/[*_`#\[\]()\s]+$/, '')
+    
+    plainText = plainText.trim()
+    
+    // Debug: log if we're getting a very short plain text
+    if (plainText.length < 5 && markdownText.length > 10) {
+      console.warn('[MarkdownWithHighlights] Plain text extraction may be incorrect:', {
+        original: markdownText.substring(0, 50),
+        plain: plainText
+      })
+    }
     
     const normalizedPlain = normalizeText(plainText)
     if (normalizedPlain.length === 0) return null
     
-    // Get all text nodes
+    // Get all text nodes and combine them into a searchable string
     const textNodes = getAllTextNodes(container)
     
-    // Strategy 1: Try exact match of plain text
-    for (const node of textNodes) {
-      const nodeText = node.textContent || ''
-      const index = nodeText.indexOf(plainText)
-      if (index !== -1) {
-        return { node, start: index, end: index + plainText.length }
-      }
+    // Build a combined text string with node references for position mapping
+    interface TextNodeInfo {
+      node: Text
+      start: number
+      end: number
+      text: string
     }
-
-    // Strategy 2: Normalized matching
-    for (const node of textNodes) {
+    
+    const nodeInfos: TextNodeInfo[] = []
+    let combinedText = ''
+    
+    textNodes.forEach(node => {
       const nodeText = node.textContent || ''
-      const normalizedNodeText = normalizeText(nodeText)
+      const start = combinedText.length
+      const end = start + nodeText.length
+      nodeInfos.push({ node, start, end, text: nodeText })
+      combinedText += nodeText
+    })
+    
+    // Strategy 1: Try exact match of plain text in combined text
+    // Only match if the text is long enough or if it's a complete word match
+    const exactIndex = combinedText.indexOf(plainText)
+    if (exactIndex !== -1) {
+      // Verify this is a complete match (not just a substring like "A" matching "A" in "Apple")
+      // Check if it's at word boundaries or if the text is long enough
+      const isWordBoundary = exactIndex === 0 || 
+        /\s/.test(combinedText[exactIndex - 1]) ||
+        plainText.length > 10 // If text is long enough, it's likely a real match
       
-      if (normalizedNodeText.includes(normalizedPlain)) {
-        const normalizedIndex = normalizedNodeText.indexOf(normalizedPlain)
+      if (isWordBoundary || plainText.length > 3) {
+        const endIndex = exactIndex + plainText.length
         
-        // Map back to actual position
-        let actualIndex = 0
-        let normalizedPos = 0
-        let actualPos = 0
+        // Find start and end nodes
+        let startNode: TextNodeInfo | null = null
+        let endNode: TextNodeInfo | null = null
+        let startOffset = 0
+        let endOffset = 0
         
-        while (normalizedPos < normalizedIndex && actualPos < nodeText.length) {
-          const char = nodeText[actualPos]
-          if (/\s/.test(char)) {
-            actualPos++
-            while (actualPos < nodeText.length && /\s/.test(nodeText[actualPos])) {
-              actualPos++
-            }
-          } else {
-            normalizedPos++
-            actualPos++
+        for (const info of nodeInfos) {
+          // Find the node containing the start position
+          if (!startNode && exactIndex >= info.start && exactIndex < info.end) {
+            startNode = info
+            startOffset = exactIndex - info.start
+          }
+          
+          // Find the node containing the end position
+          if (endIndex > info.start && endIndex <= info.end) {
+            endNode = info
+            endOffset = endIndex - info.start
+            break
           }
         }
         
-        actualIndex = actualPos
-        const endIndex = Math.min(actualIndex + plainText.length, nodeText.length)
-        
-        return { node, start: actualIndex, end: endIndex }
+        if (startNode && endNode) {
+          // If it's a single node, return single node format
+          if (startNode === endNode) {
+            if (endOffset > startOffset) {
+              console.log('[MarkdownWithHighlights] Strategy 1 match - exact match found at index:', exactIndex, 'length:', plainText.length, 'single node')
+              return { node: startNode.node, start: startOffset, end: endOffset }
+            }
+          } else {
+            // Multi-node range
+            if (endOffset > 0) {
+              console.log('[MarkdownWithHighlights] Strategy 1 match - exact match found at index:', exactIndex, 'length:', plainText.length, 'multi-node')
+              return {
+                startNode: startNode.node,
+                startOffset: startOffset,
+                endNode: endNode.node,
+                endOffset: endOffset
+              }
+            }
+          }
+        }
       }
     }
 
-    // Strategy 3: Word-by-word matching (for longer texts)
-    const words = normalizedPlain.split(' ').filter(w => w.length > 2)
-    if (words.length >= 3) {
-      // Try to find first 3-5 words
-      const searchPhrase = words.slice(0, Math.min(5, words.length)).join(' ')
+    // Strategy 2: Normalized matching in combined text
+    const normalizedCombined = normalizeText(combinedText)
+    if (normalizedCombined.includes(normalizedPlain)) {
+      const normalizedIndex = normalizedCombined.indexOf(normalizedPlain)
       
-      for (const node of textNodes) {
-        const nodeText = node.textContent || ''
-        const normalizedNodeText = normalizeText(nodeText)
+      // Map normalized position back to actual position in combined text
+      let actualPos = 0
+      let normalizedPos = 0
+      
+      while (normalizedPos < normalizedIndex && actualPos < combinedText.length) {
+        const char = combinedText[actualPos]
+        if (/\s/.test(char)) {
+          actualPos++
+          while (actualPos < combinedText.length && /\s/.test(combinedText[actualPos])) {
+            actualPos++
+          }
+        } else {
+          normalizedPos++
+          actualPos++
+        }
+      }
+      
+      // Find start and end positions in combined text
+      const endPos = actualPos + plainText.length
+      
+      // Find start and end nodes
+      let startNode: TextNodeInfo | null = null
+      let endNode: TextNodeInfo | null = null
+      let startOffset = 0
+      let endOffset = 0
+      
+      for (const info of nodeInfos) {
+        // Find the node containing the start position
+        if (!startNode && actualPos >= info.start && actualPos < info.end) {
+          startNode = info
+          startOffset = actualPos - info.start
+        }
         
-        if (normalizedNodeText.includes(searchPhrase)) {
-          const normalizedIndex = normalizedNodeText.indexOf(searchPhrase)
+        // Find the node containing the end position
+        if (endPos > info.start && endPos <= info.end) {
+          endNode = info
+          endOffset = endPos - info.start
+          break
+        }
+      }
+      
+      if (startNode && endNode) {
+        // If it's a single node, return single node format
+        if (startNode === endNode) {
+          if (endOffset > startOffset) {
+            console.log('[MarkdownWithHighlights] Strategy 2 match - normalized match found, length:', plainText.length, 'single node')
+            return { node: startNode.node, start: startOffset, end: endOffset }
+          }
+        } else {
+          // Multi-node range
+          if (endOffset > 0) {
+            console.log('[MarkdownWithHighlights] Strategy 2 match - normalized match found, length:', plainText.length, 'multi-node')
+            return {
+              startNode: startNode.node,
+              startOffset: startOffset,
+              endNode: endNode.node,
+              endOffset: endOffset
+            }
+          }
+        }
+      }
+    }
+
+    // Strategy 3: Word-by-word matching (for longer texts or when text spans nodes)
+    const words = normalizedPlain.split(' ').filter(w => w.length > 1)
+    if (words.length >= 2) {
+      // Try different phrase lengths
+      for (let phraseLength = Math.min(5, words.length); phraseLength >= 2; phraseLength--) {
+        const searchPhrase = words.slice(0, phraseLength).join(' ')
+        
+        if (normalizedCombined.includes(searchPhrase)) {
+          const normalizedIndex = normalizedCombined.indexOf(searchPhrase)
           
           // Map back to actual position
-          let actualIndex = 0
-          let normalizedPos = 0
           let actualPos = 0
+          let normalizedPos = 0
           
-          while (normalizedPos < normalizedIndex && actualPos < nodeText.length) {
-            const char = nodeText[actualPos]
+          while (normalizedPos < normalizedIndex && actualPos < combinedText.length) {
+            const char = combinedText[actualPos]
             if (/\s/.test(char)) {
               actualPos++
-              while (actualPos < nodeText.length && /\s/.test(nodeText[actualPos])) {
+              while (actualPos < combinedText.length && /\s/.test(combinedText[actualPos])) {
                 actualPos++
               }
             } else {
@@ -174,11 +298,249 @@ export function MarkdownWithHighlights({
             }
           }
           
-          actualIndex = actualPos
-          // Estimate end - use the search phrase length plus some buffer
-          const endIndex = Math.min(actualIndex + searchPhrase.length + 30, nodeText.length)
+          // Find start and end positions in combined text
+          const endPos = actualPos + plainText.length
           
-          return { node, start: actualIndex, end: endIndex }
+          // Find start and end nodes
+          let startNode: TextNodeInfo | null = null
+          let endNode: TextNodeInfo | null = null
+          let startOffset = 0
+          let endOffset = 0
+          
+          for (const info of nodeInfos) {
+            // Find the node containing the start position
+            if (!startNode && actualPos >= info.start && actualPos < info.end) {
+              startNode = info
+              startOffset = actualPos - info.start
+            }
+            
+            // Find the node containing the end position
+            if (endPos > info.start && endPos <= info.end) {
+              endNode = info
+              endOffset = endPos - info.start
+              break
+            }
+          }
+          
+          if (startNode && endNode) {
+            // If it's a single node, return single node format
+            if (startNode === endNode) {
+              if (endOffset > startOffset) {
+                console.log('[MarkdownWithHighlights] Strategy 3 match - word-by-word match found, length:', plainText.length, 'single node')
+                return { node: startNode.node, start: startOffset, end: endOffset }
+              }
+            } else {
+              // Multi-node range
+              if (endOffset > 0) {
+                console.log('[MarkdownWithHighlights] Strategy 3 match - word-by-word match found, length:', plainText.length, 'multi-node')
+                return {
+                  startNode: startNode.node,
+                  startOffset: startOffset,
+                  endNode: endNode.node,
+                  endOffset: endOffset
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Strategy 4: Try to find text that might span multiple nodes
+    // Search for the first few words in each node and try to build a range
+    if (words.length >= 2) {
+      const firstWords = words.slice(0, Math.min(3, words.length)).join(' ')
+      const normalizedFirstWords = normalizeText(firstWords)
+      
+      // Try to find the first words in any node
+      for (let i = 0; i < nodeInfos.length; i++) {
+        const info = nodeInfos[i]
+        const normalizedNodeText = normalizeText(info.text)
+        
+        if (normalizedNodeText.includes(normalizedFirstWords)) {
+          const normalizedIndex = normalizedNodeText.indexOf(normalizedFirstWords)
+          
+          // Map back to actual position in this node
+          let nodeStart = 0
+          let normalizedPos = 0
+          let actualPos = 0
+          
+          while (normalizedPos < normalizedIndex && actualPos < info.text.length) {
+            const char = info.text[actualPos]
+            if (/\s/.test(char)) {
+              actualPos++
+              while (actualPos < info.text.length && /\s/.test(info.text[actualPos])) {
+                actualPos++
+              }
+            } else {
+              normalizedPos++
+              actualPos++
+            }
+          }
+          
+          nodeStart = actualPos
+          
+          // Try to find where the text ends, possibly spanning multiple nodes
+          let remainingText = normalizedPlain.substring(normalizedFirstWords.length).trim()
+          let currentNode = i
+          let currentOffset = nodeStart
+          let endNode = i
+          let endOffset = nodeStart
+          
+          // Start from after the first words in the first node
+          let remainingInNode = normalizeText(info.text.substring(nodeStart))
+          let remainingNormalized = remainingInNode
+          
+          // Try to match the remaining text across nodes
+          while (remainingText.length > 0 && currentNode < nodeInfos.length) {
+            const currentInfo = nodeInfos[currentNode]
+            const nodeText = currentNode === i 
+              ? currentInfo.text.substring(nodeStart)
+              : currentInfo.text
+            const normalizedNodeText = normalizeText(nodeText)
+            
+            // Check if remaining text starts with this node's text
+            if (normalizedNodeText.length > 0 && remainingText.startsWith(normalizedNodeText)) {
+              // This node is fully consumed
+              remainingText = remainingText.substring(normalizedNodeText.length).trim()
+              endNode = currentNode
+              endOffset = currentNode === i ? currentInfo.text.length : currentInfo.text.length
+              currentNode++
+            } else if (remainingText.startsWith(normalizedNodeText.substring(0, Math.min(remainingText.length, normalizedNodeText.length)))) {
+              // Partial match - text ends in this node
+              const matchedLength = Math.min(remainingText.length, normalizedNodeText.length)
+              endNode = currentNode
+              endOffset = currentNode === i 
+                ? nodeStart + matchedLength
+                : matchedLength
+              remainingText = ''
+              break
+            } else {
+              // No match in this node, but we might have found enough
+              break
+            }
+          }
+          
+          if (endNode === i) {
+            // All text is in one node
+            const nodeEnd = Math.min(nodeStart + plainText.length, info.text.length)
+            return { node: info.node, start: nodeStart, end: nodeEnd }
+          } else {
+            // Text spans multiple nodes - return multi-node range
+            return {
+              startNode: info.node,
+              startOffset: nodeStart,
+              endNode: nodeInfos[endNode].node,
+              endOffset: endOffset
+            }
+          }
+        }
+      }
+    }
+
+    // Strategy 5: Last resort - try to find any significant words from the text
+    // This is useful when the stored text has markdown that doesn't match exactly
+    if (words.length >= 2) {
+      // Try to find the first significant word
+      const firstWord = words[0]
+      if (firstWord.length >= 3) {
+        for (let i = 0; i < nodeInfos.length; i++) {
+          const info = nodeInfos[i]
+          const normalizedNodeText = normalizeText(info.text)
+          
+          if (normalizedNodeText.includes(firstWord)) {
+            const normalizedIndex = normalizedNodeText.indexOf(firstWord)
+            
+            // Map back to actual position
+            let nodeStart = 0
+            let normalizedPos = 0
+            let actualPos = 0
+            
+            while (normalizedPos < normalizedIndex && actualPos < info.text.length) {
+              const char = info.text[actualPos]
+              if (/\s/.test(char)) {
+                actualPos++
+                while (actualPos < info.text.length && /\s/.test(info.text[actualPos])) {
+                  actualPos++
+                }
+              } else {
+                normalizedPos++
+                actualPos++
+              }
+            }
+            
+            nodeStart = actualPos
+            
+            // Try to extend to find more matching words
+            let matchedWords = 1
+            let currentNode = i
+            let currentOffset = nodeStart
+            let endNode = i
+            let endOffset = nodeStart + firstWord.length
+            
+            // Look for subsequent words in the same or next nodes
+            for (let w = 1; w < Math.min(words.length, 10); w++) {
+              const word = words[w]
+              if (word.length < 2) continue
+              
+              let found = false
+              // Check current node first
+              if (currentNode < nodeInfos.length) {
+                const currentInfo = nodeInfos[currentNode]
+                const remainingText = currentNode === i 
+                  ? normalizeText(currentInfo.text.substring(currentOffset))
+                  : normalizeText(currentInfo.text)
+                
+                if (remainingText.startsWith(word) || remainingText.includes(' ' + word + ' ')) {
+                  const wordIndex = remainingText.indexOf(word)
+                  if (wordIndex === 0 || remainingText[wordIndex - 1] === ' ') {
+                    matchedWords++
+                    endNode = currentNode
+                    endOffset = currentNode === i 
+                      ? currentOffset + wordIndex + word.length
+                      : wordIndex + word.length
+                    currentOffset = endOffset
+                    found = true
+                  }
+                }
+              }
+              
+              // If not found in current node, check next nodes
+              if (!found && currentNode + 1 < nodeInfos.length) {
+                currentNode++
+                const nextInfo = nodeInfos[currentNode]
+                const normalizedNextText = normalizeText(nextInfo.text)
+                
+                if (normalizedNextText.startsWith(word) || normalizedNextText.includes(' ' + word + ' ')) {
+                  const wordIndex = normalizedNextText.indexOf(word)
+                  if (wordIndex === 0 || normalizedNextText[wordIndex - 1] === ' ') {
+                    matchedWords++
+                    endNode = currentNode
+                    endOffset = wordIndex + word.length
+                    currentOffset = endOffset
+                    found = true
+                  }
+                }
+              }
+              
+              // If we can't find the next word, stop
+              if (!found) break
+            }
+            
+            // If we found at least 2 words, create a highlight
+            if (matchedWords >= 2) {
+              if (endNode === i) {
+                return { node: info.node, start: nodeStart, end: endOffset }
+              } else {
+                return {
+                  startNode: info.node,
+                  startOffset: nodeStart,
+                  endNode: nodeInfos[endNode].node,
+                  endOffset: endOffset
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -221,16 +583,50 @@ export function MarkdownWithHighlights({
         // Find the markdown text in the rendered content
         const match = findMarkdownTextInRendered(note.highlightedText, containerRef.current!)
         
+        if (!match) {
+          console.warn('[MarkdownWithHighlights] Could not find text for note:', note.id, 'Text:', note.highlightedText.substring(0, 100))
+          return
+        }
+        
         if (match) {
-          const { node, start, end } = match
-          
           const range = document.createRange()
-          try {
-            range.setStart(node, start)
-            range.setEnd(node, end)
-          } catch (e) {
-            console.warn('[MarkdownWithHighlights] Failed to create range:', e)
-            return
+          
+          // Handle both single-node and multi-node matches
+          if ('node' in match) {
+            // Single node match
+            console.log('[MarkdownWithHighlights] Single node match - start:', match.start, 'end:', match.end, 'node text:', match.node.textContent?.substring(0, 50))
+            
+            // Validate that end > start
+            if (match.end <= match.start) {
+              console.warn('[MarkdownWithHighlights] Invalid range: end <= start', match.start, match.end)
+              return
+            }
+            
+            try {
+              range.setStart(match.node, match.start)
+              range.setEnd(match.node, match.end)
+              
+              // Verify the range contains the expected text
+              const rangeText = range.toString()
+              console.log('[MarkdownWithHighlights] Range text:', rangeText.substring(0, 50), 'Expected length:', note.highlightedText.length)
+            } catch (e) {
+              console.warn('[MarkdownWithHighlights] Failed to create range:', e)
+              return
+            }
+          } else {
+            // Multi-node match
+            console.log('[MarkdownWithHighlights] Multi-node match - startNode:', match.startNode.textContent?.substring(0, 20), 'endNode:', match.endNode.textContent?.substring(0, 20))
+            try {
+              range.setStart(match.startNode, match.startOffset)
+              range.setEnd(match.endNode, match.endOffset)
+              
+              // Verify the range contains the expected text
+              const rangeText = range.toString()
+              console.log('[MarkdownWithHighlights] Multi-node range text:', rangeText.substring(0, 50))
+            } catch (e) {
+              console.warn('[MarkdownWithHighlights] Failed to create multi-node range:', e)
+              return
+            }
           }
 
           const mark = document.createElement('mark')
@@ -248,9 +644,10 @@ export function MarkdownWithHighlights({
           }
 
           try {
+            // Try surroundContents first (works for single-node ranges)
             range.surroundContents(mark)
           } catch (e) {
-            // If surroundContents fails, try extractContents approach
+            // If surroundContents fails (e.g., for multi-node ranges), use extractContents
             try {
               const contents = range.extractContents()
               mark.appendChild(contents)
@@ -294,6 +691,162 @@ export function MarkdownWithHighlights({
     
     // Normalize whitespace
     return plainText.replace(/\s+/g, ' ').trim()
+  }
+
+  // Find the markdown source text that corresponds to the selected rendered text
+  // This function tries to locate where the rendered text appears in the markdown source
+  const findMarkdownSourceText = (renderedText: string, markdownSource: string): string => {
+    if (!renderedText || !markdownSource) return renderedText
+
+    // Normalize the rendered text for comparison
+    const normalizedRendered = normalizeText(renderedText)
+    if (normalizedRendered.length === 0) return renderedText
+
+    // Strategy 1: Try to find the exact rendered text in markdown source
+    // This works when the text doesn't have markdown syntax
+    const index = markdownSource.indexOf(renderedText)
+    if (index !== -1) {
+      // Found exact match - return the markdown source text at this position
+      // Extract a bit more to include potential markdown syntax around it
+      const start = Math.max(0, index - 20)
+      const end = Math.min(markdownSource.length, index + renderedText.length + 20)
+      const extracted = markdownSource.substring(start, end).trim()
+      console.log('[MarkdownWithHighlights] Strategy 1: Found exact match, extracted:', extracted.substring(0, 50))
+      return extracted
+    }
+
+    // Strategy 2: Try normalized matching
+    const normalizedMarkdown = normalizeText(markdownSource)
+    const normalizedIndex = normalizedMarkdown.indexOf(normalizedRendered)
+    
+    if (normalizedIndex !== -1) {
+      // Map normalized position back to markdown source
+      let markdownPos = 0
+      let normalizedPos = 0
+      
+      while (normalizedPos < normalizedIndex && markdownPos < markdownSource.length) {
+        if (/\s/.test(markdownSource[markdownPos])) {
+          markdownPos++
+          while (markdownPos < markdownSource.length && /\s/.test(markdownSource[markdownPos])) {
+            markdownPos++
+          }
+        } else {
+          normalizedPos++
+          markdownPos++
+        }
+      }
+      
+      // Now we need to find where the text starts and ends in the markdown source
+      // Go backwards to find the start (to include opening markdown syntax like ** or *)
+      let startPos = markdownPos
+      while (startPos > 0 && startPos > markdownPos - 30) {
+        const char = markdownSource[startPos - 1]
+        // Stop at whitespace or if we hit markdown syntax that might be opening
+        if (/\s/.test(char)) {
+          // Check if there's markdown syntax before this whitespace
+          if (startPos > 2 && /[*_`#]/.test(markdownSource[startPos - 2])) {
+            startPos = Math.max(0, startPos - 3)
+          }
+          break
+        }
+        if (/[*_`#\[\]()]/.test(char)) {
+          // Include markdown syntax
+          startPos--
+          break
+        }
+        startPos--
+      }
+      
+      // Go forwards to find the end (to include closing markdown syntax)
+      let endPos = markdownPos
+      let remainingLength = normalizedRendered.length
+      
+      while (remainingLength > 0 && endPos < markdownSource.length) {
+        const char = markdownSource[endPos]
+        if (/\s/.test(char)) {
+          endPos++
+          while (endPos < markdownSource.length && /\s/.test(markdownSource[endPos])) {
+            endPos++
+          }
+        } else {
+          remainingLength--
+          endPos++
+        }
+      }
+      
+      // Extend endPos to include potential closing markdown syntax
+      while (endPos < markdownSource.length && /[*_`]/.test(markdownSource[endPos])) {
+        endPos++
+      }
+      
+      // Extract the markdown text with syntax
+      const extracted = markdownSource.substring(startPos, endPos).trim()
+      
+      // Verify the extracted text contains the rendered text (after removing markdown)
+      const extractedPlain = extracted
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/\*([^*]+)\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/#+\s+/g, '')
+        .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+        .trim()
+      
+      const normalizedExtracted = normalizeText(extractedPlain)
+      
+      if (normalizedExtracted.includes(normalizedRendered) || normalizedRendered.includes(normalizedExtracted)) {
+        console.log('[MarkdownWithHighlights] Strategy 2: Found markdown text with syntax:', extracted.substring(0, 50))
+        return extracted
+      }
+      
+      // If verification failed, return a larger chunk
+      const largerChunk = markdownSource.substring(
+        Math.max(0, startPos - 10),
+        Math.min(markdownSource.length, endPos + 10)
+      ).trim()
+      console.log('[MarkdownWithHighlights] Strategy 2: Using larger chunk:', largerChunk.substring(0, 50))
+      return largerChunk
+    }
+
+    // Strategy 3: Word-based matching
+    const words = normalizedRendered.split(' ').filter(w => w.length > 2) // Filter out very short words
+    if (words.length > 0) {
+      // Try to find the first few significant words
+      const searchWords = words.slice(0, Math.min(5, words.length))
+      const searchPhrase = searchWords.join(' ')
+      
+      const phraseIndex = normalizedMarkdown.indexOf(searchPhrase)
+      if (phraseIndex !== -1) {
+        // Map back to markdown position
+        let markdownPos = 0
+        let normalizedPos = 0
+        
+        while (normalizedPos < phraseIndex && markdownPos < markdownSource.length) {
+          if (/\s/.test(markdownSource[markdownPos])) {
+            markdownPos++
+            while (markdownPos < markdownSource.length && /\s/.test(markdownSource[markdownPos])) {
+              markdownPos++
+            }
+          } else {
+            normalizedPos++
+            markdownPos++
+          }
+        }
+        
+        // Extract a chunk that likely contains the full text with markdown
+        // Start a bit before to catch opening markdown syntax
+        const start = Math.max(0, markdownPos - 20)
+        // End a bit after to catch closing markdown syntax
+        const end = Math.min(markdownSource.length, markdownPos + renderedText.length * 2 + 50)
+        const extracted = markdownSource.substring(start, end).trim()
+        console.log('[MarkdownWithHighlights] Strategy 3: Found markdown text via word matching:', extracted.substring(0, 50))
+        return extracted
+      }
+    }
+
+    // Fallback: return the rendered text (will be stored as-is)
+    // This might work if the text is simple enough
+    console.warn('[MarkdownWithHighlights] Could not find markdown source, using rendered text. Rendered:', renderedText.substring(0, 50))
+    return renderedText
   }
 
   const handleMouseUp = useCallback(() => {
