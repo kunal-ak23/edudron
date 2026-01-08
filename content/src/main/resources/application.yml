@@ -1,6 +1,14 @@
 spring:
   application:
     name: content
+  servlet:
+    multipart:
+      # Allow individual files up to 2GB (to support large video uploads)
+      max-file-size: 2GB
+      # Allow entire request up to 2GB (should be >= max-file-size)
+      max-request-size: 2GB
+      # Enable file uploads
+      enabled: true
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:edudron}?sslmode=${DB_SSLMODE:prefer}
     username: ${DB_USERNAME:edudron}
