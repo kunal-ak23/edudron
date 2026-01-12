@@ -14,6 +14,7 @@ import type { Class, CreateClassRequest, Institute } from '@edudron/shared-utils
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 
 export default function ClassDetailPage() {
   const router = useRouter()
@@ -24,6 +25,7 @@ export default function ClassDetailPage() {
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [formData, setFormData] = useState<CreateClassRequest>({
     name: '',
     code: '',
@@ -97,10 +99,6 @@ export default function ClassDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to deactivate this class?')) {
-      return
-    }
-
     try {
       await classesApi.deleteClass(classId)
       toast({
@@ -116,13 +114,15 @@ export default function ClassDetailPage() {
         title: 'Failed to deactivate class',
         description: errorMessage,
       })
+    } finally {
+      setShowDeleteDialog(false)
     }
   }
 
   if (loading) {
     return (
       <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </ProtectedRoute>
@@ -135,8 +135,7 @@ export default function ClassDetailPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
           <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
             <Link href="/institutes" className="hover:text-gray-900">Institutes</Link>
             <span>/</span>
@@ -152,10 +151,6 @@ export default function ClassDetailPage() {
             </Button>
           </Link>
 
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">{classItem.name}</h1>
-            <p className="mt-2 text-sm text-gray-600">Edit class details</p>
-          </div>
 
           <Card>
             <CardHeader>
@@ -221,7 +216,7 @@ export default function ClassDetailPage() {
                   <Button
                     type="button"
                     variant="destructive"
-                    onClick={handleDelete}
+                    onClick={() => setShowDeleteDialog(true)}
                   >
                     Deactivate Class
                   </Button>
@@ -239,16 +234,31 @@ export default function ClassDetailPage() {
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-2">
               <Link href={`/classes/${classId}/sections`}>
                 <Button variant="outline" className="w-full">
                   View Sections ({classItem.sectionCount || 0})
+                </Button>
+              </Link>
+              <Link href={`/classes/${classId}/enroll`}>
+                <Button variant="outline" className="w-full">
+                  Enroll to Course
                 </Button>
               </Link>
             </CardContent>
           </Card>
         </div>
       </div>
+
+      <ConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        title="Deactivate Class"
+        description="Are you sure you want to deactivate this class?"
+        confirmText="Deactivate"
+        variant="destructive"
+      />
     </ProtectedRoute>
   )
 }

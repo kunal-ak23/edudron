@@ -180,8 +180,8 @@ export function AppLayout({ children }: AppLayoutProps) {
         </header>
 
         {/* Page Content - Scrollable */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-4">
+        <main className="flex-1 overflow-y-auto bg-background">
+          <div className="m-9">
             {children}
           </div>
         </main>

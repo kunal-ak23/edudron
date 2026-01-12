@@ -26,6 +26,9 @@ import {
 import { Plus, Trash2, X, Loader2, FileText } from 'lucide-react'
 import { courseGenerationIndexApi } from '@/lib/api'
 import type { CourseGenerationIndex } from '@edudron/shared-utils'
+import { useToast } from '@/hooks/use-toast'
+import { extractErrorMessage } from '@/lib/error-utils'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +38,9 @@ export default function CourseIndexPage() {
   const [loading, setLoading] = useState(true)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [uploadType, setUploadType] = useState<'REFERENCE_CONTENT' | 'WRITING_FORMAT'>('REFERENCE_CONTENT')
+  const { toast } = useToast()
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [indexToDelete, setIndexToDelete] = useState<string | null>(null)
   const [uploadForm, setUploadForm] = useState({
     title: '',
     description: '',
@@ -59,17 +65,29 @@ export default function CourseIndexPage() {
 
   const handleUpload = async () => {
     if (!uploadForm.title.trim()) {
-      alert('Title is required')
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'Title is required',
+      })
       return
     }
 
     if (uploadType === 'REFERENCE_CONTENT' && !uploadForm.file) {
-      alert('File is required for reference content')
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'File is required for reference content',
+      })
       return
     }
 
     if (uploadType === 'WRITING_FORMAT' && !uploadForm.writingFormat.trim() && !uploadForm.file) {
-      alert('Either writing format text or file is required')
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'Either writing format text or file is required',
+      })
       return
     }
 
@@ -91,20 +109,41 @@ export default function CourseIndexPage() {
       setShowUploadModal(false)
       setUploadForm({ title: '', description: '', writingFormat: '', file: null })
       await loadIndexes()
+      toast({
+        title: 'Success',
+        description: 'Index uploaded successfully',
+      })
     } catch (error: any) {
       console.error('Failed to upload:', error)
-      alert(error.response?.data?.message || 'Failed to upload. Please try again.')
+      const errorMessage = extractErrorMessage(error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to upload',
+        description: errorMessage || 'Failed to upload. Please try again.',
+      })
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this index?')) return
-    
-    try {
-      await courseGenerationIndexApi.deleteIndex(id)
-      await loadIndexes()
-    } catch (error) {
-      alert('Failed to delete index')
+  const handleDelete = async () => {
+    if (indexToDelete) {
+      try {
+        await courseGenerationIndexApi.deleteIndex(indexToDelete)
+        await loadIndexes()
+        toast({
+          title: 'Success',
+          description: 'Index deleted successfully',
+        })
+      } catch (error) {
+        const errorMessage = extractErrorMessage(error)
+        toast({
+          variant: 'destructive',
+          title: 'Failed to delete index',
+          description: errorMessage,
+        })
+      } finally {
+        setShowDeleteDialog(false)
+        setIndexToDelete(null)
+      }
     }
   }
 
@@ -113,13 +152,9 @@ export default function CourseIndexPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER', 'INSTRUCTOR']}>
-      <div className="min-h-screen bg-gray-50">
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Course Generation Index</h1>
-              <p className="text-gray-600">Manage reference content and writing formats for AI course generation</p>
-            </div>
+      <div>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
             <Button onClick={() => setShowUploadModal(true)}>
               <Plus className="w-5 h-5 mr-2" />
               Add Index
@@ -162,7 +197,10 @@ export default function CourseIndexPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(index.id)}
+                          onClick={() => {
+                            setIndexToDelete(index.id)
+                            setShowDeleteDialog(true)
+                          }}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -205,7 +243,10 @@ export default function CourseIndexPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(index.id)}
+                          onClick={() => {
+                            setIndexToDelete(index.id)
+                            setShowDeleteDialog(true)
+                          }}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -312,6 +353,19 @@ export default function CourseIndexPage() {
           </Dialog>
         </main>
       </div>
+
+      <ConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => {
+          setShowDeleteDialog(false)
+          setIndexToDelete(null)
+        }}
+        onConfirm={handleDelete}
+        title="Delete Index"
+        description="Are you sure you want to delete this index?"
+        confirmText="Delete"
+        variant="destructive"
+      />
     </ProtectedRoute>
   )
 }

@@ -44,5 +44,7 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, String> 
     List<Enrollment> findByClientIdAndBatchId(UUID clientId, String batchId);
     
     long countByClientIdAndBatchId(UUID clientId, String batchId);
+    
+    List<Enrollment> findByClientIdAndClassId(UUID clientId, String classId);
 }
 

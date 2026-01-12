@@ -38,12 +38,52 @@ export class TenantsApi {
   constructor(private apiClient: ApiClient) {}
 
   async createTenant(request: CreateTenantRequest): Promise<Tenant> {
+    console.log('[TenantsApi.createTenant] Starting with request:', request)
     const response = await this.apiClient.post<Tenant>('/api/tenant', request)
-    const tenant = response.data
-    if (!tenant || !tenant.id || !tenant.name) {
-      throw new Error('Invalid tenant response from server: missing required fields')
+    console.log('[TenantsApi.createTenant] Raw response from apiClient.post:', response)
+    console.log('[TenantsApi.createTenant] Response type:', typeof response)
+    console.log('[TenantsApi.createTenant] Response is array?:', Array.isArray(response))
+    console.log('[TenantsApi.createTenant] Response keys:', response && typeof response === 'object' ? Object.keys(response) : 'N/A')
+    console.log('[TenantsApi.createTenant] Response stringified:', JSON.stringify(response, null, 2))
+    
+    // Check if response has data property
+    if (response && typeof response === 'object' && 'data' in response) {
+      console.log('[TenantsApi.createTenant] Response has data property')
+      console.log('[TenantsApi.createTenant] response.data:', response.data)
+      console.log('[TenantsApi.createTenant] response.data type:', typeof response.data)
+      console.log('[TenantsApi.createTenant] response.data keys:', response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'N/A')
+      
+      const tenant = response.data as Tenant
+      console.log('[TenantsApi.createTenant] Extracted tenant from response.data:', tenant)
+      console.log('[TenantsApi.createTenant] tenant.id:', tenant?.id)
+      console.log('[TenantsApi.createTenant] tenant.name:', tenant?.name)
+      
+      if (!tenant || !tenant.id || !tenant.name) {
+        console.error('[TenantsApi.createTenant] Validation failed - tenant:', tenant)
+        console.error('[TenantsApi.createTenant] Validation failed - has tenant:', !!tenant)
+        console.error('[TenantsApi.createTenant] Validation failed - has id:', !!tenant?.id)
+        console.error('[TenantsApi.createTenant] Validation failed - has name:', !!tenant?.name)
+        throw new Error(`Invalid tenant response from server: missing required fields. Received: ${JSON.stringify(tenant)}`)
+      }
+      return tenant
     }
-    return tenant
+    
+    // Check if response itself is the tenant object
+    if (response && typeof response === 'object' && 'id' in response && 'name' in response) {
+      console.log('[TenantsApi.createTenant] Response is tenant object directly')
+      const tenant = response as any as Tenant
+      console.log('[TenantsApi.createTenant] Using response as tenant:', tenant)
+      
+      if (!tenant || !tenant.id || !tenant.name) {
+        console.error('[TenantsApi.createTenant] Validation failed - tenant:', tenant)
+        throw new Error(`Invalid tenant response from server: missing required fields. Received: ${JSON.stringify(tenant)}`)
+      }
+      return tenant
+    }
+    
+    // Unknown structure
+    console.error('[TenantsApi.createTenant] Unknown response structure:', response)
+    throw new Error(`Invalid tenant response from server: unexpected response structure. Received: ${JSON.stringify(response)}`)
   }
 
   async listTenants(): Promise<Tenant[]> {

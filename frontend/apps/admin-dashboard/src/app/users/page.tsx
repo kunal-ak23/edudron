@@ -117,58 +117,18 @@ export default function UsersPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-8">
-                <h1
-                  className="text-2xl font-bold text-blue-600 cursor-pointer"
-                  onClick={() => router.push('/dashboard')}
-                >
-                  EduDron Admin
-                </h1>
-                <nav className="hidden md:flex space-x-6">
-                  <button
-                    onClick={() => router.push('/dashboard')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Dashboard
-                  </button>
-                  <button
-                    onClick={() => router.push('/courses')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Courses
-                  </button>
-                  <button
-                    onClick={() => router.push('/users')}
-                    className="text-gray-700 hover:text-blue-600 font-medium"
-                  >
-                    Users
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="px-4 sm:px-6 lg:px-8 py-3">
-          {/* Page Header */}
-          <div className="mb-3 flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">User Management</h2>
-              <p className="text-gray-600">Manage users and their roles</p>
-            </div>
+      <div>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
             <Button onClick={() => router.push('/users/new')}>
               <Plus className="h-4 w-4 mr-2" />
               Add User
             </Button>
           </div>
+        </div>
 
-          {/* Search */}
-          <div className="mb-3">
+        {/* Search */}
+        <div className="mb-6">
             <Input
               placeholder="Search users by name, email, or role..."
               value={searchQuery}
@@ -252,7 +212,6 @@ export default function UsersPage() {
               </CardContent>
             </Card>
           )}
-        </main>
       </div>
     </ProtectedRoute>
   )

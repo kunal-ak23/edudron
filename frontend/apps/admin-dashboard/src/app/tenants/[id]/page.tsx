@@ -13,6 +13,7 @@ import { tenantsApi } from '@/lib/api'
 import type { Tenant, CreateTenantRequest } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 
 export default function TenantEditPage() {
   const router = useRouter()
@@ -30,6 +31,7 @@ export default function TenantEditPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
   useEffect(() => {
     if (tenantId) {
@@ -89,10 +91,6 @@ export default function TenantEditPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this tenant? This will deactivate it.')) {
-      return
-    }
-
     try {
       setSaving(true)
       await tenantsApi.deleteTenant(tenantId)
@@ -111,18 +109,15 @@ export default function TenantEditPage() {
       })
     } finally {
       setSaving(false)
+      setShowDeleteDialog(false)
     }
   }
 
   if (loading) {
     return (
       <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-        <div className="min-h-screen bg-background p-6">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          </div>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </ProtectedRoute>
     )
@@ -131,8 +126,7 @@ export default function TenantEditPage() {
   if (error && !tenant) {
     return (
       <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-        <div className="min-h-screen bg-background p-6">
-          <div className="max-w-4xl mx-auto">
+        <div>
             <Card>
               <CardContent className="pt-6">
                 <div className="text-center">
@@ -152,18 +146,16 @@ export default function TenantEditPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-6">
-            <Button
-              variant="ghost"
-              onClick={() => router.push('/tenants')}
-              className="mb-4"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Tenants
-            </Button>
-            <h1 className="text-3xl font-bold">Edit Tenant</h1>
+      <div>
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            onClick={() => router.push('/tenants')}
+            className="mb-4"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Tenants
+          </Button>
             {tenant && (
               <p className="text-muted-foreground mt-2">
                 Tenant ID: {tenant.id}
@@ -254,7 +246,7 @@ export default function TenantEditPage() {
                     <Button
                       type="button"
                       variant="destructive"
-                      onClick={handleDelete}
+                      onClick={() => setShowDeleteDialog(true)}
                       disabled={saving}
                     >
                       Delete Tenant
@@ -298,6 +290,17 @@ export default function TenantEditPage() {
           )}
         </div>
       </div>
+
+      <ConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        title="Delete Tenant"
+        description="Are you sure you want to delete this tenant? This will deactivate it."
+        confirmText="Delete"
+        variant="destructive"
+        isLoading={saving}
+      />
     </ProtectedRoute>
   )
 }

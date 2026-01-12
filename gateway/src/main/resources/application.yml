@@ -32,7 +32,7 @@ spring:
         - id: student-service
           uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
           predicates:
-            - Path=/student/**, /api/student/**, /api/institutes/**, /api/classes/**, /api/sections/**, /api/batches/**, /api/enrollments/**, /api/**
+            - Path=/student/**, /api/student/**, /api/institutes/**, /api/classes/**, /api/sections/**, /api/batches/**, /api/enrollments/**, /api/students/**, /api/**
         
         # Payment Service (8084)
         - id: payment-service

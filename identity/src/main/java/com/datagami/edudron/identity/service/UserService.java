@@ -67,6 +67,34 @@ public class UserService {
         return toDTO(user);
     }
     
+    @Transactional(readOnly = true)
+    public List<UserDTO> getUsersByRole(String roleStr) {
+        String clientIdStr = TenantContext.getClientId();
+        
+        User.Role role;
+        try {
+            role = User.Role.valueOf(roleStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid role: " + roleStr);
+        }
+        
+        // SYSTEM_ADMIN can see all users
+        if (clientIdStr == null || "SYSTEM".equals(clientIdStr) || "PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+            log.info("Fetching all users with role {} (SYSTEM_ADMIN)", role);
+            return userRepository.findAll().stream()
+                .filter(user -> user.getRole() == role)
+                .map(this::toDTO)
+                .collect(Collectors.toList());
+        }
+        
+        // Tenant-scoped users see only their tenant's users
+        UUID clientId = UUID.fromString(clientIdStr);
+        log.info("Fetching users with role {} for tenant: {}", role, clientId);
+        return userRepository.findByClientIdAndRole(clientId, role).stream()
+            .map(this::toDTO)
+            .collect(Collectors.toList());
+    }
+    
     @Transactional
     public UserDTO createUser(CreateUserRequest request) {
         String clientIdStr = TenantContext.getClientId();

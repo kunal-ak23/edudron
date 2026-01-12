@@ -77,7 +77,7 @@ export default function DashboardPage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
@@ -85,76 +85,7 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-8">
-                <h1 className="text-2xl font-bold text-blue-600">EduDron Admin</h1>
-                <nav className="hidden md:flex space-x-6">
-                  <button
-                    onClick={() => router.push('/dashboard')}
-                    className="text-gray-700 hover:text-blue-600 font-medium"
-                  >
-                    Dashboard
-                  </button>
-                  <button
-                    onClick={() => router.push('/courses')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Courses
-                  </button>
-                  <button
-                    onClick={() => router.push('/batches')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Batches
-                  </button>
-                  <button
-                    onClick={() => router.push('/users')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Users
-                  </button>
-                  {user?.role === 'SYSTEM_ADMIN' && (
-                    <button
-                      onClick={() => router.push('/tenants')}
-                      className="text-gray-700 hover:text-blue-600"
-                    >
-                      Tenants
-                    </button>
-                  )}
-                </nav>
-              </div>
-              <div className="flex items-center space-x-4">
-                {user && (
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                      {user.name.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-sm text-gray-700 hidden md:block">{user.name}</span>
-                  </div>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Logout
-                </Button>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="px-4 sm:px-6 lg:px-8 py-3">
-          {/* Page Header */}
-          <div className="mb-3">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Dashboard Overview</h2>
-            <p className="text-gray-600">Monitor your platform&apos;s performance and activity</p>
-          </div>
+      <div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
@@ -372,7 +303,6 @@ export default function DashboardPage() {
               </Card>
             </div>
           </div>
-        </main>
       </div>
     </ProtectedRoute>
   )

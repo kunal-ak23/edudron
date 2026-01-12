@@ -155,7 +155,8 @@ export default function CourseDetailPage() {
         return
       }
       
-      alert(errorMessage || 'Failed to enroll')
+      // Show error - you may want to add toast here if available
+      console.error('Failed to enroll:', errorMessage)
     }
   }
 

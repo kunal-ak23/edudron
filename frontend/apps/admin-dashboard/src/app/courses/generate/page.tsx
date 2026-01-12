@@ -142,12 +142,7 @@ export default function GenerateCoursePage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER', 'INSTRUCTOR']}>
-      <div className="min-h-screen bg-gray-50">
-        <main className="px-4 sm:px-6 lg:px-8 py-3">
-          <div className="mb-3">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Generate Course with AI</h1>
-            <p className="text-gray-600">Describe the course you want to create and AI will generate it for you</p>
-          </div>
+      <div>
 
           {/* Generation in Progress Alert */}
           {generating && (
@@ -475,7 +470,6 @@ export default function GenerateCoursePage() {
               )}
             </Button>
           </div>
-        </main>
       </div>
     </ProtectedRoute>
   )

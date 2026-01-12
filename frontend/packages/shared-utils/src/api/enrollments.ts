@@ -155,5 +155,45 @@ export class EnrollmentsApi {
     const response = await this.apiClient.get(`/api/batches/${id}/progress`)
     return response.data
   }
+
+  // Bulk enrollment methods
+  async enrollClassToCourse(classId: string, courseId: string): Promise<BulkEnrollmentResult> {
+    const response = await this.apiClient.post<BulkEnrollmentResult>(
+      `/api/classes/${classId}/enroll/${courseId}`
+    )
+    return response.data
+  }
+
+  async enrollSectionToCourse(sectionId: string, courseId: string): Promise<BulkEnrollmentResult> {
+    const response = await this.apiClient.post<BulkEnrollmentResult>(
+      `/api/sections/${sectionId}/enroll/${courseId}`
+    )
+    return response.data
+  }
+
+  async enrollClassToCourses(classId: string, courseIds: string[]): Promise<BulkEnrollmentResult[]> {
+    const response = await this.apiClient.post<BulkEnrollmentResult[]>(
+      `/api/classes/${classId}/enroll-batch`,
+      { courseIds }
+    )
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async enrollSectionToCourses(sectionId: string, courseIds: string[]): Promise<BulkEnrollmentResult[]> {
+    const response = await this.apiClient.post<BulkEnrollmentResult[]>(
+      `/api/sections/${sectionId}/enroll-batch`,
+      { courseIds }
+    )
+    return Array.isArray(response.data) ? response.data : []
+  }
+}
+
+export interface BulkEnrollmentResult {
+  totalStudents: number
+  enrolledStudents: number
+  skippedStudents: number
+  failedStudents: number
+  enrolledStudentIds?: string[]
+  errorMessages?: string[]
 }
 

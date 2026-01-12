@@ -13,6 +13,7 @@ import type { Section, CreateSectionRequest, Class, Institute } from '@edudron/s
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 
 export default function SectionDetailPage() {
   const router = useRouter()
@@ -24,6 +25,7 @@ export default function SectionDetailPage() {
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [formData, setFormData] = useState<CreateSectionRequest>({
     name: '',
     description: '',
@@ -98,10 +100,6 @@ export default function SectionDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to deactivate this section?')) {
-      return
-    }
-
     try {
       await sectionsApi.deleteSection(sectionId)
       toast({
@@ -117,13 +115,15 @@ export default function SectionDetailPage() {
         title: 'Failed to deactivate section',
         description: errorMessage,
       })
+    } finally {
+      setShowDeleteDialog(false)
     }
   }
 
   if (loading) {
     return (
       <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </ProtectedRoute>
@@ -136,8 +136,7 @@ export default function SectionDetailPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
           <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
             <Link href="/institutes" className="hover:text-gray-900">Institutes</Link>
             <span>/</span>
@@ -157,10 +156,6 @@ export default function SectionDetailPage() {
             </Button>
           </Link>
 
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">{section.name}</h1>
-            <p className="mt-2 text-sm text-gray-600">Edit section details</p>
-          </div>
 
           <Card>
             <CardHeader>
@@ -220,7 +215,7 @@ export default function SectionDetailPage() {
                   <Button
                     type="button"
                     variant="destructive"
-                    onClick={handleDelete}
+                    onClick={() => setShowDeleteDialog(true)}
                   >
                     Deactivate Section
                   </Button>
@@ -233,8 +228,29 @@ export default function SectionDetailPage() {
               </form>
             </CardContent>
           </Card>
-        </div>
-      </div>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Link href={`/sections/${sectionId}/enroll`}>
+                <Button variant="outline" className="w-full">
+                  Enroll to Course
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+      <ConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        title="Deactivate Section"
+        description="Are you sure you want to deactivate this section?"
+        confirmText="Deactivate"
+        variant="destructive"
+      />
     </ProtectedRoute>
   )
 }

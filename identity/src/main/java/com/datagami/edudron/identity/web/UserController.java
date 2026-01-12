@@ -35,6 +35,13 @@ public class UserController {
         return ResponseEntity.ok(user);
     }
     
+    @GetMapping("/role/{role}")
+    @Operation(summary = "List users by role", description = "Get all users with a specific role for the current tenant")
+    public ResponseEntity<List<UserDTO>> getUsersByRole(@PathVariable String role) {
+        List<UserDTO> users = userService.getUsersByRole(role);
+        return ResponseEntity.ok(users);
+    }
+    
     @PostMapping
     @Operation(summary = "Create user", description = "Create a new user. SYSTEM_ADMIN cannot be created through this endpoint.")
     public ResponseEntity<UserDTO> createUser(@Valid @RequestBody CreateUserRequest request) {

@@ -21,6 +21,7 @@ import { lecturesApi, mediaApi } from '@/lib/api'
 import type { Lecture, CreateLectureRequest, UpdateLectureRequest, LectureContent } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 
 interface LectureEditModalProps {
   isOpen: boolean
@@ -46,6 +47,8 @@ export function LectureEditModal({
   const [saving, setSaving] = useState(false)
   const [textContents, setTextContents] = useState<LectureContent[]>([])
   const [currentLectureId, setCurrentLectureId] = useState<string | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [contentToDelete, setContentToDelete] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -320,22 +323,9 @@ export function LectureEditModal({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={async () => {
-                              if (confirm('Are you sure you want to delete this content section?')) {
-                                try {
-                                  await lecturesApi.deleteMedia(content.id)
-                                  setTextContents(textContents.filter(c => c.id !== content.id))
-                                  toast({
-                                    title: 'Content section deleted',
-                                  })
-                                } catch (error) {
-                                  toast({
-                                    variant: 'destructive',
-                                    title: 'Failed to delete content section',
-                                    description: extractErrorMessage(error),
-                                  })
-                                }
-                              }
+                            onClick={() => {
+                              setContentToDelete(content.id)
+                              setShowDeleteDialog(true)
                             }}
                             disabled={saving}
                           >
@@ -579,6 +569,37 @@ export function LectureEditModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => {
+          setShowDeleteDialog(false)
+          setContentToDelete(null)
+        }}
+        onConfirm={async () => {
+          if (contentToDelete) {
+            try {
+              await lecturesApi.deleteMedia(contentToDelete)
+              setTextContents(textContents.filter(c => c.id !== contentToDelete))
+              toast({
+                title: 'Content section deleted',
+              })
+              setShowDeleteDialog(false)
+              setContentToDelete(null)
+            } catch (error) {
+              toast({
+                variant: 'destructive',
+                title: 'Failed to delete content section',
+                description: extractErrorMessage(error),
+              })
+            }
+          }
+        }}
+        title="Delete Content Section"
+        description="Are you sure you want to delete this content section?"
+        confirmText="Delete"
+        variant="destructive"
+      />
     </Dialog>
   )
 }

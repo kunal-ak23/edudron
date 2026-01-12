@@ -24,6 +24,9 @@ export { NotesApi } from './api/notes'
 export type { Note, CreateNoteRequest } from './api/notes'
 export { IssuesApi } from './api/issues'
 export type { IssueReport, CreateIssueReportRequest, IssueType, IssueStatus } from './api/issues'
+export { StudentsApi } from './api/students'
+export type { BulkStudentImportResult, StudentImportRowResult, BulkEnrollmentResult } from './api/students'
+export type { BulkEnrollmentResult as EnrollmentBulkEnrollmentResult } from './api/enrollments'
 
 // Auth
 export { AuthService } from './auth/AuthService'

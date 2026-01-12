@@ -117,7 +117,7 @@ export default function TenantsPage() {
   if (loading) {
     return (
       <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </ProtectedRoute>
@@ -126,13 +126,9 @@ export default function TenantsPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Tenant Management</h1>
-              <p className="mt-2 text-sm text-gray-600">Create and manage tenants (clients)</p>
-            </div>
+      <div>
+        <div className="flex justify-between items-center mb-8">
+          <div>
             <Button onClick={() => setShowCreateDialog(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Create New Tenant
@@ -288,7 +284,6 @@ export default function TenantsPage() {
             </Card>
           )}
         </div>
-      </div>
     </ProtectedRoute>
   )
 }

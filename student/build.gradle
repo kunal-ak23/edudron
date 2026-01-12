@@ -25,6 +25,12 @@ dependencies {
 	implementation 'io.github.cdimascio:dotenv-java:3.0.0'
 
 	implementation project(':common')
+
+	// Apache POI for Excel support
+	implementation 'org.apache.poi:poi-ooxml:5.2.4'
+	
+	// Apache Commons CSV
+	implementation 'org.apache.commons:commons-csv:1.11.0'
 }
 
 def loadEnvFile() {

@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation'
 import { ProtectedRoute, Card, Button } from '@edudron/ui-components'
 import { enrollmentsApi, coursesApi } from '@/lib/api'
 import type { Batch, Course } from '@edudron/shared-utils'
+import { useToast } from '@/hooks/use-toast'
+import { extractErrorMessage } from '@/lib/error-utils'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 
 // Force dynamic rendering - disable static generation
 export const dynamic = 'force-dynamic'
@@ -14,6 +17,9 @@ export default function BatchesPage() {
   const [batches, setBatches] = useState<Batch[]>([])
   const [courses, setCourses] = useState<Record<string, Course>>({})
   const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [batchToDelete, setBatchToDelete] = useState<string | null>(null)
 
   useEffect(() => {
     loadBatches()
@@ -44,63 +50,34 @@ export default function BatchesPage() {
     }
   }
 
-  const handleDelete = async (batchId: string) => {
-    if (confirm('Are you sure you want to deactivate this batch?')) {
+  const handleDelete = async () => {
+    if (batchToDelete) {
       try {
-        await enrollmentsApi.deleteBatch(batchId)
+        await enrollmentsApi.deleteBatch(batchToDelete)
         await loadBatches()
+        toast({
+          title: 'Batch deactivated',
+          description: 'The batch has been deactivated successfully.',
+        })
       } catch (error) {
-        alert('Failed to delete batch')
+        const errorMessage = extractErrorMessage(error)
+        toast({
+          variant: 'destructive',
+          title: 'Failed to delete batch',
+          description: errorMessage,
+        })
+      } finally {
+        setShowDeleteDialog(false)
+        setBatchToDelete(null)
       }
     }
   }
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-8">
-                <h1
-                  className="text-2xl font-bold text-blue-600 cursor-pointer"
-                  onClick={() => router.push('/dashboard')}
-                >
-                  EduDron Admin
-                </h1>
-                <nav className="hidden md:flex space-x-6">
-                  <button
-                    onClick={() => router.push('/dashboard')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Dashboard
-                  </button>
-                  <button
-                    onClick={() => router.push('/courses')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Courses
-                  </button>
-                  <button
-                    onClick={() => router.push('/batches')}
-                    className="text-gray-700 hover:text-blue-600 font-medium"
-                  >
-                    Batches
-                  </button>
-                </nav>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Page Header */}
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">Batch Management</h2>
-              <p className="text-gray-600">Manage course batches and enrollments</p>
-            </div>
+      <div>
+        <div className="mb-6 flex items-center justify-between">
+          <div>
             <Button onClick={() => router.push('/batches/new')}>
               <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -169,7 +146,10 @@ export default function BatchesPage() {
                         <Button
                           variant="destructive"
                           size="sm"
-                          onClick={() => handleDelete(batch.id)}
+                          onClick={() => {
+                            setBatchToDelete(batch.id)
+                            setShowDeleteDialog(true)
+                          }}
                         >
                           Deactivate
                         </Button>
@@ -180,7 +160,6 @@ export default function BatchesPage() {
               })}
             </div>
           )}
-        </main>
       </div>
     </ProtectedRoute>
   )

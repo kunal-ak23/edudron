@@ -22,6 +22,7 @@ import { InstituteType } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 
 export default function InstituteDetailPage() {
   const router = useRouter()
@@ -31,6 +32,7 @@ export default function InstituteDetailPage() {
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [formData, setFormData] = useState<CreateInstituteRequest>({
     name: '',
     code: '',
@@ -96,10 +98,6 @@ export default function InstituteDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to deactivate this institute?')) {
-      return
-    }
-
     try {
       await institutesApi.deleteInstitute(instituteId)
       toast({
@@ -115,13 +113,15 @@ export default function InstituteDetailPage() {
         title: 'Failed to deactivate institute',
         description: errorMessage,
       })
+    } finally {
+      setShowDeleteDialog(false)
     }
   }
 
   if (loading) {
     return (
       <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       </ProtectedRoute>
@@ -134,19 +134,13 @@ export default function InstituteDetailPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <Link href="/institutes">
-            <Button variant="ghost" className="mb-4">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Institutes
-            </Button>
-          </Link>
-
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">{institute.name}</h1>
-            <p className="mt-2 text-sm text-gray-600">Edit institute details</p>
-          </div>
+      <div>
+        <Link href="/institutes">
+          <Button variant="ghost" className="mb-6">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Institutes
+          </Button>
+        </Link>
 
           <Card>
             <CardHeader>
@@ -212,7 +206,7 @@ export default function InstituteDetailPage() {
                   <Button
                     type="button"
                     variant="destructive"
-                    onClick={handleDelete}
+                    onClick={() => setShowDeleteDialog(true)}
                   >
                     Deactivate Institute
                   </Button>
@@ -240,6 +234,16 @@ export default function InstituteDetailPage() {
           </Card>
         </div>
       </div>
+
+      <ConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        onConfirm={handleDelete}
+        title="Deactivate Institute"
+        description="Are you sure you want to deactivate this institute?"
+        confirmText="Deactivate"
+        variant="destructive"
+      />
     </ProtectedRoute>
   )
 }

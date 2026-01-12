@@ -97,6 +97,15 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
+    name: 'Students',
+    href: '/students',
+    icon: Users,
+    requiresTenant: true,
+    children: [
+      { name: 'Bulk Import', href: '/students/import', icon: Users },
+    ]
+  },
+  {
     name: 'Enrollments',
     href: '/enrollments',
     icon: Users,

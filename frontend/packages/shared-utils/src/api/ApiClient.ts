@@ -216,29 +216,73 @@ export class ApiClient {
   }
 
   async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    const response: AxiosResponse<ApiResponse<T>> = await this.client.post(url, data, config)
-    return response.data
+    console.log('[ApiClient.post] Making request to:', url, 'with data:', data)
+    const response: AxiosResponse<any> = await this.client.post(url, data, config)
+    console.log('[ApiClient.post] Raw axios response:', response)
+    console.log('[ApiClient.post] response.data:', response.data)
+    console.log('[ApiClient.post] response.data type:', typeof response.data)
+    console.log('[ApiClient.post] response.data is array?:', Array.isArray(response.data))
+    console.log('[ApiClient.post] response.data keys:', response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'N/A')
+    console.log('[ApiClient.post] response.data stringified:', JSON.stringify(response.data, null, 2))
+    
+    const responseData = response.data
+    
+    // If the response is already in ApiResponse format { data: ... }, return it
+    if (responseData && typeof responseData === 'object' && 'data' in responseData && !Array.isArray(responseData)) {
+      console.log('[ApiClient.post] Response already has data property, returning as-is')
+      return responseData as ApiResponse<T>
+    }
+    
+    // If the response is a direct value (object, etc.), wrap it in ApiResponse format
+    console.log('[ApiClient.post] Wrapping response in ApiResponse format')
+    const wrapped = { data: responseData } as ApiResponse<T>
+    console.log('[ApiClient.post] Wrapped response:', wrapped)
+    return wrapped
   }
 
   async postForm<T = any>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    const response: AxiosResponse<ApiResponse<T>> = await this.client.post(url, formData, {
+    const response: AxiosResponse<any> = await this.client.post(url, formData, {
       ...config,
       headers: {
         ...config?.headers,
         'Content-Type': 'multipart/form-data',
       },
     })
-    return response.data
+    const responseData = response.data
+    
+    // If the response is already in ApiResponse format { data: ... }, return it
+    if (responseData && typeof responseData === 'object' && 'data' in responseData && !Array.isArray(responseData)) {
+      return responseData as ApiResponse<T>
+    }
+    
+    // If the response is a direct value (object, etc.), wrap it in ApiResponse format
+    return { data: responseData } as ApiResponse<T>
   }
 
   async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    const response: AxiosResponse<ApiResponse<T>> = await this.client.put(url, data, config)
-    return response.data
+    const response: AxiosResponse<any> = await this.client.put(url, data, config)
+    const responseData = response.data
+    
+    // If the response is already in ApiResponse format { data: ... }, return it
+    if (responseData && typeof responseData === 'object' && 'data' in responseData && !Array.isArray(responseData)) {
+      return responseData as ApiResponse<T>
+    }
+    
+    // If the response is a direct value (object, etc.), wrap it in ApiResponse format
+    return { data: responseData } as ApiResponse<T>
   }
 
   async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    const response: AxiosResponse<ApiResponse<T>> = await this.client.patch(url, data, config)
-    return response.data
+    const response: AxiosResponse<any> = await this.client.patch(url, data, config)
+    const responseData = response.data
+    
+    // If the response is already in ApiResponse format { data: ... }, return it
+    if (responseData && typeof responseData === 'object' && 'data' in responseData && !Array.isArray(responseData)) {
+      return responseData as ApiResponse<T>
+    }
+    
+    // If the response is a direct value (object, etc.), wrap it in ApiResponse format
+    return { data: responseData } as ApiResponse<T>
   }
 
   async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
