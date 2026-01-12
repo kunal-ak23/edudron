@@ -37,6 +37,13 @@ public class Note {
     @Column(columnDefinition = "text")
     private String context; // Surrounding context or content reference
 
+    // Anchor-based positioning (new robust system)
+    @Column(columnDefinition = "text")
+    private String anchorJson; // JSON string containing HighlightAnchor (TextPositionSelector, TextQuoteSelector, domHint)
+    
+    @Column(length = 100)
+    private String contentHashAtCreate; // Hash of canonical text at creation time for validation
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -76,6 +83,12 @@ public class Note {
 
     public String getContext() { return context; }
     public void setContext(String context) { this.context = context; }
+
+    public String getAnchorJson() { return anchorJson; }
+    public void setAnchorJson(String anchorJson) { this.anchorJson = anchorJson; }
+
+    public String getContentHashAtCreate() { return contentHashAtCreate; }
+    public void setContentHashAtCreate(String contentHashAtCreate) { this.contentHashAtCreate = contentHashAtCreate; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

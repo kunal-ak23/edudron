@@ -1,0 +1,23 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0010-notes-anchor-support
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - tableExists:
+            tableName: notes
+            schemaName: student
+      changes:
+        - addColumn:
+            tableName: notes
+            schemaName: student
+            columns:
+              - column: { name: anchor_json, type: text, remarks: "JSON string containing HighlightAnchor (TextPositionSelector, TextQuoteSelector, domHint)" }
+              - column: { name: content_hash_at_create, type: varchar(100), remarks: "Hash of canonical text at creation time for validation" }
+        - sql:
+            sql: |
+              -- Add comment to explain the new fields
+              COMMENT ON COLUMN student.notes.anchor_json IS 'JSON string containing HighlightAnchor with TextPositionSelector, TextQuoteSelector, and optional domHint for robust re-anchoring';
+              COMMENT ON COLUMN student.notes.content_hash_at_create IS 'Hash of canonical text at creation time. Used to validate content hasn''t changed when re-anchoring highlights.';
+

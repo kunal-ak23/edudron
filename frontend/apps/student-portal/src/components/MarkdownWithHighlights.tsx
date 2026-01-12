@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { unstable_batchedUpdates } from 'react-dom'
 import { MarkdownRenderer } from './MarkdownRenderer'
 import type { Note } from '@edudron/shared-utils'
 
@@ -32,6 +33,7 @@ export function MarkdownWithHighlights({
 }: MarkdownWithHighlightsProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const selectionRef = useRef<Range | null>(null)
+  const isApplyingHighlightsRef = useRef(false)
   const [selection, setSelection] = useState<Range | null>(null)
   const [showCommentBubble, setShowCommentBubble] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
@@ -147,55 +149,144 @@ export function MarkdownWithHighlights({
     })
     
     // Strategy 1: Try exact match of plain text in combined text
-    // Only match if the text is long enough or if it's a complete word match
+    // CRITICAL: Always try to match the FULL text first, not a substring
+    // If the stored text is long, we must match the entire length
     const exactIndex = combinedText.indexOf(plainText)
+    
     if (exactIndex !== -1) {
-      // Verify this is a complete match (not just a substring like "A" matching "A" in "Apple")
-      // Check if it's at word boundaries or if the text is long enough
-      const isWordBoundary = exactIndex === 0 || 
-        /\s/.test(combinedText[exactIndex - 1]) ||
-        plainText.length > 10 // If text is long enough, it's likely a real match
+      // Verify this is a complete match by checking boundaries
+      // For long text (>50 chars), require word boundaries to avoid partial matches
+      const isLongText = plainText.length > 50
+      const isStartBoundary = exactIndex === 0 || /\s/.test(combinedText[exactIndex - 1])
+      const isEndBoundary = exactIndex + plainText.length >= combinedText.length || 
+                           /\s/.test(combinedText[exactIndex + plainText.length])
       
-      if (isWordBoundary || plainText.length > 3) {
+      // For long text, we MUST have word boundaries to ensure it's the full match
+      if (!isLongText || (isStartBoundary && isEndBoundary)) {
         const endIndex = exactIndex + plainText.length
         
-        // Find start and end nodes
-        let startNode: TextNodeInfo | null = null
-        let endNode: TextNodeInfo | null = null
-        let startOffset = 0
-        let endOffset = 0
+        // Verify the match is complete by checking if there are other occurrences
+        // If there are multiple occurrences, prefer ones with better context
+        const nextOccurrence = combinedText.indexOf(plainText, exactIndex + 1)
+        const prevOccurrence = combinedText.lastIndexOf(plainText, exactIndex - 1)
         
-        for (const info of nodeInfos) {
-          // Find the node containing the start position
-          if (!startNode && exactIndex >= info.start && exactIndex < info.end) {
-            startNode = info
-            startOffset = exactIndex - info.start
+        // If there are multiple occurrences, we need to be more careful
+        // But for now, if we found a match with proper boundaries, use it
+        if (nextOccurrence === -1 || (isStartBoundary && isEndBoundary)) {
+          // Find start and end nodes
+          let startNode: TextNodeInfo | null = null
+          let endNode: TextNodeInfo | null = null
+          let startOffset = 0
+          let endOffset = 0
+          
+          for (const info of nodeInfos) {
+            // Find the node containing the start position
+            if (!startNode && exactIndex >= info.start && exactIndex < info.end) {
+              startNode = info
+              startOffset = exactIndex - info.start
+            }
+            
+            // Find the node containing the end position
+            if (endIndex > info.start && endIndex <= info.end) {
+              endNode = info
+              endOffset = endIndex - info.start
+              break
+            }
           }
           
-          // Find the node containing the end position
-          if (endIndex > info.start && endIndex <= info.end) {
-            endNode = info
-            endOffset = endIndex - info.start
-            break
+          if (startNode && endNode) {
+            // If it's a single node, return single node format
+            if (startNode === endNode) {
+              if (endOffset > startOffset) {
+                // Verify we're matching a reasonable portion of the text
+                const matchedText = startNode.text.substring(startOffset, endOffset)
+                if (matchedText.length >= Math.min(plainText.length * 0.8, plainText.length - 20)) {
+                  console.log('[MarkdownWithHighlights] Strategy 1 match - FULL exact match found at index:', exactIndex, 'length:', plainText.length, 'matched:', matchedText.length, 'single node')
+                  return { node: startNode.node, start: startOffset, end: endOffset }
+                }
+              }
+            } else {
+              // Multi-node range - calculate actual matched length
+              let matchedLength = startNode.text.length - startOffset // Remaining text in start node
+              const startIdx = nodeInfos.indexOf(startNode)
+              const endIdx = nodeInfos.indexOf(endNode)
+              
+              // Add full text of nodes between start and end
+              for (let i = startIdx + 1; i < endIdx; i++) {
+                matchedLength += nodeInfos[i].text.length
+              }
+              
+              // Add text from start of end node
+              matchedLength += endOffset
+              
+              // Verify we're matching a reasonable portion (allow 20 char difference for whitespace)
+              if (endOffset > 0 && Math.abs(matchedLength - plainText.length) <= 20) {
+                console.log('[MarkdownWithHighlights] Strategy 1 match - FULL exact match found at index:', exactIndex, 'length:', plainText.length, 'matched:', matchedLength, 'multi-node')
+                return {
+                  startNode: startNode.node,
+                  startOffset: startOffset,
+                  endNode: endNode.node,
+                  endOffset: endOffset
+                }
+              }
+            }
           }
         }
+      }
+    }
+    
+    // If exact match failed, try to find the longest possible substring match
+    // This handles cases where whitespace normalization caused slight differences
+    // But prioritize longer matches
+    if (plainText.length > 20) {
+      // Try progressively shorter suffixes to find the longest match
+      for (let len = plainText.length; len >= Math.max(20, plainText.length * 0.7); len -= 10) {
+        const substring = plainText.substring(0, len)
+        const subIndex = combinedText.indexOf(substring)
         
-        if (startNode && endNode) {
-          // If it's a single node, return single node format
-          if (startNode === endNode) {
-            if (endOffset > startOffset) {
-              console.log('[MarkdownWithHighlights] Strategy 1 match - exact match found at index:', exactIndex, 'length:', plainText.length, 'single node')
-              return { node: startNode.node, start: startOffset, end: endOffset }
+        if (subIndex !== -1) {
+          const isStartBoundary = subIndex === 0 || /\s/.test(combinedText[subIndex - 1])
+          const isEndBoundary = subIndex + substring.length >= combinedText.length || 
+                               /\s/.test(combinedText[subIndex + substring.length])
+          
+          // Only use substring match if it has proper boundaries
+          if (isStartBoundary && isEndBoundary) {
+            const endIndex = subIndex + substring.length
+            
+            let startNode: TextNodeInfo | null = null
+            let endNode: TextNodeInfo | null = null
+            let startOffset = 0
+            let endOffset = 0
+            
+            for (const info of nodeInfos) {
+              if (!startNode && subIndex >= info.start && subIndex < info.end) {
+                startNode = info
+                startOffset = subIndex - info.start
+              }
+              
+              if (endIndex > info.start && endIndex <= info.end) {
+                endNode = info
+                endOffset = endIndex - info.start
+                break
+              }
             }
-          } else {
-            // Multi-node range
-            if (endOffset > 0) {
-              console.log('[MarkdownWithHighlights] Strategy 1 match - exact match found at index:', exactIndex, 'length:', plainText.length, 'multi-node')
-              return {
-                startNode: startNode.node,
-                startOffset: startOffset,
-                endNode: endNode.node,
-                endOffset: endOffset
+            
+            if (startNode && endNode) {
+              if (startNode === endNode) {
+                if (endOffset > startOffset) {
+                  console.warn('[MarkdownWithHighlights] Strategy 1 partial match - using substring of length:', len, 'instead of full:', plainText.length)
+                  return { node: startNode.node, start: startOffset, end: endOffset }
+                }
+              } else {
+                if (endOffset > 0) {
+                  console.warn('[MarkdownWithHighlights] Strategy 1 partial match - using substring of length:', len, 'instead of full:', plainText.length)
+                  return {
+                    startNode: startNode.node,
+                    startOffset: startOffset,
+                    endNode: endNode.node,
+                    endOffset: endOffset
+                  }
+                }
               }
             }
           }
@@ -204,29 +295,45 @@ export function MarkdownWithHighlights({
     }
 
     // Strategy 2: Normalized matching in combined text
+    // This handles cases where whitespace differs between stored and rendered text
     const normalizedCombined = normalizeText(combinedText)
     if (normalizedCombined.includes(normalizedPlain)) {
       const normalizedIndex = normalizedCombined.indexOf(normalizedPlain)
+      const normalizedEndIndex = normalizedIndex + normalizedPlain.length
       
-      // Map normalized position back to actual position in combined text
-      let actualPos = 0
+      // Map normalized start position back to actual position in combined text
+      let actualStartPos = 0
       let normalizedPos = 0
       
-      while (normalizedPos < normalizedIndex && actualPos < combinedText.length) {
-        const char = combinedText[actualPos]
+      while (normalizedPos < normalizedIndex && actualStartPos < combinedText.length) {
+        const char = combinedText[actualStartPos]
         if (/\s/.test(char)) {
-          actualPos++
-          while (actualPos < combinedText.length && /\s/.test(combinedText[actualPos])) {
-            actualPos++
+          actualStartPos++
+          while (actualStartPos < combinedText.length && /\s/.test(combinedText[actualStartPos])) {
+            actualStartPos++
           }
         } else {
           normalizedPos++
-          actualPos++
+          actualStartPos++
         }
       }
       
-      // Find start and end positions in combined text
-      const endPos = actualPos + plainText.length
+      // Map normalized end position back to actual position
+      let actualEndPos = actualStartPos
+      normalizedPos = normalizedIndex
+      
+      while (normalizedPos < normalizedEndIndex && actualEndPos < combinedText.length) {
+        const char = combinedText[actualEndPos]
+        if (/\s/.test(char)) {
+          actualEndPos++
+          while (actualEndPos < combinedText.length && /\s/.test(combinedText[actualEndPos])) {
+            actualEndPos++
+          }
+        } else {
+          normalizedPos++
+          actualEndPos++
+        }
+      }
       
       // Find start and end nodes
       let startNode: TextNodeInfo | null = null
@@ -236,35 +343,52 @@ export function MarkdownWithHighlights({
       
       for (const info of nodeInfos) {
         // Find the node containing the start position
-        if (!startNode && actualPos >= info.start && actualPos < info.end) {
+        if (!startNode && actualStartPos >= info.start && actualStartPos < info.end) {
           startNode = info
-          startOffset = actualPos - info.start
+          startOffset = actualStartPos - info.start
         }
         
         // Find the node containing the end position
-        if (endPos > info.start && endPos <= info.end) {
+        if (actualEndPos > info.start && actualEndPos <= info.end) {
           endNode = info
-          endOffset = endPos - info.start
+          endOffset = actualEndPos - info.start
           break
         }
       }
       
       if (startNode && endNode) {
-        // If it's a single node, return single node format
+        // Verify the match length is reasonable
+        let matchedLength = 0
         if (startNode === endNode) {
-          if (endOffset > startOffset) {
-            console.log('[MarkdownWithHighlights] Strategy 2 match - normalized match found, length:', plainText.length, 'single node')
-            return { node: startNode.node, start: startOffset, end: endOffset }
-          }
+          matchedLength = endOffset - startOffset
         } else {
-          // Multi-node range
-          if (endOffset > 0) {
-            console.log('[MarkdownWithHighlights] Strategy 2 match - normalized match found, length:', plainText.length, 'multi-node')
-            return {
-              startNode: startNode.node,
-              startOffset: startOffset,
-              endNode: endNode.node,
-              endOffset: endOffset
+          matchedLength = startNode.text.length - startOffset
+          const startIdx = nodeInfos.indexOf(startNode)
+          const endIdx = nodeInfos.indexOf(endNode)
+          for (let i = startIdx + 1; i < endIdx; i++) {
+            matchedLength += nodeInfos[i].text.length
+          }
+          matchedLength += endOffset
+        }
+        
+        // Allow up to 20 char difference for whitespace normalization
+        if (Math.abs(matchedLength - plainText.length) <= 20) {
+          // If it's a single node, return single node format
+          if (startNode === endNode) {
+            if (endOffset > startOffset) {
+              console.log('[MarkdownWithHighlights] Strategy 2 match - normalized match found, length:', plainText.length, 'matched:', matchedLength, 'single node')
+              return { node: startNode.node, start: startOffset, end: endOffset }
+            }
+          } else {
+            // Multi-node range
+            if (endOffset > 0) {
+              console.log('[MarkdownWithHighlights] Strategy 2 match - normalized match found, length:', plainText.length, 'matched:', matchedLength, 'multi-node')
+              return {
+                startNode: startNode.node,
+                startOffset: startOffset,
+                endNode: endNode.node,
+                endOffset: endOffset
+              }
             }
           }
         }
@@ -551,32 +675,75 @@ export function MarkdownWithHighlights({
   // Apply highlights to rendered markdown
   useEffect(() => {
     if (!containerRef.current) return
+    if (isApplyingHighlightsRef.current) return // Prevent concurrent application
 
-    // Remove existing highlights first - properly unwrap them
-    const marks = containerRef.current.querySelectorAll('.highlight-mark')
-    marks.forEach(mark => {
-      const parent = mark.parentNode
-      if (parent) {
-        // Replace the mark with its text content
-        const textNode = document.createTextNode(mark.textContent || '')
-        parent.replaceChild(textNode, mark)
-        // Normalize to merge adjacent text nodes
-        parent.normalize()
+    // Use requestIdleCallback if available, otherwise use setTimeout
+    const scheduleWork = (callback: () => void) => {
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(callback, { timeout: 1000 })
+      } else {
+        setTimeout(callback, 100)
       }
-    })
+    }
 
-    if (notes.length === 0) return
+    const applyHighlights = () => {
+      if (!containerRef.current || isApplyingHighlightsRef.current) return
+      
+      isApplyingHighlightsRef.current = true
 
-    // Wait for markdown to fully render
-    const timeoutId = setTimeout(() => {
-      if (!containerRef.current) return
+      try {
+        // Remove existing highlights first - properly unwrap them
+        const marks = containerRef.current.querySelectorAll('.highlight-mark')
+        // Convert to array and process in reverse to avoid issues
+        const marksArray = Array.from(marks).reverse()
+        marksArray.forEach(mark => {
+          const parent = mark.parentNode
+          if (parent && parent.contains(mark)) {
+            try {
+              // Replace the mark with its text content
+              const textNode = document.createTextNode(mark.textContent || '')
+              parent.replaceChild(textNode, mark)
+              // Normalize to merge adjacent text nodes
+              parent.normalize()
+            } catch (e) {
+              // Node may have already been removed
+              console.warn('[MarkdownWithHighlights] Failed to remove highlight:', e)
+            }
+          }
+        })
 
-      console.log('[MarkdownWithHighlights] Applying highlights for', notes.length, 'notes')
-      notes.forEach((note) => {
-        if (!note.highlightedText) {
-          console.warn('[MarkdownWithHighlights] Note missing highlightedText:', note.id)
+        if (notes.length === 0) {
+          isApplyingHighlightsRef.current = false
           return
         }
+
+        // Wait for markdown to fully render and React to be idle
+        // Use multiple delays to ensure React has finished all reconciliation
+        const timeoutId = setTimeout(() => {
+          // Use requestIdleCallback to wait for React to be completely idle
+          const idleCallback = (deadline?: { timeRemaining: () => number }) => {
+            if (!containerRef.current) {
+              isApplyingHighlightsRef.current = false
+              return
+            }
+
+            // Check if we have time, or if this is a forced callback
+            if (deadline && deadline.timeRemaining() < 1) {
+              // Not enough time, schedule for later
+              if ('requestIdleCallback' in window) {
+                (window as any).requestIdleCallback(idleCallback, { timeout: 500 })
+              } else {
+                setTimeout(idleCallback, 50)
+              }
+              return
+            }
+
+            console.log('[MarkdownWithHighlights] Applying highlights for', notes.length, 'notes')
+            notes.forEach((note) => {
+            if (!note.highlightedText) {
+              console.warn('[MarkdownWithHighlights] Note missing highlightedText:', note.id)
+              return
+            }
 
         console.log('[MarkdownWithHighlights] Searching for markdown text:', note.highlightedText.substring(0, 50))
 
@@ -608,7 +775,21 @@ export function MarkdownWithHighlights({
               
               // Verify the range contains the expected text
               const rangeText = range.toString()
-              console.log('[MarkdownWithHighlights] Range text:', rangeText.substring(0, 50), 'Expected length:', note.highlightedText.length)
+              const normalizedRangeText = normalizeText(rangeText)
+              const normalizedStoredText = normalizeText(note.highlightedText)
+              
+              console.log('[MarkdownWithHighlights] Range text length:', rangeText.length, 'Expected:', note.highlightedText.length)
+              console.log('[MarkdownWithHighlights] Normalized range length:', normalizedRangeText.length, 'Normalized stored:', normalizedStoredText.length)
+              
+              // Verify the match is at least 80% of the stored text length
+              // This handles cases where whitespace differs
+              const minMatchLength = Math.max(normalizedStoredText.length * 0.8, normalizedStoredText.length - 50)
+              if (normalizedRangeText.length < minMatchLength) {
+                console.warn('[MarkdownWithHighlights] Match is too short! Range:', normalizedRangeText.length, 'Stored:', normalizedStoredText.length, 'Min required:', minMatchLength)
+                console.warn('[MarkdownWithHighlights] Range text:', rangeText.substring(0, 100))
+                console.warn('[MarkdownWithHighlights] Stored text:', note.highlightedText.substring(0, 100))
+                return // Skip this highlight - it's not a good match
+              }
             } catch (e) {
               console.warn('[MarkdownWithHighlights] Failed to create range:', e)
               return
@@ -622,7 +803,20 @@ export function MarkdownWithHighlights({
               
               // Verify the range contains the expected text
               const rangeText = range.toString()
-              console.log('[MarkdownWithHighlights] Multi-node range text:', rangeText.substring(0, 50))
+              const normalizedRangeText = normalizeText(rangeText)
+              const normalizedStoredText = normalizeText(note.highlightedText)
+              
+              console.log('[MarkdownWithHighlights] Multi-node range text length:', rangeText.length, 'Expected:', note.highlightedText.length)
+              console.log('[MarkdownWithHighlights] Normalized range length:', normalizedRangeText.length, 'Normalized stored:', normalizedStoredText.length)
+              
+              // Verify the match is at least 80% of the stored text length
+              const minMatchLength = Math.max(normalizedStoredText.length * 0.8, normalizedStoredText.length - 50)
+              if (normalizedRangeText.length < minMatchLength) {
+                console.warn('[MarkdownWithHighlights] Multi-node match is too short! Range:', normalizedRangeText.length, 'Stored:', normalizedStoredText.length, 'Min required:', minMatchLength)
+                console.warn('[MarkdownWithHighlights] Range text:', rangeText.substring(0, 100))
+                console.warn('[MarkdownWithHighlights] Stored text:', note.highlightedText.substring(0, 100))
+                return // Skip this highlight - it's not a good match
+              }
             } catch (e) {
               console.warn('[MarkdownWithHighlights] Failed to create multi-node range:', e)
               return
@@ -643,33 +837,250 @@ export function MarkdownWithHighlights({
             mark.classList.add('has-comment')
           }
 
-          try {
-            // Try surroundContents first (works for single-node ranges)
-            range.surroundContents(mark)
-          } catch (e) {
-            // If surroundContents fails (e.g., for multi-node ranges), use extractContents
-            try {
-              const contents = range.extractContents()
-              mark.appendChild(contents)
-              range.insertNode(mark)
-            } catch (e2) {
-              console.warn('[MarkdownWithHighlights] Failed to apply highlight for note:', note.id, e2)
-              return
-            }
+          // Validate range is still valid before manipulating
+          if (!range.startContainer.parentNode || !range.endContainer.parentNode) {
+            console.warn('[MarkdownWithHighlights] Range containers are no longer in DOM')
+            return
           }
 
-          mark.addEventListener('click', (e) => {
-            e.stopPropagation()
-            handleHighlightClick(note.id)
-          })
+          // Check if range is still valid
+          try {
+            range.toString() // This will throw if range is invalid
+          } catch (e) {
+            console.warn('[MarkdownWithHighlights] Range is invalid:', e)
+            return
+          }
+
+          try {
+            // For single-node ranges, use surroundContents
+            if (range.startContainer === range.endContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+              // Single text node - safe to use surroundContents
+              range.surroundContents(mark)
+            } else {
+              // Multi-node range - use a safer approach that doesn't extract nodes
+              // This avoids breaking React's DOM reconciliation
+              const safeRange = range.cloneRange()
+              
+              // Get all text nodes in the range
+              const textNodes: Text[] = []
+              const walker = document.createTreeWalker(
+                safeRange.commonAncestorContainer,
+                NodeFilter.SHOW_TEXT,
+                {
+                  acceptNode: (node) => {
+                    try {
+                      if (safeRange.intersectsNode(node)) {
+                        return NodeFilter.FILTER_ACCEPT
+                      }
+                    } catch (e) {
+                      // Node might be in different document
+                    }
+                    return NodeFilter.FILTER_REJECT
+                  }
+                }
+              )
+              
+              let node: Node | null
+              while ((node = walker.nextNode())) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                  textNodes.push(node as Text)
+                }
+              }
+              
+              if (textNodes.length === 0) {
+                console.warn('[MarkdownWithHighlights] No text nodes found in range')
+                return
+              }
+              
+              // Collect all replacements first, then apply them
+              // This prevents issues with DOM structure changing during iteration
+              const replacements: Array<{ node: Text; fragment: DocumentFragment; mark: HTMLElement }> = []
+              
+              for (let i = textNodes.length - 1; i >= 0; i--) {
+                const textNode = textNodes[i]
+                if (!textNode.parentNode || !textNode.parentNode.contains(textNode)) {
+                  continue // Node already removed
+                }
+                
+                // Calculate which portion of this text node is in the range
+                let startOffset = 0
+                let endOffset = textNode.textContent?.length || 0
+                
+                // Create a range for this text node to compare with safeRange
+                const nodeRange = document.createRange()
+                try {
+                  nodeRange.selectNodeContents(textNode)
+                  
+                  // Check if this node intersects with the range
+                  const startCompare = safeRange.compareBoundaryPoints(Range.START_TO_START, nodeRange)
+                  const endCompare = safeRange.compareBoundaryPoints(Range.END_TO_END, nodeRange)
+                  
+                  // If range starts after this node ends, or ends before this node starts, skip
+                  if (startCompare > 0 || endCompare < 0) {
+                    continue
+                  }
+                  
+                  // Calculate start offset
+                  if (safeRange.startContainer === textNode) {
+                    startOffset = safeRange.startOffset
+                  } else if (startCompare <= 0) {
+                    // Range starts before or at this node
+                    startOffset = 0
+                  } else {
+                    // Range starts within this node - calculate offset
+                    const tempRange = safeRange.cloneRange()
+                    tempRange.setStart(nodeRange.startContainer, nodeRange.startOffset)
+                    startOffset = tempRange.toString().length
+                  }
+                  
+                  // Calculate end offset
+                  if (safeRange.endContainer === textNode) {
+                    endOffset = safeRange.endOffset
+                  } else if (endCompare >= 0) {
+                    // Range ends after or at this node
+                    endOffset = textNode.textContent?.length || 0
+                  } else {
+                    // Range ends within this node - calculate offset
+                    const tempRange = safeRange.cloneRange()
+                    tempRange.setEnd(nodeRange.endContainer, nodeRange.endOffset)
+                    const textBeforeEnd = textNode.textContent?.substring(0, nodeRange.endOffset) || ''
+                    endOffset = textBeforeEnd.length - tempRange.toString().length
+                  }
+                  
+                  if (startOffset >= endOffset || startOffset < 0 || endOffset > (textNode.textContent?.length || 0)) {
+                    continue // Invalid offsets
+                  }
+                } catch (e) {
+                  console.warn('[MarkdownWithHighlights] Error calculating offsets for text node:', e)
+                  continue
+                }
+                const text = textNode.textContent || ''
+                
+                // Split the text node
+                const beforeText = text.substring(0, startOffset)
+                const selectedText = text.substring(startOffset, endOffset)
+                const afterText = text.substring(endOffset)
+                
+                // Create fragment with before text, highlight span, and after text
+                const fragment = document.createDocumentFragment()
+                if (beforeText.length > 0) {
+                  fragment.appendChild(document.createTextNode(beforeText))
+                }
+                
+                // Only create one mark for the first node, reuse for others
+                const segmentMark = i === textNodes.length - 1 ? mark : mark.cloneNode(true) as HTMLElement
+                segmentMark.textContent = selectedText
+                fragment.appendChild(segmentMark)
+                
+                if (afterText.length > 0) {
+                  fragment.appendChild(document.createTextNode(afterText))
+                }
+                
+                // Store replacement for later
+                replacements.push({ node: textNode, fragment, mark: segmentMark })
+              }
+              
+              // Apply all replacements in reverse order (last to first)
+              // This ensures we don't break parent-child relationships
+              // Check each node is still valid before replacing
+              for (let i = replacements.length - 1; i >= 0; i--) {
+                const { node, fragment } = replacements[i]
+                
+                // Verify node is still in the DOM and has a valid parent
+                if (!node.parentNode) {
+                  console.warn('[MarkdownWithHighlights] Node has no parent, skipping')
+                  continue
+                }
+                
+                if (!node.isConnected) {
+                  console.warn('[MarkdownWithHighlights] Node not connected, skipping')
+                  continue
+                }
+                
+                const parent = node.parentNode
+                
+                // Double-check parent still contains this node
+                if (!parent.contains(node)) {
+                  console.warn('[MarkdownWithHighlights] Node no longer in parent, skipping')
+                  continue
+                }
+                
+                // Verify parent is still in the document
+                if (!parent.isConnected) {
+                  console.warn('[MarkdownWithHighlights] Parent not connected, skipping')
+                  continue
+                }
+                
+                try {
+                  parent.replaceChild(fragment, node)
+                } catch (e) {
+                  // If replaceChild fails, the node might have been removed by React
+                  console.warn('[MarkdownWithHighlights] Failed to replace text node (may have been removed by React):', e)
+                  // Continue with next replacement instead of breaking
+                  continue
+                }
+              }
+              
+              // Add click handlers to all marks after they're in the DOM
+              // Do this outside of batched updates to avoid issues
+              setTimeout(() => {
+                replacements.forEach(({ mark }) => {
+                  if (mark.parentNode && !mark.hasAttribute('data-click-handler-added')) {
+                    mark.setAttribute('data-click-handler-added', 'true')
+                    mark.addEventListener('click', (e) => {
+                      e.stopPropagation()
+                      handleHighlightClick(note.id)
+                    })
+                  }
+                })
+              }, 0)
+            }
+          } catch (e) {
+            console.warn('[MarkdownWithHighlights] Failed to apply highlight for note:', note.id, e)
+            return
+          }
+
+          // Add click handler (only if mark is still valid and wasn't already handled in multi-node case)
+          if (mark.parentNode) {
+            mark.addEventListener('click', (e) => {
+              e.stopPropagation()
+              handleHighlightClick(note.id)
+            })
+          }
           console.log('[MarkdownWithHighlights] Successfully applied highlight for note:', note.id)
         } else {
           console.warn('[MarkdownWithHighlights] Could not find text for note:', note.id, 'Text:', note.highlightedText?.substring(0, 50))
         }
       })
-    }, 200) // Small delay to ensure markdown is fully rendered
+      
+      // Reset flag after a delay to allow React to settle
+      setTimeout(() => {
+        isApplyingHighlightsRef.current = false
+      }, 100)
+    }
 
-    return () => clearTimeout(timeoutId)
+    // Schedule the idle callback
+    if ('requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(idleCallback, { timeout: 1000 })
+    } else {
+      // Fallback: use setTimeout with longer delay
+      setTimeout(idleCallback, 200)
+    }
+  }, 500) // Increased delay to ensure React is done
+
+        return () => clearTimeout(timeoutId)
+      } catch (error) {
+        console.error('[MarkdownWithHighlights] Error applying highlights:', error)
+        isApplyingHighlightsRef.current = false
+      }
+    }
+
+    // Schedule the work
+    scheduleWork(applyHighlights)
+
+    return () => {
+      isApplyingHighlightsRef.current = false
+    }
   }, [notes, content])
 
   // Extract plain text from a range, handling markdown-rendered content
