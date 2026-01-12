@@ -10,7 +10,7 @@ module.exports = {
   theme: {
     container: {
       center: true,
-      padding: "2rem",
+      padding: "3rem", // 48px default gutter
       screens: {
         "2xl": "1400px",
       },
@@ -55,6 +55,9 @@ module.exports = {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      spacing: {
+        gutter: "3rem", // 48px default gutter
       },
     },
   },

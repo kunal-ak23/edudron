@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,6 +35,7 @@ interface Student {
 export default function StudentsPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user, isAuthenticated } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -42,6 +43,19 @@ export default function StudentsPage() {
   useEffect(() => {
     loadStudents()
   }, [])
+
+  // Role-based access control
+  useEffect(() => {
+    if (!isAuthenticated() || !user) {
+      router.push('/login')
+      return
+    }
+    
+    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
+    if (!allowedRoles.includes(user.role)) {
+      router.push('/unauthorized')
+    }
+  }, [user, isAuthenticated, router])
 
   const loadStudents = async () => {
     try {
@@ -84,19 +98,25 @@ export default function StudentsPage() {
     (student.phone && student.phone.includes(searchTerm))
   )
 
+  if (!user || !isAuthenticated()) {
+    return null
+  }
+
+  const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
+  if (!allowedRoles.includes(user.role)) {
+    return null
+  }
+
   if (loading) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div>
+    <div>
         <div className="mb-6 flex items-center justify-between">
           <div>
             <Link href="/students/import">
@@ -194,7 +214,6 @@ export default function StudentsPage() {
             </CardContent>
           </Card>
       </div>
-    </ProtectedRoute>
   )
 }
 

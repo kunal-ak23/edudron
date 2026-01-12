@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
-import { ProtectedRoute, FileUpload } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
+import { FileUpload } from '@edudron/ui-components'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -402,17 +403,15 @@ export default function LectureEditPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </ProtectedRoute>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
+    <>
+    <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
           <div className="max-w-7xl mx-auto px-6 py-4">
@@ -562,68 +561,6 @@ export default function LectureEditPage() {
                             onClick={() => {
                               setContentToDelete(content.id)
                               setShowDeleteDialog(true)
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <ConfirmationDialog
-        isOpen={showUnsavedDialog}
-        onClose={() => {
-          setShowUnsavedDialog(false)
-          pendingNavigation.current = null
-        }}
-        onConfirm={handleConfirmLeave}
-        title="Unsaved Changes"
-        description="You have unsaved changes. Are you sure you want to leave?"
-        confirmText="Leave"
-        variant="default"
-      />
-
-      <ConfirmationDialog
-        isOpen={showDeleteDialog}
-        onClose={() => {
-          setShowDeleteDialog(false)
-          setContentToDelete(null)
-        }}
-        onConfirm={async () => {
-          if (contentToDelete) {
-            try {
-              await lecturesApi.deleteMedia(contentToDelete)
-              setTextContents(textContents.filter(c => c.id !== contentToDelete))
-              toast({
-                title: 'Content section deleted',
-              })
-              setShowDeleteDialog(false)
-              setContentToDelete(null)
-            } catch (error) {
-              toast({
-                variant: 'destructive',
-                title: 'Failed to delete content section',
-                description: extractErrorMessage(error),
-              })
-            }
-          }
-        }}
-        title="Delete Content Section"
-        description="Are you sure you want to delete this content section?"
-        confirmText="Delete"
-        variant="destructive"
-      />
-    </ProtectedRoute>
-  )
-}
-                              }
                             }}
                             disabled={saving}
                           >
@@ -791,7 +728,52 @@ export default function LectureEditPage() {
           </div>
         </div>
       </div>
-    </ProtectedRoute>
+
+      <ConfirmationDialog
+        isOpen={showUnsavedDialog}
+        onClose={() => {
+          setShowUnsavedDialog(false)
+          pendingNavigation.current = null
+        }}
+        onConfirm={handleConfirmLeave}
+        title="Unsaved Changes"
+        description="You have unsaved changes. Are you sure you want to leave?"
+        confirmText="Leave"
+        variant="default"
+      />
+
+      <ConfirmationDialog
+        isOpen={showDeleteDialog}
+        onClose={() => {
+          setShowDeleteDialog(false)
+          setContentToDelete(null)
+        }}
+        onConfirm={async () => {
+          if (contentToDelete) {
+            try {
+              await lecturesApi.deleteMedia(contentToDelete)
+              setTextContents(textContents.filter(c => c.id !== contentToDelete))
+              toast({
+                title: 'Content section deleted',
+              })
+              setShowDeleteDialog(false)
+              setContentToDelete(null)
+            } catch (error) {
+              toast({
+                variant: 'destructive',
+                title: 'Failed to delete content section',
+                description: extractErrorMessage(error),
+              })
+            }
+          }
+        }}
+        title="Delete Content Section"
+        description="Are you sure you want to delete this content section?"
+        confirmText="Delete"
+        variant="destructive"
+      />
+    </>
   )
 }
+
 

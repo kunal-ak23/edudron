@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -116,17 +116,14 @@ export default function TenantsPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-      <div>
+    <div>
         <div className="flex justify-between items-center mb-8">
           <div>
             <Button onClick={() => setShowCreateDialog(true)}>
@@ -216,8 +213,9 @@ export default function TenantsPage() {
               </form>
             </DialogContent>
           </Dialog>
+        </div>
 
-          {tenants.length === 0 ? (
+        {tenants.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
                 <p className="text-muted-foreground">No tenants found. Create your first tenant to get started.</p>
@@ -284,7 +282,6 @@ export default function TenantsPage() {
             </Card>
           )}
         </div>
-    </ProtectedRoute>
   )
 }
 

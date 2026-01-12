@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -151,7 +151,7 @@ export default function CourseIndexPage() {
   const writingFormats = indexes.filter(i => i.indexType === 'WRITING_FORMAT')
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER', 'INSTRUCTOR']}>
+    <>
       <div>
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -366,7 +366,7 @@ export default function CourseIndexPage() {
         confirmText="Delete"
         variant="destructive"
       />
-    </ProtectedRoute>
+    </>
   )
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +28,7 @@ export const dynamic = 'force-dynamic'
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
   const router = useRouter()
+  const { user: authUser, isAuthenticated } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,6 +71,28 @@ export default function DashboardPage() {
     router.push('/login')
   }
 
+  // Role-based access control
+  useEffect(() => {
+    if (!isAuthenticated() || !authUser) {
+      router.push('/login')
+      return
+    }
+    
+    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']
+    if (!allowedRoles.includes(authUser.role)) {
+      router.push('/unauthorized')
+    }
+  }, [authUser, isAuthenticated, router])
+
+  if (!authUser || !isAuthenticated()) {
+    return null
+  }
+
+  const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']
+  if (!allowedRoles.includes(authUser.role)) {
+    return null
+  }
+
   const publishedCourses = courses.filter(c => c.isPublished)
   const draftCourses = courses.filter(c => !c.isPublished)
   const activeBatches = batches.filter(b => b.isActive)
@@ -84,8 +107,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
-      <div>
+    <div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
@@ -304,6 +326,5 @@ export default function DashboardPage() {
             </div>
           </div>
       </div>
-    </ProtectedRoute>
   )
 }

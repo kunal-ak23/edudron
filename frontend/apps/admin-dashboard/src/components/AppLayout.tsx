@@ -181,7 +181,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* Page Content - Scrollable */}
         <main className="flex-1 overflow-y-auto bg-background">
-          <div className="m-9">
+          <div className="m-gutter">
             {children}
           </div>
         </main>

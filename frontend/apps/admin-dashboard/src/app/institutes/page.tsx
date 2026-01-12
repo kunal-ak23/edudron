@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@/components/ProtectedRoute'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -117,17 +117,14 @@ export default function InstitutesPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div>
+    <div>
         <div className="flex justify-between items-center mb-8">
           <div>
             <Button onClick={() => setShowCreateDialog(true)}>
@@ -209,8 +206,9 @@ export default function InstitutesPage() {
               </form>
             </DialogContent>
           </Dialog>
+        </div>
 
-          <Card>
+        <Card>
             <CardHeader>
               <CardTitle>All Institutes</CardTitle>
             </CardHeader>
@@ -278,8 +276,7 @@ export default function InstitutesPage() {
               )}
             </CardContent>
           </Card>
-        </div>
-    </ProtectedRoute>
+    </div>
   )
 }
 

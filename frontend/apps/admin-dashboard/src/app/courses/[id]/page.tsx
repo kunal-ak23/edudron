@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute, FileUpload } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
+import { FileUpload } from '@edudron/ui-components'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -546,7 +547,7 @@ export default function CourseEditPage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
+    <>
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
@@ -1295,7 +1296,6 @@ export default function CourseEditPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-    </ProtectedRoute>
+    </>
   )
 }
