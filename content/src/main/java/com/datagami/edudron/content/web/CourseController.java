@@ -16,13 +16,22 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.apache.tika.Tika;
+import org.apache.tika.exception.TikaException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.List;
 
 @RestController
 @RequestMapping("/content/courses")
 @Tag(name = "Courses", description = "Course management endpoints")
 public class CourseController {
+    
+    private static final Logger logger = LoggerFactory.getLogger(CourseController.class);
+    private final Tika tika = new Tika();
 
     @Autowired
     private CourseService courseService;
@@ -101,14 +110,117 @@ public class CourseController {
     @Autowired
     private com.datagami.edudron.content.service.AIJobWorker aiJobWorker;
     
-    @PostMapping("/generate")
+    @PostMapping(value = "/generate", consumes = {"application/json"})
     @Operation(
-        summary = "Generate course from prompt",
-        description = "Submit a course generation job to the queue. Returns a job ID that can be used to check status."
+        summary = "Generate course from prompt (JSON)",
+        description = "Submit a course generation job to the queue using JSON. Returns a job ID that can be used to check status."
     )
-    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateCourse(@Valid @RequestBody GenerateCourseRequest request) {
+    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateCourseJson(@Valid @RequestBody GenerateCourseRequest request) {
         com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.submitCourseGenerationJob(request, aiJobWorker);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
+    }
+    
+    @PostMapping(value = "/generate", consumes = {"multipart/form-data"})
+    @Operation(
+        summary = "Generate course from prompt with PDF (Multipart)",
+        description = "Submit a course generation job to the queue with optional PDF file. Returns a job ID that can be used to check status."
+    )
+    public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateCourseMultipart(
+            @RequestPart(required = false) String prompt,
+            @RequestPart(required = false) String categoryId,
+            @RequestPart(required = false) String difficultyLevel,
+            @RequestPart(required = false) String language,
+            @RequestPart(required = false) String tags,
+            @RequestPart(required = false) String certificateEligible,
+            @RequestPart(required = false) String maxCompletionDays,
+            @RequestPart(required = false) String referenceIndexIds,
+            @RequestPart(required = false) String writingFormatId,
+            @RequestPart(required = false) String writingFormat,
+            @RequestPart(required = false) MultipartFile pdfFile) {
+        
+        GenerateCourseRequest request = new GenerateCourseRequest();
+        request.setPrompt(prompt != null ? prompt : "");
+        
+        if (categoryId != null && !categoryId.isEmpty()) {
+            request.setCategoryId(categoryId);
+        }
+        if (difficultyLevel != null && !difficultyLevel.isEmpty()) {
+            request.setDifficultyLevel(difficultyLevel);
+        }
+        if (language != null && !language.isEmpty()) {
+            request.setLanguage(language);
+        }
+        if (tags != null && !tags.isEmpty()) {
+            request.setTags(java.util.Arrays.asList(tags.split(",")));
+        }
+        if (certificateEligible != null && !certificateEligible.isEmpty()) {
+            request.setCertificateEligible(Boolean.parseBoolean(certificateEligible));
+        }
+        if (maxCompletionDays != null && !maxCompletionDays.isEmpty()) {
+            try {
+                request.setMaxCompletionDays(Integer.parseInt(maxCompletionDays));
+            } catch (NumberFormatException e) {
+                // Ignore invalid number
+            }
+        }
+        if (referenceIndexIds != null && !referenceIndexIds.isEmpty()) {
+            request.setReferenceIndexIds(java.util.Arrays.asList(referenceIndexIds.split(",")));
+        }
+        if (writingFormatId != null && !writingFormatId.isEmpty()) {
+            request.setWritingFormatId(writingFormatId);
+        }
+        if (writingFormat != null && !writingFormat.isEmpty()) {
+            request.setWritingFormat(writingFormat);
+        }
+        
+        // Extract text from PDF file if provided
+        if (pdfFile != null && !pdfFile.isEmpty()) {
+            try {
+                String pdfText = extractTextFromFile(pdfFile);
+                if (pdfText != null && !pdfText.trim().isEmpty()) {
+                    // Combine PDF content with prompt
+                    String combinedPrompt = buildPromptWithPdf(prompt != null ? prompt : "", pdfText);
+                    request.setPrompt(combinedPrompt);
+                    logger.info("Extracted {} characters from PDF and combined with prompt", pdfText.length());
+                }
+            } catch (Exception e) {
+                logger.warn("Failed to extract text from PDF file: {}", e.getMessage());
+                // Continue with original prompt if PDF extraction fails
+            }
+        }
+        
+        com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.submitCourseGenerationJob(request, aiJobWorker);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
+    }
+    
+    /**
+     * Extract text from a file using Apache Tika
+     */
+    private String extractTextFromFile(MultipartFile file) throws IOException {
+        try {
+            String extractedText = tika.parseToString(file.getInputStream());
+            // Limit extracted text to reasonable size (100K characters)
+            if (extractedText.length() > 100000) {
+                extractedText = extractedText.substring(0, 100000) + "... [truncated]";
+            }
+            return extractedText;
+        } catch (TikaException e) {
+            logger.warn("Failed to extract text from file: {}", file.getOriginalFilename(), e);
+            throw new IOException("Failed to extract text from file", e);
+        }
+    }
+    
+    /**
+     * Build a combined prompt that includes PDF content
+     */
+    private String buildPromptWithPdf(String userPrompt, String pdfText) {
+        if (userPrompt == null || userPrompt.trim().isEmpty()) {
+            // If no user prompt, use PDF content as the main prompt
+            return "Generate a course based on the following course structure document:\n\n" + pdfText;
+        } else {
+            // Combine user prompt with PDF content
+            return "Course Structure Document:\n" + pdfText + "\n\nUser Instructions:\n" + userPrompt;
+        }
     }
     
     @GetMapping("/generate/jobs/{jobId}")

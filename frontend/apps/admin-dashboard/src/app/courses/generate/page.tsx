@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Sparkles, Loader2, ArrowLeft } from 'lucide-react'
+import { Sparkles, Loader2, ArrowLeft, FileText, X } from 'lucide-react'
 import { coursesApi, courseGenerationIndexApi } from '@/lib/api'
 import type { GenerateCourseRequest, CourseGenerationIndex } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -29,6 +29,7 @@ export default function GenerateCoursePage() {
   const { toast } = useToast()
   const [prompt, setPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [referenceIndexes, setReferenceIndexes] = useState<CourseGenerationIndex[]>([])
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<string[]>([])
   const [writingFormats, setWritingFormats] = useState<CourseGenerationIndex[]>([])
@@ -62,11 +63,11 @@ export default function GenerateCoursePage() {
   }
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) {
+    if (!prompt.trim() && !pdfFile) {
       toast({
         variant: 'destructive',
         title: 'Validation Error',
-        description: 'Please enter a course description prompt',
+        description: 'Please enter a course description prompt or upload a PDF file',
       })
       return
     }
@@ -74,7 +75,7 @@ export default function GenerateCoursePage() {
     setGenerating(true)
     try {
       const request: GenerateCourseRequest = {
-        prompt: prompt.trim(),
+        prompt: prompt.trim() || '', // Allow empty prompt if PDF is provided
         referenceIndexIds: selectedReferenceIds.length > 0 ? selectedReferenceIds : undefined,
         writingFormatId: selectedWritingFormatId || undefined,
         writingFormat: customWritingFormat.trim() || undefined,
@@ -84,6 +85,7 @@ export default function GenerateCoursePage() {
         tags: options.tags ? options.tags.split(',').map(t => t.trim()) : undefined,
         certificateEligible: options.certificateEligible || undefined,
         maxCompletionDays: options.maxCompletionDays ? parseInt(options.maxCompletionDays) : undefined,
+        pdfFile: pdfFile || undefined,
       }
 
       const course = await coursesApi.generateCourse(request)
@@ -121,17 +123,88 @@ export default function GenerateCoursePage() {
               <div className="space-y-6">
                 <div className="space-y-2">
                   <Label>
-                    Course Description Prompt <span className="text-destructive">*</span>
+                    Course Description Prompt {!pdfFile && <span className="text-destructive">*</span>}
                   </Label>
                   <Textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="e.g., Create a 5-module course on Python programming for beginners. Include basics, data structures, functions, OOP, and file handling. Each module should have 4-5 lectures."
+                    placeholder="e.g., Create a 5-module course on Python programming for beginners. Include basics, data structures, functions, OOP, and file handling. Each module should have 4-5 lectures. Or leave empty if uploading a PDF with course structure."
                     rows={6}
                     disabled={generating}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Be specific about course length, modules, topics, difficulty level, etc.
+                    Be specific about course length, modules, topics, difficulty level, etc. You can also upload a PDF with the course structure.
+                  </p>
+                </div>
+
+                {/* PDF Upload */}
+                <div className="space-y-2">
+                  <Label>Course Structure PDF (Optional)</Label>
+                  {!pdfFile ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                      <input
+                        type="file"
+                        id="pdf-upload"
+                        accept=".pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            if (file.type !== 'application/pdf') {
+                              toast({
+                                variant: 'destructive',
+                                title: 'Invalid File Type',
+                                description: 'Please upload a PDF file',
+                              })
+                              return
+                            }
+                            if (file.size > 50 * 1024 * 1024) {
+                              toast({
+                                variant: 'destructive',
+                                title: 'File Too Large',
+                                description: 'PDF file must be less than 50MB',
+                              })
+                              return
+                            }
+                            setPdfFile(file)
+                          }
+                        }}
+                        className="hidden"
+                        disabled={generating}
+                      />
+                      <label htmlFor="pdf-upload" className="cursor-pointer">
+                        <FileText className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                        <p className="text-sm text-gray-600">
+                          Click to upload a PDF file with course structure
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          PDF files up to 50MB are supported
+                        </p>
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="border rounded-lg p-4 flex items-center justify-between bg-gray-50">
+                      <div className="flex items-center space-x-3">
+                        <FileText className="h-5 w-5 text-blue-600" />
+                        <div>
+                          <p className="text-sm font-medium">{pdfFile.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPdfFile(null)}
+                        disabled={generating}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    Upload a PDF file containing the course structure. The AI will extract the content and generate the course based on it. You can also add additional instructions in the prompt above.
                   </p>
                 </div>
 
@@ -302,7 +375,7 @@ export default function GenerateCoursePage() {
             </Button>
             <Button
               onClick={handleGenerate}
-              disabled={generating || !prompt.trim()}
+              disabled={generating || (!prompt.trim() && !pdfFile)}
             >
               {generating ? (
                 <>

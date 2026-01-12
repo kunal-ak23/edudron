@@ -246,8 +246,29 @@ export class CoursesApi {
   }
 
   async generateCourse(request: GenerateCourseRequest): Promise<Course> {
-    const response = await this.apiClient.post<Course>('/content/courses/generate', request)
-    return response.data
+    // Check if request includes a PDF file
+    if (request.pdfFile) {
+      // Use multipart form data for PDF upload
+      const formData = new FormData()
+      if (request.prompt) formData.append('prompt', request.prompt)
+      if (request.categoryId) formData.append('categoryId', request.categoryId)
+      if (request.difficultyLevel) formData.append('difficultyLevel', request.difficultyLevel)
+      if (request.language) formData.append('language', request.language)
+      if (request.tags && request.tags.length > 0) formData.append('tags', request.tags.join(','))
+      if (request.certificateEligible !== undefined) formData.append('certificateEligible', String(request.certificateEligible))
+      if (request.maxCompletionDays) formData.append('maxCompletionDays', String(request.maxCompletionDays))
+      if (request.referenceIndexIds && request.referenceIndexIds.length > 0) formData.append('referenceIndexIds', request.referenceIndexIds.join(','))
+      if (request.writingFormatId) formData.append('writingFormatId', request.writingFormatId)
+      if (request.writingFormat) formData.append('writingFormat', request.writingFormat)
+      formData.append('pdfFile', request.pdfFile)
+      
+      const response = await this.apiClient.postForm<Course>('/content/courses/generate', formData)
+      return response.data
+    } else {
+      // Use JSON for regular requests (backward compatibility)
+      const response = await this.apiClient.post<Course>('/content/courses/generate', request)
+      return response.data
+    }
   }
 }
 
@@ -262,6 +283,7 @@ export interface GenerateCourseRequest {
   referenceIndexIds?: string[]
   writingFormatId?: string
   writingFormat?: string
+  pdfFile?: File
 }
 
 export interface CourseGenerationIndex {

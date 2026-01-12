@@ -2,6 +2,8 @@ package com.datagami.edudron.content.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 public class GenerateCourseRequest {
     @NotBlank(message = "Prompt is required")
@@ -21,6 +23,10 @@ public class GenerateCourseRequest {
     // Writing format ID or direct writing format text
     private String writingFormatId;
     private String writingFormat;
+    
+    // PDF file for course structure (transient, not serialized)
+    @JsonIgnore
+    private transient MultipartFile pdfFile;
     
     // Getters and Setters
     public String getPrompt() {
@@ -101,6 +107,14 @@ public class GenerateCourseRequest {
     
     public void setWritingFormat(String writingFormat) {
         this.writingFormat = writingFormat;
+    }
+    
+    public MultipartFile getPdfFile() {
+        return pdfFile;
+    }
+    
+    public void setPdfFile(MultipartFile pdfFile) {
+        this.pdfFile = pdfFile;
     }
 }
 
