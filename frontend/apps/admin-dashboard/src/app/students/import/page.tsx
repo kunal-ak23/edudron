@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -25,6 +25,7 @@ import { extractErrorMessage } from '@/lib/error-utils'
 export default function BulkImportPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user, isAuthenticated } = useAuth()
   const [file, setFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<BulkStudentImportResult | null>(null)
@@ -123,14 +124,35 @@ Bob Johnson,bob.johnson@example.com,,,,inst_123,,,`
     }
   }
 
-  return (
-    <ProtectedRoute>
-      <div>
-        <div className="mb-6">
-          <p className="text-gray-600">Import students from CSV or Excel file</p>
-        </div>
+  // Role-based access control
+  useEffect(() => {
+    if (!isAuthenticated() || !user) {
+      router.push('/login')
+      return
+    }
+    
+    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
+    if (!allowedRoles.includes(user.role)) {
+      router.push('/unauthorized')
+    }
+  }, [user, isAuthenticated, router])
 
-        <div className="grid gap-6">
+  if (!user || !isAuthenticated()) {
+    return null
+  }
+
+  const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
+  if (!allowedRoles.includes(user.role)) {
+    return null
+  }
+
+  return (
+    <div>
+      <div className="mb-6">
+        <p className="text-gray-600">Import students from CSV or Excel file</p>
+      </div>
+
+      <div className="grid gap-6">
           {/* Import Options */}
           <Card>
             <CardHeader>
@@ -319,7 +341,6 @@ Bob Johnson,bob.johnson@example.com,,,,inst_123,,,`
             </Card>
           )}
       </div>
-    </ProtectedRoute>
   )
 }
 

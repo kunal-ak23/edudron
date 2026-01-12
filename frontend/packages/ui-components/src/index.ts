@@ -22,6 +22,7 @@ export {
 export type { CardProps } from './components/Card'
 
 export { default as ProtectedRoute } from './components/ProtectedRoute'
+export type { ProtectedRouteProps } from './components/ProtectedRoute'
 
 // Course Components
 export { default as CourseCard } from './components/CourseCard'

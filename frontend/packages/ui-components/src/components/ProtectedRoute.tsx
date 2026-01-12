@@ -2,13 +2,13 @@
 
 import React, { useEffect, useState } from 'react'
 
-interface ProtectedRouteProps {
+export interface ProtectedRouteProps {
   children: React.ReactNode
   requiredRoles?: string[]
   redirectTo?: string
 }
 
-export default function ProtectedRoute({ 
+function ProtectedRoute({ 
   children, 
   requiredRoles,
   redirectTo = '/login' 
@@ -90,3 +90,7 @@ export default function ProtectedRoute({
 
   return <>{children}</>
 }
+
+ProtectedRoute.displayName = 'ProtectedRoute'
+
+export default ProtectedRoute
