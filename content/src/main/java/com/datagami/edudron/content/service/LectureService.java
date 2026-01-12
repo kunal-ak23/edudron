@@ -33,6 +33,11 @@ public class LectureService {
     
     public LectureDTO createLecture(String sectionId, String title, String description, 
                                    Lecture.ContentType contentType) {
+        return createLecture(sectionId, title, description, contentType, null);
+    }
+    
+    public LectureDTO createLecture(String sectionId, String title, String description, 
+                                   Lecture.ContentType contentType, Integer durationSeconds) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -56,6 +61,9 @@ public class LectureService {
         lecture.setDescription(description);
         lecture.setContentType(contentType);
         lecture.setSequence(nextSequence);
+        if (durationSeconds != null) {
+            lecture.setDurationSeconds(durationSeconds);
+        }
         
         Lecture saved = lectureRepository.save(lecture);
         return toDTO(saved);

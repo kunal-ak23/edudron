@@ -75,8 +75,9 @@ export default function LectureEditPage() {
   const loadLectureData = async () => {
     setLoading(true)
     try {
-      if (isNewSubLecture) {
+      if (isNewSubLecture && !currentLectureId) {
         // Creating a new sub-lecture - no data to load, just set up empty form
+        // Only reset if currentLectureId is not already set (to avoid resetting after save)
         setFormData({
           title: '',
           description: '',
@@ -86,6 +87,7 @@ export default function LectureEditPage() {
           contentUrl: ''
         })
         setTextContents([])
+        setCurrentLectureId(null) // Reset to null for new sub-lectures
         initialDataRef.current = JSON.stringify(formData)
         initialTextContentsRef.current = JSON.stringify([])
       } else if (isSubLecture && subLectureId) {
@@ -106,11 +108,16 @@ export default function LectureEditPage() {
           contentUrl: data.contentUrl || ''
         }
         setFormData(formDataValue)
-        const textItems = await loadTextContents(subLectureId)
+        const { allItems, textItems, updatedFormData } = await loadTextContents(subLectureId, formDataValue)
         
-        // Store initial state after all data is loaded
-        initialDataRef.current = JSON.stringify(formDataValue)
-        initialTextContentsRef.current = JSON.stringify(textItems)
+        // Don't set initial refs here - let useEffect handle it after state stabilizes
+        console.log('[EditPage] Loaded sub-lecture data:', {
+          formDataValue,
+          updatedFormData,
+          wasFormDataUpdated: !!updatedFormData,
+          allItems,
+          textItems
+        })
       } else {
         // Load main lecture
         const data = await lecturesApi.getLecture(courseId, lectureId)
@@ -125,11 +132,16 @@ export default function LectureEditPage() {
           contentUrl: data.contentUrl || ''
         }
         setFormData(formDataValue)
-        const textItems = await loadTextContents(lectureId)
+        const { allItems, textItems, updatedFormData } = await loadTextContents(lectureId, formDataValue)
         
-        // Store initial state after all data is loaded
-        initialDataRef.current = JSON.stringify(formDataValue)
-        initialTextContentsRef.current = JSON.stringify(textItems)
+        // Don't set initial refs here - let useEffect handle it after state stabilizes
+        console.log('[EditPage] Loaded main lecture data:', {
+          formDataValue,
+          updatedFormData,
+          wasFormDataUpdated: !!updatedFormData,
+          allItems,
+          textItems
+        })
       }
     } catch (error) {
       console.error('Failed to load lecture:', error)
@@ -144,23 +156,32 @@ export default function LectureEditPage() {
     }
   }
 
-  const loadTextContents = async (lectureId: string): Promise<LectureContent[]> => {
+  const loadTextContents = async (lectureId: string, currentFormData?: typeof formData): Promise<{ allItems: LectureContent[], textItems: LectureContent[], updatedFormData?: typeof formData }> => {
     try {
       const media = await lecturesApi.getLectureMedia(lectureId)
-      const textItems = media.filter((content: LectureContent) => content.contentType === 'TEXT')
-      setTextContents(textItems)
+      // Load both TEXT and VIDEO content (VIDEO for transcript upload)
+      const allItems = media.filter((content: LectureContent) => 
+        content.contentType === 'TEXT' || content.contentType === 'VIDEO'
+      )
+      setTextContents(allItems)
       
       // Also check for video content to set contentUrl
+      let updatedFormData = currentFormData
       const videoContent = media.find((content: LectureContent) => content.contentType === 'VIDEO')
       if (videoContent && (videoContent.videoUrl || videoContent.fileUrl)) {
-        setFormData(prev => ({ ...prev, contentUrl: videoContent.videoUrl || videoContent.fileUrl || '' }))
+        const videoUrl = videoContent.videoUrl || videoContent.fileUrl || ''
+        setFormData(prev => ({ ...prev, contentUrl: videoUrl }))
+        // Also update our local copy for immediate use
+        updatedFormData = currentFormData ? { ...currentFormData, contentUrl: videoUrl } : undefined
       }
       
-      return textItems
+      // Return both allItems and textItems, plus updated form data if it was modified
+      const textItems = allItems.filter((content: LectureContent) => content.contentType === 'TEXT')
+      return { allItems, textItems, updatedFormData }
     } catch (error) {
       console.error('Failed to load text contents:', error)
       setTextContents([])
-      return []
+      return { allItems: [], textItems: [], updatedFormData: undefined }
     }
   }
 
@@ -174,18 +195,48 @@ export default function LectureEditPage() {
         })
       } else if (isNewSubLecture) {
         // Create new sub-lecture
-        const savedLecture = await lecturesApi.createSubLecture(courseId, lectureId, {
+        console.log('[EditPage] Creating new sub-lecture with data:', {
           title: formData.title,
           description: formData.description,
           contentType: formData.contentType,
           durationSeconds: formData.durationSeconds
         })
         
+        let savedLecture: Lecture | undefined
+        try {
+          console.log('[EditPage] Calling lecturesApi.createSubLecture...')
+          savedLecture = await lecturesApi.createSubLecture(courseId, lectureId, {
+            title: formData.title,
+            description: formData.description,
+            contentType: formData.contentType,
+            durationSeconds: formData.durationSeconds
+          })
+          console.log('[EditPage] createSubLecture returned:', savedLecture)
+          console.log('[EditPage] savedLecture type:', typeof savedLecture)
+          console.log('[EditPage] savedLecture is undefined?', savedLecture === undefined)
+          console.log('[EditPage] savedLecture is null?', savedLecture === null)
+        } catch (error: any) {
+          console.error('[EditPage] Failed to create sub-lecture - error caught:', error)
+          console.error('[EditPage] Error message:', error?.message)
+          console.error('[EditPage] Error stack:', error?.stack)
+          throw new Error(`Failed to create sub-lecture: ${error.message || 'Unknown error'}`)
+        }
+        
+        // Ensure savedLecture is defined and has an id
+        if (!savedLecture) {
+          console.error('[EditPage] savedLecture is undefined or null after creation')
+          throw new Error('Failed to create sub-lecture: No lecture object returned from server')
+        }
+        
+        if (!savedLecture.id) {
+          console.error('[EditPage] savedLecture missing id property:', savedLecture)
+          throw new Error('Failed to create sub-lecture: Invalid response from server - missing id')
+        }
+        
+        console.log('[EditPage] Setting currentLectureId to:', savedLecture.id)
+        // Set currentLectureId immediately so FileUpload is enabled
         setCurrentLectureId(savedLecture.id)
         setLecture(savedLecture)
-        
-        // Note: Video upload should be done after creation using the FileUpload component
-        // The FileUpload will handle the upload once the lecture is created
         
         // Save all text content items
         for (const content of textContents) {
@@ -198,12 +249,14 @@ export default function LectureEditPage() {
           description: 'The sub-lecture has been created successfully. You can now upload the video file.',
         })
         
-        // Update URL to remove newSubLecture flag and set subLectureId so they can upload
-        router.replace(`/courses/${courseId}/lectures/${lectureId}/edit?subLectureId=${savedLecture.id}`)
-        
         // Update state to reflect that we're now editing (not creating)
-        // This allows video upload to work
         setHasUnsavedChanges(false)
+        
+        // Update URL to remove newSubLecture flag and set subLectureId
+        // Use replace to update URL without adding to history
+        // The currentLectureId is already set, so FileUpload will remain enabled
+        router.replace(`/courses/${courseId}/lectures/${lectureId}/edit?subLectureId=${savedLecture.id}`, { scroll: false })
+        
         return // Don't navigate back yet - allow user to upload video
       } else if (subLectureId && lecture) {
         await lecturesApi.updateSubLecture(courseId, lectureId, subLectureId, {
@@ -216,9 +269,32 @@ export default function LectureEditPage() {
         
         // Note: Video URL is updated via uploadVideo API, not through updateSubLecture
         
-        // Save all text content items
-        for (const content of textContents) {
-          await lecturesApi.updateTextContent(content.id, content.textContent || '', content.title || '')
+        // Save all text content items (only TEXT type, not VIDEO)
+        // Double-check: filter out any non-TEXT items and ensure they have IDs
+        console.log('[EditPage] Saving text contents. Total items:', textContents.length)
+        const textOnlyContents = textContents.filter(content => {
+          const isText = content?.contentType === 'TEXT'
+          const hasId = !!content?.id
+          if (!isText && hasId) {
+            console.warn(`[EditPage] Skipping non-TEXT content item ${content.id} with type ${content?.contentType}`)
+          }
+          return isText && hasId
+        })
+        console.log('[EditPage] Filtered to TEXT items:', textOnlyContents.length)
+        
+        for (const content of textOnlyContents) {
+          try {
+            // Triple-check before making the API call
+            if (content.contentType !== 'TEXT') {
+              console.error(`[EditPage] Attempted to update non-TEXT content ${content.id} with type ${content.contentType}`)
+              continue
+            }
+            console.log(`[EditPage] Updating text content ${content.id}`)
+            await lecturesApi.updateTextContent(content.id, content.textContent || '', content.title || '')
+          } catch (error) {
+            console.error(`[EditPage] Failed to update text content ${content.id}:`, error)
+            // Continue with other content items even if one fails
+          }
         }
         
         toast({
@@ -252,10 +328,32 @@ export default function LectureEditPage() {
     }
   }
 
+  // Set initial refs after data is loaded and state has stabilized (only once)
+  useEffect(() => {
+    // Only set initial refs if they haven't been set yet, loading is complete, and we have data
+    if (!initialDataRef.current && !loading && formData.title && textContents.length >= 0) {
+      const serializedFormData = JSON.stringify(formData)
+      const serializedTextContents = JSON.stringify(textContents)
+      initialDataRef.current = serializedFormData
+      initialTextContentsRef.current = serializedTextContents
+      console.log('[EditPage] Set initial refs (useEffect):', {
+        formData,
+        textContents,
+        serializedFormDataLength: serializedFormData.length,
+        serializedTextContentsLength: serializedTextContents.length,
+        serializedFormData: serializedFormData.substring(0, 200)
+      })
+    }
+  }, [formData, textContents, loading])
+
   // Track unsaved changes
   useEffect(() => {
     // Only check for changes if initial state has been set
     if (!initialDataRef.current || !initialTextContentsRef.current) {
+      console.log('[EditPage] Unsaved changes check skipped - initial refs not set:', {
+        hasInitialData: !!initialDataRef.current,
+        hasInitialTextContents: !!initialTextContentsRef.current
+      })
       setHasUnsavedChanges(false)
       return
     }
@@ -265,6 +363,23 @@ export default function LectureEditPage() {
     
     const hasFormChanges = currentData !== initialDataRef.current
     const hasContentChanges = currentTextContents !== initialTextContentsRef.current
+    
+    console.log('[EditPage] Unsaved changes check:', {
+      currentData: currentData,
+      initialData: initialDataRef.current,
+      currentDataLength: currentData.length,
+      initialDataLength: initialDataRef.current.length,
+      hasFormChanges,
+      currentTextContents: currentTextContents.substring(0, 200),
+      initialTextContents: initialTextContentsRef.current.substring(0, 200),
+      currentTextContentsLength: currentTextContents.length,
+      initialTextContentsLength: initialTextContentsRef.current.length,
+      hasContentChanges,
+      textContentsCount: textContents.length,
+      willSetUnsaved: hasFormChanges || hasContentChanges,
+      formDataKeys: Object.keys(formData),
+      formDataValues: formData
+    })
     
     if (hasFormChanges || hasContentChanges) {
       setHasUnsavedChanges(true)
@@ -417,11 +532,11 @@ export default function LectureEditPage() {
                     + Add Content Section
                   </Button>
                 </div>
-                {textContents.length === 0 ? (
+                {textContents.filter(content => content != null && content.contentType === 'TEXT').length === 0 ? (
                   <p className="text-sm text-gray-500">No content sections yet. Click &quot;Add Content Section&quot; to create one.</p>
                 ) : (
                   <div className="space-y-4">
-                    {textContents.filter(content => content != null).map((content, index) => (
+                    {textContents.filter(content => content != null && content.contentType === 'TEXT').map((content, index) => (
                       <div key={content.id} className="border border-gray-200 rounded-lg p-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <Label className="text-sm font-medium">
@@ -459,6 +574,11 @@ export default function LectureEditPage() {
                           <Input
                             value={content.title || ''}
                             onChange={(e) => {
+                              // Only update if this is a TEXT content item
+                              if (content.contentType !== 'TEXT') {
+                                console.warn(`Attempted to update title for non-TEXT content ${content.id} with type ${content.contentType}`)
+                                return
+                              }
                               const newTitle = e.target.value
                               const updatedContents = textContents.map(c =>
                                 c.id === content.id ? { ...c, title: newTitle } : c
@@ -475,6 +595,11 @@ export default function LectureEditPage() {
                             <SplitMarkdownEditor
                               content={content.textContent || ''}
                               onChange={(newContent) => {
+                                // Only update if this is a TEXT content item
+                                if (content.contentType !== 'TEXT') {
+                                  console.warn(`Attempted to update textContent for non-TEXT content ${content.id} with type ${content.contentType}`)
+                                  return
+                                }
                                 const updatedContents = textContents.map(c =>
                                   c.id === content.id ? { ...c, textContent: newContent } : c
                                 )
@@ -518,6 +643,7 @@ export default function LectureEditPage() {
                   <div className="space-y-2">
                     <Label>Video File</Label>
                     <FileUpload
+                      label="Video File"
                       accept="video/*"
                       maxSize={500 * 1024 * 1024} // 500MB
                       value={formData.contentUrl || ''}
@@ -532,11 +658,49 @@ export default function LectureEditPage() {
                         setFormData({ ...formData, contentUrl: url })
                         return url
                       }}
-                      helperText={isNewSubLecture ? "Please save the sub-lecture first, then upload the video file (MP4, MOV, etc. up to 500MB)" : "Upload a video file for this lecture (MP4, MOV, etc. up to 500MB)"}
-                      disabled={!currentLectureId}
+                      helperText={!currentLectureId ? "Please save the sub-lecture first, then upload the video file (MP4, MOV, etc. up to 500MB)" : "Upload a video file for this lecture (MP4, MOV, etc. up to 500MB)"}
+                      disabled={!currentLectureId || saving}
                     />
                   </div>
                 )}
+
+                {/* Transcript Upload (only for VIDEO content type with existing video) */}
+                {formData.contentType === 'VIDEO' && currentLectureId && (() => {
+                  const videoContent = textContents.find((c: any) => c.contentType === 'VIDEO') as any
+                  const hasVideo = !!videoContent
+                  return hasVideo ? (
+                    <div className="space-y-2 border-t pt-6">
+                      <Label>Transcript File</Label>
+                      <FileUpload
+                        label="Transcript File"
+                        accept=".txt,.vtt,.srt,.doc,.docx"
+                        maxSize={10 * 1024 * 1024} // 10MB
+                        value={(videoContent as any)?.transcriptUrl || ''}
+                        onChange={(url) => {
+                          // Update the video content's transcript URL
+                          const updatedContents = textContents.map((c: any) =>
+                            c.id === videoContent.id ? { ...c, transcriptUrl: url } : c
+                          )
+                          setTextContents(updatedContents)
+                        }}
+                        onUpload={async (file) => {
+                          if (!currentLectureId) {
+                            throw new Error('Please save the sub-lecture first, then upload the transcript')
+                          }
+                          const content = await (lecturesApi as any).uploadTranscript(currentLectureId, file)
+                          // Update the video content with the new transcript URL
+                          const updatedContents = textContents.map((c: any) =>
+                            c.id === videoContent.id ? { ...c, transcriptUrl: (content as any).transcriptUrl } : c
+                          )
+                          setTextContents(updatedContents)
+                          return (content as any).transcriptUrl || ''
+                        }}
+                        helperText="Upload a transcript file for this video (TXT, VTT, SRT, DOC, DOCX up to 10MB)"
+                        disabled={!currentLectureId || saving}
+                      />
+                    </div>
+                  ) : null
+                })()}
 
                 <div className="space-y-2">
                   <Label>Duration (seconds)</Label>

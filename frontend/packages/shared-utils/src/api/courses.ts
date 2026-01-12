@@ -71,6 +71,8 @@ export interface LectureContent {
   description?: string
   fileUrl?: string
   videoUrl?: string
+  transcriptUrl?: string
+  subtitleUrls?: any
   textContent?: string
   externalUrl?: string
   embeddedCode?: string

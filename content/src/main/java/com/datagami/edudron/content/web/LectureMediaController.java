@@ -97,5 +97,18 @@ public class LectureMediaController {
         LectureContentDTO content = lectureMediaService.updateTextContent(contentId, textContent, title);
         return ResponseEntity.ok(content);
     }
+
+    @PostMapping("/{lectureId}/media/transcript")
+    @Operation(summary = "Upload transcript", description = "Upload a transcript file for a video lecture")
+    public ResponseEntity<LectureContentDTO> uploadTranscript(
+            @PathVariable String lectureId,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            LectureContentDTO content = lectureMediaService.uploadTranscript(lectureId, file);
+            return ResponseEntity.status(HttpStatus.CREATED).body(content);
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }
 

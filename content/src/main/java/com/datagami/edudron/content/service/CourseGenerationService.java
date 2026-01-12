@@ -145,7 +145,8 @@ public class CourseGenerationService {
                             section.getId(),
                             lectureInfo.getTitle(),
                             lectureInfo.getDescription(),
-                            Lecture.ContentType.TEXT
+                            Lecture.ContentType.TEXT,
+                            lectureInfo.getDurationSeconds()
                         );
                     
                     // Generate full lecture content
@@ -295,7 +296,8 @@ public class CourseGenerationService {
                         section.getId(),
                         lectureInfo.getTitle(),
                         lectureInfo.getDescription(),
-                        Lecture.ContentType.TEXT
+                        Lecture.ContentType.TEXT,
+                        lectureInfo.getDurationSeconds()
                     );
                 
                 // Generate full lecture content

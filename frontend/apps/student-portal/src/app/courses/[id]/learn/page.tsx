@@ -47,6 +47,10 @@ export default function LearnPage() {
   // Notes state
   const [notes, setNotes] = useState<Note[]>([])
   const [showNotesSidebar, setShowNotesSidebar] = useState(false)
+  
+  // Transcript state
+  const [transcriptText, setTranscriptText] = useState<string | null>(null)
+  const [loadingTranscript, setLoadingTranscript] = useState(false)
 
   // Refs for scrollable containers
   const mainContentRef = useRef<HTMLDivElement>(null)
@@ -351,6 +355,37 @@ export default function LearnPage() {
     setSelectedSection(null) // Clear module selection when selecting a lecture
     // Position will be saved via useEffect hook
     // Notes will be loaded via useEffect hook when selectedLecture changes
+    
+    // Load transcript when selectedLecture changes
+    useEffect(() => {
+      if (selectedLecture?.contentType === 'VIDEO') {
+        const videoContent = selectedLecture.contents?.find((c: any) => 
+          c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
+        )
+        const transcriptUrl = (videoContent as any)?.transcriptUrl
+        
+        if (transcriptUrl) {
+          setLoadingTranscript(true)
+          fetch(transcriptUrl)
+            .then(res => res.text())
+            .then(text => {
+              setTranscriptText(text)
+              setLoadingTranscript(false)
+            })
+            .catch(err => {
+              console.error('Failed to load transcript:', err)
+              setTranscriptText(null)
+              setLoadingTranscript(false)
+            })
+        } else {
+          setTranscriptText(null)
+          setLoadingTranscript(false)
+        }
+      } else {
+        setTranscriptText(null)
+        setLoadingTranscript(false)
+      }
+    }, [selectedLecture?.id, selectedLecture?.contents])
     
     // Smoothly scroll to top
     requestAnimationFrame(() => {
@@ -872,18 +907,33 @@ export default function LearnPage() {
                 </div>
 
                 {/* Video/Content Player */}
-                <div className="bg-black flex-1 flex items-center justify-center relative min-h-0">
-                  {selectedLecture.contentType === 'VIDEO' && selectedLecture.contentUrl ? (
-                    <div className="w-full h-full">
-                      <video
-                        controls
-                        className="w-full h-full"
-                        src={selectedLecture.contentUrl}
-                      >
-                        Your browser does not support the video tag.
-                      </video>
-                    </div>
-                  ) : selectedLecture.contentType === 'TEXT' ? (
+                <div className="bg-white flex-1 flex items-center justify-center relative min-h-0">
+                  {selectedLecture.contentType === 'VIDEO' ? (() => {
+                    // Find video URL from contents array
+                    const videoContent = selectedLecture.contents?.find((c: any) => 
+                      c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
+                    )
+                    const videoUrl = videoContent?.videoUrl || videoContent?.fileUrl || selectedLecture.contentUrl
+                    
+                    return videoUrl ? (
+                      <div className="w-full h-full flex items-center justify-center p-4">
+                        <div className="w-full max-w-7xl h-full max-h-[90vh] flex items-center justify-center">
+                          <video
+                            controls
+                            className="w-full h-full object-contain"
+                            src={videoUrl}
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-gray-600 text-center p-8">
+                        <p className="text-lg">Video not available</p>
+                        <p className="text-sm text-gray-400 mt-2">The video file has not been uploaded yet.</p>
+                      </div>
+                    )
+                  })() : selectedLecture.contentType === 'TEXT' ? (
                     <div ref={textContentRef} className="w-full h-full bg-white overflow-y-auto">
                       <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-6">
                         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">{selectedLecture.title}</h1>
@@ -1035,12 +1085,52 @@ export default function LearnPage() {
                   )}
                 </div>
 
-                {/* Content Below Video - Only for VIDEO content */}
+                {/* Text Content Below Video - Only for VIDEO content */}
                 {selectedLecture.contentType === 'VIDEO' && (
-                  <div className="border-t border-gray-200 bg-white pb-20 md:pb-4">
-                    <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-3">
-                      {/* Tab Content */}
-                      <div className="mb-6">
+                  <>
+                    {/* Text Content Section */}
+                    {(selectedLecture.description || (selectedLecture.contents && selectedLecture.contents.some((c: any) => c.contentType === 'TEXT' && c.textContent))) && (
+                      <div className="border-t border-gray-200 bg-white">
+                        <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-6">
+                          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">{selectedLecture.title}</h2>
+                          
+                          {/* Lecture Description */}
+                          {selectedLecture.description && (
+                            <div className="text-gray-700 mb-6 text-base sm:text-lg font-normal leading-relaxed">
+                              <MarkdownRenderer content={selectedLecture.description} />
+                            </div>
+                          )}
+                          
+                          {/* TEXT Content Items */}
+                          {selectedLecture.contents && selectedLecture.contents.length > 0 && (
+                            <div className="space-y-6">
+                              {selectedLecture.contents
+                                .filter((content: any) => content.contentType === 'TEXT' && content.textContent)
+                                .map((content: any, index: number) => (
+                                  <div key={content.id || index} className="border-t border-gray-100 pt-6 first:border-t-0 first:pt-0">
+                                    {content.title && content.title.trim() !== selectedLecture.title.trim() && (
+                                      <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">{content.title}</h3>
+                                    )}
+                                    <MarkdownWithHighlights
+                                      content={content.textContent}
+                                      notes={notes.filter(n => n.lectureId === selectedLecture.id)}
+                                      onAddNote={handleAddNote}
+                                      onUpdateNote={handleUpdateNote}
+                                      onDeleteNote={handleDeleteNote}
+                                    />
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Tab Section */}
+                    <div className="border-t border-gray-200 bg-white pb-20 md:pb-4">
+                      <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-3">
+                        {/* Tab Content */}
+                        <div className="mb-6">
                         {activeTab === 'transcript' && (
                           <div>
                             <div className="flex justify-between items-center mb-3">
@@ -1050,9 +1140,17 @@ export default function LearnPage() {
                               </select>
                             </div>
                             <div className="text-gray-700">
-                              <p className="text-sm text-gray-500 mb-3">
-                                Transcript will be available here once the video transcript is generated.
-                              </p>
+                              {loadingTranscript ? (
+                                <p className="text-sm text-gray-500 mb-3">Loading transcript...</p>
+                              ) : transcriptText ? (
+                                <div className="whitespace-pre-wrap text-sm leading-relaxed max-h-96 overflow-y-auto">
+                                  {transcriptText}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500 mb-3">
+                                  Transcript will be available here once the video transcript is uploaded.
+                                </p>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1211,9 +1309,10 @@ export default function LearnPage() {
                           </svg>
                         </button>
                       )}
-                    </div>
+                      </div>
                     </div>
                   </div>
+                  </>
                 )}
               </>
             ) : (

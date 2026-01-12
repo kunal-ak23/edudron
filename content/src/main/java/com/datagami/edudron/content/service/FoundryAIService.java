@@ -153,9 +153,26 @@ public class FoundryAIService {
                 "title": "Section title",
                 "description": "Section description",
                 "lectures": [
-                    {"title": "Lecture title", "description": "Brief lecture description"}
+                    {
+                        "title": "Lecture title",
+                        "description": "Brief lecture description",
+                        "durationSeconds": <estimated time in seconds for an average student to learn this lecture properly>
+                    }
                 ]
             }
+            
+            IMPORTANT: For each lecture, estimate the duration in seconds (durationSeconds) based on:
+            - The complexity and depth of the content
+            - Typical reading/learning speed (average student reads ~200-250 words per minute)
+            - Time needed to understand concepts, practice, and absorb the material
+            - For video content: actual video length + time for comprehension
+            - For text content: reading time + time for reflection and understanding
+            - Include time for examples, exercises, and practical application
+            
+            Examples:
+            - Short introductory lecture: 300-600 seconds (5-10 minutes)
+            - Standard lecture with concepts and examples: 900-1800 seconds (15-30 minutes)
+            - Comprehensive deep-dive lecture: 2400-3600 seconds (40-60 minutes)
             
             Generate %d sections with approximately %d lectures each.
             Return ONLY valid JSON array, no additional text.
@@ -192,6 +209,9 @@ public class FoundryAIService {
                         LectureInfo lecture = new LectureInfo();
                         lecture.setTitle(lectureNode.get("title").asText());
                         lecture.setDescription(lectureNode.has("description") ? lectureNode.get("description").asText() : "");
+                        if (lectureNode.has("durationSeconds")) {
+                            lecture.setDurationSeconds(lectureNode.get("durationSeconds").asInt());
+                        }
                         lectures.add(lecture);
                     }
                 }
@@ -318,9 +338,26 @@ public class FoundryAIService {
                 "title": "Lecture title",
                 "description": "Lecture description",
                 "lectures": [
-                    {"title": "Sub-lecture title", "description": "Brief sub-lecture description"}
+                    {
+                        "title": "Sub-lecture title",
+                        "description": "Brief sub-lecture description",
+                        "durationSeconds": <estimated time in seconds for an average student to learn this sub-lecture properly>
+                    }
                 ]
             }
+            
+            IMPORTANT: For each sub-lecture, estimate the duration in seconds (durationSeconds) based on:
+            - The complexity and depth of the content
+            - Typical reading/learning speed (average student reads ~200-250 words per minute)
+            - Time needed to understand concepts, practice, and absorb the material
+            - For video content: actual video length + time for comprehension
+            - For text content: reading time + time for reflection and understanding
+            - Include time for examples, exercises, and practical application
+            
+            Examples:
+            - Short introductory sub-lecture: 300-600 seconds (5-10 minutes)
+            - Standard sub-lecture with concepts and examples: 900-1800 seconds (15-30 minutes)
+            - Comprehensive deep-dive sub-lecture: 2400-3600 seconds (40-60 minutes)
             
             Generate 3-8 sub-lectures that comprehensively cover the topic in the prompt.
             Return ONLY valid JSON object, no additional text.
@@ -354,6 +391,9 @@ public class FoundryAIService {
                     LectureInfo lecture = new LectureInfo();
                     lecture.setTitle(lectureNode.get("title").asText());
                     lecture.setDescription(lectureNode.has("description") ? lectureNode.get("description").asText() : "");
+                    if (lectureNode.has("durationSeconds")) {
+                        lecture.setDurationSeconds(lectureNode.get("durationSeconds").asInt());
+                    }
                     lectures.add(lecture);
                 }
             }
@@ -679,11 +719,14 @@ public class FoundryAIService {
     public static class LectureInfo {
         private String title;
         private String description;
+        private Integer durationSeconds;
         
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
+        public Integer getDurationSeconds() { return durationSeconds; }
+        public void setDurationSeconds(Integer durationSeconds) { this.durationSeconds = durationSeconds; }
     }
 }
 

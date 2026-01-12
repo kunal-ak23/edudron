@@ -37,16 +37,66 @@ export class LecturesApi {
   }
 
   async createSubLecture(courseId: string, lectureId: string, request: CreateLectureRequest): Promise<Lecture> {
-    // Use the section-based endpoint: /api/sections/{sectionId}/lectures
-    const response = await this.apiClient.post<Lecture>(
-      `/content/api/sections/${lectureId}/lectures`,
-      {
-        title: request.title,
-        description: request.description,
-        contentType: request.contentType || 'TEXT'
+    try {
+      console.log('[lecturesApi.createSubLecture] Starting...')
+      // Use the section-based endpoint: /api/sections/{sectionId}/lectures
+      const response = await this.apiClient.post<Lecture>(
+        `/content/api/sections/${lectureId}/lectures`,
+        {
+          title: request.title,
+          description: request.description,
+          contentType: request.contentType || 'TEXT'
+        }
+      )
+      
+      console.log('[lecturesApi.createSubLecture] Response received:', response)
+      console.log('[lecturesApi.createSubLecture] Response type:', typeof response)
+      console.log('[lecturesApi.createSubLecture] Response keys:', response && typeof response === 'object' ? Object.keys(response) : 'N/A')
+      console.log('[lecturesApi.createSubLecture] Has id?', response && typeof response === 'object' && 'id' in response)
+      console.log('[lecturesApi.createSubLecture] Has data?', response && typeof response === 'object' && 'data' in response)
+      
+      // The backend returns the lecture DTO directly: {"id":"...","title":"...",...}
+      // ApiClient.post returns axios response.data, which is the lecture object directly
+      // But TypeScript types it as ApiResponse<Lecture> = { data: Lecture }
+      // At runtime, response IS the lecture object (not wrapped)
+      
+      let lecture: Lecture | null = null
+      
+      // Check if response itself is the lecture (has 'id' property)
+      if (response && typeof response === 'object' && 'id' in response && !Array.isArray(response)) {
+        console.log('[lecturesApi.createSubLecture] Response is lecture directly')
+        lecture = response as unknown as Lecture
       }
-    )
-    return response.data
+      // Check if response has a 'data' property (wrapped in ApiResponse format)
+      else if (response && typeof response === 'object' && 'data' in response) {
+        const data = (response as any).data
+        console.log('[lecturesApi.createSubLecture] Response has data property:', data)
+        if (data && typeof data === 'object' && 'id' in data) {
+          console.log('[lecturesApi.createSubLecture] Found lecture in response.data')
+          lecture = data as Lecture
+        }
+      }
+      
+      console.log('[lecturesApi.createSubLecture] Extracted lecture:', lecture)
+      
+      if (!lecture) {
+        console.error('[lecturesApi.createSubLecture] Failed to extract lecture. Response:', JSON.stringify(response, null, 2))
+        throw new Error(`Invalid response from server: lecture object not found. Response: ${JSON.stringify(response)}`)
+      }
+      
+      if (!lecture.id) {
+        console.error('[lecturesApi.createSubLecture] Lecture missing id. Lecture:', JSON.stringify(lecture, null, 2))
+        throw new Error(`Invalid response from server: lecture object missing 'id' property. Response: ${JSON.stringify(response)}`)
+      }
+      
+      console.log('[lecturesApi.createSubLecture] Returning lecture with id:', lecture.id)
+      return lecture
+    } catch (error: any) {
+      console.error('[lecturesApi.createSubLecture] Error creating sub-lecture:', error)
+      console.error('[lecturesApi.createSubLecture] Error message:', error?.message)
+      console.error('[lecturesApi.createSubLecture] Error stack:', error?.stack)
+      throw error
+    }
   }
 
   async updateSubLecture(courseId: string, lectureId: string, subLectureId: string, request: UpdateLectureRequest): Promise<Lecture> {
@@ -97,6 +147,23 @@ export class LecturesApi {
       formData
     )
     return response.data
+  }
+
+  async uploadTranscript(lectureId: string, file: File): Promise<LectureContent> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await this.apiClient.postForm<LectureContent>(
+      `/content/api/lectures/${lectureId}/media/transcript`,
+      formData
+    )
+    // Handle both ApiResponse format and direct lecture content
+    if (response && typeof response === 'object' && 'id' in response) {
+      return response as unknown as LectureContent
+    }
+    if (response && typeof response === 'object' && 'data' in response) {
+      return (response as any).data as LectureContent
+    }
+    return response as unknown as LectureContent
   }
 
   async uploadAttachments(lectureId: string, files: File[]): Promise<LectureContent[]> {

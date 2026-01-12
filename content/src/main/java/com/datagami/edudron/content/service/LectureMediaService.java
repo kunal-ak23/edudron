@@ -248,6 +248,38 @@ public class LectureMediaService {
         return toDTO(saved);
     }
     
+    /**
+     * Upload transcript file for a video lecture
+     */
+    public LectureContentDTO uploadTranscript(String lectureId, MultipartFile file) throws IOException {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Verify lecture exists
+        Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
+        
+        // Find existing video content for this lecture
+        List<LectureContent> existingContent = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
+        LectureContent videoContent = existingContent.stream()
+            .filter(content -> content.getContentType() == LectureContent.ContentType.VIDEO)
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("No video content found for lecture: " + lectureId));
+        
+        // Upload transcript file to Azure Storage
+        String folder = "lectures/transcripts";
+        String transcriptUrl = uploadGenericFile(file, folder);
+        
+        // Update video content with transcript URL
+        videoContent.setTranscriptUrl(transcriptUrl);
+        
+        LectureContent saved = lectureContentRepository.save(videoContent);
+        return toDTO(saved);
+    }
+    
     private LectureContent.ContentType determineContentType(MultipartFile file) {
         String contentType = file.getContentType();
         String filename = file.getOriginalFilename();
