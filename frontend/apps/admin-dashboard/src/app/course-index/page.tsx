@@ -160,9 +160,10 @@ export default function CourseIndexPage() {
               Add Index
             </Button>
           </div>
+        </div>
 
-          {/* Reference Content Section */}
-          <Card className="mb-6">
+        {/* Reference Content Section */}
+        <Card className="mb-6">
             <CardHeader>
               <CardTitle>Reference Content</CardTitle>
             </CardHeader>
@@ -351,7 +352,6 @@ export default function CourseIndexPage() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-        </main>
       </div>
 
       <ConfirmationDialog
