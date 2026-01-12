@@ -45,7 +45,7 @@ export function CommitmentModal({ courseTitle, isOpen, onClose, onCommit }: Comm
           
           <div className="space-y-5 text-gray-900 mb-8 text-lg leading-relaxed">
             <p>
-              I'm beginning my learning in <strong className="font-semibold">{courseTitle}</strong>
+              I&apos;m beginning my learning in <strong className="font-semibold">{courseTitle}</strong>
             </p>
             <p>
               I know learning can be hard, but I have the patience, determination, and discipline to reach my goals.
@@ -53,7 +53,7 @@ export function CommitmentModal({ courseTitle, isOpen, onClose, onCommit }: Comm
           </div>
 
           <p className="text-lg font-semibold text-gray-900 mb-5">
-            When I'm stuck, I'll find a solution, like...
+            When I&apos;m stuck, I&apos;ll find a solution, like...
           </p>
 
           {/* Solutions Grid */}

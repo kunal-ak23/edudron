@@ -179,7 +179,7 @@ export default function CoursesPage() {
 
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
-      <div className="space-y-6">
+      <div className="space-y-3">
           {/* Page Header */}
           <div className="flex items-center justify-between">
             <div>
@@ -202,7 +202,7 @@ export default function CoursesPage() {
           </div>
 
           {/* Filters */}
-          <div className="mb-6 flex flex-col sm:flex-row gap-4">
+          <div className="mb-3 flex flex-col sm:flex-row gap-4">
             <div className="flex-1">
               <Input
                 placeholder="Search courses..."
@@ -275,7 +275,7 @@ export default function CoursesPage() {
                   className="hover:shadow-md transition-shadow cursor-pointer"
                   onClick={() => router.push(`/courses/${course.id}`)}
                 >
-                  <CardContent className="p-6">
+                  <CardContent className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 mb-2">

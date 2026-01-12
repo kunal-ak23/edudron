@@ -428,7 +428,10 @@ export default function CourseEditPage() {
         if (isMain) {
           router.push(`/courses/${courseId}/lectures/${sectionId}/edit`)
         } else if (lecture) {
-          router.push(`/courses/${courseId}/lectures/${sectionId}/sub-lectures/${lecture.id}/edit`)
+          router.push(`/courses/${courseId}/lectures/${sectionId}/edit?subLectureId=${lecture.id}`)
+        } else {
+          // Create new sub-lecture - navigate to edit page
+          router.push(`/courses/${courseId}/lectures/${sectionId}/edit?newSubLecture=true`)
         }
       })
       setShowUnsavedChangesDialog(true)
@@ -442,9 +445,14 @@ export default function CourseEditPage() {
       // Or we can use the lectureId as the sub-lecture ID
       router.push(`/courses/${courseId}/lectures/${sectionId}/edit?subLectureId=${lecture.id}`)
     } else {
-      // Create new sub-lecture - navigate to main lecture edit page
-      router.push(`/courses/${courseId}/lectures/${sectionId}/edit`)
+      // Create new sub-lecture - navigate to edit page
+      router.push(`/courses/${courseId}/lectures/${sectionId}/edit?newSubLecture=true`)
     }
+  }
+
+  const handleCreateSubLecture = (sectionId: string) => {
+    // Navigate to the lecture edit page to create a new sub-lecture
+    router.push(`/courses/${courseId}/lectures/${sectionId}/edit?newSubLecture=true`)
   }
 
   const handlePublish = async () => {
@@ -542,7 +550,7 @@ export default function CourseEditPage() {
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="px-4 sm:px-6 lg:px-8 py-1">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-4">
                 <Button
@@ -573,7 +581,7 @@ export default function CourseEditPage() {
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="px-4 sm:px-6 lg:px-8 py-3">
           <Card>
             <CardHeader>
               <CardTitle>{courseId === 'new' ? 'Create Course' : 'Edit Course'}</CardTitle>
@@ -584,7 +592,7 @@ export default function CourseEditPage() {
                   <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-3">
                   {/* Basic Information */}
                   <div>
                     <h2 className="text-lg font-semibold mb-4">Basic Information</h2>
@@ -896,61 +904,65 @@ export default function CourseEditPage() {
                                   </Button>
                                 </div>
                               </button>
-                              {expandedSections.has(section.id) && section.lectures && section.lectures.length > 0 && (
+                              {expandedSections.has(section.id) && (
                                 <div className="border-t bg-gray-50">
                                   <div className="p-4 space-y-2">
-                                    {section.lectures.map((lecture, idx) => (
-                                      <div
-                                        key={lecture.id}
-                                        className="flex items-center justify-between p-3 bg-white rounded border border-gray-200 hover:border-gray-300 transition-colors"
-                                      >
-                                        <div className="flex items-center flex-1">
-                                          <Play className="h-4 w-4 mr-3 text-gray-400" />
-                                          <div>
-                                            <div className="font-medium text-sm text-gray-900">
-                                              {idx + 1}. {lecture.title}
-                                            </div>
-                                            {lecture.description && (
-                                              <div className="text-xs text-gray-500 mt-1 line-clamp-1">
-                                                {lecture.description}
+                                    {section.lectures && section.lectures.length > 0 && (
+                                      <>
+                                        {section.lectures.map((lecture, idx) => (
+                                          <div
+                                            key={lecture.id}
+                                            className="flex items-center justify-between p-3 bg-white rounded border border-gray-200 hover:border-gray-300 transition-colors"
+                                          >
+                                            <div className="flex items-center flex-1">
+                                              <Play className="h-4 w-4 mr-3 text-gray-400" />
+                                              <div>
+                                                <div className="font-medium text-sm text-gray-900">
+                                                  {idx + 1}. {lecture.title}
+                                                </div>
+                                                {lecture.description && (
+                                                  <div className="text-xs text-gray-500 mt-1 line-clamp-1">
+                                                    {lecture.description}
+                                                  </div>
+                                                )}
                                               </div>
-                                            )}
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                              <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                {lecture.duration && (
+                                                  <span>{Math.floor(lecture.duration / 60)}m</span>
+                                                )}
+                                                <Badge variant="outline" className="text-xs">
+                                                  {lecture.contentType}
+                                                </Badge>
+                                              </div>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleEditLecture(section.id, lecture)}
+                                                className="h-8 w-8 p-0"
+                                              >
+                                                <Edit className="h-4 w-4" />
+                                              </Button>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => handleDeleteSubLecture(section.id, lecture.id, lecture.title)}
+                                                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                              >
+                                                <Trash2 className="h-4 w-4" />
+                                              </Button>
+                                            </div>
                                           </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                          <div className="flex items-center gap-2 text-xs text-gray-500">
-                                            {lecture.duration && (
-                                              <span>{Math.floor(lecture.duration / 60)}m</span>
-                                            )}
-                                            <Badge variant="outline" className="text-xs">
-                                              {lecture.contentType}
-                                            </Badge>
-                                          </div>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleEditLecture(section.id, lecture)}
-                                            className="h-8 w-8 p-0"
-                                          >
-                                            <Edit className="h-4 w-4" />
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => handleDeleteSubLecture(section.id, lecture.id, lecture.title)}
-                                            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                          >
-                                            <Trash2 className="h-4 w-4" />
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    ))}
-                                    {/* Add Sub-Lecture Buttons */}
+                                        ))}
+                                      </>
+                                    )}
+                                    {/* Add Sub-Lecture Buttons - Always show when section is expanded */}
                                     <div className="flex gap-2 mt-2">
                                       <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => handleEditLecture(section.id)}
+                                        onClick={() => handleCreateSubLecture(section.id)}
                                         className="flex-1"
                                       >
                                         <Plus className="h-4 w-4 mr-2" />
@@ -1283,6 +1295,7 @@ export default function CourseEditPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </ProtectedRoute>
   )
 }

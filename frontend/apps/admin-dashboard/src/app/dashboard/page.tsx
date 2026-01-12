@@ -88,7 +88,7 @@ export default function DashboardPage() {
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-8">
                 <h1 className="text-2xl font-bold text-blue-600">EduDron Admin</h1>
@@ -149,17 +149,17 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="px-4 sm:px-6 lg:px-8 py-3">
           {/* Page Header */}
-          <div className="mb-8">
+          <div className="mb-3">
             <h2 className="text-3xl font-bold text-gray-900 mb-2">Dashboard Overview</h2>
             <p className="text-gray-600">Monitor your platform&apos;s performance and activity</p>
           </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
             <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-blue-100">Total Courses</h3>
                   <BookOpen className="w-6 h-6 text-blue-200" />
@@ -172,7 +172,7 @@ export default function DashboardPage() {
             </Card>
 
             <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-green-100">Active Batches</h3>
                   <Users className="w-6 h-6 text-green-200" />
@@ -183,7 +183,7 @@ export default function DashboardPage() {
             </Card>
 
             <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-purple-100">Total Students</h3>
                   <GraduationCap className="w-6 h-6 text-purple-200" />
@@ -194,7 +194,7 @@ export default function DashboardPage() {
             </Card>
 
             <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0">
-              <CardContent className="p-6">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-sm font-medium text-orange-100">Completion Rate</h3>
                   <BarChart3 className="w-6 h-6 text-orange-200" />
@@ -206,7 +206,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Main Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-3">
             {/* Recent Courses */}
             <div className="lg:col-span-2">
               <Card>

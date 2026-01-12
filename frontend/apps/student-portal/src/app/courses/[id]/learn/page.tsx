@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, Button } from '@edudron/ui-components'
 import { coursesApi, enrollmentsApi, lecturesApi, feedbackApi, notesApi, issuesApi } from '@/lib/api'
@@ -47,6 +47,10 @@ export default function LearnPage() {
   // Notes state
   const [notes, setNotes] = useState<Note[]>([])
   const [showNotesSidebar, setShowNotesSidebar] = useState(false)
+
+  // Refs for scrollable containers
+  const mainContentRef = useRef<HTMLDivElement>(null)
+  const textContentRef = useRef<HTMLDivElement>(null)
 
   // Helper function to get localStorage key for course position
   const getStorageKey = (courseId: string) => `course_position_${courseId}`
@@ -178,6 +182,38 @@ export default function LearnPage() {
       setCurrentFeedback(null)
     }
   }, [selectedLecture?.id, loadFeedbackAndNotes])
+
+  // Scroll to top when lecture changes
+  useEffect(() => {
+    if (selectedLecture) {
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        // Smoothly scroll main content container
+        if (mainContentRef.current) {
+          mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        // Smoothly scroll text content container if it exists
+        if (textContentRef.current) {
+          textContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        // Also scroll window as fallback
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      })
+      
+      // Also try after a small delay to catch any late DOM updates
+      const timeoutId = setTimeout(() => {
+        if (mainContentRef.current) {
+          mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        if (textContentRef.current) {
+          textContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, [selectedLecture?.id])
 
   const loadCourseData = async () => {
     try {
@@ -315,6 +351,17 @@ export default function LearnPage() {
     setSelectedSection(null) // Clear module selection when selecting a lecture
     // Position will be saved via useEffect hook
     // Notes will be loaded via useEffect hook when selectedLecture changes
+    
+    // Smoothly scroll to top
+    requestAnimationFrame(() => {
+      if (mainContentRef.current) {
+        mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+      if (textContentRef.current) {
+        textContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    })
   }
 
   // Handle like/dislike button click
@@ -714,7 +761,7 @@ export default function LearnPage() {
           )}
 
           {/* Main Content */}
-          <div className="flex-1 flex flex-col min-w-0 bg-white overflow-y-auto">
+          <div ref={mainContentRef} className="flex-1 flex flex-col min-w-0 bg-white overflow-y-auto">
             {selectedSection && !selectedLecture ? (
               <>
                 {/* Module Landing Page */}
@@ -837,7 +884,7 @@ export default function LearnPage() {
                       </video>
                     </div>
                   ) : selectedLecture.contentType === 'TEXT' ? (
-                    <div className="w-full h-full bg-white overflow-y-auto">
+                    <div ref={textContentRef} className="w-full h-full bg-white overflow-y-auto">
                       <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-6">
                         <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">{selectedLecture.title}</h1>
                         {selectedLecture.description && (
@@ -1013,7 +1060,7 @@ export default function LearnPage() {
                         {activeTab === 'notes' && (
                           <div>
                             <p className="text-gray-700 mb-3">
-                              Click the 'Save Note' button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you've captured.
+                              Click the &apos;Save Note&apos; button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you&apos;ve captured.
                             </p>
                             <a href="#" className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center space-x-1">
                               <span>View all notes</span>
@@ -1041,50 +1088,45 @@ export default function LearnPage() {
                           </div>
                         )}
                       </div>
-                    )}
 
                     {/* Controls moved to end - Tabs, Save note, Report issue, Engagement buttons */}
-                    {selectedLecture.contentType === 'VIDEO' && (
-                      <>
-                        {/* Tabs */}
-                        <div className="border-t border-gray-200 pt-4 mt-6">
-                          <div className="border-b border-gray-200 mb-4">
-                            <div className="flex space-x-6">
-                              <button
-                                onClick={() => setActiveTab('transcript')}
-                                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                                  activeTab === 'transcript'
-                                    ? 'border-primary-600 text-primary-600'
-                                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                                }`}
-                              >
-                                Transcript
-                              </button>
-                              <button
-                                onClick={() => setActiveTab('notes')}
-                                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                                  activeTab === 'notes'
-                                    ? 'border-primary-600 text-primary-600'
-                                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                                }`}
-                              >
-                                Notes
-                              </button>
-                              <button
-                                onClick={() => setActiveTab('downloads')}
-                                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                                  activeTab === 'downloads'
-                                    ? 'border-primary-600 text-primary-600'
-                                    : 'border-transparent text-gray-600 hover:text-gray-900'
-                                }`}
-                              >
-                                Downloads
-                              </button>
-                            </div>
-                          </div>
+                    {/* Tabs */}
+                    <div className="border-t border-gray-200 pt-4 mt-6">
+                      <div className="border-b border-gray-200 mb-4">
+                        <div className="flex space-x-6">
+                          <button
+                            onClick={() => setActiveTab('transcript')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                              activeTab === 'transcript'
+                                ? 'border-primary-600 text-primary-600'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            Transcript
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('notes')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                              activeTab === 'notes'
+                                ? 'border-primary-600 text-primary-600'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            Notes
+                          </button>
+                          <button
+                            onClick={() => setActiveTab('downloads')}
+                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                              activeTab === 'downloads'
+                                ? 'border-primary-600 text-primary-600'
+                                : 'border-transparent text-gray-600 hover:text-gray-900'
+                            }`}
+                          >
+                            Downloads
+                          </button>
                         </div>
-                      </>
-                    )}
+                      </div>
+                    </div>
 
                     {/* Save note and Report issue */}
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
@@ -1170,8 +1212,8 @@ export default function LearnPage() {
                         </button>
                       )}
                     </div>
+                    </div>
                   </div>
-                </div>
                 )}
               </>
             ) : (

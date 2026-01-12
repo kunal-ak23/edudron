@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { ProtectedRoute, FileUpload } from '@edudron/ui-components'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,6 +31,7 @@ export default function LectureEditPage() {
   const lectureId = params.lectureId as string
   // Check if we're editing a sub-lecture (passed as query param)
   const subLectureId = searchParams.get('subLectureId') || undefined
+  const isNewSubLecture = searchParams.get('newSubLecture') === 'true'
   const { toast } = useToast()
   
   const [loading, setLoading] = useState(true)
@@ -43,19 +44,20 @@ export default function LectureEditPage() {
     description: '',
     contentType: 'TEXT' as 'VIDEO' | 'TEXT' | 'AUDIO' | 'DOCUMENT',
     durationSeconds: 0,
-    isPublished: false
+    isPublished: false,
+    contentUrl: ''
   })
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const initialDataRef = useRef<string | null>(null)
   const initialTextContentsRef = useRef<string | null>(null)
 
-  const isMainLecture = !subLectureId
-  const isSubLecture = !!subLectureId
+  const isMainLecture = !subLectureId && !isNewSubLecture
+  const isSubLecture = !!subLectureId || isNewSubLecture
 
   useEffect(() => {
     loadLectureData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, lectureId, subLectureId])
+  }, [courseId, lectureId, subLectureId, isNewSubLecture])
 
   // Separate effect for beforeunload warning
   useEffect(() => {
@@ -73,7 +75,20 @@ export default function LectureEditPage() {
   const loadLectureData = async () => {
     setLoading(true)
     try {
-      if (isSubLecture && subLectureId) {
+      if (isNewSubLecture) {
+        // Creating a new sub-lecture - no data to load, just set up empty form
+        setFormData({
+          title: '',
+          description: '',
+          contentType: 'TEXT',
+          durationSeconds: 0,
+          isPublished: false,
+          contentUrl: ''
+        })
+        setTextContents([])
+        initialDataRef.current = JSON.stringify(formData)
+        initialTextContentsRef.current = JSON.stringify([])
+      } else if (isSubLecture && subLectureId) {
         // Load sub-lecture
         const data = await lecturesApi.getLecture(courseId, subLectureId)
         setLecture(data)
@@ -87,7 +102,8 @@ export default function LectureEditPage() {
           description: data.description || '',
           contentType,
           durationSeconds: data.duration || 0,
-          isPublished: data.isPublished || false
+          isPublished: data.isPublished || false,
+          contentUrl: data.contentUrl || ''
         }
         setFormData(formDataValue)
         const textItems = await loadTextContents(subLectureId)
@@ -105,7 +121,8 @@ export default function LectureEditPage() {
           description: data.description || '',
           contentType: 'TEXT',
           durationSeconds: 0,
-          isPublished: data.isPublished || false
+          isPublished: data.isPublished || false,
+          contentUrl: data.contentUrl || ''
         }
         setFormData(formDataValue)
         const textItems = await loadTextContents(lectureId)
@@ -132,6 +149,13 @@ export default function LectureEditPage() {
       const media = await lecturesApi.getLectureMedia(lectureId)
       const textItems = media.filter((content: LectureContent) => content.contentType === 'TEXT')
       setTextContents(textItems)
+      
+      // Also check for video content to set contentUrl
+      const videoContent = media.find((content: LectureContent) => content.contentType === 'VIDEO')
+      if (videoContent && (videoContent.videoUrl || videoContent.fileUrl)) {
+        setFormData(prev => ({ ...prev, contentUrl: videoContent.videoUrl || videoContent.fileUrl || '' }))
+      }
+      
       return textItems
     } catch (error) {
       console.error('Failed to load text contents:', error)
@@ -148,6 +172,39 @@ export default function LectureEditPage() {
           title: formData.title,
           description: formData.description
         })
+      } else if (isNewSubLecture) {
+        // Create new sub-lecture
+        const savedLecture = await lecturesApi.createSubLecture(courseId, lectureId, {
+          title: formData.title,
+          description: formData.description,
+          contentType: formData.contentType,
+          durationSeconds: formData.durationSeconds
+        })
+        
+        setCurrentLectureId(savedLecture.id)
+        setLecture(savedLecture)
+        
+        // Note: Video upload should be done after creation using the FileUpload component
+        // The FileUpload will handle the upload once the lecture is created
+        
+        // Save all text content items
+        for (const content of textContents) {
+          // For new sub-lectures, all content items are temporary and need to be created
+          await lecturesApi.createTextContent(savedLecture.id, content.textContent || '', content.title || '')
+        }
+        
+        toast({
+          title: 'Sub-lecture created',
+          description: 'The sub-lecture has been created successfully. You can now upload the video file.',
+        })
+        
+        // Update URL to remove newSubLecture flag and set subLectureId so they can upload
+        router.replace(`/courses/${courseId}/lectures/${lectureId}/edit?subLectureId=${savedLecture.id}`)
+        
+        // Update state to reflect that we're now editing (not creating)
+        // This allows video upload to work
+        setHasUnsavedChanges(false)
+        return // Don't navigate back yet - allow user to upload video
       } else if (subLectureId && lecture) {
         await lecturesApi.updateSubLecture(courseId, lectureId, subLectureId, {
           title: formData.title,
@@ -157,16 +214,18 @@ export default function LectureEditPage() {
           isPublished: formData.isPublished
         })
         
+        // Note: Video URL is updated via uploadVideo API, not through updateSubLecture
+        
         // Save all text content items
         for (const content of textContents) {
           await lecturesApi.updateTextContent(content.id, content.textContent || '', content.title || '')
         }
+        
+        toast({
+          title: 'Lecture saved',
+          description: 'The lecture has been saved successfully.',
+        })
       }
-      
-      toast({
-        title: 'Lecture saved',
-        description: 'The lecture has been saved successfully.',
-      })
       
       setHasUnsavedChanges(false)
       // Navigate back to course page
@@ -243,7 +302,7 @@ export default function LectureEditPage() {
                 </Button>
                 <div>
                   <h1 className="text-2xl font-bold">
-                    {isMainLecture ? 'Edit Lecture' : 'Edit Sub-Lecture'}
+                    {isMainLecture ? 'Edit Lecture' : isNewSubLecture ? 'Create Sub-Lecture' : 'Edit Sub-Lecture'}
                   </h1>
                   <p className="text-sm text-gray-500">
                     {courseId && `Course: ${courseId}`}
@@ -304,7 +363,7 @@ export default function LectureEditPage() {
             </div>
 
             {/* Text Content Items (only for sub-lectures) */}
-            {isSubLecture && currentLectureId && (
+            {isSubLecture && (currentLectureId || isNewSubLecture) && (
               <div className="space-y-4 border-t pt-6">
                 <div className="flex items-center justify-between">
                   <Label className="text-base font-semibold">Content Sections</Label>
@@ -313,30 +372,47 @@ export default function LectureEditPage() {
                     variant="outline"
                     size="sm"
                     onClick={async () => {
-                      if (!currentLectureId) return
-                      try {
-                        const newContent = await lecturesApi.createTextContent(currentLectureId, '', 'New Content Section')
-                        console.log('[EditPage] Created new content:', newContent)
-                        if (newContent && newContent.id) {
-                          setTextContents([...textContents, newContent])
-                          toast({
-                            title: 'Content section created',
-                            description: 'You can now edit the content.',
-                          })
-                        } else {
-                          console.error('[EditPage] Invalid response from createTextContent:', newContent)
-                          throw new Error('Invalid response from server: content section was not created properly')
-                        }
-                      } catch (error) {
-                        console.error('[EditPage] Failed to create content section:', error)
+                      if (isNewSubLecture) {
+                        // For new sub-lectures, add to local state (will be saved when lecture is created)
+                        const newContent: LectureContent = {
+                          id: `temp-${Date.now()}`,
+                          lectureId: '',
+                          contentType: 'TEXT',
+                          textContent: '',
+                          title: 'New Content Section',
+                          sequence: textContents.length
+                        } as LectureContent
+                        setTextContents([...textContents, newContent])
                         toast({
-                          variant: 'destructive',
-                          title: 'Failed to create content section',
-                          description: extractErrorMessage(error),
+                          title: 'Content section added',
+                          description: 'You can now edit the content. It will be saved when you create the sub-lecture.',
                         })
+                      } else if (currentLectureId) {
+                        // For existing sub-lectures, create on server
+                        try {
+                          const newContent = await lecturesApi.createTextContent(currentLectureId, '', 'New Content Section')
+                          console.log('[EditPage] Created new content:', newContent)
+                          if (newContent && newContent.id) {
+                            setTextContents([...textContents, newContent])
+                            toast({
+                              title: 'Content section created',
+                              description: 'You can now edit the content.',
+                            })
+                          } else {
+                            console.error('[EditPage] Invalid response from createTextContent:', newContent)
+                            throw new Error('Invalid response from server: content section was not created properly')
+                          }
+                        } catch (error) {
+                          console.error('[EditPage] Failed to create content section:', error)
+                          toast({
+                            variant: 'destructive',
+                            title: 'Failed to create content section',
+                            description: extractErrorMessage(error),
+                          })
+                        }
                       }
                     }}
-                    disabled={saving || !currentLectureId}
+                    disabled={saving || (!currentLectureId && !isNewSubLecture)}
                   >
                     + Add Content Section
                   </Button>
@@ -417,7 +493,7 @@ export default function LectureEditPage() {
             )}
 
             {/* Content Type and other fields (only for sub-lectures) */}
-            {isSubLecture && (
+            {(isSubLecture || isNewSubLecture) && (
               <>
                 <div className="space-y-2 border-t pt-6">
                   <Label>Content Type</Label>
@@ -436,6 +512,31 @@ export default function LectureEditPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Video Upload (only for VIDEO content type) */}
+                {formData.contentType === 'VIDEO' && (
+                  <div className="space-y-2">
+                    <Label>Video File</Label>
+                    <FileUpload
+                      accept="video/*"
+                      maxSize={500 * 1024 * 1024} // 500MB
+                      value={formData.contentUrl || ''}
+                      onChange={(url) => setFormData({ ...formData, contentUrl: url })}
+                      onUpload={async (file) => {
+                        if (!currentLectureId) {
+                          throw new Error('Please save the sub-lecture first, then upload the video')
+                        }
+                        // Upload video for existing sub-lectures
+                        const content = await lecturesApi.uploadVideo(currentLectureId, file)
+                        const url = content.videoUrl || content.fileUrl || ''
+                        setFormData({ ...formData, contentUrl: url })
+                        return url
+                      }}
+                      helperText={isNewSubLecture ? "Please save the sub-lecture first, then upload the video file (MP4, MOV, etc. up to 500MB)" : "Upload a video file for this lecture (MP4, MOV, etc. up to 500MB)"}
+                      disabled={!currentLectureId}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Duration (seconds)</Label>

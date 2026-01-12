@@ -143,15 +143,15 @@ export default function GenerateCoursePage() {
   return (
     <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER', 'INSTRUCTOR']}>
       <div className="min-h-screen bg-gray-50">
-        <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="mb-6">
+        <main className="px-4 sm:px-6 lg:px-8 py-3">
+          <div className="mb-3">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Generate Course with AI</h1>
             <p className="text-gray-600">Describe the course you want to create and AI will generate it for you</p>
           </div>
 
           {/* Generation in Progress Alert */}
           {generating && (
-            <Alert className="mb-6 border-blue-200 bg-blue-50">
+            <Alert className="mb-3 border-blue-200 bg-blue-50">
               <AlertCircle className="h-4 w-4 text-blue-600" />
               <AlertTitle className="text-blue-900">Course Generation in Progress</AlertTitle>
               <AlertDescription className="text-blue-800">
@@ -165,12 +165,12 @@ export default function GenerateCoursePage() {
             </Alert>
           )}
 
-          <Card className="mb-6">
+          <Card className="mb-3">
             <CardHeader>
               <CardTitle>Course Generation</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
+              <div className="space-y-3">
                 <div className="space-y-2">
                   <Label>
                     Course Description Prompt {!pdfFile && <span className="text-destructive">*</span>}
@@ -192,7 +192,7 @@ export default function GenerateCoursePage() {
                 <div className="space-y-2">
                   <Label>Course Structure PDF (Optional)</Label>
                   {!pdfFile ? (
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
                       <input
                         type="file"
                         id="pdf-upload"
@@ -420,7 +420,7 @@ export default function GenerateCoursePage() {
 
           {/* Progress Indicator */}
           {generationProgress && (
-            <Card className="mb-6">
+            <Card className="mb-3">
               <CardContent className="pt-6">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">

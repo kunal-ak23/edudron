@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, Button, Card } from '@edudron/ui-components'
 import { coursesApi, enrollmentsApi, lecturesApi } from '@/lib/api'
@@ -31,11 +31,7 @@ export default function CourseDetailPage() {
   const [showPreviewVideoModal, setShowPreviewVideoModal] = useState(false)
   const [openModuleId, setOpenModuleId] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadCourse()
-  }, [courseId])
-
-  const loadCourse = async () => {
+  const loadCourse = useCallback(async () => {
     try {
       const [courseData, sectionsData] = await Promise.all([
         coursesApi.getCourse(courseId),
@@ -121,7 +117,11 @@ export default function CourseDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [courseId])
+
+  useEffect(() => {
+    loadCourse()
+  }, [loadCourse])
 
   const handleEnrollClick = () => {
     // Show commitment modal first

@@ -214,12 +214,16 @@ public class FoundryAIService {
         String systemPrompt = """
             You are an expert course designer. Generate a detailed, rich description for a course section using markdown formatting.
             
-            Use markdown formatting to make it engaging:
-            - Use **bold** for key concepts
+            CRITICAL MARKDOWN RULES - FOLLOW STRICTLY:
+            - Use headings correctly: Use SINGLE heading markers (## for level 2, ### for level 3)
+            - NEVER duplicate heading markers: Write "## Heading Title" NOT "## ## Heading Title" or "### ### Heading Title"
+            - Each heading should use exactly ONE set of # symbols followed by a space and the heading text
+            - Use **bold** for key concepts (single markers, not duplicated)
             - Use bullet points (-) or numbered lists for learning outcomes
-            - Use *italic* for emphasis
-            - Structure with headings (##) if needed
+            - Use *italic* for emphasis (single markers, not duplicated)
+            - Structure with headings (##) if needed, but always use single markers
             
+            IMPORTANT: Always output clean, valid markdown. Never duplicate markdown syntax markers.
             Make it engaging and informative, explaining what students will learn in this section with rich formatting.
             """;
         
@@ -243,9 +247,11 @@ public class FoundryAIService {
         systemPromptBuilder.append("""
             You are an expert course instructor. Generate comprehensive, detailed lecture content in rich markdown format.
             
-            IMPORTANT: Use extensive markdown formatting to create visually rich, engaging content:
-            - Use headings (##, ###) to structure sections
-            - Use **bold** and *italic* for emphasis
+            CRITICAL MARKDOWN RULES - FOLLOW STRICTLY:
+            - Use headings correctly: Use SINGLE heading markers (## for level 2, ### for level 3, #### for level 4)
+            - NEVER duplicate heading markers: Write "## Heading Title" NOT "## ## Heading Title" or "### ### Heading Title"
+            - Each heading should use exactly ONE set of # symbols followed by a space and the heading text
+            - Use **bold** and *italic* for emphasis (single markers, not duplicated)
             - Use numbered lists (1., 2., 3.) and bullet points (-, *) for organization
             - Use code blocks (```language) for code examples
             - Use inline code (`code`) for technical terms
@@ -261,6 +267,7 @@ public class FoundryAIService {
             - ## Key Takeaways (summary points)
             - ## Summary (conclusion)
             
+            IMPORTANT: Always output clean, valid markdown. Never duplicate markdown syntax markers.
             Make it educational, clear, visually appealing, and well-structured with rich formatting throughout.
             """);
         
@@ -287,6 +294,7 @@ public class FoundryAIService {
         }
         
         userPromptBuilder.append("Generate comprehensive lecture content in markdown format.");
+        userPromptBuilder.append("\n\nREMEMBER: Use single heading markers (## or ###), never duplicate them. Output clean, valid markdown.");
         
         String userPrompt = userPromptBuilder.toString();
         

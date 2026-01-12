@@ -120,7 +120,7 @@ export default function UsersPage() {
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
         <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-8">
                 <h1
@@ -154,9 +154,9 @@ export default function UsersPage() {
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="px-4 sm:px-6 lg:px-8 py-3">
           {/* Page Header */}
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 mb-2">User Management</h2>
               <p className="text-gray-600">Manage users and their roles</p>
@@ -168,7 +168,7 @@ export default function UsersPage() {
           </div>
 
           {/* Search */}
-          <div className="mb-6">
+          <div className="mb-3">
             <Input
               placeholder="Search users by name, email, or role..."
               value={searchQuery}

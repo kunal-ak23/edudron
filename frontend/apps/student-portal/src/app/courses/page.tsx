@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ProtectedRoute, CourseCard, SearchBar, FilterBar } from '@edudron/ui-components'
 import { coursesApi, enrollmentsApi } from '@/lib/api'
@@ -23,15 +23,7 @@ export default function CoursesPage() {
   })
   const [user, setUser] = useState<any>(null)
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  useEffect(() => {
-    filterCourses()
-  }, [courses, searchQuery, selectedFilters])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const userStr = localStorage.getItem('user')
       if (userStr) {
@@ -46,9 +38,13 @@ export default function CoursesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const filterCourses = () => {
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  const filterCourses = useCallback(() => {
     let filtered = [...courses]
 
     // Search filter
@@ -79,7 +75,11 @@ export default function CoursesPage() {
     }
 
     setFilteredCourses(filtered)
-  }
+  }, [courses, searchQuery, selectedFilters])
+
+  useEffect(() => {
+    filterCourses()
+  }, [filterCourses])
 
   const handleFilterChange = (filterType: string, value: string) => {
     setSelectedFilters((prev) => ({

@@ -50,10 +50,10 @@ export function EnrollmentSuccessModal({ userName, isOpen, onClose, onGetStarted
 
         {/* Message */}
         <h1 className="text-5xl font-bold text-gray-900 mb-5 leading-tight">
-          You're all set, {userName}
+          You&apos;re all set, {userName}
         </h1>
         <p className="text-xl text-gray-600 mb-10 max-w-2xl mx-auto leading-relaxed">
-          Congratulations—you've taken the first step toward your goals. Your subscription is now active, and you're ready to start learning.
+          Congratulations—you&apos;ve taken the first step toward your goals. Your subscription is now active, and you&apos;re ready to start learning.
         </p>
 
         {/* Action Button */}
