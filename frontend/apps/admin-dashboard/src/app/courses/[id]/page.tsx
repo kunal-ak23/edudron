@@ -193,7 +193,7 @@ export default function CourseEditPage() {
       // Prepare course data, excluding fields that shouldn't be sent in CreateCourseRequest
       const { 
         id, 
-        clientId, 
+        clientId: _clientId, 
         isPublished,
         status,
         totalDurationSeconds, 
@@ -207,7 +207,7 @@ export default function CourseEditPage() {
         instructors,
         resources,
         ...courseData 
-      } = course
+      } = course as any
 
       const courseToSave = {
         ...courseData,
@@ -332,11 +332,13 @@ export default function CourseEditPage() {
           {
             prompt: aiPrompt.trim()
           }
-        )
+        ) as any
+        
+        const responseData = (response as any).data || response
         
         toast({
           title: 'Lecture generated',
-          description: `Lecture "${response.title}" has been generated with ${response.lectures?.length || 0} sub-lectures.`,
+          description: `Lecture "${responseData?.title || 'Lecture'}" has been generated with ${responseData?.lectures?.length || 0} sub-lectures.`,
         })
       }
       
@@ -1188,7 +1190,7 @@ export default function CourseEditPage() {
           <DialogHeader>
             <DialogTitle>Delete Lecture</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the lecture "{lectureToDelete?.title}"? This will also delete all sub-lectures within it. This action cannot be undone.
+              Are you sure you want to delete the lecture &quot;{lectureToDelete?.title}&quot;? This will also delete all sub-lectures within it. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1220,7 +1222,7 @@ export default function CourseEditPage() {
           <DialogHeader>
             <DialogTitle>Delete Sub-Lecture</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the sub-lecture "{lectureToDelete?.title}"? This action cannot be undone.
+              Are you sure you want to delete the sub-lecture &quot;{lectureToDelete?.title}&quot;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

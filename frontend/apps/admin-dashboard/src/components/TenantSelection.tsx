@@ -9,7 +9,7 @@ import type { TenantInfo } from '@edudron/shared-utils'
 
 interface TenantSelectionProps {
   tenants: TenantInfo[]
-  onTenantSelect: (tenantId: string) => void
+  onTenantSelect: (tenantId: string) => Promise<void> | void
   userEmail: string
   title?: string
   subtitle?: string
@@ -25,11 +25,17 @@ export function TenantSelection({ tenants, onTenantSelect, userEmail, title, sub
     if (tenants.length === 1 && !autoSelecting) {
       setAutoSelecting(true)
       setIsLoading(true)
-      onTenantSelect(tenants[0].id).catch((error) => {
-        console.error('Error auto-selecting tenant:', error)
+      const result = onTenantSelect(tenants[0].id)
+      if (result && typeof result.then === 'function') {
+        result.catch((error) => {
+          console.error('Error auto-selecting tenant:', error)
+          setAutoSelecting(false)
+          setIsLoading(false)
+        })
+      } else {
         setAutoSelecting(false)
         setIsLoading(false)
-      })
+      }
     }
   }, [tenants, onTenantSelect, autoSelecting])
 
@@ -38,7 +44,10 @@ export function TenantSelection({ tenants, onTenantSelect, userEmail, title, sub
     
     setIsLoading(true)
     try {
-      await onTenantSelect(selectedTenantId)
+      const result = onTenantSelect(selectedTenantId)
+      if (result && typeof result.then === 'function') {
+        await result
+      }
     } finally {
       setIsLoading(false)
     }

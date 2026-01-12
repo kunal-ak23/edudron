@@ -54,8 +54,11 @@ export default function LectureEditPage() {
 
   useEffect(() => {
     loadLectureData()
-    
-    // Warn before leaving if there are unsaved changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, lectureId, subLectureId])
+
+  // Separate effect for beforeunload warning
+  useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
         e.preventDefault()
@@ -65,7 +68,7 @@ export default function LectureEditPage() {
     
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [])
+  }, [hasUnsavedChanges])
 
   const loadLectureData = async () => {
     setLoading(true)
@@ -75,10 +78,14 @@ export default function LectureEditPage() {
         const data = await lecturesApi.getLecture(courseId, subLectureId)
         setLecture(data)
         setCurrentLectureId(subLectureId)
-        const formDataValue = {
+        const contentType: 'VIDEO' | 'TEXT' | 'AUDIO' | 'DOCUMENT' = 
+          (['VIDEO', 'TEXT', 'AUDIO', 'DOCUMENT'].includes(data.contentType as string))
+            ? (data.contentType as 'VIDEO' | 'TEXT' | 'AUDIO' | 'DOCUMENT')
+            : 'TEXT'
+        const formDataValue: typeof formData = {
           title: data.title || '',
           description: data.description || '',
-          contentType: (data.contentType as any) || 'TEXT',
+          contentType,
           durationSeconds: data.duration || 0,
           isPublished: data.isPublished || false
         }
@@ -93,7 +100,7 @@ export default function LectureEditPage() {
         const data = await lecturesApi.getLecture(courseId, lectureId)
         setLecture(data)
         setCurrentLectureId(lectureId)
-        const formDataValue = {
+        const formDataValue: typeof formData = {
           title: data.title || '',
           description: data.description || '',
           contentType: 'TEXT',
@@ -335,7 +342,7 @@ export default function LectureEditPage() {
                   </Button>
                 </div>
                 {textContents.length === 0 ? (
-                  <p className="text-sm text-gray-500">No content sections yet. Click "Add Content Section" to create one.</p>
+                  <p className="text-sm text-gray-500">No content sections yet. Click &quot;Add Content Section&quot; to create one.</p>
                 ) : (
                   <div className="space-y-4">
                     {textContents.filter(content => content != null).map((content, index) => (

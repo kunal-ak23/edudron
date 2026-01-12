@@ -29,11 +29,6 @@ export function TenantSelector() {
   const [loading, setLoading] = useState(true)
   const [isOpen, setIsOpen] = useState(false)
 
-  // Only show for SYSTEM_ADMIN users
-  if (user?.role !== 'SYSTEM_ADMIN') {
-    return null
-  }
-
   const handleTenantSelect = async (tenant: Tenant) => {
     try {
       console.log('[TenantSelector] Selecting tenant:', tenant.id, tenant.name)
@@ -108,8 +103,17 @@ export function TenantSelector() {
       }
     }
 
-    loadTenants()
-  }, [tenantId, selectTenant])
+    if (user?.role === 'SYSTEM_ADMIN') {
+      loadTenants()
+    } else {
+      setLoading(false)
+    }
+  }, [tenantId, selectTenant, user?.role])
+
+  // Only show for SYSTEM_ADMIN users
+  if (user?.role !== 'SYSTEM_ADMIN') {
+    return null
+  }
 
   if (loading) {
     return (

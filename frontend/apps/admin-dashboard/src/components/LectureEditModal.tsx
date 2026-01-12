@@ -306,7 +306,7 @@ export function LectureEditModal({
                   </Button>
                 </div>
                 {textContents.length === 0 ? (
-                  <p className="text-sm text-gray-500">No content sections yet. Click "Add Content Section" to create one.</p>
+                  <p className="text-sm text-gray-500">No content sections yet. Click &quot;Add Content Section&quot; to create one.</p>
                 ) : (
                   <div className="space-y-4">
                     {textContents.map((content, index) => (
@@ -424,6 +424,7 @@ export function LectureEditModal({
                     <Label>Video File {!lecture && <span className="text-xs text-gray-500">(Upload after saving lecture)</span>}</Label>
                     {lecture ? (
                       <FileUpload
+                        label="Video File"
                         accept="video/*"
                         maxSize={2 * 1024 * 1024 * 1024} // 2GB
                         value={formData.contentUrl}
@@ -449,8 +450,8 @@ export function LectureEditModal({
                 {/* Document Upload */}
                 {formData.contentType === 'DOCUMENT' && (
                   <div className="space-y-2">
-                    <Label>Document File</Label>
                     <FileUpload
+                      label="Document File"
                       accept=".pdf,.doc,.docx,.txt"
                       maxSize={50 * 1024 * 1024} // 50MB
                       value={formData.contentUrl}
@@ -458,11 +459,12 @@ export function LectureEditModal({
                       onUpload={async (file) => {
                         // For documents, we can use image upload endpoint or create a document-specific one
                         // For now, let's use a generic upload
-                        const formData = new FormData()
-                        formData.append('file', file)
-                        formData.append('folder', 'lectures')
+                        const uploadFormData = new FormData()
+                        uploadFormData.append('file', file)
+                        uploadFormData.append('folder', 'lectures')
                         // This would need a document upload endpoint
-                        return formData.contentUrl
+                        // For now, return empty string as placeholder
+                        throw new Error('Document upload endpoint not yet implemented')
                       }}
                       helperText="Upload a document file (PDF, DOC, DOCX, TXT up to 50MB)"
                     />
@@ -475,6 +477,7 @@ export function LectureEditModal({
                     <Label>Audio File {!lecture && <span className="text-xs text-gray-500">(Upload after saving lecture)</span>}</Label>
                     {lecture ? (
                       <FileUpload
+                        label="Audio File"
                         accept="audio/*"
                         maxSize={100 * 1024 * 1024} // 100MB
                         value={formData.contentUrl}
