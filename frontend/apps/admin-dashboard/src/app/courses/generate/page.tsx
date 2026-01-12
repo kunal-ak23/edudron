@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Sparkles, Loader2, ArrowLeft, FileText, X } from 'lucide-react'
+import { Sparkles, Loader2, ArrowLeft, FileText, X, AlertCircle } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { coursesApi, courseGenerationIndexApi } from '@/lib/api'
 import type { GenerateCourseRequest, CourseGenerationIndex } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -50,6 +51,22 @@ export default function GenerateCoursePage() {
     loadIndexes()
   }, [])
 
+  // Warn user if they try to navigate away during generation
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (generating) {
+        e.preventDefault()
+        e.returnValue = 'Course generation is in progress. Are you sure you want to leave?'
+        return e.returnValue
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [generating])
+
   const loadIndexes = async () => {
     try {
       const [refs, formats] = await Promise.all([
@@ -64,6 +81,16 @@ export default function GenerateCoursePage() {
   }
 
   const handleGenerate = async () => {
+    // Prevent duplicate submissions
+    if (generating) {
+      toast({
+        variant: 'default',
+        title: 'Generation in Progress',
+        description: 'Please wait for the current course generation to complete.',
+      })
+      return
+    }
+
     if (!prompt.trim() && !pdfFile) {
       toast({
         variant: 'destructive',
@@ -122,6 +149,22 @@ export default function GenerateCoursePage() {
             <p className="text-gray-600">Describe the course you want to create and AI will generate it for you</p>
           </div>
 
+          {/* Generation in Progress Alert */}
+          {generating && (
+            <Alert className="mb-6 border-blue-200 bg-blue-50">
+              <AlertCircle className="h-4 w-4 text-blue-600" />
+              <AlertTitle className="text-blue-900">Course Generation in Progress</AlertTitle>
+              <AlertDescription className="text-blue-800">
+                Your course is being generated. Please do not navigate away or create another course until this process completes.
+                {generationProgress && (
+                  <span className="block mt-1 text-sm">
+                    {generationProgress.message} ({generationProgress.progress}%)
+                  </span>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Course Generation</CardTitle>
@@ -138,6 +181,7 @@ export default function GenerateCoursePage() {
                     placeholder="e.g., Create a 5-module course on Python programming for beginners. Include basics, data structures, functions, OOP, and file handling. Each module should have 4-5 lectures. Or leave empty if uploading a PDF with course structure."
                     rows={6}
                     disabled={generating}
+                    className={generating ? 'opacity-60 cursor-not-allowed' : ''}
                   />
                   <p className="text-sm text-muted-foreground">
                     Be specific about course length, modules, topics, difficulty level, etc. You can also upload a PDF with the course structure.
@@ -178,10 +222,13 @@ export default function GenerateCoursePage() {
                         className="hidden"
                         disabled={generating}
                       />
-                      <label htmlFor="pdf-upload" className="cursor-pointer">
+                      <label 
+                        htmlFor="pdf-upload" 
+                        className={generating ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
+                      >
                         <FileText className="h-8 w-8 mx-auto mb-2 text-gray-400" />
                         <p className="text-sm text-gray-600">
-                          Click to upload a PDF file with course structure
+                          {generating ? 'Upload disabled during generation' : 'Click to upload a PDF file with course structure'}
                         </p>
                         <p className="text-xs text-gray-500 mt-1">
                           PDF files up to 50MB are supported
@@ -217,7 +264,7 @@ export default function GenerateCoursePage() {
 
                 {/* Reference Content */}
                 {referenceIndexes.length > 0 && (
-                  <div className="space-y-2">
+                  <div className={`space-y-2 ${generating ? 'opacity-60 pointer-events-none' : ''}`}>
                     <Label>Reference Content (Optional)</Label>
                     <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-3">
                       {referenceIndexes.map((index) => (
@@ -250,7 +297,7 @@ export default function GenerateCoursePage() {
                 )}
 
                 {/* Writing Format */}
-                <div className="space-y-2">
+                <div className={`space-y-2 ${generating ? 'opacity-60 pointer-events-none' : ''}`}>
                   <Label>Writing Format (Optional)</Label>
                   {writingFormats.length > 0 && (
                     <Select
@@ -289,8 +336,8 @@ export default function GenerateCoursePage() {
                 </div>
 
                 {/* Advanced Options */}
-                <details className="border rounded-md p-3">
-                  <summary className="cursor-pointer text-sm font-medium">
+                <details className={`border rounded-md p-3 ${generating ? 'opacity-60 pointer-events-none' : ''}`}>
+                  <summary className={`text-sm font-medium ${generating ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
                     Advanced Options
                   </summary>
                   <div className="mt-4 space-y-3">
@@ -394,15 +441,26 @@ export default function GenerateCoursePage() {
           <div className="flex justify-end space-x-3">
             <Button
               variant="outline"
-              onClick={() => router.back()}
+              onClick={() => {
+                if (generating) {
+                  toast({
+                    variant: 'default',
+                    title: 'Generation in Progress',
+                    description: 'Please wait for the course generation to complete before leaving.',
+                  })
+                } else {
+                  router.back()
+                }
+              }}
               disabled={generating}
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Cancel
+              {generating ? 'Generation in Progress...' : 'Cancel'}
             </Button>
             <Button
               onClick={handleGenerate}
               disabled={generating || (!prompt.trim() && !pdfFile)}
+              className="min-w-[160px]"
             >
               {generating ? (
                 <>
