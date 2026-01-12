@@ -30,6 +30,7 @@ export default function GenerateCoursePage() {
   const [prompt, setPrompt] = useState('')
   const [generating, setGenerating] = useState(false)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [generationProgress, setGenerationProgress] = useState<{ progress: number; message: string } | null>(null)
   const [referenceIndexes, setReferenceIndexes] = useState<CourseGenerationIndex[]>([])
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<string[]>([])
   const [writingFormats, setWritingFormats] = useState<CourseGenerationIndex[]>([])
@@ -73,8 +74,9 @@ export default function GenerateCoursePage() {
     }
 
     setGenerating(true)
+    setGenerationProgress({ progress: 0, message: 'Starting course generation...' })
     try {
-      const request: GenerateCourseRequest = {
+      const request = {
         prompt: prompt.trim() || '', // Allow empty prompt if PDF is provided
         referenceIndexIds: selectedReferenceIds.length > 0 ? selectedReferenceIds : undefined,
         writingFormatId: selectedWritingFormatId || undefined,
@@ -86,9 +88,13 @@ export default function GenerateCoursePage() {
         certificateEligible: options.certificateEligible || undefined,
         maxCompletionDays: options.maxCompletionDays ? parseInt(options.maxCompletionDays) : undefined,
         pdfFile: pdfFile || undefined,
-      }
+      } as GenerateCourseRequest & { pdfFile?: File }
 
-      const course = await coursesApi.generateCourse(request)
+      const course = await (coursesApi.generateCourse as any)(request, (progress: number, message: string) => {
+        setGenerationProgress({ progress, message })
+      })
+      
+      setGenerationProgress(null)
       toast({
         title: 'Course Generated',
         description: 'The course has been generated successfully.',
@@ -96,6 +102,7 @@ export default function GenerateCoursePage() {
       router.push(`/courses/${course.id}`)
     } catch (error: any) {
       console.error('Failed to generate course:', error)
+      setGenerationProgress(null)
       toast({
         variant: 'destructive',
         title: 'Failed to generate course',
@@ -363,6 +370,26 @@ export default function GenerateCoursePage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Progress Indicator */}
+          {generationProgress && (
+            <Card className="mb-6">
+              <CardContent className="pt-6">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">{generationProgress.message}</span>
+                    <span className="text-muted-foreground">{generationProgress.progress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${generationProgress.progress}%` }}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="flex justify-end space-x-3">
             <Button

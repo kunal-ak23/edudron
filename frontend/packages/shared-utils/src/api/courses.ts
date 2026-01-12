@@ -245,12 +245,15 @@ export class CoursesApi {
     return Array.isArray(response.data) ? response.data : []
   }
 
-  async generateCourse(request: GenerateCourseRequest): Promise<Course> {
+  async generateCourse(request: GenerateCourseRequest, onProgress?: (progress: number, message: string) => void): Promise<Course> {
     // Check if request includes a PDF file
+    let job: AIGenerationJobDTO
+    
     if (request.pdfFile) {
       // Use multipart form data for PDF upload
       const formData = new FormData()
-      if (request.prompt) formData.append('prompt', request.prompt)
+      // Always include prompt, even if empty (backend expects it)
+      formData.append('prompt', request.prompt || '')
       if (request.categoryId) formData.append('categoryId', request.categoryId)
       if (request.difficultyLevel) formData.append('difficultyLevel', request.difficultyLevel)
       if (request.language) formData.append('language', request.language)
@@ -260,15 +263,53 @@ export class CoursesApi {
       if (request.referenceIndexIds && request.referenceIndexIds.length > 0) formData.append('referenceIndexIds', request.referenceIndexIds.join(','))
       if (request.writingFormatId) formData.append('writingFormatId', request.writingFormatId)
       if (request.writingFormat) formData.append('writingFormat', request.writingFormat)
-      formData.append('pdfFile', request.pdfFile)
+      // Append PDF file - this must be the actual File object
+      formData.append('pdfFile', request.pdfFile, request.pdfFile.name)
       
-      const response = await this.apiClient.postForm<Course>('/content/courses/generate', formData)
-      return response.data
+      const response = await this.apiClient.postForm<AIGenerationJobDTO>('/content/courses/generate', formData)
+      job = response.data
     } else {
       // Use JSON for regular requests (backward compatibility)
-      const response = await this.apiClient.post<Course>('/content/courses/generate', request)
-      return response.data
+      const response = await this.apiClient.post<AIGenerationJobDTO>('/content/courses/generate', request)
+      job = response.data
     }
+    
+    // Poll for job completion
+    return this.waitForJobCompletion(job.jobId, onProgress)
+  }
+  
+  async getCourseGenerationJobStatus(jobId: string): Promise<AIGenerationJobDTO> {
+    const response = await this.apiClient.get<AIGenerationJobDTO>(`/content/courses/generate/jobs/${jobId}`)
+    return response.data
+  }
+  
+  private async waitForJobCompletion(jobId: string, onProgress?: (progress: number, message: string) => void, maxWaitTime: number = 300000): Promise<Course> {
+    const startTime = Date.now()
+    const pollInterval = 2000 // Poll every 2 seconds
+    
+    while (Date.now() - startTime < maxWaitTime) {
+      const job = await this.getCourseGenerationJobStatus(jobId)
+      
+      if (onProgress && job.progress !== undefined && job.message) {
+        onProgress(job.progress, job.message)
+      }
+      
+      if (job.status === 'COMPLETED') {
+        if (job.result && typeof job.result === 'object' && 'id' in job.result) {
+          return job.result as Course
+        }
+        throw new Error('Job completed but result is invalid')
+      }
+      
+      if (job.status === 'FAILED') {
+        throw new Error(job.error || job.message || 'Course generation failed')
+      }
+      
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollInterval))
+    }
+    
+    throw new Error('Course generation timed out')
   }
 }
 
@@ -284,6 +325,20 @@ export interface GenerateCourseRequest {
   writingFormatId?: string
   writingFormat?: string
   pdfFile?: File
+}
+
+export interface AIGenerationJobDTO {
+  jobId: string
+  jobType: 'COURSE_GENERATION' | 'LECTURE_GENERATION' | 'SUB_LECTURE_GENERATION'
+  status: 'PENDING' | 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  message?: string
+  clientId?: string
+  userId?: string
+  result?: Course | any
+  error?: string
+  createdAt: string
+  updatedAt: string
+  progress?: number
 }
 
 export interface CourseGenerationIndex {
