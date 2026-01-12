@@ -4,6 +4,9 @@
 
 @layer base {
   :root {
+    /* Application scale - 30% reduction = 70% of original size */
+    --app-scale: 0.7;
+    
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -53,6 +56,13 @@
   * {
     @apply border-border;
   }
+  
+  /* Scale the entire application by adjusting base font size */
+  /* This will scale all rem-based units (spacing, font sizes, etc.) */
+  html {
+    font-size: calc(16px * var(--app-scale));
+  }
+  
   body {
     @apply bg-background text-foreground;
   }

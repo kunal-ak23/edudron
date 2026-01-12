@@ -62,10 +62,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-primary-100">
+      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg border border-primary-100">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-primary-600">
             EduDron
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
@@ -109,7 +109,12 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <Button type="submit" className="w-full" loading={loading}>
+            <Button 
+              type="submit" 
+              variant="primary"
+              className="w-full font-semibold" 
+              loading={loading}
+            >
               {isLogin ? 'Sign in' : 'Sign up'}
             </Button>
           </div>
@@ -120,7 +125,7 @@ export default function LoginPage() {
                 setIsLogin(!isLogin)
                 setError('')
               }}
-              className="text-sm text-primary-600 hover:text-primary-500"
+              className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
             >
               {isLogin
                 ? "Don't have an account? Sign up"
