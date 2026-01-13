@@ -1,0 +1,7 @@
+{
+  "buildCommand": "cd ../.. && npx turbo run build --filter=@edudron/admin-dashboard",
+  "outputDirectory": "apps/admin-dashboard/.next",
+  "installCommand": "cd ../.. && npm ci",
+  "framework": "nextjs"
+}
+
