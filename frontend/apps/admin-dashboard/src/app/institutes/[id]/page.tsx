@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -120,11 +120,9 @@ export default function InstituteDetailPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     )
   }
 
@@ -133,7 +131,7 @@ export default function InstituteDetailPage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
+    <>
       <div>
         <Link href="/institutes">
           <Button variant="ghost" className="mb-6">
@@ -142,11 +140,11 @@ export default function InstituteDetailPage() {
           </Button>
         </Link>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Institute Details</CardTitle>
-            </CardHeader>
-            <CardContent>
+        <Card>
+          <CardHeader>
+            <CardTitle>Institute Details</CardTitle>
+          </CardHeader>
+          <CardContent>
               <form onSubmit={handleUpdate} className="space-y-6">
                 <div className="grid gap-4">
                   <div className="grid gap-2">
@@ -217,22 +215,21 @@ export default function InstituteDetailPage() {
                   </Button>
                 </div>
               </form>
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
 
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Link href={`/institutes/${instituteId}/classes`}>
-                <Button variant="outline" className="w-full">
-                  View Classes ({institute.classCount || 0})
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Link href={`/institutes/${instituteId}/classes`}>
+              <Button variant="outline" className="w-full">
+                View Classes ({institute.classCount || 0})
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
 
       <ConfirmationDialog
@@ -244,7 +241,7 @@ export default function InstituteDetailPage() {
         confirmText="Deactivate"
         variant="destructive"
       />
-    </ProtectedRoute>
+    </>
   )
 }
 

@@ -341,6 +341,7 @@ Bob Johnson,bob.johnson@example.com,,,,inst_123,,,`
             </Card>
           )}
       </div>
+    </div>
   )
 }
 

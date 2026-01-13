@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -122,32 +122,27 @@ export default function SectionEnrollPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <div className="container mx-auto py-8 px-4">
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          </div>
+      <div className="container mx-auto py-8 px-4">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
-      </ProtectedRoute>
+      </div>
     )
   }
 
   if (!section || !classItem) {
     return (
-      <ProtectedRoute>
-        <div className="container mx-auto py-8 px-4">
-          <p>Section not found</p>
-        </div>
-      </ProtectedRoute>
+      <div className="container mx-auto py-8 px-4">
+        <p>Section not found</p>
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute>
-      <div className="container mx-auto py-8 px-4">
-        <div className="mb-6">
-          <Link href={`/sections/${sectionId}`}>
-            <Button variant="ghost" size="sm" className="mb-4">
+    <div className="container mx-auto py-8 px-4">
+      <div className="mb-6">
+        <Link href={`/sections/${sectionId}`}>
+          <Button variant="ghost" size="sm" className="mb-4">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Section
             </Button>
@@ -322,7 +317,6 @@ export default function SectionEnrollPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </ProtectedRoute>
   )
 }
 

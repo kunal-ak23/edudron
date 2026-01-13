@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -115,44 +115,38 @@ export default function TenantEditPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
     )
   }
 
   if (error && !tenant) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-        <div>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-center">
+      <div>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
                   <p className="text-destructive mb-4">{error}</p>
                   <Button onClick={() => router.push('/tenants')} variant="outline">
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back to Tenants
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </ProtectedRoute>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN']}>
-      <div>
-        <div className="mb-6">
-          <Button
-            variant="ghost"
-            onClick={() => router.push('/tenants')}
-            className="mb-4"
-          >
+    <div>
+      <div className="mb-6">
+        <Button
+          variant="ghost"
+          onClick={() => router.push('/tenants')}
+          className="mb-4"
+        >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Tenants
           </Button>
@@ -301,7 +295,6 @@ export default function TenantEditPage() {
         variant="destructive"
         isLoading={saving}
       />
-    </ProtectedRoute>
   )
 }
 

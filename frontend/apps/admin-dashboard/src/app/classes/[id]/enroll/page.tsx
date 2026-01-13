@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -137,43 +137,39 @@ export default function ClassEnrollPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute>
-        <div className="container mx-auto py-8 px-4">
-          <div className="flex items-center justify-center h-64">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-          </div>
+      <div className="container mx-auto py-8 px-4">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
-      </ProtectedRoute>
+      </div>
     )
   }
 
   if (!classItem) {
     return (
-      <ProtectedRoute>
-        <div className="container mx-auto py-8 px-4">
-          <p>Class not found</p>
-        </div>
-      </ProtectedRoute>
+      <div className="container mx-auto py-8 px-4">
+        <p>Class not found</p>
+      </div>
     )
   }
 
   return (
-    <ProtectedRoute>
-      <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto py-8 px-4">
+      <div className="mb-6">
+        <Link href={`/classes/${classId}`}>
+          <Button variant="ghost" size="sm" className="mb-4">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Class
+          </Button>
+        </Link>
         <div className="mb-6">
-          <Link href={`/classes/${classId}`}>
-            <Button variant="ghost" size="sm" className="mb-4">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Class
-            </Button>
-          </Link>
-          <div className="mb-6">
-            <p className="text-gray-600">
+          <p className="text-gray-600">
             {institute?.name} - {classItem.name}
           </p>
         </div>
+      </div>
 
-        <div className="grid gap-6">
+      <div className="grid gap-6">
           {/* Class Info */}
           <Card>
             <CardHeader>
@@ -337,7 +333,6 @@ export default function ClassEnrollPage() {
           </DialogContent>
         </Dialog>
       </div>
-    </ProtectedRoute>
   )
 }
 

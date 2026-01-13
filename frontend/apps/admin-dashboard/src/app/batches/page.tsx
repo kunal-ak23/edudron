@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute, Card, Button } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
+import { Card, Button } from '@edudron/ui-components'
 import { enrollmentsApi, coursesApi } from '@/lib/api'
 import type { Batch, Course } from '@edudron/shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -74,8 +75,7 @@ export default function BatchesPage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
-      <div>
+    <div>
         <div className="mb-6 flex items-center justify-between">
           <div>
             <Button onClick={() => router.push('/batches/new')}>
@@ -85,9 +85,10 @@ export default function BatchesPage() {
               Create Batch
             </Button>
           </div>
+        </div>
 
-          {/* Batch List */}
-          {loading ? (
+        {/* Batch List */}
+        {loading ? (
             <Card loading={true} />
           ) : batches.length === 0 ? (
             <Card>
@@ -161,7 +162,6 @@ export default function BatchesPage() {
             </div>
           )}
       </div>
-    </ProtectedRoute>
   )
 }
 

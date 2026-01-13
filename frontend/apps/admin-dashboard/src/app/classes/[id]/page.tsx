@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -121,11 +121,9 @@ export default function ClassDetailPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     )
   }
 
@@ -134,26 +132,25 @@ export default function ClassDetailPage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
+    <>
       <div>
-          <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
-            <Link href="/institutes" className="hover:text-gray-900">Institutes</Link>
-            <span>/</span>
-            <Link href={`/institutes/${institute.id}/classes`} className="hover:text-gray-900">{institute.name}</Link>
-            <span>/</span>
-            <span className="text-gray-900">{classItem.name}</span>
-          </div>
+        <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+          <Link href="/institutes" className="hover:text-gray-900">Institutes</Link>
+          <span>/</span>
+          <Link href={`/institutes/${institute.id}/classes`} className="hover:text-gray-900">{institute.name}</Link>
+          <span>/</span>
+          <span className="text-gray-900">{classItem.name}</span>
+        </div>
 
-          <Link href={`/institutes/${institute.id}/classes`}>
-            <Button variant="ghost" className="mb-4">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Classes
-            </Button>
-          </Link>
+        <Link href={`/institutes/${institute.id}/classes`}>
+        <Button variant="ghost" className="mb-4">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Classes
+        </Button>
+      </Link>
 
-
-          <Card>
-            <CardHeader>
+        <Card>
+          <CardHeader>
               <CardTitle>Class Details</CardTitle>
             </CardHeader>
             <CardContent>
@@ -227,27 +224,26 @@ export default function ClassDetailPage() {
                   </Button>
                 </div>
               </form>
-            </CardContent>
-          </Card>
+          </CardContent>
+        </Card>
 
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Link href={`/classes/${classId}/sections`}>
-                <Button variant="outline" className="w-full">
-                  View Sections ({classItem.sectionCount || 0})
-                </Button>
-              </Link>
-              <Link href={`/classes/${classId}/enroll`}>
-                <Button variant="outline" className="w-full">
-                  Enroll to Course
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Link href={`/classes/${classId}/sections`}>
+              <Button variant="outline" className="w-full">
+                View Sections ({classItem.sectionCount || 0})
+              </Button>
+            </Link>
+            <Link href={`/classes/${classId}/enroll`}>
+              <Button variant="outline" className="w-full">
+                Enroll to Course
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
 
       <ConfirmationDialog
@@ -259,7 +255,7 @@ export default function ClassDetailPage() {
         confirmText="Deactivate"
         variant="destructive"
       />
-    </ProtectedRoute>
+    </>
   )
 }
 

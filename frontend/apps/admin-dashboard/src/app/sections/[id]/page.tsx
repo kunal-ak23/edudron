@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -122,11 +122,9 @@ export default function SectionDetailPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        </div>
-      </ProtectedRoute>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     )
   }
 
@@ -135,14 +133,13 @@ export default function SectionDetailPage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div>
-          <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
-            <Link href="/institutes" className="hover:text-gray-900">Institutes</Link>
-            <span>/</span>
-            <Link href={`/institutes/${institute.id}/classes`} className="hover:text-gray-900">{institute.name}</Link>
-            <span>/</span>
-            <Link href={`/classes/${classItem.id}`} className="hover:text-gray-900">{classItem.name}</Link>
+    <div>
+      <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
+        <Link href="/institutes" className="hover:text-gray-900">Institutes</Link>
+        <span>/</span>
+        <Link href={`/institutes/${institute.id}/classes`} className="hover:text-gray-900">{institute.name}</Link>
+        <span>/</span>
+        <Link href={`/classes/${classItem.id}`} className="hover:text-gray-900">{classItem.name}</Link>
             <span>/</span>
             <Link href={`/classes/${classItem.id}/sections`} className="hover:text-gray-900">Sections</Link>
             <span>/</span>
@@ -251,7 +248,6 @@ export default function SectionDetailPage() {
         confirmText="Deactivate"
         variant="destructive"
       />
-    </ProtectedRoute>
   )
 }
 
