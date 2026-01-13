@@ -30,6 +30,18 @@ export default function CourseDetailPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showPreviewVideoModal, setShowPreviewVideoModal] = useState(false)
   const [openModuleId, setOpenModuleId] = useState<string | null>(null)
+  
+  // Check for preview mode
+  const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const isAdminUser = user && user.role !== 'STUDENT'
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const preview = urlParams.get('preview') === 'true'
+      setIsPreviewMode(preview && isAdminUser)
+    }
+  }, [isAdminUser])
 
   const loadCourse = useCallback(async () => {
     try {
@@ -62,25 +74,28 @@ export default function CourseDetailPage() {
       }
       
       // Check enrollment status - try enroll API, if it returns 409, user is already enrolled
-      let isEnrolled = false
-      try {
-        await enrollmentsApi.enrollInCourse(courseId)
-        // If enroll succeeds, user is now enrolled
-        isEnrolled = true
-      } catch (error: any) {
-        const statusCode = error.response?.status
-        const errorMessage = error.response?.data?.error || error.message || error.response?.data?.message || ''
-        const lowerMessage = errorMessage.toLowerCase()
-        
-        // If 409 (Conflict) or message indicates already enrolled, user is enrolled
-        if (statusCode === 409 || lowerMessage.includes('already enrolled')) {
+      // In preview mode, allow viewing without enrollment
+      let isEnrolled = isPreviewMode
+      if (!isPreviewMode) {
+        try {
+          await enrollmentsApi.enrollInCourse(courseId)
+          // If enroll succeeds, user is now enrolled
           isEnrolled = true
-        } else {
-          // User is not enrolled - try checkEnrollment as fallback
-          try {
-            isEnrolled = await enrollmentsApi.checkEnrollment(courseId)
-          } catch {
-            isEnrolled = false
+        } catch (error: any) {
+          const statusCode = error.response?.status
+          const errorMessage = error.response?.data?.error || error.message || error.response?.data?.message || ''
+          const lowerMessage = errorMessage.toLowerCase()
+          
+          // If 409 (Conflict) or message indicates already enrolled, user is enrolled
+          if (statusCode === 409 || lowerMessage.includes('already enrolled')) {
+            isEnrolled = true
+          } else {
+            // User is not enrolled - try checkEnrollment as fallback
+            try {
+              isEnrolled = await enrollmentsApi.checkEnrollment(courseId)
+            } catch {
+              isEnrolled = false
+            }
           }
         }
       }
@@ -246,6 +261,34 @@ export default function CourseDetailPage() {
     <ProtectedRoute>
       <StudentLayout>
         <div className="min-h-screen bg-gray-50">
+          {/* Preview Mode Banner */}
+          {isPreviewMode && (
+            <div className="bg-amber-50 border-b border-amber-200 px-6 sm:px-8 lg:px-12 py-3">
+              <div className="max-w-[1600px] mx-auto">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-800 font-medium">Preview Mode</span>
+                    <span className="text-amber-700 text-sm">You are viewing this course as a student would see it</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const adminPortalUrl = typeof window !== 'undefined' 
+                        ? (window.location.origin.includes('localhost') 
+                            ? 'http://localhost:3000' 
+                            : window.location.origin.replace('student', 'admin').replace('portal', 'dashboard'))
+                        : 'http://localhost:3000'
+                      window.location.href = `${adminPortalUrl}/courses/${courseId}`
+                    }}
+                    className="text-amber-800 border-amber-300 hover:bg-amber-100"
+                  >
+                    Exit Preview
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Hero Section */}
           <div className="max-w-[1600px] mx-auto px-6 sm:px-8 lg:px-12 py-3">
           <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_0.9fr] gap-3 items-start">

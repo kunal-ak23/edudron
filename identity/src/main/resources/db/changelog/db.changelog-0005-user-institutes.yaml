@@ -1,0 +1,53 @@
+databaseChangeLog:
+  - changeSet:
+      id: user-institutes-0001
+      author: edudron
+      changes:
+        # Create junction table for many-to-many relationship between users and institutes
+        - createTable:
+            tableName: user_institutes
+            schemaName: idp
+            columns:
+              - column: { name: user_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: institute_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        # Add primary key constraint
+        - addPrimaryKey:
+            tableName: user_institutes
+            schemaName: idp
+            columnNames: user_id, institute_id
+            constraintName: pk_user_institutes
+        # Add foreign key to users table
+        - addForeignKeyConstraint:
+            baseTableName: user_institutes
+            baseTableSchemaName: idp
+            baseColumnNames: user_id
+            referencedTableName: users
+            referencedTableSchemaName: idp
+            referencedColumnNames: id
+            constraintName: fk_user_institutes_user_id
+            onDelete: CASCADE
+        # Add foreign key to institutes table (in student schema)
+        - sql:
+            sql: |
+              ALTER TABLE idp.user_institutes 
+              ADD CONSTRAINT fk_user_institutes_institute_id 
+              FOREIGN KEY (institute_id) 
+              REFERENCES student.institutes(id) 
+              ON DELETE CASCADE;
+        # Add indexes for performance
+        - createIndex:
+            tableName: user_institutes
+            schemaName: idp
+            indexName: idx_user_institutes_user_id
+            columns:
+              - column: { name: user_id }
+        - createIndex:
+            tableName: user_institutes
+            schemaName: idp
+            indexName: idx_user_institutes_institute_id
+            columns:
+              - column: { name: institute_id }
+        # Note: The constraint preventing SYSTEM_ADMIN users from having institute associations
+        # is enforced at the application level in UserService, as PostgreSQL doesn't support
+        # subqueries in CHECK constraints.

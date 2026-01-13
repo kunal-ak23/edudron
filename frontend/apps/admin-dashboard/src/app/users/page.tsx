@@ -29,6 +29,7 @@ interface User {
   email: string
   role: string
   active: boolean
+  instituteIds?: string[]
   createdAt: string
 }
 
