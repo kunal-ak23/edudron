@@ -1,7 +1,7 @@
 {
-  "buildCommand": "cd ../.. && npx turbo run build --filter=@edudron/student-portal",
-  "outputDirectory": "apps/student-portal/.next",
-  "installCommand": "cd ../.. && npm ci",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
   "framework": "nextjs"
 }
 

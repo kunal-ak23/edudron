@@ -40,14 +40,42 @@ vercel
 vercel --prod
 ```
 
+## Package Build Strategy
+
+EduDron uses **local package builds** (similar to gulliyo's approach):
+
+- Packages are built automatically via `prebuild` scripts before each app build
+- No need to publish packages to GitHub Packages for Vercel deployments
+- Packages are referenced as workspace dependencies (`*`)
+
+**How it works:**
+- Each app has a `prebuild` script that builds `shared-utils` and `ui-components`
+- When Vercel runs `npm run build`, it automatically runs `prebuild` first
+- Packages are built locally during the Vercel build process
+
+**Alternative:** If you prefer to use published packages (like gulliyo does now), see `frontend/packages/PUBLISH_PACKAGES.md` for instructions.
+
 ## Environment Variables
 
 For each app, set these in Vercel Dashboard or via CLI:
+
+### Required Variables
+
+1. **GITHUB_TOKEN** (Required for installing packages)
+   - Get token from: https://github.com/settings/tokens
+   - Required scope: `read:packages` (or `write:packages` if publishing)
+   - Set for: Production, Preview, Development
+
+2. **NEXT_PUBLIC_API_GATEWAY_URL**
+   - Your gateway URL (e.g., `https://your-gateway.azurecontainerapps.io`)
 
 ### Admin Dashboard
 
 ```bash
 cd frontend/apps/admin-dashboard
+
+vercel env add GITHUB_TOKEN production
+# Enter: your_github_token
 
 vercel env add NEXT_PUBLIC_API_GATEWAY_URL production
 # Enter: https://your-gateway-url.azurecontainerapps.io
@@ -57,6 +85,9 @@ vercel env add NEXT_PUBLIC_API_GATEWAY_URL production
 
 ```bash
 cd frontend/apps/student-portal
+
+vercel env add GITHUB_TOKEN production
+# Enter: your_github_token
 
 vercel env add NEXT_PUBLIC_API_GATEWAY_URL production
 # Enter: https://your-gateway-url.azurecontainerapps.io
@@ -83,12 +114,12 @@ Deploy each app as a separate Vercel project for better isolation and independen
 2. **Configure Project:**
    - **Project Name:** `edudron-admin-dashboard` (or your preferred name)
    - **Framework Preset:** Next.js (auto-detected)
-   - **Root Directory:** `frontend`
-   - **Build Command:** `npm install && npx turbo run build --filter=@edudron/admin-dashboard`
-   - **Output Directory:** `apps/admin-dashboard/.next`
-   - **Install Command:** `npm install`
+   - **Root Directory:** `frontend/apps/admin-dashboard` (default - where you ran `vercel` from)
+   - **Build Command:** (leave empty - uses `vercel.json`)
+   - **Output Directory:** (leave empty - uses `vercel.json`)
+   - **Install Command:** (leave empty - uses `vercel.json`)
    
-   **OR** use the included `vercel.json` file (recommended)
+   The included `vercel.json` file handles everything automatically!
 
 3. **Environment Variables:**
    - Go to **Settings** → **Environment Variables**
@@ -108,12 +139,12 @@ Deploy each app as a separate Vercel project for better isolation and independen
 2. **Configure Project:**
    - **Project Name:** `edudron-student-portal` (or your preferred name)
    - **Framework Preset:** Next.js
-   - **Root Directory:** `frontend`
-   - **Build Command:** `npm install && npx turbo run build --filter=@edudron/student-portal`
-   - **Output Directory:** `apps/student-portal/.next`
-   - **Install Command:** `npm install`
+   - **Root Directory:** `frontend/apps/student-portal` (default - where you ran `vercel` from)
+   - **Build Command:** (leave empty - uses `vercel.json`)
+   - **Output Directory:** (leave empty - uses `vercel.json`)
+   - **Install Command:** (leave empty - uses `vercel.json`)
    
-   **OR** use the included `vercel.json` file (recommended)
+   The included `vercel.json` file handles everything automatically!
 
 3. **Environment Variables:**
    - Add `NEXT_PUBLIC_API_GATEWAY_URL` with your gateway URL
@@ -138,16 +169,38 @@ The monorepo structure requires building shared packages before building apps:
 
 ### Using vercel.json (Included)
 
-Each app has a `vercel.json` file that handles the monorepo build:
+Each app has a `vercel.json` file that handles the monorepo build automatically:
 
 **Admin Dashboard** (`apps/admin-dashboard/vercel.json`):
-- Builds from root directory
-- Installs all dependencies
-- Builds shared packages
-- Builds the app
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "cd ../.. && npm install",
+  "framework": "nextjs"
+}
+```
 
 **Student Portal** (`apps/student-portal/vercel.json`):
-- Same configuration as admin dashboard
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "cd ../.. && npm install",
+  "framework": "nextjs"
+}
+```
+
+**How it works:**
+1. **Vercel Root Directory:** `frontend/apps/admin-dashboard` (or `frontend/apps/student-portal`)
+2. **Install Command:** `cd ../.. && npm install` - Goes up to `frontend` root and installs workspace packages
+3. **Build Command:** `npm run build` - Runs from app directory
+4. **prebuild script** (in package.json) automatically runs first:
+   - Builds `shared-utils` package
+   - Builds `ui-components` package
+5. Then `next build` runs to build the Next.js app
+
+**Note:** The `prebuild` script ensures packages are built before the app tries to use them, just like when you run `npm run build` locally.
 
 ### Manual Build Commands
 
@@ -160,22 +213,24 @@ If not using `vercel.json`, use these commands in Vercel Dashboard:
 npm install
 ```
 
+**Root Directory:** `frontend/apps/admin-dashboard` (or `frontend/apps/student-portal`)
+
 **Install Command:**
 ```bash
-cd ../.. && npm ci
+cd ../.. && npm install
 ```
 
-**Build Command (Admin Dashboard):**
+**Build Command:**
 ```bash
-cd ../.. && npx turbo run build --filter=@edudron/admin-dashboard
+npm run build
 ```
 
-**Build Command (Student Portal):**
-```bash
-cd ../.. && npx turbo run build --filter=@edudron/student-portal
+**Output Directory:**
+```
+.next
 ```
 
-**Note:** Using `turbo run build --filter=<package-name>` leverages Turbo's dependency graph to automatically build `@edudron/ui-components` and `@edudron/shared-utils` before building the app. The `--filter` flag tells Turbo to build the specified app and all its dependencies.
+**Note:** The `prebuild` script in each app's `package.json` automatically builds `shared-utils` and `ui-components` before building the Next.js app. This is the same approach used in gulliyo.
 
 **Output Directory:**
 - Admin Dashboard: `apps/admin-dashboard/.next`
@@ -211,7 +266,7 @@ Access them via:
 
 ### Build Fails - Package Not Found
 
-**Problem:** `@edudron/ui-components` or `@edudron/shared-utils` not found.
+**Problem:** `@kunal-ak23/edudron-ui-components` or `@kunal-ak23/edudron-shared-utils` not found.
 
 **Solution:**
 1. Ensure packages are built before the app
@@ -242,9 +297,9 @@ Access them via:
 3. Split large dependencies if possible
 4. Check Vercel plan limits (free tier has build time limits)
 
-### npm Error: "Tracker 'idealTree' already exists"
+### npm Error: "Tracker 'idealTree' already exists" or "Command exited with 1"
 
-**Problem:** npm install fails with "Tracker 'idealTree' already exists" error.
+**Problem:** npm install fails during Vercel build.
 
 **Solution:**
 1. **Clear Vercel cache:** Delete the `.vercel` directory in your app folder:
@@ -253,19 +308,32 @@ Access them via:
    rm -rf apps/admin-dashboard/.vercel
    ```
 
-2. **Update Vercel project settings:**
-   - Go to Vercel Dashboard → Your Project → Settings → General
-   - Update the Build Command to: `cd ../.. && npx turbo run build --filter=@edudron/student-portal`
-   - Update the Install Command to: `cd ../.. && npm ci`
+2. **Check Vercel Root Directory Setting:**
+   - Go to Vercel Dashboard → Your Project → Settings → General → Build & Development Settings
+   - **Root Directory should be:** `frontend/apps/student-portal` (or `frontend/apps/admin-dashboard`)
+   - This is the default when you run `vercel` from the app directory
+   - The `installCommand` in `vercel.json` uses `cd ../..` to navigate to `frontend` root for installing dependencies
+
+3. **Update Vercel project settings manually (if vercel.json isn't working):**
+   - **Root Directory:** `frontend/apps/student-portal`
+   - **Install Command:** `cd ../.. && npm install`
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `.next`
    - Save and redeploy
 
-3. **Use `npm ci` instead of `npm install`:**
-   - `npm ci` is more reliable for CI/CD environments
-   - It does a clean install based on package-lock.json
+4. **Alternative: Use simpler install command:**
+   - Try `npm install --legacy-peer-deps` instead of `npm install`
+   - This handles peer dependency conflicts better
 
-4. **Ensure vercel.json is correct:**
-   - The `vercel.json` file should NOT have `npm install` in the buildCommand
-   - Install should only be in `installCommand`
+5. **Ensure GITHUB_TOKEN is set:**
+   - Go to Vercel Dashboard → Settings → Environment Variables
+   - Make sure `GITHUB_TOKEN` is set for all environments
+   - This is required for installing `@kunal-ak23` scoped packages
+
+6. **Verify .npmrc files exist:**
+   - `frontend/.npmrc` should exist
+   - `frontend/apps/student-portal/.npmrc` should exist
+   - Both should reference `${GITHUB_TOKEN}`
 
 ## Quick Deploy Script
 

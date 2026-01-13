@@ -1,5 +1,5 @@
 {
-  "name": "@edudron/shared-utils",
+  "name": "@kunal-ak23/edudron-shared-utils",
   "version": "1.0.0",
   "description": "Shared utilities and services for EduDron platform",
   "main": "./dist/index.js",

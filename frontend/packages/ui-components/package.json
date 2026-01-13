@@ -1,5 +1,5 @@
 {
-  "name": "@edudron/ui-components",
+  "name": "@kunal-ak23/edudron-ui-components",
   "version": "1.0.0",
   "description": "Reusable UI components for EduDron platform",
   "main": "./dist/index.js",
