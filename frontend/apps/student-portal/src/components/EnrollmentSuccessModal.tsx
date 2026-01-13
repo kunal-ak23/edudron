@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Button } from '@edudron/ui-components'
+import { Button } from '@kunal-ak23/edudron-ui-components'
 
 interface EnrollmentSuccessModalProps {
   userName: string

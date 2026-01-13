@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
-import { FileUpload } from '@edudron/ui-components'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
+import { FileUpload } from '@kunal-ak23/edudron-ui-components'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,7 +29,7 @@ import {
 } from '@/components/ui/dialog'
 import { ArrowLeft, Loader2, Save, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles } from 'lucide-react'
 import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi, apiClient } from '@/lib/api'
-import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@edudron/shared-utils'
+import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 

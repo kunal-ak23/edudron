@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import type { Note } from '@edudron/shared-utils'
+import type { Note } from '@kunal-ak23/edudron-shared-utils'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
 
 interface NotesSidebarProps {

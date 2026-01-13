@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute, CourseCard, Card } from '@edudron/ui-components'
+import { ProtectedRoute, CourseCard, Card } from '@kunal-ak23/edudron-ui-components'
 import { enrollmentsApi, coursesApi } from '@/lib/api'
 import { StudentLayout } from '@/components/StudentLayout'
-import type { Enrollment, Course, Progress } from '@edudron/shared-utils'
+import type { Enrollment, Course, Progress } from '@kunal-ak23/edudron-shared-utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'

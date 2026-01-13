@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Button } from '@edudron/ui-components'
-import type { IssueType } from '@edudron/shared-utils'
+import { Button } from '@kunal-ak23/edudron-ui-components'
+import type { IssueType } from '@kunal-ak23/edudron-shared-utils'
 
 interface IssueReportDialogProps {
   isOpen: boolean

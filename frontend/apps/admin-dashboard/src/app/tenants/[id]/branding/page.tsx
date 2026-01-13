@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
-import { FileUpload } from '@edudron/ui-components'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
+import { FileUpload } from '@kunal-ak23/edudron-ui-components'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft } from 'lucide-react'
 import { tenantBrandingApi, mediaApi } from '@/lib/api'
-import type { TenantBranding } from '@edudron/shared-utils'
+import type { TenantBranding } from '@kunal-ak23/edudron-shared-utils'
 
 export default function TenantBrandingPage() {
   const router = useRouter()

@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -18,7 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Upload, Download, Loader2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import { studentsApi } from '@/lib/api'
-import type { BulkStudentImportResult, StudentImportRowResult } from '@edudron/shared-utils'
+import type { BulkStudentImportResult, StudentImportRowResult } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 

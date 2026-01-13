@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import type { Note } from '@edudron/shared-utils'
+import type { Note } from '@kunal-ak23/edudron-shared-utils'
 
 interface TextHighlighterProps {
   content: string

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Trash2, X, Loader2, FileText } from 'lucide-react'
 import { courseGenerationIndexApi } from '@/lib/api'
-import type { CourseGenerationIndex } from '@edudron/shared-utils'
+import type { CourseGenerationIndex } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -33,8 +33,8 @@ import {
 } from '@/components/ui/select'
 import { Plus, Loader2, Edit, Building2, Users } from 'lucide-react'
 import { institutesApi } from '@/lib/api'
-import type { Institute, CreateInstituteRequest } from '@edudron/shared-utils'
-import { InstituteType } from '@edudron/shared-utils'
+import type { Institute, CreateInstituteRequest } from '@kunal-ak23/edudron-shared-utils'
+import { InstituteType } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 

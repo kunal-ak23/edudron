@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Card } from '@edudron/ui-components'
+import { Button, Card } from '@kunal-ak23/edudron-ui-components'
 import { tenantsApi } from '@/lib/api'
 import { authService } from '@/lib/auth'
-import type { Tenant, TenantInfo } from '@edudron/shared-utils'
+import type { Tenant, TenantInfo } from '@kunal-ak23/edudron-shared-utils'
 
 export default function SelectTenantPage() {
   const router = useRouter()

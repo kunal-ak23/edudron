@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/table'
 import { Plus, Loader2, Edit, Image as ImageIcon } from 'lucide-react'
 import { tenantsApi } from '@/lib/api'
-import type { Tenant, CreateTenantRequest } from '@edudron/shared-utils'
+import type { Tenant, CreateTenantRequest } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 

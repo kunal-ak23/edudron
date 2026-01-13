@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -20,7 +20,7 @@ import {
   LogOut
 } from 'lucide-react'
 import { coursesApi, enrollmentsApi } from '@/lib/api'
-import type { Course, Batch } from '@edudron/shared-utils'
+import type { Course, Batch } from '@kunal-ak23/edudron-shared-utils'
 
 // Force dynamic rendering - disable static generation
 export const dynamic = 'force-dynamic'

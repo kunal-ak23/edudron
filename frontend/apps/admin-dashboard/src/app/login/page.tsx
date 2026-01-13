@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Input } from '@edudron/ui-components'
-import { useAuth } from '@edudron/shared-utils'
+import { Button, Input } from '@kunal-ak23/edudron-ui-components'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { TenantSelection } from '@/components/TenantSelection'
-import type { LoginCredentials } from '@edudron/shared-utils'
+import type { LoginCredentials } from '@kunal-ak23/edudron-shared-utils'
 
 export default function LoginPage() {
   const router = useRouter()

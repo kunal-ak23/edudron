@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute, CourseCard, SearchBar, FilterBar } from '@edudron/ui-components'
+import { ProtectedRoute, CourseCard, SearchBar, FilterBar } from '@kunal-ak23/edudron-ui-components'
 import { coursesApi, enrollmentsApi } from '@/lib/api'
 import { StudentLayout } from '@/components/StudentLayout'
-import type { Course } from '@edudron/shared-utils'
+import type { Course } from '@kunal-ak23/edudron-shared-utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'

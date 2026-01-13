@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { unstable_batchedUpdates } from 'react-dom'
 import { MarkdownRenderer } from './MarkdownRenderer'
-import type { Note } from '@edudron/shared-utils'
+import type { Note } from '@kunal-ak23/edudron-shared-utils'
 
 interface MarkdownWithHighlightsProps {
   content: string // Markdown source content

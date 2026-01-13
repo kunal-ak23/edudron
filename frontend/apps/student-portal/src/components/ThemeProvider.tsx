@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useAuth } from '@edudron/shared-utils'
-import { TenantBrandingApi } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
+import { TenantBrandingApi } from '@kunal-ak23/edudron-shared-utils'
 import { getApiClient } from '@/lib/api'
 import { applyTenantBranding } from '@/utils/colorUtils'
 

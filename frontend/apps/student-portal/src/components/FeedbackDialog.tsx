@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Button } from '@edudron/ui-components'
-import type { FeedbackType } from '@edudron/shared-utils'
+import { Button } from '@kunal-ak23/edudron-ui-components'
+import type { FeedbackType } from '@kunal-ak23/edudron-shared-utils'
 
 interface FeedbackDialogProps {
   isOpen: boolean

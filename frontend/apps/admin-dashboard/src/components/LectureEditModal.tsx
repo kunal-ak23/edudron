@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { RichTextEditor } from '@/components/RichTextEditor'
 import { SplitMarkdownEditor } from '@/components/SplitMarkdownEditor'
-import { FileUpload } from '@edudron/ui-components'
+import { FileUpload } from '@kunal-ak23/edudron-ui-components'
 import {
   Select,
   SelectContent,
@@ -18,7 +18,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Loader2, X, Video, FileText, Upload } from 'lucide-react'
 import { lecturesApi, mediaApi } from '@/lib/api'
-import type { Lecture, CreateLectureRequest, UpdateLectureRequest, LectureContent } from '@edudron/shared-utils'
+import type { Lecture, CreateLectureRequest, UpdateLectureRequest, LectureContent } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { Button } from '@edudron/ui-components'
+import { Button } from '@kunal-ak23/edudron-ui-components'
 
 interface HighlightNoteDialogProps {
   isOpen: boolean

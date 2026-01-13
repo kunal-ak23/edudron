@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
-import { Card, Button } from '@edudron/ui-components'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
+import { Card, Button } from '@kunal-ak23/edudron-ui-components'
 import { enrollmentsApi, coursesApi } from '@/lib/api'
-import type { Batch, Course } from '@edudron/shared-utils'
+import type { Batch, Course } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'

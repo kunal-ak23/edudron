@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { tenantsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { 
@@ -19,7 +19,7 @@ import {
   Check,
   Loader2
 } from 'lucide-react'
-import type { Tenant } from '@edudron/shared-utils'
+import type { Tenant } from '@kunal-ak23/edudron-shared-utils'
 
 export function TenantSelector() {
   const router = useRouter()

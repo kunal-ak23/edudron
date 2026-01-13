@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
-import { AuthProvider } from '@edudron/shared-utils'
+import { AuthProvider } from '@kunal-ak23/edudron-shared-utils'
 import { ApiClientSetup } from '@/components/ApiClientSetup'
 import { ThemeProvider } from '@/components/ThemeProvider'
 

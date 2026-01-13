@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
-import { TenantBrandingApi, TenantsApi } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
+import { TenantBrandingApi, TenantsApi } from '@kunal-ak23/edudron-shared-utils'
 import { getApiClient } from '@/lib/api'
 
 interface StudentLayoutProps {

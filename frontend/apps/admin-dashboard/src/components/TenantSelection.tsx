@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, Building2 } from 'lucide-react'
-import type { TenantInfo } from '@edudron/shared-utils'
+import type { TenantInfo } from '@kunal-ak23/edudron-shared-utils'
 
 interface TenantSelectionProps {
   tenants: TenantInfo[]

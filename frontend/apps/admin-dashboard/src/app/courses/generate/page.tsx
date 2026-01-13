@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,7 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Sparkles, Loader2, ArrowLeft, FileText, X, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { coursesApi, courseGenerationIndexApi } from '@/lib/api'
-import type { GenerateCourseRequest, CourseGenerationIndex } from '@edudron/shared-utils'
+import type { GenerateCourseRequest, CourseGenerationIndex } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 

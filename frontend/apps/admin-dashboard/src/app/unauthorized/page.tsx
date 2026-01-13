@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Button } from '@edudron/ui-components'
+import { Button } from '@kunal-ak23/edudron-ui-components'
 
 export default function UnauthorizedPage() {
   const router = useRouter()

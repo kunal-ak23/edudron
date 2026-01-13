@@ -1,4 +1,4 @@
-import { ApiClient, CoursesApi, CourseGenerationIndexApi, EnrollmentsApi, PaymentsApi, MediaApi, TenantsApi, TenantBrandingApi, InstitutesApi, ClassesApi, SectionsApi, LecturesApi, StudentsApi } from '@edudron/shared-utils'
+import { ApiClient, CoursesApi, CourseGenerationIndexApi, EnrollmentsApi, PaymentsApi, MediaApi, TenantsApi, TenantBrandingApi, InstitutesApi, ClassesApi, SectionsApi, LecturesApi, StudentsApi } from '@kunal-ak23/edudron-shared-utils'
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080'
 

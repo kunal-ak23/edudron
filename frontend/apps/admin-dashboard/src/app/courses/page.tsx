@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Sparkles, BookOpen, Users, Video, Trash2, Edit, Loader2 } from 'lucide-react'
 import { coursesApi } from '@/lib/api'
-import type { Course } from '@edudron/shared-utils'
+import type { Course } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 

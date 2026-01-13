@@ -2,15 +2,15 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute, Button, Card } from '@edudron/ui-components'
+import { ProtectedRoute, Button, Card } from '@kunal-ak23/edudron-ui-components'
 import { coursesApi, enrollmentsApi, lecturesApi } from '@/lib/api'
-import type { Course, Section } from '@edudron/shared-utils'
+import type { Course, Section } from '@kunal-ak23/edudron-shared-utils'
 import { CommitmentModal } from '@/components/CommitmentModal'
 import { EnrollmentSuccessModal } from '@/components/EnrollmentSuccessModal'
 import { PreviewVideoModal } from '@/components/PreviewVideoModal'
 import { StudentLayout } from '@/components/StudentLayout'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
-import { useAuth } from '@edudron/shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
