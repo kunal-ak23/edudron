@@ -143,11 +143,19 @@ export class ApiClient {
               
               console.log('[ApiClient] Attempting to refresh token...')
               
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/539a6c71-ea02-4a10-be32-4a5d508ee167',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ApiClient.ts:147',message:'Attempting token refresh',data:{hasRefreshToken:!!refreshToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
+              // #endregion
+              
               // Try refresh endpoint - send refreshToken in request body
               const response = await refreshClient.post(
                 '/auth/refresh',
                 { refreshToken }
               )
+              
+              // #region agent log
+              fetch('http://127.0.0.1:7242/ingest/539a6c71-ea02-4a10-be32-4a5d508ee167',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ApiClient.ts:152',message:'Token refresh response received',data:{status:response.status,hasToken:!!(response.data?.token || response.data?.data?.token)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
+              // #endregion
 
               console.log('[ApiClient] Token refresh response:', response.status, response.data)
 

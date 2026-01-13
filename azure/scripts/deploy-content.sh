@@ -168,6 +168,10 @@ if [ -z "$APP_EXISTS" ]; then
             "azure-openai-api-key=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-OPENAI-API-KEY,identityref:system" \
             "azure-openai-deployment-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-OPENAI-DEPLOYMENT-NAME,identityref:system" \
             "azure-openai-api-version=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-OPENAI-API-VERSION,identityref:system" \
+            "azure-storage-connection-string=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-CONNECTION-STRING,identityref:system" \
+            "azure-storage-account-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-ACCOUNT-NAME,identityref:system" \
+            "azure-storage-container-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-CONTAINER-NAME,identityref:system" \
+            "azure-storage-base-url=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-BASE-URL,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
     # Set environment variables
@@ -194,6 +198,10 @@ if [ -z "$APP_EXISTS" ]; then
             "AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key" \
             "AZURE_OPENAI_DEPLOYMENT_NAME=secretref:azure-openai-deployment-name" \
             "AZURE_OPENAI_API_VERSION=secretref:azure-openai-api-version" \
+            "AZURE_STORAGE_CONNECTION_STRING=secretref:azure-storage-connection-string" \
+            "AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name" \
+            "AZURE_STORAGE_CONTAINER_NAME=secretref:azure-storage-container-name" \
+            "AZURE_STORAGE_BASE_URL=secretref:azure-storage-base-url" \
         --output none
     
     print_success "Container app created successfully"
@@ -248,6 +256,10 @@ else
             "azure-openai-api-key=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-OPENAI-API-KEY,identityref:system" \
             "azure-openai-deployment-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-OPENAI-DEPLOYMENT-NAME,identityref:system" \
             "azure-openai-api-version=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-OPENAI-API-VERSION,identityref:system" \
+            "azure-storage-connection-string=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-CONNECTION-STRING,identityref:system" \
+            "azure-storage-account-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-ACCOUNT-NAME,identityref:system" \
+            "azure-storage-container-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-CONTAINER-NAME,identityref:system" \
+            "azure-storage-base-url=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-BASE-URL,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
     # Update image and environment variables
@@ -274,6 +286,10 @@ else
             "AZURE_OPENAI_API_KEY=secretref:azure-openai-api-key" \
             "AZURE_OPENAI_DEPLOYMENT_NAME=secretref:azure-openai-deployment-name" \
             "AZURE_OPENAI_API_VERSION=secretref:azure-openai-api-version" \
+            "AZURE_STORAGE_CONNECTION_STRING=secretref:azure-storage-connection-string" \
+            "AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name" \
+            "AZURE_STORAGE_CONTAINER_NAME=secretref:azure-storage-container-name" \
+            "AZURE_STORAGE_BASE_URL=secretref:azure-storage-base-url" \
         --output none
     
     print_success "Container app updated successfully"

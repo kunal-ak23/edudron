@@ -27,10 +27,23 @@ public class MediaUploadController {
     public ResponseEntity<Map<String, String>> uploadImage(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "folder", defaultValue = MediaFolderConstants.THUMBNAILS) String folder) {
-        
+        // #region agent log
+        try {
+            java.io.FileWriter fw = new java.io.FileWriter("/Users/kunalsharma/datagami/edudron/.cursor/debug.log", true);
+            fw.write(java.util.Map.of("sessionId", "debug-session", "runId", "run1", "hypothesisId", "B,C", "location", "MediaUploadController.java:27", "message", "Upload image endpoint called", "data", java.util.Map.of("folder", folder, "fileName", file.getOriginalFilename(), "fileSize", file.getSize()), "timestamp", System.currentTimeMillis()).toString() + "\n");
+            fw.close();
+        } catch (Exception e) {}
+        // #endregion
         try {
             // Get tenant ID from context
             String tenantId = TenantContext.getClientId();
+            // #region agent log
+            try {
+                java.io.FileWriter fw = new java.io.FileWriter("/Users/kunalsharma/datagami/edudron/.cursor/debug.log", true);
+                fw.write(java.util.Map.of("sessionId", "debug-session", "runId", "run1", "hypothesisId", "B", "location", "MediaUploadController.java:34", "message", "Tenant context retrieved", "data", java.util.Map.of("tenantId", tenantId != null ? tenantId : "null"), "timestamp", System.currentTimeMillis()).toString() + "\n");
+                fw.close();
+            } catch (Exception e) {}
+            // #endregion
             String imageUrl = mediaUploadService.uploadImage(file, folder, tenantId);
             
             Map<String, String> response = new HashMap<>();
@@ -41,14 +54,35 @@ public class MediaUploadController {
             
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
+            // #region agent log
+            try {
+                java.io.FileWriter fw = new java.io.FileWriter("/Users/kunalsharma/datagami/edudron/.cursor/debug.log", true);
+                fw.write(java.util.Map.of("sessionId", "debug-session", "runId", "run1", "hypothesisId", "B,C", "location", "MediaUploadController.java:43", "message", "Upload failed - IllegalArgumentException", "data", java.util.Map.of("error", e.getMessage()), "timestamp", System.currentTimeMillis()).toString() + "\n");
+                fw.close();
+            } catch (Exception ex) {}
+            // #endregion
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", e.getMessage());
             return ResponseEntity.badRequest().body(errorResponse);
         } catch (IOException e) {
+            // #region agent log
+            try {
+                java.io.FileWriter fw = new java.io.FileWriter("/Users/kunalsharma/datagami/edudron/.cursor/debug.log", true);
+                fw.write(java.util.Map.of("sessionId", "debug-session", "runId", "run1", "hypothesisId", "B,C", "location", "MediaUploadController.java:48", "message", "Upload failed - IOException", "data", java.util.Map.of("error", e.getMessage()), "timestamp", System.currentTimeMillis()).toString() + "\n");
+                fw.close();
+            } catch (Exception ex) {}
+            // #endregion
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", "Failed to upload image: " + e.getMessage());
             return ResponseEntity.internalServerError().body(errorResponse);
         } catch (IllegalStateException e) {
+            // #region agent log
+            try {
+                java.io.FileWriter fw = new java.io.FileWriter("/Users/kunalsharma/datagami/edudron/.cursor/debug.log", true);
+                fw.write(java.util.Map.of("sessionId", "debug-session", "runId", "run1", "hypothesisId", "D", "location", "MediaUploadController.java:53", "message", "Upload failed - IllegalStateException", "data", java.util.Map.of("error", e.getMessage()), "timestamp", System.currentTimeMillis()).toString() + "\n");
+                fw.close();
+            } catch (Exception ex) {}
+            // #endregion
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("error", e.getMessage());
             return ResponseEntity.status(503).body(errorResponse); // Service Unavailable

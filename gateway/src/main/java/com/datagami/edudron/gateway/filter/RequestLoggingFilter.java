@@ -27,17 +27,18 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        String path = request.getURI().getPath();
-        String method = request.getMethod().name();
+        final String path = request.getURI().getPath();
+        final String method = request.getMethod().name();
         
         // Try to get traceId from multiple sources
-        String traceId = (String) exchange.getAttributes().get("traceId");
-        if (traceId == null) {
-            traceId = MDC.get("traceId");
+        String traceIdTemp = (String) exchange.getAttributes().get("traceId");
+        if (traceIdTemp == null) {
+            traceIdTemp = MDC.get("traceId");
         }
-        if (traceId == null) {
-            traceId = request.getHeaders().getFirst("X-Request-Id");
+        if (traceIdTemp == null) {
+            traceIdTemp = request.getHeaders().getFirst("X-Request-Id");
         }
+        final String traceId = traceIdTemp;
 
         long startTime = Instant.now().toEpochMilli();
         exchange.getAttributes().put(START_TIME, startTime);
@@ -45,8 +46,8 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
         log.info("Incoming request: method={}, path={}, traceId={}", method, path, traceId);
 
         // Log request headers for debugging
-        String authHeader = request.getHeaders().getFirst("Authorization");
-        String clientIdHeader = request.getHeaders().getFirst("X-Client-Id");
+        final String authHeader = request.getHeaders().getFirst("Authorization");
+        final String clientIdHeader = request.getHeaders().getFirst("X-Client-Id");
         log.debug("Request headers - Authorization: {}, X-Client-Id: {}, path={}, traceId={}", 
                 authHeader != null ? "present" : "missing", 
                 clientIdHeader != null ? clientIdHeader : "missing", 

@@ -27,21 +27,22 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
-        String path = request.getURI().getPath();
-        String method = request.getMethod().name();
+        final String path = request.getURI().getPath();
+        final String method = request.getMethod().name();
         
         // Try to get traceId from multiple sources
-        String traceId = (String) exchange.getAttributes().get("traceId");
-        if (traceId == null) {
-            traceId = MDC.get("traceId");
+        String traceIdTemp = (String) exchange.getAttributes().get("traceId");
+        if (traceIdTemp == null) {
+            traceIdTemp = MDC.get("traceId");
         }
-        if (traceId == null) {
-            traceId = request.getHeaders().getFirst("X-Request-Id");
+        if (traceIdTemp == null) {
+            traceIdTemp = request.getHeaders().getFirst("X-Request-Id");
         }
+        final String traceId = traceIdTemp;
         
-        String clientId = MDC.get("clientId");
+        final String clientId = MDC.get("clientId");
         
-        String authHeader = request.getHeaders().getFirst(AUTHORIZATION_HEADER);
+        final String authHeader = request.getHeaders().getFirst(AUTHORIZATION_HEADER);
 
         if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
             String token = authHeader.substring(BEARER_PREFIX.length());

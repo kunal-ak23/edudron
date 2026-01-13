@@ -269,6 +269,118 @@ if [ -n "$APPINSIGHTS_CONNECTION_STRING" ]; then
     set_secret "appinsights-connection-string" "$APPINSIGHTS_CONNECTION_STRING" ""
 fi
 
+# Azure Storage Configuration
+print_info "Configuring Azure Storage secrets..."
+
+# Try to auto-detect storage account from infrastructure deployment
+print_info "Attempting to auto-detect Azure Storage Account from infrastructure..."
+STORAGE_ACCOUNT=$(az storage account list --resource-group "$RESOURCE_GROUP" --query "[0].name" -o tsv 2>/dev/null || echo "")
+
+# Check if values are already exported from dev.env
+if [ -n "$AZURE_STORAGE_CONNECTION_STRING" ]; then
+    print_info "Using Azure Storage Connection String from dev.env"
+    AZURE_STORAGE_CONNECTION_STRING_INPUT="$AZURE_STORAGE_CONNECTION_STRING"
+elif [ -n "$STORAGE_ACCOUNT" ]; then
+    # Auto-fetch connection string from infrastructure-deployed storage account
+    print_info "Found storage account from infrastructure: $STORAGE_ACCOUNT"
+    print_info "Auto-fetching connection string..."
+    AZURE_STORAGE_CONNECTION_STRING_INPUT=$(az storage account show-connection-string \
+        --name "$STORAGE_ACCOUNT" \
+        --resource-group "$RESOURCE_GROUP" \
+        --query "connectionString" -o tsv 2>/dev/null || echo "")
+    
+    if [ -n "$AZURE_STORAGE_CONNECTION_STRING_INPUT" ]; then
+        print_success "Successfully retrieved connection string from storage account"
+    else
+        print_warning "Could not retrieve connection string automatically"
+        # Try to get from file
+        AZURE_STORAGE_CONNECTION_STRING_INPUT=$(grep "^export AZURE_STORAGE_CONNECTION_STRING=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || \
+            grep "^AZURE_STORAGE_CONNECTION_STRING=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+        
+        if [ -z "$AZURE_STORAGE_CONNECTION_STRING_INPUT" ]; then
+            read -p "Azure Storage Connection String (or press Enter to skip): " AZURE_STORAGE_CONNECTION_STRING_INPUT
+        fi
+    fi
+else
+    # Try to get from file
+    AZURE_STORAGE_CONNECTION_STRING_INPUT=$(grep "^export AZURE_STORAGE_CONNECTION_STRING=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || \
+        grep "^AZURE_STORAGE_CONNECTION_STRING=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+    
+    if [ -z "$AZURE_STORAGE_CONNECTION_STRING_INPUT" ]; then
+        print_warning "No storage account found in resource group. You may need to deploy infrastructure first."
+        read -p "Azure Storage Connection String (or press Enter to skip): " AZURE_STORAGE_CONNECTION_STRING_INPUT
+    fi
+fi
+
+# Get storage account name (for managed identity option)
+if [ -n "$AZURE_STORAGE_ACCOUNT_NAME" ]; then
+    AZURE_STORAGE_ACCOUNT_NAME_INPUT="$AZURE_STORAGE_ACCOUNT_NAME"
+    print_info "Using storage account name from dev.env: $AZURE_STORAGE_ACCOUNT_NAME_INPUT"
+elif [ -n "$STORAGE_ACCOUNT" ]; then
+    AZURE_STORAGE_ACCOUNT_NAME_INPUT="$STORAGE_ACCOUNT"
+    print_info "Auto-detected storage account name from infrastructure: $AZURE_STORAGE_ACCOUNT_NAME_INPUT"
+else
+    AZURE_STORAGE_ACCOUNT_NAME_INPUT=$(grep "^export AZURE_STORAGE_ACCOUNT_NAME=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || \
+        grep "^AZURE_STORAGE_ACCOUNT_NAME=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+    
+    if [ -z "$AZURE_STORAGE_ACCOUNT_NAME_INPUT" ]; then
+        read -p "Azure Storage Account Name (or press Enter to skip): " AZURE_STORAGE_ACCOUNT_NAME_INPUT
+    fi
+fi
+
+# Get container name (defaults to infrastructure value)
+if [ -n "$AZURE_STORAGE_CONTAINER_NAME" ]; then
+    AZURE_STORAGE_CONTAINER_NAME_INPUT="$AZURE_STORAGE_CONTAINER_NAME"
+    print_info "Using container name from dev.env: $AZURE_STORAGE_CONTAINER_NAME_INPUT"
+else
+    AZURE_STORAGE_CONTAINER_NAME_INPUT=$(grep "^export AZURE_STORAGE_CONTAINER_NAME=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || \
+        grep "^AZURE_STORAGE_CONTAINER_NAME=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "edudron-media")
+    
+    if [ "$AZURE_STORAGE_CONTAINER_NAME_INPUT" = "edudron-media" ]; then
+        print_info "Using default container name from infrastructure: $AZURE_STORAGE_CONTAINER_NAME_INPUT"
+    else
+        read -p "Azure Storage Container Name [${AZURE_STORAGE_CONTAINER_NAME_INPUT}]: " AZURE_STORAGE_CONTAINER_NAME_INPUT_OVERRIDE
+        AZURE_STORAGE_CONTAINER_NAME_INPUT="${AZURE_STORAGE_CONTAINER_NAME_INPUT_OVERRIDE:-${AZURE_STORAGE_CONTAINER_NAME_INPUT}}"
+    fi
+fi
+
+# Get base URL (auto-generate from account name)
+if [ -n "$AZURE_STORAGE_BASE_URL" ]; then
+    AZURE_STORAGE_BASE_URL_INPUT="$AZURE_STORAGE_BASE_URL"
+    print_info "Using base URL from dev.env: $AZURE_STORAGE_BASE_URL_INPUT"
+elif [ -n "$AZURE_STORAGE_ACCOUNT_NAME_INPUT" ]; then
+    AZURE_STORAGE_BASE_URL_INPUT="https://${AZURE_STORAGE_ACCOUNT_NAME_INPUT}.blob.core.windows.net"
+    print_info "Auto-generated base URL from account name: $AZURE_STORAGE_BASE_URL_INPUT"
+else
+    AZURE_STORAGE_BASE_URL_INPUT=$(grep "^export AZURE_STORAGE_BASE_URL=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || \
+        grep "^AZURE_STORAGE_BASE_URL=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+    
+    if [ -z "$AZURE_STORAGE_BASE_URL_INPUT" ]; then
+        read -p "Azure Storage Base URL (or press Enter to skip): " AZURE_STORAGE_BASE_URL_INPUT
+    fi
+fi
+
+# Strip newlines from values
+AZURE_STORAGE_CONNECTION_STRING_INPUT=$(echo -n "$AZURE_STORAGE_CONNECTION_STRING_INPUT" | tr -d '\n\r')
+AZURE_STORAGE_ACCOUNT_NAME_INPUT=$(echo -n "$AZURE_STORAGE_ACCOUNT_NAME_INPUT" | tr -d '\n\r')
+
+# Set Azure Storage secrets (only if values are provided)
+if [ -n "$AZURE_STORAGE_CONNECTION_STRING_INPUT" ]; then
+    set_secret "AZURE-STORAGE-CONNECTION-STRING" "$AZURE_STORAGE_CONNECTION_STRING_INPUT" ""
+fi
+
+if [ -n "$AZURE_STORAGE_ACCOUNT_NAME_INPUT" ]; then
+    set_secret "AZURE-STORAGE-ACCOUNT-NAME" "$AZURE_STORAGE_ACCOUNT_NAME_INPUT" ""
+fi
+
+if [ -n "$AZURE_STORAGE_CONTAINER_NAME_INPUT" ]; then
+    set_secret "AZURE-STORAGE-CONTAINER-NAME" "$AZURE_STORAGE_CONTAINER_NAME_INPUT" ""
+fi
+
+if [ -n "$AZURE_STORAGE_BASE_URL_INPUT" ]; then
+    set_secret "AZURE-STORAGE-BASE-URL" "$AZURE_STORAGE_BASE_URL_INPUT" ""
+fi
+
 # Azure OpenAI Configuration
 print_info "Configuring Azure OpenAI secrets..."
 
@@ -309,7 +421,7 @@ if [ -n "$AZURE_OPENAI_DEPLOYMENT_NAME" ]; then
     AZURE_OPENAI_DEPLOYMENT_NAME_INPUT="$AZURE_OPENAI_DEPLOYMENT_NAME"
 else
     AZURE_OPENAI_DEPLOYMENT_NAME_INPUT=$(grep "^export AZURE_OPENAI_DEPLOYMENT_NAME=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || \
-        grep "^AZURE_OPENAI_DEPLOYMENT_NAME=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "gpt-4")
+        grep "^AZURE_OPENAI_DEPLOYMENT_NAME=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "gpt-5.2-chat")
     read -p "Azure OpenAI Deployment Name [${AZURE_OPENAI_DEPLOYMENT_NAME_INPUT}]: " AZURE_OPENAI_DEPLOYMENT_NAME_INPUT_OVERRIDE
     AZURE_OPENAI_DEPLOYMENT_NAME_INPUT="${AZURE_OPENAI_DEPLOYMENT_NAME_INPUT_OVERRIDE:-${AZURE_OPENAI_DEPLOYMENT_NAME_INPUT}}"
 fi
@@ -318,7 +430,7 @@ if [ -n "$AZURE_OPENAI_API_VERSION" ]; then
     AZURE_OPENAI_API_VERSION_INPUT="$AZURE_OPENAI_API_VERSION"
 else
     AZURE_OPENAI_API_VERSION_INPUT=$(grep "^export AZURE_OPENAI_API_VERSION=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || \
-        grep "^AZURE_OPENAI_API_VERSION=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "2024-02-15-preview")
+        grep "^AZURE_OPENAI_API_VERSION=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "2025-04-01-preview")
     read -p "Azure OpenAI API Version [${AZURE_OPENAI_API_VERSION_INPUT}]: " AZURE_OPENAI_API_VERSION_INPUT_OVERRIDE
     AZURE_OPENAI_API_VERSION_INPUT="${AZURE_OPENAI_API_VERSION_INPUT_OVERRIDE:-${AZURE_OPENAI_API_VERSION_INPUT}}"
 fi

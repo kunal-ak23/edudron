@@ -37,7 +37,21 @@ public class MediaUploadService {
     }
 
     public String uploadImage(MultipartFile file, String folder, String tenantId) throws IOException {
+        // #region agent log
+        try {
+            java.io.FileWriter fw = new java.io.FileWriter("/Users/kunalsharma/datagami/edudron/.cursor/debug.log", true);
+            fw.write(java.util.Map.of("sessionId", "debug-session", "runId", "run1", "hypothesisId", "D", "location", "MediaUploadService.java:39", "message", "Upload image service called", "data", java.util.Map.of("blobServiceClient", blobServiceClient != null ? "configured" : "null", "tenantId", tenantId != null ? tenantId : "null"), "timestamp", System.currentTimeMillis()).toString() + "\n");
+            fw.close();
+        } catch (Exception e) {}
+        // #endregion
         if (blobServiceClient == null) {
+            // #region agent log
+            try {
+                java.io.FileWriter fw = new java.io.FileWriter("/Users/kunalsharma/datagami/edudron/.cursor/debug.log", true);
+                fw.write(java.util.Map.of("sessionId", "debug-session", "runId", "run1", "hypothesisId", "D", "location", "MediaUploadService.java:41", "message", "Azure Storage not configured", "data", java.util.Map.of(), "timestamp", System.currentTimeMillis()).toString() + "\n");
+                fw.close();
+            } catch (Exception e) {}
+            // #endregion
             throw new IllegalStateException("Azure Storage is not configured");
         }
 
