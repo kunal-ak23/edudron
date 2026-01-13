@@ -29,7 +29,16 @@ public class JwtAuthenticationFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
         String method = request.getMethod().name();
-        String traceId = MDC.get("traceId");
+        
+        // Try to get traceId from multiple sources
+        String traceId = (String) exchange.getAttributes().get("traceId");
+        if (traceId == null) {
+            traceId = MDC.get("traceId");
+        }
+        if (traceId == null) {
+            traceId = request.getHeaders().getFirst("X-Request-Id");
+        }
+        
         String clientId = MDC.get("clientId");
         
         String authHeader = request.getHeaders().getFirst(AUTHORIZATION_HEADER);

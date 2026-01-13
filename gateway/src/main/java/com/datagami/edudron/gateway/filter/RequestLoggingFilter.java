@@ -29,7 +29,15 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
         String method = request.getMethod().name();
-        String traceId = MDC.get("traceId");
+        
+        // Try to get traceId from multiple sources
+        String traceId = (String) exchange.getAttributes().get("traceId");
+        if (traceId == null) {
+            traceId = MDC.get("traceId");
+        }
+        if (traceId == null) {
+            traceId = request.getHeaders().getFirst("X-Request-Id");
+        }
 
         long startTime = Instant.now().toEpochMilli();
         exchange.getAttributes().put(START_TIME, startTime);

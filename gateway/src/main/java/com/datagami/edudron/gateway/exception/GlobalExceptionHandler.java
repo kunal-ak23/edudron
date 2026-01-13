@@ -36,7 +36,16 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
         ServerHttpResponse response = exchange.getResponse();
-        String traceId = MDC.get("traceId");
+        
+        // Try to get traceId from multiple sources (exchange attributes, MDC, Reactor Context)
+        String traceId = (String) exchange.getAttributes().get("traceId");
+        if (traceId == null) {
+            traceId = MDC.get("traceId");
+        }
+        if (traceId == null) {
+            // Try to get from request header as fallback
+            traceId = exchange.getRequest().getHeaders().getFirst("X-Request-Id");
+        }
         
         HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
         String errorMessage = "Internal Server Error";

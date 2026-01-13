@@ -162,6 +162,7 @@ if [ -z "$APP_EXISTS" ]; then
             "redis-host=keyvaultref:${KEY_VAULT_URL}/secrets/redis-host,identityref:system" \
             "redis-port=keyvaultref:${KEY_VAULT_URL}/secrets/redis-port,identityref:system" \
             "redis-password=keyvaultref:${KEY_VAULT_URL}/secrets/redis-password,identityref:system" \
+            "jwt-secret=keyvaultref:${KEY_VAULT_URL}/secrets/jwt-secret,identityref:system" \
             "appinsights-connection-string=keyvaultref:${KEY_VAULT_URL}/secrets/appinsights-connection-string,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
@@ -183,6 +184,7 @@ if [ -z "$APP_EXISTS" ]; then
             "REDIS_HOST=secretref:redis-host" \
             "REDIS_PORT=secretref:redis-port" \
             "REDIS_PASSWORD=secretref:redis-password" \
+            "JWT_SECRET=secretref:jwt-secret" \
             "APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-connection-string" \
         --output none
     
@@ -232,6 +234,7 @@ else
             "redis-host=keyvaultref:${KEY_VAULT_URL}/secrets/redis-host,identityref:system" \
             "redis-port=keyvaultref:${KEY_VAULT_URL}/secrets/redis-port,identityref:system" \
             "redis-password=keyvaultref:${KEY_VAULT_URL}/secrets/redis-password,identityref:system" \
+            "jwt-secret=keyvaultref:${KEY_VAULT_URL}/secrets/jwt-secret,identityref:system" \
             "appinsights-connection-string=keyvaultref:${KEY_VAULT_URL}/secrets/appinsights-connection-string,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
@@ -253,6 +256,7 @@ else
             "REDIS_HOST=secretref:redis-host" \
             "REDIS_PORT=secretref:redis-port" \
             "REDIS_PASSWORD=secretref:redis-password" \
+            "JWT_SECRET=secretref:jwt-secret" \
             "APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-connection-string" \
         --output none
     

@@ -30,12 +30,20 @@ public class TenantContextFilter implements GlobalFilter, Ordered {
             log.debug("Tenant context found: clientId={} for path={}", clientId, request.getURI().getPath());
             // Add to MDC for logging
             MDC.put("clientId", clientId);
+            // Also store in exchange attributes for reactive propagation
+            exchange.getAttributes().put("clientId", clientId);
         } else {
             log.debug("No tenant context (X-Client-Id) found in request to {}", request.getURI().getPath());
         }
 
         // Forward request with all headers intact
         return chain.filter(exchange)
+                .doOnEach(signal -> {
+                    // Update MDC on each signal
+                    if (clientId != null && !clientId.isBlank()) {
+                        MDC.put("clientId", clientId);
+                    }
+                })
                 .doFinally(signalType -> {
                     // Clean up MDC
                     MDC.remove("clientId");
