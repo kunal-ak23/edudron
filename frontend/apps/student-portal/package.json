@@ -11,7 +11,7 @@
     "clean": "rm -rf .next dist"
   },
   "dependencies": {
-    "@kunal-ak23/edudron-shared-utils": "^1.0.1",
+    "@kunal-ak23/edudron-shared-utils": "^1.0.2",
     "@kunal-ak23/edudron-ui-components": "^1.0.1",
     "@hookform/resolvers": "^3.3.0",
     "@radix-ui/react-switch": "^1.2.6",
