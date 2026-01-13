@@ -114,10 +114,11 @@ Deploy each app as a separate Vercel project for better isolation and independen
 2. **Configure Project:**
    - **Project Name:** `edudron-admin-dashboard` (or your preferred name)
    - **Framework Preset:** Next.js (auto-detected)
-   - **Root Directory:** `frontend/apps/admin-dashboard` (default - where you ran `vercel` from)
+   - **Root Directory:** `frontend/apps/admin-dashboard` (default when you run `vercel` from app directory)
    - **Build Command:** (leave empty - uses `vercel.json`)
    - **Output Directory:** (leave empty - uses `vercel.json`)
    - **Install Command:** (leave empty - uses `vercel.json`)
+   - **Important:** Enable "Include files outside the root directory in the Build Step" toggle
    
    The included `vercel.json` file handles everything automatically!
 
@@ -139,10 +140,11 @@ Deploy each app as a separate Vercel project for better isolation and independen
 2. **Configure Project:**
    - **Project Name:** `edudron-student-portal` (or your preferred name)
    - **Framework Preset:** Next.js
-   - **Root Directory:** `frontend/apps/student-portal` (default - where you ran `vercel` from)
+   - **Root Directory:** `frontend/apps/student-portal` (default when you run `vercel` from app directory)
    - **Build Command:** (leave empty - uses `vercel.json`)
    - **Output Directory:** (leave empty - uses `vercel.json`)
    - **Install Command:** (leave empty - uses `vercel.json`)
+   - **Important:** Enable "Include files outside the root directory in the Build Step" toggle
    
    The included `vercel.json` file handles everything automatically!
 
@@ -192,15 +194,18 @@ Each app has a `vercel.json` file that handles the monorepo build automatically:
 ```
 
 **How it works:**
-1. **Vercel Root Directory:** `frontend/apps/admin-dashboard` (or `frontend/apps/student-portal`)
-2. **Install Command:** `cd ../.. && npm install` - Goes up to `frontend` root and installs workspace packages
-3. **Build Command:** `npm run build` - Runs from app directory
-4. **prebuild script** (in package.json) automatically runs first:
-   - Builds `shared-utils` package
-   - Builds `ui-components` package
-5. Then `next build` runs to build the Next.js app
+1. **Vercel Root Directory:** `frontend/apps/admin-dashboard` (default when running `vercel` from app directory)
+2. **Toggle:** "Include files outside the root directory in the Build Step" must be **ENABLED**
+3. **Install Command:** `cd ../.. && npm install` - Goes up to `frontend` root and:
+   - Installs all workspace packages
+   - Runs `postinstall` script automatically → Builds `shared-utils` and `ui-components` packages
+4. **Build Command:** `npm run build` - Runs from app directory
+5. **prebuild script** (in package.json) also runs as a safety net:
+   - Ensures packages are built even if postinstall didn't run
+   - Uses `cd ../../packages/shared-utils` - Works because the toggle allows access outside root
+6. Then `next build` runs to build the Next.js app
 
-**Note:** The `prebuild` script ensures packages are built before the app tries to use them, just like when you run `npm run build` locally.
+**Note:** Packages are built twice (postinstall + prebuild), but this ensures reliability. The `prebuild` script serves as a safety net if someone runs build without install first.
 
 ### Manual Build Commands
 
@@ -310,9 +315,10 @@ Access them via:
 
 2. **Check Vercel Root Directory Setting:**
    - Go to Vercel Dashboard → Your Project → Settings → General → Build & Development Settings
-   - **Root Directory should be:** `frontend/apps/student-portal` (or `frontend/apps/admin-dashboard`)
-   - This is the default when you run `vercel` from the app directory
-   - The `installCommand` in `vercel.json` uses `cd ../..` to navigate to `frontend` root for installing dependencies
+   - **Root Directory:** `frontend/apps/student-portal` (or `frontend/apps/admin-dashboard`) - This is the default
+   - **CRITICAL:** Enable the toggle "Include files outside the root directory in the Build Step"
+   - This toggle allows the `prebuild` script to access the `packages/` directory using `cd ../../packages/`
+   - Without this toggle enabled, the build will fail with "No such file or directory" errors
 
 3. **Update Vercel project settings manually (if vercel.json isn't working):**
    - **Root Directory:** `frontend/apps/student-portal`
