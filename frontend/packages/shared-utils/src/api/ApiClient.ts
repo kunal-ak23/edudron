@@ -41,7 +41,6 @@ export class ApiClient {
    * Set callback to be called when token is refreshed
    */
   setOnTokenRefresh(callback: (token: string) => void) {
-    console.log('[ApiClient] Setting onTokenRefresh callback')
     this.onTokenRefresh = callback
   }
 
@@ -49,7 +48,6 @@ export class ApiClient {
    * Set callback to be called when logout is needed
    */
   setOnLogout(callback: () => void) {
-    console.log('[ApiClient] Setting onLogout callback')
     this.onLogout = callback
   }
 
@@ -90,20 +88,6 @@ export class ApiClient {
                 tenantId !== 'null' && 
                 tenantId !== '') {
               config.headers['X-Client-Id'] = tenantId
-              // Log in development to help debug
-              if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-                console.log('[API Client] Setting X-Client-Id header:', tenantId, 'for request:', config.url)
-              }
-            } else {
-              // Log warning if tenant ID is a placeholder
-              if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-                console.warn('[API Client] X-Client-Id header not set - tenant ID is placeholder value:', tenantId, 'for request:', config.url)
-              }
-            }
-          } else {
-            // Log warning if clientId is missing (but don't block the request)
-            if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-              console.warn('[API Client] X-Client-Id header not set - tenant ID not found in localStorage. Checked: clientId, selectedTenantId, tenant_id. Request:', config.url)
             }
           }
         }
@@ -123,12 +107,10 @@ export class ApiClient {
         // Handle 401 (Unauthorized) and 403 (Forbidden) as potential token expiration
         // 403 can also mean token expired or invalid permissions
         if ((status === 401 || status === 403) && !originalRequest._retry) {
-          console.log(`[ApiClient] Received ${status} error for ${originalRequest.url}, attempting token refresh...`)
           originalRequest._retry = true
 
           try {
             const refreshToken = this.tokenManager.getRefreshToken()
-            console.log('[ApiClient] Refresh token available:', !!refreshToken)
             
             if (refreshToken) {
               // Create a new axios instance without interceptors to avoid infinite loop
@@ -141,27 +123,14 @@ export class ApiClient {
                 },
               })
               
-              console.log('[ApiClient] Attempting to refresh token...')
-              
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/539a6c71-ea02-4a10-be32-4a5d508ee167',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ApiClient.ts:147',message:'Attempting token refresh',data:{hasRefreshToken:!!refreshToken},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
-              // #endregion
-              
               // Try refresh endpoint - send refreshToken in request body
               const response = await refreshClient.post(
                 '/auth/refresh',
                 { refreshToken }
               )
-              
-              // #region agent log
-              fetch('http://127.0.0.1:7242/ingest/539a6c71-ea02-4a10-be32-4a5d508ee167',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ApiClient.ts:152',message:'Token refresh response received',data:{status:response.status,hasToken:!!(response.data?.token || response.data?.data?.token)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'})}).catch(()=>{});
-              // #endregion
-
-              console.log('[ApiClient] Token refresh response:', response.status, response.data)
 
               const newToken = response.data.token || response.data.data?.token || (response.data as any)?.token
               if (newToken) {
-                console.log('[ApiClient] Token refresh successful, updating token...')
                 this.tokenManager.setToken(newToken)
                 if (response.data.refreshToken || response.data.data?.refreshToken || (response.data as any)?.refreshToken) {
                   const newRefreshToken = response.data.refreshToken || response.data.data?.refreshToken || (response.data as any)?.refreshToken
@@ -170,30 +139,15 @@ export class ApiClient {
                 
                 // Notify AuthContext about token refresh
                 if (this.onTokenRefresh) {
-                  console.log('[ApiClient] Notifying AuthContext about token refresh...')
                   this.onTokenRefresh(newToken)
-                } else {
-                  console.warn('[ApiClient] onTokenRefresh callback not set!')
                 }
                 
                 originalRequest.headers.Authorization = `Bearer ${newToken}`
-                console.log('[ApiClient] Retrying original request with new token...')
                 return this.client(originalRequest)
-              } else {
-                console.error('[ApiClient] Token refresh response did not contain a new token')
               }
-            } else {
-              console.warn('[ApiClient] No refresh token available, cannot refresh')
             }
           } catch (refreshError: any) {
-            console.error('[ApiClient] Token refresh failed:', refreshError?.message || refreshError)
-            console.error('[ApiClient] Refresh error details:', {
-              status: refreshError?.response?.status,
-              data: refreshError?.response?.data,
-              message: refreshError?.message
-            })
             // Refresh failed, trigger logout
-            console.log('[ApiClient] Triggering logout due to refresh failure...')
             this.handleLogout()
             return Promise.reject(refreshError)
           }
@@ -201,7 +155,6 @@ export class ApiClient {
 
         // If refresh didn't work or other 401/403 error, trigger logout
         if (status === 401 || status === 403) {
-          console.log(`[ApiClient] ${status} error not handled by refresh, triggering logout...`)
           this.handleLogout()
         }
 
@@ -211,52 +164,29 @@ export class ApiClient {
   }
 
   async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    console.log('[ApiClient.get] Making request to:', url, 'with config:', config)
     const response: AxiosResponse<any> = await this.client.get(url, config)
-    console.log('[ApiClient.get] Raw axios response:', response)
-    console.log('[ApiClient.get] Response.data:', response.data)
-    console.log('[ApiClient.get] Response.data type:', typeof response.data)
-    console.log('[ApiClient.get] Response.data is array?:', Array.isArray(response.data))
-    console.log('[ApiClient.get] Response.data keys:', response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'N/A')
-    
     const responseData = response.data
     
     // If the response is already in ApiResponse format { data: ... }, return it
     if (responseData && typeof responseData === 'object' && 'data' in responseData && !Array.isArray(responseData)) {
-      console.log('[ApiClient.get] Response already has data property, returning as-is')
       return responseData as ApiResponse<T>
     }
     
     // If the response is a direct value (array, object, etc.), wrap it in ApiResponse format
-    console.log('[ApiClient.get] Wrapping response in ApiResponse format')
-    const wrapped = { data: responseData } as ApiResponse<T>
-    console.log('[ApiClient.get] Wrapped response:', wrapped)
-    return wrapped
+    return { data: responseData } as ApiResponse<T>
   }
 
   async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    console.log('[ApiClient.post] Making request to:', url, 'with data:', data)
     const response: AxiosResponse<any> = await this.client.post(url, data, config)
-    console.log('[ApiClient.post] Raw axios response:', response)
-    console.log('[ApiClient.post] response.data:', response.data)
-    console.log('[ApiClient.post] response.data type:', typeof response.data)
-    console.log('[ApiClient.post] response.data is array?:', Array.isArray(response.data))
-    console.log('[ApiClient.post] response.data keys:', response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'N/A')
-    console.log('[ApiClient.post] response.data stringified:', JSON.stringify(response.data, null, 2))
-    
     const responseData = response.data
     
     // If the response is already in ApiResponse format { data: ... }, return it
     if (responseData && typeof responseData === 'object' && 'data' in responseData && !Array.isArray(responseData)) {
-      console.log('[ApiClient.post] Response already has data property, returning as-is')
       return responseData as ApiResponse<T>
     }
     
     // If the response is a direct value (object, etc.), wrap it in ApiResponse format
-    console.log('[ApiClient.post] Wrapping response in ApiResponse format')
-    const wrapped = { data: responseData } as ApiResponse<T>
-    console.log('[ApiClient.post] Wrapped response:', wrapped)
-    return wrapped
+    return { data: responseData } as ApiResponse<T>
   }
 
   async postForm<T = any>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
@@ -325,7 +255,6 @@ export class ApiClient {
    * Handle logout - clear tokens and notify AuthContext
    */
   private handleLogout() {
-    console.log('[ApiClient] handleLogout called')
     this.tokenManager.clearToken()
     
     // Clear all auth-related localStorage
@@ -337,15 +266,12 @@ export class ApiClient {
       localStorage.removeItem('clientId')
       localStorage.removeItem('selectedTenantId')
       localStorage.removeItem('available_tenants')
-      console.log('[ApiClient] Cleared all auth data from localStorage')
     }
     
     // Notify AuthContext to update state
     if (this.onLogout) {
-      console.log('[ApiClient] Calling onLogout callback...')
       this.onLogout()
     } else {
-      console.warn('[ApiClient] onLogout callback not set! Redirecting to login...')
       // Fallback: redirect to login if no callback is set
       if (typeof window !== 'undefined') {
         window.location.href = '/login'

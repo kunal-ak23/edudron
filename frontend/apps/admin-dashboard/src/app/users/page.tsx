@@ -54,7 +54,6 @@ export default function UsersPage() {
       // Spring Boot returns ResponseEntity<List<UserDTO>> which serializes as an array
       // ApiClient.get returns response.data, which will be the array directly
       const response = await apiClient.get<User[]>('/idp/users')
-      console.log('Users response:', response) // Debug log
       
       // The response might be the array directly, or wrapped in {data: [...]}
       let usersData: User[] = []
@@ -64,7 +63,6 @@ export default function UsersPage() {
         usersData = response.data as User[]
       }
       
-      console.log('Parsed users:', usersData) // Debug log
       setUsers(usersData)
       setFilteredUsers(usersData)
     } catch (error: any) {

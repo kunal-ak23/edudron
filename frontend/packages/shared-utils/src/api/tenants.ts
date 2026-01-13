@@ -88,15 +88,7 @@ export class TenantsApi {
 
   async listTenants(): Promise<Tenant[]> {
     try {
-      console.log('[TenantsApi.listTenants] Starting...')
       const response = await this.apiClient.get<Tenant[]>('/api/tenant')
-      
-      // Debug: Log everything about the response
-      console.log('[TenantsApi.listTenants] Raw response:', response)
-      console.log('[TenantsApi.listTenants] Response type:', typeof response)
-      console.log('[TenantsApi.listTenants] Response isArray:', Array.isArray(response))
-      console.log('[TenantsApi.listTenants] Response keys:', response && typeof response === 'object' ? Object.keys(response) : 'N/A')
-      console.log('[TenantsApi.listTenants] Response stringified:', JSON.stringify(response))
       
       // The API returns the array directly: [{...}]
       // ApiClient.get returns response.data from axios

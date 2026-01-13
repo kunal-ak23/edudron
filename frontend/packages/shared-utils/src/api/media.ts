@@ -21,9 +21,6 @@ export class MediaApi {
    * @returns Promise with the uploaded file URL
    */
   async uploadImage(file: File, folder: string = 'thumbnails'): Promise<string> {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/539a6c71-ea02-4a10-be32-4a5d508ee167',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'media.ts:23',message:'Upload image called',data:{folder,fileName:file.name,fileSize:file.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,C,D'})}).catch(()=>{});
-    // #endregion
     const formData = new FormData()
     formData.append('file', file)
     formData.append('folder', folder)
@@ -33,14 +30,8 @@ export class MediaApi {
         '/content/media/upload/image',
         formData
       )
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/539a6c71-ea02-4a10-be32-4a5d508ee167',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'media.ts:33',message:'Upload image success',data:{hasUrl:!!(response.data?.url || (response as any).url)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,C,D'})}).catch(()=>{});
-      // #endregion
       return response.data?.url || (response as any).url
     } catch (error: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/539a6c71-ea02-4a10-be32-4a5d508ee167',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'media.ts:38',message:'Upload image failed',data:{error:error?.message,status:error?.response?.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,C,D'})}).catch(()=>{});
-      // #endregion
       throw error
     }
   }

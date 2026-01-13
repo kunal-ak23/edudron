@@ -114,15 +114,6 @@ export function MarkdownWithHighlights({
     plainText = plainText.replace(/[*_`#\[\]()\s]+$/, '')
     
     plainText = plainText.trim()
-    
-    // Debug: log if we're getting a very short plain text
-    if (plainText.length < 5 && markdownText.length > 10) {
-      console.warn('[MarkdownWithHighlights] Plain text extraction may be incorrect:', {
-        original: markdownText.substring(0, 50),
-        plain: plainText
-      })
-    }
-    
     const normalizedPlain = normalizeText(plainText)
     if (normalizedPlain.length === 0) return null
     
@@ -201,7 +192,6 @@ export function MarkdownWithHighlights({
                 // Verify we're matching a reasonable portion of the text
                 const matchedText = startNode.text.substring(startOffset, endOffset)
                 if (matchedText.length >= Math.min(plainText.length * 0.8, plainText.length - 20)) {
-                  console.log('[MarkdownWithHighlights] Strategy 1 match - FULL exact match found at index:', exactIndex, 'length:', plainText.length, 'matched:', matchedText.length, 'single node')
                   return { node: startNode.node, start: startOffset, end: endOffset }
                 }
               }
@@ -221,7 +211,6 @@ export function MarkdownWithHighlights({
               
               // Verify we're matching a reasonable portion (allow 20 char difference for whitespace)
               if (endOffset > 0 && Math.abs(matchedLength - plainText.length) <= 20) {
-                console.log('[MarkdownWithHighlights] Strategy 1 match - FULL exact match found at index:', exactIndex, 'length:', plainText.length, 'matched:', matchedLength, 'multi-node')
                 return {
                   startNode: startNode.node,
                   startOffset: startOffset,
@@ -274,12 +263,10 @@ export function MarkdownWithHighlights({
             if (startNode && endNode) {
               if (startNode === endNode) {
                 if (endOffset > startOffset) {
-                  console.warn('[MarkdownWithHighlights] Strategy 1 partial match - using substring of length:', len, 'instead of full:', plainText.length)
                   return { node: startNode.node, start: startOffset, end: endOffset }
                 }
               } else {
                 if (endOffset > 0) {
-                  console.warn('[MarkdownWithHighlights] Strategy 1 partial match - using substring of length:', len, 'instead of full:', plainText.length)
                   return {
                     startNode: startNode.node,
                     startOffset: startOffset,
@@ -376,13 +363,11 @@ export function MarkdownWithHighlights({
           // If it's a single node, return single node format
           if (startNode === endNode) {
             if (endOffset > startOffset) {
-              console.log('[MarkdownWithHighlights] Strategy 2 match - normalized match found, length:', plainText.length, 'matched:', matchedLength, 'single node')
               return { node: startNode.node, start: startOffset, end: endOffset }
             }
           } else {
             // Multi-node range
             if (endOffset > 0) {
-              console.log('[MarkdownWithHighlights] Strategy 2 match - normalized match found, length:', plainText.length, 'matched:', matchedLength, 'multi-node')
               return {
                 startNode: startNode.node,
                 startOffset: startOffset,
@@ -450,13 +435,11 @@ export function MarkdownWithHighlights({
             // If it's a single node, return single node format
             if (startNode === endNode) {
               if (endOffset > startOffset) {
-                console.log('[MarkdownWithHighlights] Strategy 3 match - word-by-word match found, length:', plainText.length, 'single node')
                 return { node: startNode.node, start: startOffset, end: endOffset }
               }
             } else {
               // Multi-node range
               if (endOffset > 0) {
-                console.log('[MarkdownWithHighlights] Strategy 3 match - word-by-word match found, length:', plainText.length, 'multi-node')
                 return {
                   startNode: startNode.node,
                   startOffset: startOffset,
@@ -738,20 +721,15 @@ export function MarkdownWithHighlights({
               return
             }
 
-            console.log('[MarkdownWithHighlights] Applying highlights for', notes.length, 'notes')
             notes.forEach((note) => {
             if (!note.highlightedText) {
-              console.warn('[MarkdownWithHighlights] Note missing highlightedText:', note.id)
               return
             }
-
-        console.log('[MarkdownWithHighlights] Searching for markdown text:', note.highlightedText.substring(0, 50))
 
         // Find the markdown text in the rendered content
         const match = findMarkdownTextInRendered(note.highlightedText, containerRef.current!)
         
         if (!match) {
-          console.warn('[MarkdownWithHighlights] Could not find text for note:', note.id, 'Text:', note.highlightedText.substring(0, 100))
           return
         }
         
@@ -761,11 +739,8 @@ export function MarkdownWithHighlights({
           // Handle both single-node and multi-node matches
           if ('node' in match) {
             // Single node match
-            console.log('[MarkdownWithHighlights] Single node match - start:', match.start, 'end:', match.end, 'node text:', match.node.textContent?.substring(0, 50))
-            
             // Validate that end > start
             if (match.end <= match.start) {
-              console.warn('[MarkdownWithHighlights] Invalid range: end <= start', match.start, match.end)
               return
             }
             
@@ -778,16 +753,10 @@ export function MarkdownWithHighlights({
               const normalizedRangeText = normalizeText(rangeText)
               const normalizedStoredText = normalizeText(note.highlightedText)
               
-              console.log('[MarkdownWithHighlights] Range text length:', rangeText.length, 'Expected:', note.highlightedText.length)
-              console.log('[MarkdownWithHighlights] Normalized range length:', normalizedRangeText.length, 'Normalized stored:', normalizedStoredText.length)
-              
               // Verify the match is at least 80% of the stored text length
               // This handles cases where whitespace differs
               const minMatchLength = Math.max(normalizedStoredText.length * 0.8, normalizedStoredText.length - 50)
               if (normalizedRangeText.length < minMatchLength) {
-                console.warn('[MarkdownWithHighlights] Match is too short! Range:', normalizedRangeText.length, 'Stored:', normalizedStoredText.length, 'Min required:', minMatchLength)
-                console.warn('[MarkdownWithHighlights] Range text:', rangeText.substring(0, 100))
-                console.warn('[MarkdownWithHighlights] Stored text:', note.highlightedText.substring(0, 100))
                 return // Skip this highlight - it's not a good match
               }
             } catch (e) {
@@ -796,7 +765,6 @@ export function MarkdownWithHighlights({
             }
           } else {
             // Multi-node match
-            console.log('[MarkdownWithHighlights] Multi-node match - startNode:', match.startNode.textContent?.substring(0, 20), 'endNode:', match.endNode.textContent?.substring(0, 20))
             try {
               range.setStart(match.startNode, match.startOffset)
               range.setEnd(match.endNode, match.endOffset)
@@ -806,15 +774,9 @@ export function MarkdownWithHighlights({
               const normalizedRangeText = normalizeText(rangeText)
               const normalizedStoredText = normalizeText(note.highlightedText)
               
-              console.log('[MarkdownWithHighlights] Multi-node range text length:', rangeText.length, 'Expected:', note.highlightedText.length)
-              console.log('[MarkdownWithHighlights] Normalized range length:', normalizedRangeText.length, 'Normalized stored:', normalizedStoredText.length)
-              
               // Verify the match is at least 80% of the stored text length
               const minMatchLength = Math.max(normalizedStoredText.length * 0.8, normalizedStoredText.length - 50)
               if (normalizedRangeText.length < minMatchLength) {
-                console.warn('[MarkdownWithHighlights] Multi-node match is too short! Range:', normalizedRangeText.length, 'Stored:', normalizedStoredText.length, 'Min required:', minMatchLength)
-                console.warn('[MarkdownWithHighlights] Range text:', rangeText.substring(0, 100))
-                console.warn('[MarkdownWithHighlights] Stored text:', note.highlightedText.substring(0, 100))
                 return // Skip this highlight - it's not a good match
               }
             } catch (e) {
@@ -1047,9 +1009,6 @@ export function MarkdownWithHighlights({
               handleHighlightClick(note.id)
             })
           }
-          console.log('[MarkdownWithHighlights] Successfully applied highlight for note:', note.id)
-        } else {
-          console.warn('[MarkdownWithHighlights] Could not find text for note:', note.id, 'Text:', note.highlightedText?.substring(0, 50))
         }
       })
       
@@ -1122,7 +1081,6 @@ export function MarkdownWithHighlights({
       const start = Math.max(0, index - 20)
       const end = Math.min(markdownSource.length, index + renderedText.length + 20)
       const extracted = markdownSource.substring(start, end).trim()
-      console.log('[MarkdownWithHighlights] Strategy 1: Found exact match, extracted:', extracted.substring(0, 50))
       return extracted
     }
 
@@ -1205,7 +1163,6 @@ export function MarkdownWithHighlights({
       const normalizedExtracted = normalizeText(extractedPlain)
       
       if (normalizedExtracted.includes(normalizedRendered) || normalizedRendered.includes(normalizedExtracted)) {
-        console.log('[MarkdownWithHighlights] Strategy 2: Found markdown text with syntax:', extracted.substring(0, 50))
         return extracted
       }
       
@@ -1214,7 +1171,6 @@ export function MarkdownWithHighlights({
         Math.max(0, startPos - 10),
         Math.min(markdownSource.length, endPos + 10)
       ).trim()
-      console.log('[MarkdownWithHighlights] Strategy 2: Using larger chunk:', largerChunk.substring(0, 50))
       return largerChunk
     }
 
@@ -1249,14 +1205,12 @@ export function MarkdownWithHighlights({
         // End a bit after to catch closing markdown syntax
         const end = Math.min(markdownSource.length, markdownPos + renderedText.length * 2 + 50)
         const extracted = markdownSource.substring(start, end).trim()
-        console.log('[MarkdownWithHighlights] Strategy 3: Found markdown text via word matching:', extracted.substring(0, 50))
         return extracted
       }
     }
 
     // Fallback: return the rendered text (will be stored as-is)
     // This might work if the text is simple enough
-    console.warn('[MarkdownWithHighlights] Could not find markdown source, using rendered text. Rendered:', renderedText.substring(0, 50))
     return renderedText
   }
 
