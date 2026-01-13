@@ -17,6 +17,27 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  const stored = localStorage.getItem('edudron_font_size');
+                  if (stored !== null) {
+                    const fontSize = parseFloat(stored);
+                    if (!isNaN(fontSize) && fontSize >= 0.5 && fontSize <= 1.5) {
+                      document.documentElement.style.setProperty('--app-scale', fontSize.toString());
+                    }
+                  }
+                } catch (e) {
+                  // Ignore errors
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className={inter.className}>
         <Providers>{children}</Providers>
       </body>

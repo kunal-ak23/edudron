@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Sidebar, SidebarToggle } from './Sidebar'
 import { TenantSelector } from './TenantSelector'
-import { useAuth } from '@kunal-ak23/edudron-shared-utils'
+import { useAuth, FontSizeControl } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -122,6 +122,9 @@ export function AppLayout({ children }: AppLayoutProps) {
             </div>
             
             <div className="flex items-center space-x-4">
+              {/* Font Size Control */}
+              <FontSizeControl className="hidden sm:flex" />
+              
               {/* Notifications */}
               <Button variant="ghost" size="sm" className="relative hover:bg-primary/10 hover:text-primary transition-colors">
                 <Bell className="h-4 w-4" />

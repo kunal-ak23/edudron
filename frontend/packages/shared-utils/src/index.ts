@@ -70,3 +70,8 @@ export type {
   Payment
 } from './api/payments'
 
+// Preferences
+export { getFontSize, setFontSize, resetFontSize, applyFontSize } from './preferences/fontSize'
+export { FontSizeControl } from './components/FontSizeControl'
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/Tooltip'
+

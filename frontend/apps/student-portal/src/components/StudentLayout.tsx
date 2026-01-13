@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useAuth } from '@kunal-ak23/edudron-shared-utils'
-import { TenantBrandingApi, TenantsApi } from '@kunal-ak23/edudron-shared-utils'
+import { useAuth, FontSizeControl, TenantBrandingApi, TenantsApi } from '@kunal-ak23/edudron-shared-utils'
 import { getApiClient } from '@/lib/api'
 
 interface StudentLayoutProps {
@@ -127,6 +126,9 @@ export function StudentLayout({ children }: StudentLayoutProps) {
               </nav>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Font Size Control */}
+              <FontSizeControl className="hidden sm:flex" />
+              
               {user && (
                 <div className="flex items-center space-x-3">
                   <div className="text-right hidden sm:block">

@@ -4,8 +4,8 @@
 
 @layer base {
   :root {
-    /* Application scale - 30% reduction = 70% of original size */
-    --app-scale: 0.7;
+    /* Application scale - 20% reduction = 80% of original size */
+    --app-scale: 0.8;
     
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
