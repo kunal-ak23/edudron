@@ -11,8 +11,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "build:packages": "cd packages/shared-utils && npm run build && cd ../ui-components && npm run build",
-    "postinstall": "npm run build:packages",
+    "postinstall": "echo 'Skipping package build - apps use published packages from GitHub Packages'",
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "clean": "turbo run clean"

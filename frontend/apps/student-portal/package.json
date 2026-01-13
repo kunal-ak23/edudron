@@ -4,7 +4,6 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
-    "prebuild": "cd ../../packages/shared-utils && npm run build && cd ../ui-components && npm run build",
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "next lint",
@@ -12,8 +11,8 @@
     "clean": "rm -rf .next dist"
   },
   "dependencies": {
-    "@kunal-ak23/edudron-shared-utils": "*",
-    "@kunal-ak23/edudron-ui-components": "*",
+    "@kunal-ak23/edudron-shared-utils": "^1.0.0",
+    "@kunal-ak23/edudron-ui-components": "^1.0.0",
     "@hookform/resolvers": "^3.3.0",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.2.8",
