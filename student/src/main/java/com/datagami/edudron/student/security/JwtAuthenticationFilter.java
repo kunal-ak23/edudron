@@ -5,6 +5,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -19,6 +21,8 @@ import java.util.Collections;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
     @Autowired
     private JwtUtil jwtUtil;
 
@@ -26,9 +30,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         
+        String requestUri = request.getRequestURI();
+        String method = request.getMethod();
+        String requestId = request.getHeader("X-Request-Id");
+        boolean isInstitutesEndpoint = requestUri != null && requestUri.contains("/api/institutes");
+        
         final String authHeader = request.getHeader("Authorization");
+        final String clientIdHeader = request.getHeader("X-Client-Id");
+        
+        // Enhanced logging for /api/institutes endpoint
+        if (isInstitutesEndpoint) {
+            logger.info("Processing /api/institutes request: method={}, uri={}, hasAuthorization={}, hasX-Client-Id={}, X-Request-Id={}", 
+                    method, requestUri, authHeader != null, clientIdHeader != null, requestId);
+        }
         
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            if (isInstitutesEndpoint) {
+                logger.warn("No valid Authorization header for /api/institutes: method={}, uri={}, authHeaderPresent={}", 
+                        method, requestUri, authHeader != null);
+            }
             chain.doFilter(request, response);
             return;
         }
@@ -36,12 +56,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             final String token = authHeader.substring(7);
             
+            // Log token info for /api/institutes
+            if (isInstitutesEndpoint) {
+                logger.info("JWT token received for /api/institutes: method={}, tokenLength={}, tokenPrefix={}, X-Request-Id={}", 
+                        method, token.length(), 
+                        token.length() > 30 ? token.substring(0, 30) + "..." : token, 
+                        requestId);
+            }
+            
             if (jwtUtil.validateToken(token)) {
                 String tenantId = jwtUtil.extractTenantId(token);
                 String role = jwtUtil.extractRole(token);
                 String username = jwtUtil.extractUsername(token);
                 
-                logger.debug("JWT validated - username: " + username + ", role: " + role + ", tenantId: " + tenantId);
+                if (isInstitutesEndpoint) {
+                    logger.info("JWT validated for /api/institutes: username={}, role={}, tenantId={}, X-Request-Id={}", 
+                            username, role, tenantId, requestId);
+                } else {
+                    logger.debug("JWT validated - username: " + username + ", role: " + role + ", tenantId: " + tenantId);
+                }
                 
                 // Set tenant context from token or header
                 // For SYSTEM_ADMIN users, token may have "PENDING_TENANT_SELECTION" or "SYSTEM"
@@ -52,15 +85,29 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (tenantId != null && !isPlaceholderTenant) {
                     // Use tenant from token if it's a valid tenant ID
                     TenantContext.setClientId(tenantId);
+                    if (isInstitutesEndpoint) {
+                        logger.info("Tenant context set from token for /api/institutes: tenantId={}, X-Request-Id={}", 
+                                tenantId, requestId);
+                    }
                 } else {
                     // Fallback to header if token doesn't have tenant or has placeholder
                     String tenantHeader = request.getHeader("X-Client-Id");
                     if (tenantHeader != null && !tenantHeader.isBlank()) {
                         TenantContext.setClientId(tenantHeader);
-                        logger.debug("Using tenant from X-Client-Id header: " + tenantHeader);
+                        if (isInstitutesEndpoint) {
+                            logger.info("Tenant context set from X-Client-Id header for /api/institutes: tenantId={}, X-Request-Id={}", 
+                                    tenantHeader, requestId);
+                        } else {
+                            logger.debug("Using tenant from X-Client-Id header: " + tenantHeader);
+                        }
                     } else if (isPlaceholderTenant) {
                         // Log warning if we have placeholder but no header
-                        logger.warn("JWT token has placeholder tenant (" + tenantId + ") but no X-Client-Id header provided");
+                        if (isInstitutesEndpoint) {
+                            logger.warn("JWT token has placeholder tenant ({}) but no X-Client-Id header for /api/institutes: method={}, X-Request-Id={}", 
+                                    tenantId, method, requestId);
+                        } else {
+                            logger.warn("JWT token has placeholder tenant (" + tenantId + ") but no X-Client-Id header provided");
+                        }
                     }
                 }
                 
@@ -73,15 +120,36 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                    logger.debug("Authentication set for user: " + username);
+                    if (isInstitutesEndpoint) {
+                        logger.info("Authentication set for /api/institutes: username={}, role={}, X-Request-Id={}", 
+                                username, role, requestId);
+                    } else {
+                        logger.debug("Authentication set for user: " + username);
+                    }
                 } else {
-                    logger.warn("JWT token validated but username is null");
+                    if (isInstitutesEndpoint) {
+                        logger.warn("JWT token validated but username is null for /api/institutes: X-Request-Id={}", requestId);
+                    } else {
+                        logger.warn("JWT token validated but username is null");
+                    }
                 }
             } else {
-                logger.warn("JWT token validation failed for request: " + request.getRequestURI());
+                if (isInstitutesEndpoint) {
+                    logger.error("JWT token validation failed for /api/institutes: method={}, uri={}, tokenLength={}, tokenPrefix={}, X-Request-Id={}", 
+                            method, requestUri, token.length(), 
+                            token.length() > 30 ? token.substring(0, 30) + "..." : token, 
+                            requestId);
+                } else {
+                    logger.warn("JWT token validation failed for request: " + requestUri);
+                }
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: " + e.getMessage(), e);
+            if (isInstitutesEndpoint) {
+                logger.error("Exception during JWT authentication for /api/institutes: method={}, uri={}, error={}, X-Request-Id={}", 
+                        method, requestUri, e.getMessage(), requestId, e);
+            } else {
+                logger.error("Cannot set user authentication: " + e.getMessage(), e);
+            }
         } finally {
             chain.doFilter(request, response);
             // Clear tenant context after request
