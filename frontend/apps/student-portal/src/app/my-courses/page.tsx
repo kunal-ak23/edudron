@@ -64,7 +64,7 @@ export default function MyCoursesPage() {
 
   const filteredEnrollments = enrollments.filter((enrollment) => {
     const progress = progressData[enrollment.courseId]
-    const progressPercent = progress ? progress.overallProgress : 0
+    const progressPercent = progress?.overallProgress ?? 0
 
     if (activeTab === 'completed') {
       return progressPercent >= 1 || enrollment.status === 'COMPLETED'
@@ -170,7 +170,7 @@ export default function MyCoursesPage() {
                 const progress = progressData[enrollment.courseId]
                 if (!course) return null
 
-                const progressPercent = progress ? progress.overallProgress : 0
+                const progressPercent = progress?.overallProgress ?? 0
                 const isCompleted = progressPercent >= 1 || enrollment.status === 'COMPLETED'
 
                 return (

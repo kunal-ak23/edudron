@@ -26,10 +26,10 @@ export default function LearnPage() {
   const courseId = params.id as string
   const { user } = useAuth()
   const [course, setCourse] = useState<Course | null>(null)
-  const [sections, setSections] = useState<Section[]>([])
+  const [sections, setSections] = useState<any[]>([])
   const [progress, setProgress] = useState<Progress | null>(null)
   const [selectedLecture, setSelectedLecture] = useState<Lecture | null>(null)
-  const [selectedSection, setSelectedSection] = useState<Section | null>(null)
+  const [selectedSection, setSelectedSection] = useState<any>(null)
   const [completedLectures, setCompletedLectures] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -95,7 +95,7 @@ export default function LearnPage() {
   }
 
   // Helper function to restore position from localStorage
-  const restorePositionFromStorage = (sectionsData: any[]): { lecture: Lecture | null; section: Section | null } => {
+  const restorePositionFromStorage = useCallback((sectionsData: any[]): { lecture: Lecture | null; section: Section | null } => {
     try {
       const stored = localStorage.getItem(getStorageKey(courseId))
       if (!stored) return { lecture: null, section: null }
@@ -116,10 +116,10 @@ export default function LearnPage() {
       console.warn('[LearnPage] Error restoring position from localStorage:', error)
     }
     return { lecture: null, section: null }
-  }
+  }, [courseId])
 
   // Save current position to localStorage
-  const savePositionToStorage = (lecture: Lecture | null) => {
+  const savePositionToStorage = useCallback((lecture: Lecture | null) => {
     try {
       if (lecture) {
         localStorage.setItem(getStorageKey(courseId), JSON.stringify({ lectureId: lecture.id }))
@@ -129,7 +129,7 @@ export default function LearnPage() {
     } catch (error) {
       console.warn('[LearnPage] Error saving position to localStorage:', error)
     }
-  }
+  }, [courseId])
 
   // Load feedback and notes for a lecture
   const loadFeedbackAndNotes = useCallback(async (lectureId: string) => {
@@ -157,69 +157,7 @@ export default function LearnPage() {
     }
   }, [])
 
-  useEffect(() => {
-    loadCourseData()
-  }, [courseId])
-
-  // Save position to localStorage when selectedLecture changes
-  useEffect(() => {
-    if (selectedLecture) {
-      savePositionToStorage(selectedLecture)
-      // Update progress to track last accessed position
-      enrollmentsApi.updateProgress(courseId, {
-        lectureId: selectedLecture.id,
-        progressPercentage: completedLectures.has(selectedLecture.id) ? 100 : 0
-      }).catch((error) => {
-        console.warn('[LearnPage] Failed to update progress for last accessed position:', error)
-      })
-    }
-  }, [selectedLecture, courseId])
-
-  // Load feedback and notes whenever selectedLecture changes
-  useEffect(() => {
-    if (selectedLecture?.id) {
-      console.log('[LearnPage] selectedLecture changed, loading notes for:', selectedLecture.id)
-      loadFeedbackAndNotes(selectedLecture.id)
-    } else {
-      // Clear notes when no lecture is selected
-      setNotes([])
-      setCurrentFeedback(null)
-    }
-  }, [selectedLecture?.id, loadFeedbackAndNotes])
-
-  // Scroll to top when lecture changes
-  useEffect(() => {
-    if (selectedLecture) {
-      // Use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(() => {
-        // Smoothly scroll main content container
-        if (mainContentRef.current) {
-          mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
-        }
-        // Smoothly scroll text content container if it exists
-        if (textContentRef.current) {
-          textContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
-        }
-        // Also scroll window as fallback
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      })
-      
-      // Also try after a small delay to catch any late DOM updates
-      const timeoutId = setTimeout(() => {
-        if (mainContentRef.current) {
-          mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
-        }
-        if (textContentRef.current) {
-          textContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
-        }
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      }, 100)
-      
-      return () => clearTimeout(timeoutId)
-    }
-  }, [selectedLecture?.id])
-
-  const loadCourseData = async () => {
+  const loadCourseData = useCallback(async () => {
     try {
       console.log('[LearnPage] Loading course data for courseId:', courseId)
       setLoading(true)
@@ -254,7 +192,7 @@ export default function LearnPage() {
           return []
         })
         sectionsData = await Promise.all(
-          fetchedSections.map(async (section: Section) => {
+          fetchedSections.map(async (section: any) => {
             try {
               const subLectures = await lecturesApi.getSubLecturesByLecture(courseId, section.id)
               return { ...section, lectures: subLectures }
@@ -342,50 +280,111 @@ export default function LearnPage() {
       }
     } catch (error) {
       console.error('[LearnPage] Unexpected error loading course data:', error)
-      if (!course) {
-        setCourse(null)
-      }
+      setCourse(null)
     } finally {
       setLoading(false)
     }
-  }
+  }, [courseId, restorePositionFromStorage])
+
+  useEffect(() => {
+    loadCourseData()
+  }, [loadCourseData])
+
+  // Save position to localStorage when selectedLecture changes
+  useEffect(() => {
+    if (selectedLecture) {
+      savePositionToStorage(selectedLecture)
+      // Update progress to track last accessed position
+      enrollmentsApi.updateProgress(courseId, {
+        lectureId: selectedLecture.id,
+        progressPercentage: completedLectures.has(selectedLecture.id) ? 100 : 0
+      }).catch((error) => {
+        console.warn('[LearnPage] Failed to update progress for last accessed position:', error)
+      })
+    }
+  }, [selectedLecture, courseId, completedLectures, savePositionToStorage])
+
+  // Load feedback and notes whenever selectedLecture changes
+  useEffect(() => {
+    if (selectedLecture?.id) {
+      console.log('[LearnPage] selectedLecture changed, loading notes for:', selectedLecture.id)
+      loadFeedbackAndNotes(selectedLecture.id)
+    } else {
+      // Clear notes when no lecture is selected
+      setNotes([])
+      setCurrentFeedback(null)
+    }
+  }, [selectedLecture?.id, loadFeedbackAndNotes])
+
+  // Scroll to top when lecture changes
+  useEffect(() => {
+    if (selectedLecture) {
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        // Smoothly scroll main content container
+        if (mainContentRef.current) {
+          mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        // Smoothly scroll text content container if it exists
+        if (textContentRef.current) {
+          textContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        // Also scroll window as fallback
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      })
+      
+      // Also try after a small delay to catch any late DOM updates
+      const timeoutId = setTimeout(() => {
+        if (mainContentRef.current) {
+          mainContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        if (textContentRef.current) {
+          textContentRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, [selectedLecture])
+
+  // Load transcript when selectedLecture changes
+  useEffect(() => {
+    if (selectedLecture?.contentType === 'VIDEO') {
+      const videoContent = selectedLecture.contents?.find((c: any) => 
+        c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
+      )
+      const transcriptUrl = (videoContent as any)?.transcriptUrl
+      
+      if (transcriptUrl) {
+        setLoadingTranscript(true)
+        fetch(transcriptUrl)
+          .then(res => res.text())
+          .then(text => {
+            setTranscriptText(text)
+            setLoadingTranscript(false)
+          })
+          .catch(err => {
+            console.error('Failed to load transcript:', err)
+            setTranscriptText(null)
+            setLoadingTranscript(false)
+          })
+      } else {
+        setTranscriptText(null)
+        setLoadingTranscript(false)
+      }
+    } else {
+      setTranscriptText(null)
+      setLoadingTranscript(false)
+    }
+  }, [selectedLecture])
 
   const handleLectureSelect = (lecture: Lecture) => {
     setSelectedLecture(lecture)
     setSelectedSection(null) // Clear module selection when selecting a lecture
     // Position will be saved via useEffect hook
     // Notes will be loaded via useEffect hook when selectedLecture changes
-    
-    // Load transcript when selectedLecture changes
-    useEffect(() => {
-      if (selectedLecture?.contentType === 'VIDEO') {
-        const videoContent = selectedLecture.contents?.find((c: any) => 
-          c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
-        )
-        const transcriptUrl = (videoContent as any)?.transcriptUrl
-        
-        if (transcriptUrl) {
-          setLoadingTranscript(true)
-          fetch(transcriptUrl)
-            .then(res => res.text())
-            .then(text => {
-              setTranscriptText(text)
-              setLoadingTranscript(false)
-            })
-            .catch(err => {
-              console.error('Failed to load transcript:', err)
-              setTranscriptText(null)
-              setLoadingTranscript(false)
-            })
-        } else {
-          setTranscriptText(null)
-          setLoadingTranscript(false)
-        }
-      } else {
-        setTranscriptText(null)
-        setLoadingTranscript(false)
-      }
-    }, [selectedLecture?.id, selectedLecture?.contents])
+    // Transcript will be loaded via useEffect hook when selectedLecture changes
     
     // Smoothly scroll to top
     requestAnimationFrame(() => {
@@ -577,7 +576,7 @@ export default function LearnPage() {
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i]
       const lectures = section.lectures || []
-      const currentIndex = lectures.findIndex((l) => l.id === selectedLecture.id)
+      const currentIndex = lectures.findIndex((l: any) => l.id === selectedLecture.id)
 
       if (currentIndex !== -1) {
         if (currentIndex < lectures.length - 1) {
@@ -597,7 +596,7 @@ export default function LearnPage() {
     for (let i = 0; i < sections.length; i++) {
       const section = sections[i]
       const lectures = section.lectures || []
-      const currentIndex = lectures.findIndex((l) => l.id === selectedLecture.id)
+      const currentIndex = lectures.findIndex((l: any) => l.id === selectedLecture.id)
 
       if (currentIndex !== -1) {
         if (currentIndex > 0) {
@@ -665,7 +664,7 @@ export default function LearnPage() {
     )
   }
 
-  const currentSection = sections.find(s => s.lectures?.some(l => l.id === selectedLecture?.id))
+  const currentSection = sections.find(s => s.lectures?.some((l: any) => l.id === selectedLecture?.id))
   const currentSectionIndex = sections.findIndex(s => s.id === currentSection?.id)
 
   return (
@@ -725,7 +724,7 @@ export default function LearnPage() {
                             
                             {/* Lessons in this module */}
                             <div className="space-y-1">
-                              {section.lectures.map((lecture) => {
+                              {section.lectures.map((lecture: any) => {
                                 const isSelected = selectedLecture?.id === lecture.id
                                 const isCompleted = completedLectures.has(lecture.id)
                                 const contentType = lecture.contentType || 'TEXT'
@@ -830,7 +829,7 @@ export default function LearnPage() {
                         Lessons in this module
                       </h2>
                       <div className="space-y-3">
-                        {selectedSection.lectures?.map((lecture, lectureIdx) => {
+                        {selectedSection.lectures?.map((lecture: any, lectureIdx: number) => {
                           const isCompleted = completedLectures.has(lecture.id)
                           const contentType = lecture.contentType || 'TEXT'
                           

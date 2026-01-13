@@ -21,7 +21,7 @@ export default function CourseDetailPage() {
   const courseId = params.id as string
   const { user } = useAuth()
   const [course, setCourse] = useState<Course | null>(null)
-  const [sections, setSections] = useState<Section[]>([])
+  const [sections, setSections] = useState<any[]>([])
   const [enrolled, setEnrolled] = useState(false)
   const [loading, setLoading] = useState(true)
   const [progress, setProgress] = useState<any>(null)
@@ -449,7 +449,7 @@ export default function CourseDetailPage() {
                     {/* Lessons in this section - Collapsible */}
                     {isOpen && (
                       <div className="px-4 pb-4 space-y-3 border-t border-gray-200 pt-3">
-                        {section.lectures.map((lecture, lectureIdx) => {
+                        {section.lectures.map((lecture: any, lectureIdx: number) => {
                           const isVideo = lecture.contentType === 'VIDEO'
                           const isReading = lecture.contentType === 'TEXT' || lecture.contentType === 'READING'
                           

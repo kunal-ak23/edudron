@@ -102,6 +102,9 @@ export function splitAndWrapTextNodePortion(
  * Removes only highlight wrapper spans, preserving text content
  */
 export function clearRenderedHighlights(root: Node): void {
+  if (!(root instanceof Element)) {
+    return
+  }
   const highlights = root.querySelectorAll('[data-hl]')
   // Convert to array and process in reverse to avoid issues
   const highlightsArray = Array.from(highlights).reverse()
@@ -185,12 +188,32 @@ export function renderHighlights(
         return
       }
 
-      const intersection = range.intersection(nodeRange)
-      if (!intersection || intersection.collapsed) return
+      // Check if ranges intersect
+      const startCompare = range.compareBoundaryPoints(Range.START_TO_START, nodeRange)
+      const endCompare = range.compareBoundaryPoints(Range.END_TO_END, nodeRange)
+      
+      // If range doesn't intersect with node range, skip
+      if (startCompare > 0 || endCompare < 0) {
+        return
+      }
 
-      // Get offsets relative to the text node
-      const nodeStart = intersection.startOffset
-      const nodeEnd = intersection.endOffset
+      // Calculate intersection offsets relative to the text node
+      let nodeStart = 0
+      let nodeEnd = textNode.textContent?.length || 0
+
+      if (range.startContainer === textNode) {
+        nodeStart = range.startOffset
+      } else if (startCompare <= 0) {
+        nodeStart = 0
+      }
+
+      if (range.endContainer === textNode) {
+        nodeEnd = range.endOffset
+      } else if (endCompare >= 0) {
+        nodeEnd = textNode.textContent?.length || 0
+      }
+
+      if (nodeStart >= nodeEnd) return
 
       if (!textNodeRanges.has(textNode)) {
         textNodeRanges.set(textNode, [])
