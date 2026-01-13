@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -178,11 +178,10 @@ export default function CoursesPage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']}>
+    
       <div className="space-y-3">
           {/* Page Header */}
           <div className="flex items-center justify-between">
-            <div>
             <div className="flex gap-2">
               <Button 
                 variant="outline"
@@ -363,6 +362,5 @@ export default function CoursesPage() {
         </DialogContent>
       </Dialog>
       </div>
-    </ProtectedRoute>
   )
 }

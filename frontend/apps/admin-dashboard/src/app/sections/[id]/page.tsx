@@ -248,6 +248,7 @@ export default function SectionDetailPage() {
         confirmText="Deactivate"
         variant="destructive"
       />
+    </div>
   )
 }
 

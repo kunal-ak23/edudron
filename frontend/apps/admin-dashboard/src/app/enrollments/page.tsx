@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -149,17 +149,15 @@ export default function EnrollmentsPage() {
 
   if (loading) {
     return (
-      <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
+      
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      </ProtectedRoute>
-    )
-  }
+  )
+}
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div>
+    <div>
 
           <Card className="mb-6">
             <CardHeader>
@@ -294,7 +292,6 @@ export default function EnrollmentsPage() {
             </CardContent>
           </Card>
       </div>
-    </ProtectedRoute>
   )
 }
 

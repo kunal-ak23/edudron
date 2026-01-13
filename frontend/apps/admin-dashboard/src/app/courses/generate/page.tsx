@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -141,8 +141,7 @@ export default function GenerateCoursePage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER', 'INSTRUCTOR']}>
-      <div>
+    <div>
 
           {/* Generation in Progress Alert */}
           {generating && (
@@ -471,7 +470,6 @@ export default function GenerateCoursePage() {
             </Button>
           </div>
       </div>
-    </ProtectedRoute>
   )
 }
 

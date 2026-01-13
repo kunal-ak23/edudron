@@ -282,8 +282,6 @@ export default function TenantEditPage() {
               </CardContent>
             </Card>
           )}
-        </div>
-      </div>
 
       <ConfirmationDialog
         isOpen={showDeleteDialog}
@@ -295,6 +293,7 @@ export default function TenantEditPage() {
         variant="destructive"
         isLoading={saving}
       />
+    </div>
   )
 }
 

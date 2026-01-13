@@ -317,6 +317,7 @@ export default function SectionEnrollPage() {
           </DialogContent>
         </Dialog>
       </div>
+    </div>
   )
 }
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ProtectedRoute } from '@edudron/ui-components'
+import { useAuth } from '@edudron/shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -116,8 +116,7 @@ export default function UsersPage() {
   }
 
   return (
-    <ProtectedRoute requiredRoles={['SYSTEM_ADMIN', 'TENANT_ADMIN']}>
-      <div>
+    <div>
         <div className="mb-6 flex items-center justify-between">
           <div>
             <Button onClick={() => router.push('/users/new')}>
@@ -213,7 +212,6 @@ export default function UsersPage() {
             </Card>
           )}
       </div>
-    </ProtectedRoute>
   )
 }
 
