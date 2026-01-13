@@ -81,6 +81,12 @@ management:
         enabled: true
     gateway:
       enabled: true
+  health:
+    # Disable discovery client health checks (not using service discovery - using static URLs)
+    discovery:
+      enabled: false
+    reactiveDiscoveryClients:
+      enabled: false
 
 # Note: Swagger/OpenAPI removed from gateway to avoid circular dependency
 # Access Swagger docs directly on individual microservices:

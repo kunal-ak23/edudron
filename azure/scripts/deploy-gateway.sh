@@ -86,17 +86,34 @@ MIN_REPLICAS=$(jq -r ".services.${SERVICE}.minReplicas" "$SERVICES_CONFIG" 2>/de
 MAX_REPLICAS=$(jq -r ".services.${SERVICE}.maxReplicas" "$SERVICES_CONFIG" 2>/dev/null || echo "10")
 INGRESS_EXTERNAL=$(jq -r ".services.${SERVICE}.ingressExternal" "$SERVICES_CONFIG" 2>/dev/null || echo "true")
 
-# Get service URLs (internal URLs within Container Apps)
-IDENTITY_URL="http://identity-${ENVIRONMENT}:8081"
-CONTENT_URL="http://content-${ENVIRONMENT}:8082"
-STUDENT_URL="http://student-${ENVIRONMENT}:8083"
-PAYMENT_URL="http://payment-${ENVIRONMENT}:8084"
-
 print_info "Deploying ${SERVICE} service"
 print_info "  Version: ${VERSION}"
 print_info "  Image: ${IMAGE}"
 print_info "  App Name: ${APP_NAME}"
 print_info "  Resource Group: ${RESOURCE_GROUP}"
+
+# Get Container Apps Environment FQDN for service URLs
+ENV_FQDN=$(az containerapp env show \
+    --name "$ENVIRONMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.defaultDomain" -o tsv 2>/dev/null || echo "")
+
+if [ -z "$ENV_FQDN" ]; then
+    print_error "Could not get Container Apps Environment FQDN"
+    exit 1
+fi
+
+# Build service URLs using internal FQDN format with HTTPS (port handled by ingress)
+IDENTITY_URL="https://identity-${ENVIRONMENT}.internal.${ENV_FQDN}"
+CONTENT_URL="https://content-${ENVIRONMENT}.internal.${ENV_FQDN}"
+STUDENT_URL="https://student-${ENVIRONMENT}.internal.${ENV_FQDN}"
+PAYMENT_URL="https://payment-${ENVIRONMENT}.internal.${ENV_FQDN}"
+
+print_info "Service URLs:"
+print_info "  IDENTITY_SERVICE_URL: ${IDENTITY_URL}"
+print_info "  CONTENT_SERVICE_URL: ${CONTENT_URL}"
+print_info "  STUDENT_SERVICE_URL: ${STUDENT_URL}"
+print_info "  PAYMENT_SERVICE_URL: ${PAYMENT_URL}"
 
 # Check if app exists
 APP_EXISTS=$(az containerapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query "name" -o tsv 2>/dev/null || echo "")
@@ -116,7 +133,7 @@ if [ -z "$APP_EXISTS" ]; then
         exit 1
     fi
     
-    # Create app
+    # Create app first without environment variables
     print_info "Creating container app..."
     if ! az containerapp create \
         --name "$APP_NAME" \
@@ -137,38 +154,44 @@ if [ -z "$APP_EXISTS" ]; then
         exit 1
     fi
     
+    # Verify app was created
     sleep 2
+    if ! az containerapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query "name" -o tsv &>/dev/null; then
+        print_error "Container app was not created successfully"
+        exit 1
+    fi
     
-    # Set environment variables
+    # Set environment variables after creation
     print_info "Setting environment variables..."
     az containerapp update \
         --name "$APP_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
-            "GATEWAY_SERVICE_PORT=${PORT}" \
-            "IDENTITY_SERVICE_URL=${IDENTITY_URL}" \
-            "CONTENT_SERVICE_URL=${CONTENT_URL}" \
-            "STUDENT_SERVICE_URL=${STUDENT_URL}" \
-            "PAYMENT_SERVICE_URL=${PAYMENT_URL}" \
+            "GATEWAY_CONNECT_TIMEOUT=30000" \
+            "GATEWAY_RESPONSE_TIMEOUT=600s" \
+            "IDENTITY_SERVICE_URL=$IDENTITY_URL" \
+            "CONTENT_SERVICE_URL=$CONTENT_URL" \
+            "STUDENT_SERVICE_URL=$STUDENT_URL" \
+            "PAYMENT_SERVICE_URL=$PAYMENT_URL" \
         --output none
     
     print_success "Container app created successfully"
 else
     print_info "Container app exists. Updating..."
     
-    # Update image and environment variables
     az containerapp update \
         --name "$APP_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --image "$IMAGE" \
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
-            "GATEWAY_SERVICE_PORT=${PORT}" \
-            "IDENTITY_SERVICE_URL=${IDENTITY_URL}" \
-            "CONTENT_SERVICE_URL=${CONTENT_URL}" \
-            "STUDENT_SERVICE_URL=${STUDENT_URL}" \
-            "PAYMENT_SERVICE_URL=${PAYMENT_URL}" \
+            "GATEWAY_CONNECT_TIMEOUT=30000" \
+            "GATEWAY_RESPONSE_TIMEOUT=600s" \
+            "IDENTITY_SERVICE_URL=$IDENTITY_URL" \
+            "CONTENT_SERVICE_URL=$CONTENT_URL" \
+            "STUDENT_SERVICE_URL=$STUDENT_URL" \
+            "PAYMENT_SERVICE_URL=$PAYMENT_URL" \
         --output none
     
     print_success "Container app updated successfully"
