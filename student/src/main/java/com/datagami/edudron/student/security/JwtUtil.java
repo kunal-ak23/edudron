@@ -53,7 +53,41 @@ public class JwtUtil {
                 .setSigningKey(getSigningKey())
                 .parseClaimsJws(token);
             return true;
-        } catch (JwtException | IllegalArgumentException e) {
+        } catch (ExpiredJwtException e) {
+            // Log expiration details
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JwtUtil.class);
+            logger.warn("JWT token expired: expiredAt={}, tokenPrefix={}", 
+                    e.getClaims().getExpiration(), 
+                    token.length() > 30 ? token.substring(0, 30) + "..." : token);
+            return false;
+        } catch (MalformedJwtException e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JwtUtil.class);
+            logger.warn("JWT token malformed: error={}, tokenPrefix={}", 
+                    e.getMessage(), 
+                    token.length() > 30 ? token.substring(0, 30) + "..." : token);
+            return false;
+        } catch (io.jsonwebtoken.security.SignatureException e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JwtUtil.class);
+            logger.warn("JWT token signature invalid: error={}, tokenPrefix={}", 
+                    e.getMessage(), 
+                    token.length() > 30 ? token.substring(0, 30) + "..." : token);
+            return false;
+        } catch (IllegalArgumentException e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JwtUtil.class);
+            logger.warn("JWT token validation failed - illegal argument: error={}, tokenPrefix={}", 
+                    e.getMessage(), 
+                    token != null && token.length() > 30 ? token.substring(0, 30) + "..." : token);
+            return false;
+        } catch (JwtException e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JwtUtil.class);
+            logger.warn("JWT token validation failed: error={}, errorType={}, tokenPrefix={}", 
+                    e.getMessage(), e.getClass().getSimpleName(),
+                    token.length() > 30 ? token.substring(0, 30) + "..." : token);
+            return false;
+        } catch (Exception e) {
+            org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(JwtUtil.class);
+            logger.error("Unexpected error during JWT token validation: error={}, errorType={}", 
+                    e.getMessage(), e.getClass().getSimpleName(), e);
             return false;
         }
     }

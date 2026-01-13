@@ -36,21 +36,44 @@ public class RequestLoggingFilter implements GlobalFilter, Ordered {
 
         log.info("Incoming request: method={}, path={}, traceId={}", method, path, traceId);
 
+        // Log request headers for debugging
+        String authHeader = request.getHeaders().getFirst("Authorization");
+        String clientIdHeader = request.getHeaders().getFirst("X-Client-Id");
+        log.debug("Request headers - Authorization: {}, X-Client-Id: {}, path={}, traceId={}", 
+                authHeader != null ? "present" : "missing", 
+                clientIdHeader != null ? clientIdHeader : "missing", 
+                path, traceId);
+
         return chain.filter(exchange)
                 .doOnSuccess(aVoid -> {
                     ServerHttpResponse response = exchange.getResponse();
                     Long start = exchange.getAttribute(START_TIME);
                     long duration = start != null ? Instant.now().toEpochMilli() - start : 0;
                     
-                    log.info("Request completed: method={}, path={}, status={}, duration={}ms, traceId={}",
-                            method, path, response.getStatusCode(), duration, traceId);
+                    if (response.getStatusCode() != null) {
+                        int statusCode = response.getStatusCode().value();
+                        
+                        // Log authentication/authorization failures with more detail
+                        if (statusCode == 401 || statusCode == 403) {
+                            log.warn("Authentication/Authorization failure from downstream: method={}, path={}, status={}, duration={}ms, traceId={}, hasAuthHeader={}, hasClientId={}", 
+                                    method, path, statusCode, duration, traceId, 
+                                    authHeader != null, clientIdHeader != null);
+                        } else {
+                            log.info("Request completed: method={}, path={}, status={}, duration={}ms, traceId={}",
+                                    method, path, statusCode, duration, traceId);
+                        }
+                    } else {
+                        log.info("Request completed: method={}, path={}, status=null, duration={}ms, traceId={}",
+                                method, path, duration, traceId);
+                    }
                 })
                 .doOnError(throwable -> {
                     Long start = exchange.getAttribute(START_TIME);
                     long duration = start != null ? Instant.now().toEpochMilli() - start : 0;
                     
-                    log.error("Request failed: method={}, path={}, error={}, duration={}ms, traceId={}",
-                            method, path, throwable.getMessage(), duration, traceId, throwable);
+                    log.error("Request failed: method={}, path={}, error={}, duration={}ms, traceId={}, hasAuthHeader={}, hasClientId={}",
+                            method, path, throwable.getMessage(), duration, traceId, 
+                            authHeader != null, clientIdHeader != null, throwable);
                 });
     }
 
