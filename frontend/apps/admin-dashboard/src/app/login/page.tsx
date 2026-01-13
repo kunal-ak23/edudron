@@ -25,9 +25,26 @@ export default function LoginPage() {
     }
 
     if (user && !needsTenantSelection) {
+      // Check if password reset is required - redirect to profile page
+      if (user.passwordResetRequired) {
+        router.push('/profile')
+        return
+      }
+      
       // Check if tenant is actually selected (not PENDING_TENANT_SELECTION)
       const tenantId = localStorage.getItem('tenant_id') || user.tenantId
       const isPending = tenantId === 'PENDING_TENANT_SELECTION' || tenantId === 'SYSTEM' || !tenantId
+      
+      // Redirect STUDENT users to student portal
+      if (user.role === 'STUDENT') {
+        const studentPortalUrl = typeof window !== 'undefined' 
+          ? (window.location.origin.includes('localhost') 
+              ? 'http://localhost:3001' 
+              : window.location.origin.replace('admin', 'student').replace('dashboard', 'portal'))
+          : 'http://localhost:3001'
+        window.location.href = studentPortalUrl
+        return
+      }
       
       // For SYSTEM_ADMIN, allow access even without tenant (they can select from top bar)
       if (user.role === 'SYSTEM_ADMIN') {
@@ -49,8 +66,9 @@ export default function LoginPage() {
 
     try {
       const credentials: LoginCredentials = { email, password }
-      await login(credentials)
+      const response = await login(credentials)
       // The AuthContext will handle setting needsTenantSelection
+      // If password reset is required, redirect will happen in useEffect
     } catch (err: any) {
       const errorMessage = err.message || 'Login failed. Please try again.'
       setError(errorMessage)

@@ -19,7 +19,8 @@ public record AuthResponse(
         String tenantId,
         String tenantName,
         String tenantSlug,
-        OffsetDateTime createdAt
+        OffsetDateTime createdAt,
+        Boolean passwordResetRequired
     ) {}
     
     public record TenantInfo(

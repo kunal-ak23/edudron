@@ -123,6 +123,11 @@ const menuItems: MenuItem[] = [
     icon: Settings,
     requiresTenant: true,
   },
+  {
+    name: 'Profile',
+    href: '/profile',
+    icon: UserCog,
+  },
 ]
 
 interface SidebarProps {

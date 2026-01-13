@@ -37,6 +37,9 @@ public class User {
     @Column(nullable = false)
     private Boolean active = true;
 
+    @Column(nullable = false)
+    private Boolean passwordResetRequired = false;
+
     public enum Role {
         // System-level roles (highest privilege)
         SYSTEM_ADMIN,        // Full system access, can manage all tenants
@@ -96,6 +99,9 @@ public class User {
 
     public Boolean getActive() { return active; }
     public void setActive(Boolean active) { this.active = active; }
+
+    public Boolean getPasswordResetRequired() { return passwordResetRequired; }
+    public void setPasswordResetRequired(Boolean passwordResetRequired) { this.passwordResetRequired = passwordResetRequired; }
     
     // Role hierarchy and permission methods
     public boolean isSystemAdmin() {

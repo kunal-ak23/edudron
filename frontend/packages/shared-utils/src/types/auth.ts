@@ -16,6 +16,7 @@ export interface User {
   tenantName?: string
   tenantSlug?: string
   createdAt: string
+  passwordResetRequired?: boolean
 }
 
 export interface LoginCredentials {

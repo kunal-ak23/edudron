@@ -78,7 +78,8 @@ public class AuthService {
                             tenantId,
                             "System",
                             "system",
-                            user.getCreatedAt()
+                            user.getCreatedAt(),
+                            user.getPasswordResetRequired() != null ? user.getPasswordResetRequired() : false
                     ),
                     needsTenantSelection,
                     tenants
@@ -149,7 +150,8 @@ public class AuthService {
                         tenantId,
                         tenantName,
                         tenantSlug,
-                        user.getCreatedAt()
+                        user.getCreatedAt(),
+                        user.getPasswordResetRequired() != null ? user.getPasswordResetRequired() : false
                 ),
                 false,
                 List.of()
@@ -246,7 +248,8 @@ public class AuthService {
                         tenantId,
                         tenantName,
                         tenantSlug,
-                        user.getCreatedAt()
+                        user.getCreatedAt(),
+                        user.getPasswordResetRequired() != null ? user.getPasswordResetRequired() : false
                 ),
                 false,
                 List.of()
@@ -299,7 +302,8 @@ public class AuthService {
                         tenantId,
                         tenantName,
                         tenantSlug,
-                        user.getCreatedAt()
+                        user.getCreatedAt(),
+                        user.getPasswordResetRequired() != null ? user.getPasswordResetRequired() : false
                 ),
                 false,
                 List.of()

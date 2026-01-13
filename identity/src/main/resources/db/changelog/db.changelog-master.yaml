@@ -50,4 +50,8 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0003-system-admin-fix.yaml
   - include:
       file: db/changelog/db.changelog-0004-tenant-branding.yaml
+  - include:
+      file: db/changelog/db.changelog-0005-user-institutes.yaml
+  - include:
+      file: db/changelog/db.changelog-0006-password-reset.yaml
 

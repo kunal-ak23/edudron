@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Bell, LogOut, User } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 
 interface AppLayoutProps {
@@ -46,6 +47,7 @@ function getPageTitle(pathname: string): string {
   if (pathname === '/enrollments') return 'Enrollments'
   if (pathname === '/payments') return 'Payments'
   if (pathname === '/settings') return 'Settings'
+  if (pathname === '/profile') return 'Profile'
   return 'Dashboard'
 }
 
@@ -73,6 +75,7 @@ function getPageSubtitle(pathname: string): string {
   if (pathname === '/enrollments') return 'Manage student enrollments'
   if (pathname === '/payments') return 'Manage payment transactions'
   if (pathname === '/settings') return 'Configure system settings'
+  if (pathname === '/profile') return 'View and manage your profile'
   return 'Welcome to your EduDron admin dashboard'
 }
 
@@ -157,9 +160,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="cursor-pointer">
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Profile</span>
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link href="/profile" className="flex items-center">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem className="cursor-pointer">
                     <Bell className="mr-2 h-4 w-4" />

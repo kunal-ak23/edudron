@@ -1,5 +1,6 @@
 package com.datagami.edudron.identity.web;
 
+import com.datagami.edudron.identity.dto.ChangePasswordRequest;
 import com.datagami.edudron.identity.dto.CreateUserRequest;
 import com.datagami.edudron.identity.dto.UserDTO;
 import com.datagami.edudron.identity.service.UserService;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/idp/users")
@@ -43,10 +45,34 @@ public class UserController {
     }
     
     @PostMapping
-    @Operation(summary = "Create user", description = "Create a new user. SYSTEM_ADMIN cannot be created through this endpoint.")
+    @Operation(summary = "Create user", description = "Create a new user. SYSTEM_ADMIN can only be created by existing SYSTEM_ADMIN users. Non-SYSTEM_ADMIN users must have at least one institute assigned.")
     public ResponseEntity<UserDTO> createUser(@Valid @RequestBody CreateUserRequest request) {
         UserDTO user = userService.createUser(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(user);
+    }
+    
+    @PutMapping("/{id}/institutes")
+    @Operation(summary = "Update user institutes", description = "Update institute associations for a user")
+    public ResponseEntity<UserDTO> updateUserInstitutes(
+            @PathVariable String id,
+            @RequestBody List<String> instituteIds) {
+        userService.assignInstitutesToUser(id, instituteIds);
+        UserDTO user = userService.getUserById(id);
+        return ResponseEntity.ok(user);
+    }
+    
+    @GetMapping("/me")
+    @Operation(summary = "Get current user profile", description = "Get the profile of the currently authenticated user")
+    public ResponseEntity<UserDTO> getCurrentUserProfile() {
+        UserDTO user = userService.getCurrentUserProfile();
+        return ResponseEntity.ok(user);
+    }
+    
+    @PutMapping("/me/password")
+    @Operation(summary = "Change password", description = "Change the password of the currently authenticated user")
+    public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
+        userService.changePassword(request.getCurrentPassword(), request.getNewPassword());
+        return ResponseEntity.ok().build();
     }
 }
 

@@ -36,6 +36,23 @@ export default function ProtectedRoute({
       return
     }
 
+    // Check if password reset is required (except on profile page)
+    if (user.passwordResetRequired && typeof window !== 'undefined' && window.location.pathname !== '/profile') {
+      router.push('/profile')
+      return
+    }
+
+    // Redirect STUDENT users to student portal
+    if (user.role === 'STUDENT') {
+      const studentPortalUrl = typeof window !== 'undefined' 
+        ? (window.location.origin.includes('localhost') 
+            ? 'http://localhost:3001' 
+            : window.location.origin.replace('admin', 'student').replace('dashboard', 'portal'))
+        : 'http://localhost:3001'
+      window.location.href = studentPortalUrl
+      return
+    }
+
     // Check if tenant is selected (required for all authenticated users except SYSTEM_ADMIN)
     if (!tenantId && user.role !== 'SYSTEM_ADMIN') {
       const availableTenants = localStorage.getItem('available_tenants')

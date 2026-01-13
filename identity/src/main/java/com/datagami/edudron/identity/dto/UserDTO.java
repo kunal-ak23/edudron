@@ -1,6 +1,7 @@
 package com.datagami.edudron.identity.dto;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public class UserDTO {
@@ -11,6 +12,8 @@ public class UserDTO {
     private String phone;
     private String role;
     private Boolean active;
+    private Boolean passwordResetRequired;
+    private List<String> instituteIds;
     private OffsetDateTime createdAt;
     private OffsetDateTime lastLoginAt;
 
@@ -26,6 +29,39 @@ public class UserDTO {
         this.phone = phone;
         this.role = role;
         this.active = active;
+        this.passwordResetRequired = false;
+        this.createdAt = createdAt;
+        this.lastLoginAt = lastLoginAt;
+    }
+
+    public UserDTO(String id, UUID clientId, String email, String name, String phone, 
+                   String role, Boolean active, List<String> instituteIds, 
+                   OffsetDateTime createdAt, OffsetDateTime lastLoginAt) {
+        this.id = id;
+        this.clientId = clientId;
+        this.email = email;
+        this.name = name;
+        this.phone = phone;
+        this.role = role;
+        this.active = active;
+        this.passwordResetRequired = false;
+        this.instituteIds = instituteIds;
+        this.createdAt = createdAt;
+        this.lastLoginAt = lastLoginAt;
+    }
+
+    public UserDTO(String id, UUID clientId, String email, String name, String phone, 
+                   String role, Boolean active, Boolean passwordResetRequired, List<String> instituteIds, 
+                   OffsetDateTime createdAt, OffsetDateTime lastLoginAt) {
+        this.id = id;
+        this.clientId = clientId;
+        this.email = email;
+        this.name = name;
+        this.phone = phone;
+        this.role = role;
+        this.active = active;
+        this.passwordResetRequired = passwordResetRequired;
+        this.instituteIds = instituteIds;
         this.createdAt = createdAt;
         this.lastLoginAt = lastLoginAt;
     }
@@ -57,6 +93,12 @@ public class UserDTO {
 
     public OffsetDateTime getLastLoginAt() { return lastLoginAt; }
     public void setLastLoginAt(OffsetDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
+
+    public List<String> getInstituteIds() { return instituteIds; }
+    public void setInstituteIds(List<String> instituteIds) { this.instituteIds = instituteIds; }
+
+    public Boolean getPasswordResetRequired() { return passwordResetRequired; }
+    public void setPasswordResetRequired(Boolean passwordResetRequired) { this.passwordResetRequired = passwordResetRequired; }
 }
 
 
