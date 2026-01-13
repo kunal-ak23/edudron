@@ -57,43 +57,54 @@ export class ApiClient {
     // Request interceptor to add auth token and tenant ID
     this.client.interceptors.request.use(
       (config) => {
-        // Add auth token
-        const token = this.tokenManager.getToken()
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`
+        // Don't add Authorization header for auth endpoints (login, register, refresh)
+        // This prevents stale tokens from causing issues
+        const isAuthEndpoint = config.url?.includes('/auth/login') || 
+                               config.url?.includes('/auth/register') || 
+                               config.url?.includes('/auth/refresh')
+        
+        // Add auth token (skip for auth endpoints)
+        if (!isAuthEndpoint) {
+          const token = this.tokenManager.getToken()
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`
+          }
         }
         
         // Add tenant ID from localStorage (check multiple possible keys)
         // Read dynamically on each request to ensure we get the latest value
-        let tenantId: string | null = null
-        if (typeof window !== 'undefined') {
-          tenantId = localStorage.getItem('clientId') || 
-                     localStorage.getItem('selectedTenantId') || 
-                     localStorage.getItem('tenant_id') ||
-                     null
-        }
-        
-        if (tenantId) {
-          // Validate tenant ID is not a placeholder value
-          if (tenantId !== 'PENDING_TENANT_SELECTION' && 
-              tenantId !== 'SYSTEM' && 
-              tenantId !== 'null' && 
-              tenantId !== '') {
-            config.headers['X-Client-Id'] = tenantId
-            // Log in development to help debug
-            if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-              console.log('[API Client] Setting X-Client-Id header:', tenantId, 'for request:', config.url)
+        // Skip for auth endpoints as well
+        if (!isAuthEndpoint) {
+          let tenantId: string | null = null
+          if (typeof window !== 'undefined') {
+            tenantId = localStorage.getItem('clientId') || 
+                       localStorage.getItem('selectedTenantId') || 
+                       localStorage.getItem('tenant_id') ||
+                       null
+          }
+          
+          if (tenantId) {
+            // Validate tenant ID is not a placeholder value
+            if (tenantId !== 'PENDING_TENANT_SELECTION' && 
+                tenantId !== 'SYSTEM' && 
+                tenantId !== 'null' && 
+                tenantId !== '') {
+              config.headers['X-Client-Id'] = tenantId
+              // Log in development to help debug
+              if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+                console.log('[API Client] Setting X-Client-Id header:', tenantId, 'for request:', config.url)
+              }
+            } else {
+              // Log warning if tenant ID is a placeholder
+              if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+                console.warn('[API Client] X-Client-Id header not set - tenant ID is placeholder value:', tenantId, 'for request:', config.url)
+              }
             }
           } else {
-            // Log warning if tenant ID is a placeholder
+            // Log warning if clientId is missing (but don't block the request)
             if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-              console.warn('[API Client] X-Client-Id header not set - tenant ID is placeholder value:', tenantId, 'for request:', config.url)
+              console.warn('[API Client] X-Client-Id header not set - tenant ID not found in localStorage. Checked: clientId, selectedTenantId, tenant_id. Request:', config.url)
             }
-          }
-        } else {
-          // Log warning if clientId is missing (but don't block the request)
-          if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-            console.warn('[API Client] X-Client-Id header not set - tenant ID not found in localStorage. Checked: clientId, selectedTenantId, tenant_id. Request:', config.url)
           }
         }
         
