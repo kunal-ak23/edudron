@@ -154,7 +154,7 @@ export function D3TreeView({
     const root = d3.hierarchy(treeData)
     // Increase horizontal spacing to prevent overlap - use more of the width
     const horizontalSpacing = Math.max(width - 200, 800) // Minimum 800px spacing
-    const treeLayout = d3.tree().size([height - 200, horizontalSpacing])
+    const treeLayout = d3.tree<TreeNode>().size([height - 200, horizontalSpacing])
     treeLayout(root)
 
     // Color scheme
@@ -171,9 +171,9 @@ export function D3TreeView({
       .enter()
       .append('path')
       .attr('class', 'link')
-      .attr('d', d3.linkHorizontal()
-        .x((d: any) => d.y + 200)
-        .y((d: any) => d.x + 100)
+      .attr('d', d3.linkHorizontal<d3.HierarchyLink<TreeNode>, d3.HierarchyNode<TreeNode>>()
+        .x((d) => (d.y ?? 0) + 200)
+        .y((d) => (d.x ?? 0) + 100)
       )
       .attr('fill', 'none')
       .attr('stroke', '#94a3b8')
@@ -186,7 +186,7 @@ export function D3TreeView({
       .enter()
       .append('g')
       .attr('class', 'node')
-      .attr('transform', (d) => `translate(${d.y + 200},${d.x + 100})`)
+      .attr('transform', (d) => `translate(${(d.y ?? 0) + 200},${(d.x ?? 0) + 100})`)
 
     // Node circles
     nodes

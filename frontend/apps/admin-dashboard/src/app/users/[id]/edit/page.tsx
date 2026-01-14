@@ -79,7 +79,7 @@ export default function EditUserPage() {
       try {
         setLoadingUser(true)
         const response = await apiClient.get<User>(`/idp/users/${userId}`)
-        const userData = response.data || response as User
+        const userData = response.data
         
         setFormData({
           email: userData.email || '',

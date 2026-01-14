@@ -791,8 +791,8 @@ export default function LectureEditPage() {
                                     <p className="text-sm font-medium truncate">
                                       {attachment.title || attachment.fileUrl?.split('/').pop() || 'Untitled'}
                                     </p>
-                                    {attachment.mimeType && (
-                                      <p className="text-xs text-gray-500">{attachment.mimeType}</p>
+                                    {attachment.contentType && (
+                                      <p className="text-xs text-gray-500">{attachment.contentType}</p>
                                     )}
                                   </div>
                                 </div>
