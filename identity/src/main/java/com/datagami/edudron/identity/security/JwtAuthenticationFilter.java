@@ -72,10 +72,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Set tenant context from header (if present) for all requests
+        // Set tenant context from header (if present) or from JWT token
         try {
             if (tenantHeader != null && !tenantHeader.isBlank()) {
                 TenantContext.setClientId(tenantHeader);
+            } else if (jwt != null && username != null) {
+                // If header is not present, try to extract tenant from JWT token
+                try {
+                    String tenantFromToken = jwtUtil.extractTenantId(jwt);
+                    if (tenantFromToken != null && !tenantFromToken.isBlank()) {
+                        TenantContext.setClientId(tenantFromToken);
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("Set tenant context from JWT token: " + tenantFromToken);
+                        }
+                    }
+                } catch (Exception e) {
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Could not extract tenant from JWT token: " + e.getMessage());
+                    }
+                }
             }
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {

@@ -17,7 +17,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -260,21 +259,51 @@ public class UserService {
     private User getCurrentUser() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.getPrincipal() != null) {
-                String email = authentication.getName();
-                String clientIdStr = TenantContext.getClientId();
-                
-                // Try to find user by email and tenant
-                if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+            if (authentication == null || authentication.getPrincipal() == null) {
+                log.warn("No authentication found in SecurityContext");
+                return null;
+            }
+            
+            String email = authentication.getName();
+            if (email == null || email.isBlank()) {
+                log.warn("Email is null or blank in authentication");
+                return null;
+            }
+            
+            String clientIdStr = TenantContext.getClientId();
+            
+            // Try to find user by email and tenant
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                try {
                     UUID clientId = UUID.fromString(clientIdStr);
-                    return userRepository.findByEmailAndClientId(email, clientId).orElse(null);
-                } else {
-                    // Try SYSTEM_ADMIN
-                    return userRepository.findByEmailAndRoleAndActiveTrue(email, User.Role.SYSTEM_ADMIN).orElse(null);
+                    var user = userRepository.findByEmailAndClientId(email, clientId);
+                    if (user.isPresent()) {
+                        return user.get();
+                    }
+                    log.warn("User not found with email: {} and clientId: {}", email, clientId);
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid clientId format: {}", clientIdStr);
                 }
             }
+            
+            // Try SYSTEM_ADMIN lookup
+            var systemAdmin = userRepository.findByEmailAndRoleAndActiveTrue(email, User.Role.SYSTEM_ADMIN);
+            if (systemAdmin.isPresent()) {
+                log.debug("Found SYSTEM_ADMIN user with email: {}", email);
+                return systemAdmin.get();
+            }
+            
+            // Log detailed information for debugging
+            var usersByEmail = userRepository.findByEmailAndActiveTrue(email);
+            if (!usersByEmail.isEmpty()) {
+                log.warn("User with email {} exists but not found for tenant {} or as SYSTEM_ADMIN. Found {} user(s) with this email in other tenants.", 
+                    email, clientIdStr, usersByEmail.size());
+            } else {
+                log.warn("User not found with email: {} (checked tenant: {}, SYSTEM_ADMIN). User may not exist or be inactive.", email, clientIdStr);
+            }
+            
         } catch (Exception e) {
-            log.warn("Failed to get current user: {}", e.getMessage());
+            log.error("Failed to get current user: {}", e.getMessage(), e);
         }
         return null;
     }
@@ -304,7 +333,12 @@ public class UserService {
     public UserDTO getCurrentUserProfile() {
         User currentUser = getCurrentUser();
         if (currentUser == null) {
-            throw new IllegalArgumentException("User not found");
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            String email = authentication != null ? authentication.getName() : "unknown";
+            String clientIdStr = TenantContext.getClientId();
+            throw new IllegalArgumentException(
+                String.format("User not found. Email: %s, Tenant: %s. Please ensure you are authenticated with a valid token.", 
+                    email, clientIdStr != null ? clientIdStr : "not set"));
         }
         return toDTO(currentUser);
     }

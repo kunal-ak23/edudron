@@ -5,6 +5,9 @@ export type { ButtonProps } from './components/Button'
 export { default as Input } from './components/Input'
 export type { InputProps } from './components/Input'
 
+export { default as PasswordInput } from './components/PasswordInput'
+export type { PasswordInputProps } from './components/PasswordInput'
+
 export { default as Select } from './components/Select'
 export type { SelectProps } from './components/Select'
 
