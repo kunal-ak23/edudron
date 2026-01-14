@@ -192,6 +192,8 @@ export class ApiClient {
   async postForm<T = any>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
     const response: AxiosResponse<any> = await this.client.post(url, formData, {
       ...config,
+      // Use config timeout if provided, otherwise use default (30000ms)
+      timeout: config?.timeout ?? this.client.defaults.timeout,
       headers: {
         ...config?.headers,
         'Content-Type': 'multipart/form-data',

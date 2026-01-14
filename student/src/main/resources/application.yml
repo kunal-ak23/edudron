@@ -37,6 +37,19 @@ springdoc:
 
 server:
   port: ${STUDENT_SERVICE_PORT:8083}
+  # Increase timeout for long-running operations like bulk import
+  # Default is 30 seconds, increase to 10 minutes (600 seconds)
+  # Tomcat connection timeout (in milliseconds)
+  connection-timeout: 600000
+  servlet:
+    session:
+      timeout: 600s
+    # Multipart file upload settings
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      # Allow longer processing time for large files
+      file-size-threshold: 1MB
 
 # JWT Configuration (must match Identity service)
 jwt:

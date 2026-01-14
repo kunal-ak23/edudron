@@ -55,9 +55,14 @@ export class StudentsApi {
       formData.append('defaultCourseIds', options.defaultCourseIds.join(','))
     }
 
+    // Use a longer timeout for bulk import (5 minutes = 300000ms)
+    // Bulk imports can process hundreds of students and may take time
     const response = await this.apiClient.postForm<BulkStudentImportResult>(
       '/api/students/bulk-import',
-      formData
+      formData,
+      {
+        timeout: 300000, // 5 minutes
+      }
     )
     return response.data
   }
