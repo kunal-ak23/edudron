@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -14,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Loader2, ArrowLeft, Users, Edit, FolderOpen } from 'lucide-react'
+import { Plus, Loader2, ArrowLeft, Users, Edit, FolderOpen, Network } from 'lucide-react'
 import { institutesApi, classesApi } from '@/lib/api'
 import type { Institute, Class } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -29,6 +28,7 @@ export default function InstituteClassesPage() {
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [classes, setClasses] = useState<Class[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (instituteId) {
@@ -39,21 +39,25 @@ export default function InstituteClassesPage() {
   const loadData = async () => {
     try {
       setLoading(true)
+      setError(null)
+      console.log('Loading data for institute:', instituteId)
       const [instituteData, classesData] = await Promise.all([
         institutesApi.getInstitute(instituteId),
         classesApi.listClassesByInstitute(instituteId)
       ])
+      console.log('Loaded institute:', instituteData)
+      console.log('Loaded classes:', classesData)
       setInstitute(instituteData)
       setClasses(classesData || [])
     } catch (err: any) {
       console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
+      setError(errorMessage)
       toast({
         variant: 'destructive',
         title: 'Failed to load data',
         description: errorMessage,
       })
-      router.push('/institutes')
     } finally {
       setLoading(false)
     }
@@ -69,20 +73,56 @@ export default function InstituteClassesPage() {
 
   if (loading) {
     return (
-      
-        <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (error && !institute) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <Link href="/institutes">
+            <Button variant="ghost" className="mb-4">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Institutes
+            </Button>
+          </Link>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center py-12">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to load data</h3>
+                <p className="text-sm text-gray-600 mb-4">{error}</p>
+                <Button onClick={loadData} variant="outline">
+                  Try Again
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-  )
-}
+      </div>
+    )
+  }
 
   if (!institute) {
-    return null
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">No institute data available</p>
+          <Link href="/institutes">
+            <Button variant="outline" className="mt-4">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Institutes
+            </Button>
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
-    
-      <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <Link href="/institutes">
             <Button variant="ghost" className="mb-4">
@@ -96,12 +136,20 @@ export default function InstituteClassesPage() {
               <h1 className="text-3xl font-bold text-gray-900">Classes - {institute.name}</h1>
               <p className="mt-2 text-sm text-gray-600">Manage classes for this institute</p>
             </div>
-            <Link href={`/institutes/${instituteId}/classes/new`}>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Create New Class
-              </Button>
-            </Link>
+            <div className="flex gap-2">
+              <Link href={`/institutes/${instituteId}/tree`}>
+                <Button variant="outline">
+                  <Network className="h-4 w-4 mr-2" />
+                  Tree View
+                </Button>
+              </Link>
+              <Link href={`/institutes/${instituteId}/classes/new`}>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create New Class
+                </Button>
+              </Link>
+            </div>
           </div>
 
           <Card>

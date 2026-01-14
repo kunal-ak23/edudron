@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ArrowLeft, Save } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Network } from 'lucide-react'
 import { institutesApi } from '@/lib/api'
 import type { Institute, CreateInstituteRequest } from '@kunal-ak23/edudron-shared-utils'
 import { InstituteType } from '@kunal-ak23/edudron-shared-utils'
@@ -222,10 +222,16 @@ export default function InstituteDetailPage() {
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-2">
             <Link href={`/institutes/${instituteId}/classes`}>
               <Button variant="outline" className="w-full">
                 View Classes ({institute.classCount || 0})
+              </Button>
+            </Link>
+            <Link href={`/institutes/${instituteId}/tree`}>
+              <Button variant="outline" className="w-full">
+                <Network className="h-4 w-4 mr-2" />
+                View Tree Visualization
               </Button>
             </Link>
           </CardContent>
