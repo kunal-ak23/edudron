@@ -1,7 +1,7 @@
 {
   "gateway": "0.1.9",
   "identity": "0.1.5",
-  "content": "0.1.8",
+  "content": "0.1.9",
   "student": "0.1.6",
   "payment": "0.1.5"
 }
