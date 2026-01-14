@@ -520,15 +520,8 @@ export default function CourseEditPage() {
 
   const handlePreview = () => {
     if (!courseId || courseId === 'new') return
-    // Open student portal course view in preview mode
-    // Student portal runs on port 3001 by default
-    const studentPortalUrl = typeof window !== 'undefined' 
-      ? (window.location.origin.includes('localhost') 
-          ? 'http://localhost:3001' 
-          : window.location.origin.replace('admin', 'student').replace('dashboard', 'portal'))
-      : 'http://localhost:3001'
-    // Add preview=true query parameter to enable preview mode for admin users
-    window.open(`${studentPortalUrl}/courses/${courseId}?preview=true`, '_blank')
+    // Navigate to internal preview route
+    router.push(`/courses/${courseId}/preview`)
   }
 
   const getClassDisplayName = (classId: string) => {
