@@ -14,16 +14,6 @@ import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { IssueReportDialog } from '@/components/IssueReportDialog'
 import { MarkdownWithHighlights } from '@/components/MarkdownWithHighlights'
 import { NotesSidebar } from '@/components/NotesSidebar'
-import dynamicImport from 'next/dynamic'
-
-// Dynamically import PDFViewer to avoid SSR issues with pdfjs-dist
-const PDFViewer = dynamicImport(() => import('@/components/PDFViewer').then((mod) => mod.PDFViewer), {
-  ssr: false,
-  loading: () => null,
-})
-
-// Force dynamic rendering
-export const dynamic = 'force-dynamic'
 
 type TabType = 'transcript' | 'notes'
 
