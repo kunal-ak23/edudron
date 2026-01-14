@@ -67,8 +67,27 @@ export class EnrollmentsApi {
   constructor(private apiClient: ApiClient) {}
 
   async listEnrollments(): Promise<Enrollment[]> {
-    const response = await this.apiClient.get<Enrollment[]>('/api/enrollments')
-    return Array.isArray(response.data) ? response.data : []
+    console.log('[EnrollmentsApi.listEnrollments] Starting request')
+    const response = await this.apiClient.get<any>('/api/enrollments')
+    console.log('[EnrollmentsApi.listEnrollments] Raw response:', response)
+    console.log('[EnrollmentsApi.listEnrollments] Response data:', response.data)
+    console.log('[EnrollmentsApi.listEnrollments] Response data type:', typeof response.data)
+    console.log('[EnrollmentsApi.listEnrollments] Response data is array?:', Array.isArray(response.data))
+    
+    // Handle Spring Data Page response structure: {content: [...], totalElements: ...}
+    if (response.data && response.data.content && Array.isArray(response.data.content)) {
+      console.log('[EnrollmentsApi.listEnrollments] Found content array, length:', response.data.content.length)
+      console.log('[EnrollmentsApi.listEnrollments] Content:', response.data.content)
+      return response.data.content
+    }
+    // Fallback: if response is already an array, return it
+    if (Array.isArray(response.data)) {
+      console.log('[EnrollmentsApi.listEnrollments] Response.data is already an array, length:', response.data.length)
+      return response.data
+    }
+    console.warn('[EnrollmentsApi.listEnrollments] No valid enrollment data found in response. Returning empty array.')
+    console.warn('[EnrollmentsApi.listEnrollments] Response structure:', JSON.stringify(response.data, null, 2))
+    return []
   }
 
   async getEnrollment(id: string): Promise<Enrollment> {

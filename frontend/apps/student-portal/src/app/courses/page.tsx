@@ -56,32 +56,84 @@ export default function CoursesPage() {
       }
 
       // Fetch published courses and enrollments in parallel
-      const [coursesData, enrollmentsData] = await Promise.all([
-        coursesApi.listCourses({ status: 'PUBLISHED' }),
-        enrollmentsApi.listEnrollments().catch(() => []) // Don't fail if enrollments fail
-      ])
+      console.log('📚 Starting to fetch courses and enrollments...')
+      let enrollmentsData: Enrollment[] = []
+      try {
+        const enrollmentsResponse = await enrollmentsApi.listEnrollments()
+        enrollmentsData = Array.isArray(enrollmentsResponse) ? enrollmentsResponse : []
+        console.log('✅ Enrollments API call successful')
+      } catch (error) {
+        console.error('❌ Enrollments API call failed:', error)
+        enrollmentsData = []
+      }
+      
+      const coursesData = await coursesApi.listCourses({ status: 'PUBLISHED' })
 
       setEnrollments(enrollmentsData)
       
-      // Get enrolled course IDs
-      const enrolledCourseIds = new Set(enrollmentsData.map(e => e.courseId))
+      // Get enrolled course IDs - filter out any null/undefined courseIds
+      const enrolledCourseIds = new Set(
+        enrollmentsData
+          .map(e => e.courseId)
+          .filter((courseId): courseId is string => courseId != null && courseId !== '')
+      )
+      
+      // Debug logging
+      console.log('📚 Enrollments data:', enrollmentsData)
+      console.log('📚 Enrollments array length:', enrollmentsData.length)
+      console.log('📚 Enrollments with courseId:', enrollmentsData.map(e => ({ 
+        id: e.id, 
+        courseId: e.courseId, 
+        studentId: e.studentId,
+        batchId: e.batchId,
+        classId: e.classId
+      })))
+      console.log('📚 Enrolled course IDs (Set):', Array.from(enrolledCourseIds))
+      console.log('📚 Number of enrollments:', enrollmentsData.length)
+      console.log('📚 Number of valid course IDs:', enrolledCourseIds.size)
+      
+      if (enrollmentsData.length === 0) {
+        console.warn('⚠️ WARNING: No enrollments returned from API. Student may not be enrolled in any courses.')
+      }
+      
+      if (enrolledCourseIds.size === 0 && enrollmentsData.length > 0) {
+        console.warn('⚠️ WARNING: Enrollments returned but no valid courseIds found. Enrollments:', enrollmentsData)
+      }
       
       // Fetch all courses (including drafts) to check for enrolled draft courses
       const allCourses = await coursesApi.listCourses().catch(() => coursesData)
+      
+      console.log('📚 All courses:', allCourses.length)
+      console.log('📚 Course IDs:', allCourses.map(c => c.id))
       
       // Filter courses based on self-enrollment status
       let visibleCourses: Course[]
       if (currentUser?.role === 'STUDENT' && !isSelfEnrollmentEnabled) {
         // If self-enrollment is disabled, only show enrolled courses (even if draft)
-        visibleCourses = allCourses.filter(course => 
-          enrolledCourseIds.has(course.id)
-        )
+        visibleCourses = allCourses.filter(course => {
+          const isEnrolled = enrolledCourseIds.has(course.id)
+          if (!isEnrolled) {
+            console.log(`❌ Course ${course.id} (${course.title}) filtered out - not in enrolledCourseIds`)
+          }
+          return isEnrolled
+        })
       } else {
         // If self-enrollment is enabled OR user is admin/instructor, show published courses OR enrolled courses (even if draft)
-        visibleCourses = allCourses.filter(course => 
-          course.isPublished || enrolledCourseIds.has(course.id)
-        )
+        visibleCourses = allCourses.filter(course => {
+          const isPublished = course.isPublished
+          const isEnrolled = enrolledCourseIds.has(course.id)
+          const shouldShow = isPublished || isEnrolled
+          if (!shouldShow) {
+            console.log(`❌ Course ${course.id} (${course.title}) filtered out - not published and not enrolled`)
+          } else {
+            console.log(`✅ Course ${course.id} (${course.title}) included - published: ${isPublished}, enrolled: ${isEnrolled}`)
+          }
+          return shouldShow
+        })
       }
+      
+      console.log('📚 Visible courses after filtering:', visibleCourses.length)
+      console.log('📚 Visible course IDs:', visibleCourses.map(c => c.id))
       
       setCourses(visibleCourses)
       setFilteredCourses(visibleCourses)

@@ -22,7 +22,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,10 +54,35 @@ public class CourseService {
     
     private RestTemplate getRestTemplate() {
         if (restTemplate == null) {
+            log.debug("Initializing RestTemplate for student service calls. Gateway URL: {}", gatewayUrl);
             restTemplate = new RestTemplate();
             List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
             interceptors.add(new TenantContextRestTemplateInterceptor());
+            // Add interceptor to forward JWT token (Authorization header)
+            interceptors.add((request, body, execution) -> {
+                // Get current request to extract Authorization header
+                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    HttpServletRequest currentRequest = attributes.getRequest();
+                    String authHeader = currentRequest.getHeader("Authorization");
+                    if (authHeader != null && !authHeader.isBlank()) {
+                        // Only add if not already present
+                        if (!request.getHeaders().containsKey("Authorization")) {
+                            request.getHeaders().add("Authorization", authHeader);
+                            log.debug("Propagated Authorization header (JWT token) to student service: {}", request.getURI());
+                        } else {
+                            log.debug("Authorization header already present in request to {}", request.getURI());
+                        }
+                    } else {
+                        log.warn("No Authorization header found in current request - student service call may fail with 403 Forbidden: {}", request.getURI());
+                    }
+                } else {
+                    log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
+                }
+                return execution.execute(request, body);
+            });
             restTemplate.setInterceptors(interceptors);
+            log.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
         }
         return restTemplate;
     }
@@ -193,10 +223,39 @@ public class CourseService {
         
         // Automatically enroll students for newly assigned classes/sections
         // Only enroll if course is published
+        // IMPORTANT: Enrollment must happen AFTER transaction commits to avoid race condition
+        // where student service validates course before the assignment is visible in the database
         if (Boolean.TRUE.equals(saved.getIsPublished())) {
-            enrollNewlyAssignedClassesAndSections(id, oldClassIds, newClassIds, oldSectionIds, newSectionIds);
+            log.info("Course {} updated and is published. Checking for new class/section assignments to trigger automatic enrollment.", id);
+            log.debug("Course {} - Previous class assignments: {}, New class assignments: {}", 
+                id, oldClassIds, newClassIds);
+            log.debug("Course {} - Previous section assignments: {}, New section assignments: {}", 
+                id, oldSectionIds, newSectionIds);
+            
+            // Schedule enrollment to happen after transaction commits
+            final String courseId = id;
+            final List<String> finalOldClassIds = new ArrayList<>(oldClassIds);
+            final List<String> finalNewClassIds = new ArrayList<>(newClassIds);
+            final List<String> finalOldSectionIds = new ArrayList<>(oldSectionIds);
+            final List<String> finalNewSectionIds = new ArrayList<>(newSectionIds);
+            
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        log.info("Course {} - Transaction committed. Starting automatic enrollment for new assignments.", courseId);
+                        enrollNewlyAssignedClassesAndSections(courseId, finalOldClassIds, finalNewClassIds, finalOldSectionIds, finalNewSectionIds);
+                    }
+                });
+                log.debug("Course {} - Enrollment scheduled to run after transaction commits", id);
+            } else {
+                // If no transaction, enroll immediately (shouldn't happen in normal flow)
+                log.warn("Course {} - No active transaction, enrolling immediately (this may cause race conditions)", id);
+                enrollNewlyAssignedClassesAndSections(id, oldClassIds, newClassIds, oldSectionIds, newSectionIds);
+            }
         } else {
-            log.debug("Course {} is not published, skipping automatic enrollment", id);
+            log.debug("Course {} is not published (isPublished={}), skipping automatic enrollment", 
+                id, saved.getIsPublished());
         }
         
         return toDTO(saved);
@@ -229,29 +288,62 @@ public class CourseService {
             .filter(sectionId -> !oldSectionIds.contains(sectionId))
             .collect(Collectors.toSet());
         
+        // Log summary of what will be enrolled
+        if (newlyAddedClassIds.isEmpty() && newlyAddedSectionIds.isEmpty()) {
+            log.info("Course {} - No new class or section assignments detected. All assignments already existed. Skipping enrollment.", courseId);
+            return;
+        }
+        
+        log.info("Course {} - Starting automatic enrollment for {} new class(es) and {} new section(s)", 
+            courseId, newlyAddedClassIds.size(), newlyAddedSectionIds.size());
+        
+        if (!newlyAddedClassIds.isEmpty()) {
+            log.info("Course {} - Newly assigned classes to enroll: {}", courseId, newlyAddedClassIds);
+        }
+        if (!newlyAddedSectionIds.isEmpty()) {
+            log.info("Course {} - Newly assigned sections to enroll: {}", courseId, newlyAddedSectionIds);
+        }
+        
+        int successfulClassEnrollments = 0;
+        int failedClassEnrollments = 0;
+        int successfulSectionEnrollments = 0;
+        int failedSectionEnrollments = 0;
+        
         // Enroll students for newly assigned classes
         for (String classId : newlyAddedClassIds) {
             try {
+                log.debug("Course {} - Attempting to enroll students from class {} via student service", courseId, classId);
                 enrollClassToCourse(classId, courseId);
-                log.info("Automatically enrolled students from class {} to course {}", classId, courseId);
+                successfulClassEnrollments++;
+                log.info("Course {} - Successfully enrolled students from class {} to course {}", courseId, classId, courseId);
             } catch (Exception e) {
+                failedClassEnrollments++;
                 // Log error but don't fail the course update
-                log.warn("Failed to automatically enroll students from class {} to course {}: {}", 
-                    classId, courseId, e.getMessage());
+                log.warn("Course {} - Failed to automatically enroll students from class {} to course {}: {}", 
+                    courseId, classId, courseId, e.getMessage(), e);
             }
         }
         
         // Enroll students for newly assigned sections
         for (String sectionId : newlyAddedSectionIds) {
             try {
+                log.debug("Course {} - Attempting to enroll students from section {} via student service", courseId, sectionId);
                 enrollSectionToCourse(sectionId, courseId);
-                log.info("Automatically enrolled students from section {} to course {}", sectionId, courseId);
+                successfulSectionEnrollments++;
+                log.info("Course {} - Successfully enrolled students from section {} to course {}", courseId, sectionId, courseId);
             } catch (Exception e) {
+                failedSectionEnrollments++;
                 // Log error but don't fail the course update
-                log.warn("Failed to automatically enroll students from section {} to course {}: {}", 
-                    sectionId, courseId, e.getMessage());
+                log.warn("Course {} - Failed to automatically enroll students from section {} to course {}: {}", 
+                    courseId, sectionId, courseId, e.getMessage(), e);
             }
         }
+        
+        // Log summary
+        log.info("Course {} - Automatic enrollment completed. Classes: {}/{} successful, {}/{} failed. Sections: {}/{} successful, {}/{} failed.", 
+            courseId,
+            successfulClassEnrollments, newlyAddedClassIds.size(), failedClassEnrollments, newlyAddedClassIds.size(),
+            successfulSectionEnrollments, newlyAddedSectionIds.size(), failedSectionEnrollments, newlyAddedSectionIds.size());
     }
     
     /**
@@ -262,24 +354,41 @@ public class CourseService {
      */
     private void enrollClassToCourse(String classId, String courseId) {
         String enrollmentUrl = gatewayUrl + "/api/classes/" + classId + "/enroll/" + courseId;
+        log.debug("Course {} - Calling student service enrollment API: POST {}", courseId, enrollmentUrl);
+        
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<?> entity = new HttpEntity<>(headers);
         
         try {
+            long startTime = System.currentTimeMillis();
             ResponseEntity<Object> response = getRestTemplate().exchange(
                 enrollmentUrl,
                 HttpMethod.POST,
                 entity,
                 Object.class
             );
+            long duration = System.currentTimeMillis() - startTime;
             
             if (!response.getStatusCode().is2xxSuccessful()) {
+                log.error("Course {} - Enrollment API returned non-2xx status for class {}: {}", 
+                    courseId, classId, response.getStatusCode());
                 throw new RuntimeException("Enrollment failed with status: " + response.getStatusCode());
             }
+            
+            log.debug("Course {} - Enrollment API call for class {} completed successfully in {}ms. Response status: {}", 
+                courseId, classId, duration, response.getStatusCode());
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("Course {} - HTTP error calling enrollment API for class {}: Status={}, Response={}", 
+                courseId, classId, e.getStatusCode(), e.getResponseBodyAsString(), e);
+            throw new RuntimeException("Failed to enroll class to course: " + e.getMessage(), e);
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            log.error("Course {} - Network error calling enrollment API for class {}: {}", 
+                courseId, classId, e.getMessage(), e);
+            throw new RuntimeException("Failed to enroll class to course: Network error - " + e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Error calling enrollment API for class {} and course {}: {}", 
-                classId, courseId, e.getMessage());
+            log.error("Course {} - Unexpected error calling enrollment API for class {} and course {}: {}", 
+                courseId, classId, courseId, e.getMessage(), e);
             throw new RuntimeException("Failed to enroll class to course: " + e.getMessage(), e);
         }
     }
@@ -292,24 +401,41 @@ public class CourseService {
      */
     private void enrollSectionToCourse(String sectionId, String courseId) {
         String enrollmentUrl = gatewayUrl + "/api/sections/" + sectionId + "/enroll/" + courseId;
+        log.debug("Course {} - Calling student service enrollment API: POST {}", courseId, enrollmentUrl);
+        
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<?> entity = new HttpEntity<>(headers);
         
         try {
+            long startTime = System.currentTimeMillis();
             ResponseEntity<Object> response = getRestTemplate().exchange(
                 enrollmentUrl,
                 HttpMethod.POST,
                 entity,
                 Object.class
             );
+            long duration = System.currentTimeMillis() - startTime;
             
             if (!response.getStatusCode().is2xxSuccessful()) {
+                log.error("Course {} - Enrollment API returned non-2xx status for section {}: {}", 
+                    courseId, sectionId, response.getStatusCode());
                 throw new RuntimeException("Enrollment failed with status: " + response.getStatusCode());
             }
+            
+            log.debug("Course {} - Enrollment API call for section {} completed successfully in {}ms. Response status: {}", 
+                courseId, sectionId, duration, response.getStatusCode());
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("Course {} - HTTP error calling enrollment API for section {}: Status={}, Response={}", 
+                courseId, sectionId, e.getStatusCode(), e.getResponseBodyAsString(), e);
+            throw new RuntimeException("Failed to enroll section to course: " + e.getMessage(), e);
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            log.error("Course {} - Network error calling enrollment API for section {}: {}", 
+                courseId, sectionId, e.getMessage(), e);
+            throw new RuntimeException("Failed to enroll section to course: Network error - " + e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Error calling enrollment API for section {} and course {}: {}", 
-                sectionId, courseId, e.getMessage());
+            log.error("Course {} - Unexpected error calling enrollment API for section {} and course {}: {}", 
+                courseId, sectionId, courseId, e.getMessage(), e);
             throw new RuntimeException("Failed to enroll section to course: " + e.getMessage(), e);
         }
     }
@@ -350,18 +476,42 @@ public class CourseService {
         
         Course saved = courseRepository.save(course);
         
+        log.info("Course {} published. Previous published status: {}, Current published status: {}", 
+            id, wasPublished, saved.getIsPublished());
+        
         // If course was not previously published, enroll students for assigned classes/sections
+        // IMPORTANT: Enrollment must happen AFTER transaction commits to avoid race condition
         if (!wasPublished && 
             ((saved.getAssignedToClassIds() != null && !saved.getAssignedToClassIds().isEmpty()) ||
              (saved.getAssignedToSectionIds() != null && !saved.getAssignedToSectionIds().isEmpty()))) {
-            List<String> emptyList = new ArrayList<>();
-            enrollNewlyAssignedClassesAndSections(
-                saved.getId(),
-                emptyList,
-                saved.getAssignedToClassIds() != null ? saved.getAssignedToClassIds() : emptyList,
-                emptyList,
-                saved.getAssignedToSectionIds() != null ? saved.getAssignedToSectionIds() : emptyList
-            );
+            log.info("Course {} - First time publication detected with assigned classes/sections. Triggering automatic enrollment.", id);
+            log.debug("Course {} - Assigned classes: {}, Assigned sections: {}", 
+                id, saved.getAssignedToClassIds(), saved.getAssignedToSectionIds());
+            
+            // Schedule enrollment to happen after transaction commits
+            final String courseId = saved.getId();
+            final List<String> emptyList = new ArrayList<>();
+            final List<String> finalClassIds = saved.getAssignedToClassIds() != null ? new ArrayList<>(saved.getAssignedToClassIds()) : emptyList;
+            final List<String> finalSectionIds = saved.getAssignedToSectionIds() != null ? new ArrayList<>(saved.getAssignedToSectionIds()) : emptyList;
+            
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        log.info("Course {} - Transaction committed. Starting automatic enrollment for first-time publication.", courseId);
+                        enrollNewlyAssignedClassesAndSections(courseId, emptyList, finalClassIds, emptyList, finalSectionIds);
+                    }
+                });
+                log.debug("Course {} - Enrollment scheduled to run after transaction commits", id);
+            } else {
+                // If no transaction, enroll immediately (shouldn't happen in normal flow)
+                log.warn("Course {} - No active transaction, enrolling immediately (this may cause race conditions)", id);
+                enrollNewlyAssignedClassesAndSections(saved.getId(), emptyList, finalClassIds, emptyList, finalSectionIds);
+            }
+        } else if (!wasPublished) {
+            log.debug("Course {} - First time publication but no classes or sections assigned. Skipping enrollment.", id);
+        } else {
+            log.debug("Course {} - Already published. Enrollment on publish skipped (enrollment happens on assignment updates).", id);
         }
         
         return toDTO(saved);

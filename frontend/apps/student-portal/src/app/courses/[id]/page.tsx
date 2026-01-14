@@ -100,30 +100,17 @@ export default function CourseDetailPage() {
         setSections(sectionsData as any)
       }
       
-      // Check enrollment status - try enroll API, if it returns 409, user is already enrolled
+      // Check enrollment status - check first, don't try to enroll
       // In preview mode, allow viewing without enrollment
       let isEnrolled = isPreviewMode
       if (!isPreviewMode) {
         try {
-          await enrollmentsApi.enrollInCourse(courseId)
-          // If enroll succeeds, user is now enrolled
-          isEnrolled = true
+          // Check enrollment status first
+          isEnrolled = await enrollmentsApi.checkEnrollment(courseId)
         } catch (error: any) {
-          const statusCode = error.response?.status
-          const errorMessage = error.response?.data?.error || error.message || error.response?.data?.message || ''
-          const lowerMessage = errorMessage.toLowerCase()
-          
-          // If 409 (Conflict) or message indicates already enrolled, user is enrolled
-          if (statusCode === 409 || lowerMessage.includes('already enrolled')) {
-            isEnrolled = true
-          } else {
-            // User is not enrolled - try checkEnrollment as fallback
-            try {
-              isEnrolled = await enrollmentsApi.checkEnrollment(courseId)
-            } catch {
-              isEnrolled = false
-            }
-          }
+          console.warn('Failed to check enrollment status:', error)
+          // If check fails, assume not enrolled
+          isEnrolled = false
         }
       }
       

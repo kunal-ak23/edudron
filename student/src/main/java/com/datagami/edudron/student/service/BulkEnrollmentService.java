@@ -8,6 +8,7 @@ import com.datagami.edudron.student.domain.Section;
 import com.datagami.edudron.student.dto.BatchEnrollmentRequest;
 import com.datagami.edudron.student.dto.BulkEnrollmentResult;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
+import com.datagami.edudron.student.dto.EnrollmentDTO;
 import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.SectionRepository;
@@ -24,6 +25,9 @@ import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -59,6 +63,29 @@ public class BulkEnrollmentService {
             restTemplate = new RestTemplate();
             List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
             interceptors.add(new TenantContextRestTemplateInterceptor());
+            // Add interceptor to forward JWT token (Authorization header)
+            interceptors.add((request, body, execution) -> {
+                // Get current request to extract Authorization header
+                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    HttpServletRequest currentRequest = attributes.getRequest();
+                    String authHeader = currentRequest.getHeader("Authorization");
+                    if (authHeader != null && !authHeader.isBlank()) {
+                        // Only add if not already present
+                        if (!request.getHeaders().containsKey("Authorization")) {
+                            request.getHeaders().add("Authorization", authHeader);
+                            log.debug("Propagated Authorization header (JWT token) to content service: {}", request.getURI());
+                        } else {
+                            log.debug("Authorization header already present in request to {}", request.getURI());
+                        }
+                    } else {
+                        log.warn("No Authorization header found in current request - content service call may fail with 403 Forbidden: {}", request.getURI());
+                    }
+                } else {
+                    log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
+                }
+                return execution.execute(request, body);
+            });
             restTemplate.setInterceptors(interceptors);
         }
         return restTemplate;
@@ -115,12 +142,44 @@ public class BulkEnrollmentService {
         // Validate course and check assignment
         validateCourseAssignment(courseId, classId, sectionId, clientId);
         
-        // Get all students in the section (using batchId for backward compatibility)
-        // This includes both real course enrollments and placeholder enrollments (used for association)
+        // Get all students in the section using two methods:
+        // 1. From enrollment records (batchId = sectionId) - for students with existing enrollments
+        // 2. From identity service (sectionId field) - for all students assigned to the section
+        Set<String> studentIds = new java.util.HashSet<>();
+        
+        // Method 1: Find students via enrollment records
         List<Enrollment> sectionEnrollments = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId);
-        Set<String> studentIds = sectionEnrollments.stream()
+        Set<String> studentsFromEnrollments = sectionEnrollments.stream()
             .map(Enrollment::getStudentId)
             .collect(Collectors.toSet());
+        studentIds.addAll(studentsFromEnrollments);
+        
+        log.info("Section {} enrollment: Found {} enrollment records with batchId={}, resulting in {} unique students from enrollments", 
+            sectionId, sectionEnrollments.size(), sectionId, studentsFromEnrollments.size());
+        
+        // Method 2: Find students via identity service (users with sectionId field)
+        try {
+            Set<String> studentsFromIdentity = getStudentsFromIdentityServiceBySection(sectionId, clientId);
+            log.info("Section {} enrollment: Found {} students from identity service with sectionId={}", 
+                sectionId, studentsFromIdentity.size(), sectionId);
+            studentIds.addAll(studentsFromIdentity);
+            
+            if (studentsFromIdentity.size() > studentsFromEnrollments.size()) {
+                log.info("Section {} enrollment: Identity service found {} additional students not in enrollment records", 
+                    sectionId, studentsFromIdentity.size() - studentsFromEnrollments.size());
+            }
+        } catch (Exception e) {
+            log.warn("Section {} enrollment: Failed to fetch students from identity service: {}. Proceeding with enrollment-based students only.", 
+                sectionId, e.getMessage());
+        }
+        
+        log.info("Section {} enrollment: Total unique students to enroll: {}", sectionId, studentIds.size());
+        
+        if (studentIds.isEmpty()) {
+            log.warn("Section {} enrollment: No students found in section via enrollments or identity service.", sectionId);
+        } else {
+            log.debug("Section {} enrollment: Student IDs to enroll: {}", sectionId, studentIds);
+        }
         
         return enrollStudentsToCourse(studentIds, courseId, classId, sectionId, classEntity.getInstituteId(), clientId);
     }
@@ -227,6 +286,10 @@ public class BulkEnrollmentService {
         List<String> enrolledStudentIds = new ArrayList<>();
         List<String> errorMessages = new ArrayList<>();
         
+        log.info("Enrolling {} students to course {} (classId={}, sectionId={}, clientId={})", 
+            studentIds.size(), courseId, classId, sectionId, clientId);
+        log.debug("Student IDs to enroll: {}", studentIds);
+        
         for (String studentId : studentIds) {
             try {
                 // Check if already enrolled
@@ -254,9 +317,20 @@ public class BulkEnrollmentService {
                 enrollmentRequest.setBatchId(sectionId); // batchId is used for sectionId
                 enrollmentRequest.setInstituteId(instituteId);
                 
-                enrollmentService.enrollStudent(studentId, enrollmentRequest);
+                EnrollmentDTO enrollment = enrollmentService.enrollStudent(studentId, enrollmentRequest);
                 enrolledStudentIds.add(studentId);
                 result.setEnrolledStudents(result.getEnrolledStudents() + 1);
+                log.info("Successfully enrolled student {} in course {} (classId={}, sectionId={}). Enrollment ID: {}, Course ID: {}", 
+                    studentId, courseId, classId, sectionId, enrollment.getId(), enrollment.getCourseId());
+                
+                // Verify enrollment was created by querying it back
+                boolean exists = enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId);
+                if (exists) {
+                    log.debug("Verified: Enrollment exists for student {} and course {}", studentId, courseId);
+                } else {
+                    log.error("ERROR: Enrollment was created but verification query returned false for student {} and course {}", 
+                        studentId, courseId);
+                }
                 
             } catch (Exception e) {
                 log.warn("Failed to enroll student {} to course {}: {}", studentId, courseId, e.getMessage());
@@ -269,6 +343,63 @@ public class BulkEnrollmentService {
         result.setErrorMessages(errorMessages);
         
         return result;
+    }
+    
+    /**
+     * Get all students from identity service that belong to a specific section.
+     * This finds students by their sectionId field in the user record.
+     * 
+     * @param sectionId The section ID
+     * @param clientId The client/tenant ID
+     * @return Set of student IDs
+     */
+    private Set<String> getStudentsFromIdentityServiceBySection(String sectionId, UUID clientId) {
+        Set<String> studentIds = new java.util.HashSet<>();
+        
+        try {
+            // Get all students (users with role STUDENT) from identity service
+            String url = gatewayUrl + "/idp/users/role/STUDENT";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            log.debug("Fetching students from identity service for section {}", sectionId);
+            ResponseEntity<UserResponseDTO[]> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                entity,
+                UserResponseDTO[].class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                // Filter students by sectionId
+                for (UserResponseDTO user : response.getBody()) {
+                    if (sectionId.equals(user.getSectionId())) {
+                        studentIds.add(user.getId());
+                        log.debug("Found student {} in section {} via identity service", user.getId(), sectionId);
+                    }
+                }
+                log.info("Identity service returned {} total students, {} belong to section {}", 
+                    response.getBody().length, studentIds.size(), sectionId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch students from identity service for section {}: {}", sectionId, e.getMessage());
+            throw new RuntimeException("Failed to fetch students from identity service: " + e.getMessage(), e);
+        }
+        
+        return studentIds;
+    }
+    
+    // Helper DTO for user response from identity service
+    private static class UserResponseDTO {
+        private String id;
+        private String sectionId;
+        
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        
+        public String getSectionId() { return sectionId; }
+        public void setSectionId(String sectionId) { this.sectionId = sectionId; }
     }
     
     // Helper DTO for course response

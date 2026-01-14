@@ -8,6 +8,8 @@ import com.datagami.edudron.student.service.EnrollmentService;
 import com.datagami.edudron.student.util.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +23,8 @@ import java.util.List;
 @RequestMapping("/api")
 @Tag(name = "Enrollments", description = "Student enrollment management endpoints")
 public class EnrollmentController {
+
+    private static final Logger log = LoggerFactory.getLogger(EnrollmentController.class);
 
     @Autowired
     private EnrollmentService enrollmentService;
@@ -39,7 +43,15 @@ public class EnrollmentController {
     @Operation(summary = "List my enrollments", description = "Get all enrollments for the current student")
     public ResponseEntity<List<EnrollmentDTO>> getMyEnrollments() {
         String studentId = UserUtil.getCurrentUserId();
+        log.info("GET /api/enrollments - Fetching enrollments for student: {}", studentId);
         List<EnrollmentDTO> enrollments = enrollmentService.getStudentEnrollments(studentId);
+        log.info("GET /api/enrollments - Returning {} enrollments for student {}", enrollments.size(), studentId);
+        if (!enrollments.isEmpty()) {
+            log.debug("GET /api/enrollments - Enrollment courseIds: {}", 
+                enrollments.stream().map(EnrollmentDTO::getCourseId).collect(java.util.stream.Collectors.toList()));
+        } else {
+            log.warn("GET /api/enrollments - No enrollments found for student {}", studentId);
+        }
         return ResponseEntity.ok(enrollments);
     }
 
@@ -67,10 +79,13 @@ public class EnrollmentController {
 
     @GetMapping("/courses/{courseId}/enrolled")
     @Operation(summary = "Check enrollment", description = "Check if current student is enrolled in a course")
-    public ResponseEntity<Boolean> isEnrolled(@PathVariable String courseId) {
+    public ResponseEntity<java.util.Map<String, Boolean>> isEnrolled(@PathVariable String courseId) {
         String studentId = UserUtil.getCurrentUserId();
+        log.info("GET /api/courses/{}/enrolled - Checking enrollment for student: {}", courseId, studentId);
         boolean enrolled = enrollmentService.isEnrolled(studentId, courseId);
-        return ResponseEntity.ok(enrolled);
+        log.info("GET /api/courses/{}/enrolled - Student {} enrollment status: {}", courseId, studentId, enrolled);
+        java.util.Map<String, Boolean> response = java.util.Map.of("enrolled", enrolled);
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/courses/{courseId}/enroll")

@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -236,6 +237,9 @@ public class EnrollmentService {
         enrollment.setClassId(classId);
         
         Enrollment saved = enrollmentRepository.save(enrollment);
+        log.info("Created enrollment for student {} in course {} (classId={}, sectionId={}, enrollmentId={})", 
+            studentId, request.getCourseId(), classId, sectionId, saved.getId());
+        
         return toDTO(saved);
     }
     
@@ -263,8 +267,44 @@ public class EnrollmentService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
+        log.info("GET /api/enrollments - Fetching enrollments for student: {}, clientId: {}", studentId, clientId);
+        
         List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId);
-        return enrollments.stream().map(this::toDTO).collect(Collectors.toList());
+        
+        log.info("GET /api/enrollments - Found {} total enrollments for student {} (before filtering)", 
+            enrollments.size(), studentId);
+        
+        if (!enrollments.isEmpty()) {
+            log.debug("GET /api/enrollments - Enrollment details for student {}: {}", studentId,
+                enrollments.stream()
+                    .map(e -> String.format("id=%s, courseId=%s, batchId=%s, classId=%s", 
+                        e.getId(), e.getCourseId(), e.getBatchId(), e.getClassId()))
+                    .collect(Collectors.joining(", ")));
+        }
+        
+        // Filter out placeholder enrollments (they're not real course enrollments)
+        List<Enrollment> realEnrollments = enrollments.stream()
+            .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+            .collect(Collectors.toList());
+        
+        log.info("GET /api/enrollments - Student {} enrollments: Found {} total enrollments, {} real course enrollments (excluding placeholders)", 
+            studentId, enrollments.size(), realEnrollments.size());
+        
+        if (realEnrollments.size() != enrollments.size()) {
+            log.debug("GET /api/enrollments - Student {} enrollments: Filtered out {} placeholder enrollments", 
+                studentId, enrollments.size() - realEnrollments.size());
+        }
+        
+        if (!realEnrollments.isEmpty()) {
+            log.info("GET /api/enrollments - Returning {} enrollments for student {} with courseIds: {}", 
+                realEnrollments.size(), studentId,
+                realEnrollments.stream().map(Enrollment::getCourseId).collect(Collectors.toList()));
+        } else {
+            log.warn("GET /api/enrollments - No real enrollments found for student {}. Total enrollments: {}", 
+                studentId, enrollments.size());
+        }
+        
+        return realEnrollments.stream().map(this::toDTO).collect(Collectors.toList());
     }
     
     public Page<EnrollmentDTO> getStudentEnrollments(String studentId, Pageable pageable) {
@@ -274,8 +314,31 @@ public class EnrollmentService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
+        // Get all enrollments (not paginated) to count real enrollments
+        List<Enrollment> allEnrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId);
+        long totalRealEnrollments = allEnrollments.stream()
+            .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+            .count();
+        
+        // Get paginated enrollments
         Page<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId, pageable);
-        return enrollments.map(this::toDTO);
+        
+        // Filter out placeholder enrollments from current page
+        List<Enrollment> realEnrollmentsList = enrollments.getContent().stream()
+            .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+            .collect(Collectors.toList());
+        
+        // Create a new Page with filtered content
+        Page<Enrollment> realEnrollments = new PageImpl<>(
+            realEnrollmentsList, 
+            pageable, 
+            totalRealEnrollments
+        );
+        
+        log.debug("Student {} enrollments (paginated): Found {} total enrollments, {} real course enrollments (excluding placeholders)", 
+            studentId, enrollments.getTotalElements(), totalRealEnrollments);
+        
+        return realEnrollments.map(this::toDTO);
     }
     
     public List<EnrollmentDTO> getCourseEnrollments(String courseId) {
@@ -296,7 +359,11 @@ public class EnrollmentService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        return enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId);
+        log.info("Checking enrollment: studentId={}, courseId={}, clientId={}", studentId, courseId, clientId);
+        boolean enrolled = enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId);
+        log.info("Enrollment check result: studentId={}, courseId={}, enrolled={}", studentId, courseId, enrolled);
+        
+        return enrolled;
     }
     
     public void unenroll(String studentId, String courseId) {
