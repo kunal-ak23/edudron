@@ -90,28 +90,21 @@ public class FoundryAIService {
                 "maxCompletionDays": 30
             }
             
-            Extract reasonable defaults if not specified. Return ONLY valid JSON, no additional text.
+            Extract reasonable defaults if not specified.
+            
+            CRITICAL: Return ONLY valid JSON object. Do NOT include any explanatory text, greetings, or conversational language before or after the JSON. Start your response directly with '{' and end with '}'.
             """;
         
         try {
             logger.info("Calling OpenAI API with deployment: {}", deploymentName);
             String response = callOpenAI(systemPrompt, prompt);
             logger.info("Received response from OpenAI (length: {} chars)", response != null ? response.length() : 0);
-            // Clean response - remove markdown code blocks if present
-            response = response.trim();
-            if (response.startsWith("```json")) {
-                response = response.substring(7);
-            }
-            if (response.startsWith("```")) {
-                response = response.substring(3);
-            }
-            if (response.endsWith("```")) {
-                response = response.substring(0, response.length() - 3);
-            }
-            response = response.trim();
             
-            logger.debug("Parsing JSON response: {}", response);
-            JsonNode jsonNode = objectMapper.readTree(response);
+            // Extract JSON from response (handles conversational text)
+            String jsonResponse = extractJsonFromResponse(response);
+            
+            logger.debug("Parsing JSON response: {}", jsonResponse);
+            JsonNode jsonNode = objectMapper.readTree(jsonResponse);
             CourseRequirements requirements = objectMapper.treeToValue(jsonNode, CourseRequirements.class);
             logger.info("Successfully parsed course requirements: title={}, modules={}, lecturesPerModule={}", 
                 requirements.getTitle(), requirements.getNumberOfModules(), requirements.getLecturesPerModule());
@@ -160,26 +153,27 @@ public class FoundryAIService {
         if (hasPdfStructure) {
             // Enhanced prompt for PDF-based course structures
             systemPrompt = """
-                You are an expert course designer. You MUST follow the EXACT course structure provided in the user's prompt.
+                You are an expert course designer. Generate a course structure based on the information provided.
                 
                 CRITICAL REQUIREMENTS:
-                1. Follow the EXACT module titles, lesson titles, and structure from the provided document
-                2. Extract time durations (in hours) from the document and convert them to seconds
+                1. If the user provides module/lesson structure, use it as a guide but you MUST still generate a complete course structure
+                2. Extract time durations (in hours) if mentioned and convert them to seconds
                    - 1 hour = 3600 seconds
                    - If a module shows "6 Hours", that's 21600 seconds total for that module
                    - Distribute the module time across its lessons proportionally
                 3. If individual lesson times are specified, use those and convert to seconds
                 4. If only module times are specified, divide the module time evenly across its lessons
                 5. EVERY lecture MUST have a durationSeconds field - this is MANDATORY
+                6. If the structure is incomplete or unclear, use your expertise to create a reasonable course structure based on the course title and description
                 
                 Return a JSON array where each section (module) has:
                 {
-                    "title": "EXACT module title from document",
+                    "title": "Module title (use provided title if available, otherwise generate appropriate title)",
                     "description": "Section description",
                     "moduleDurationHours": <hours for this module if specified>,
                     "lectures": [
                         {
-                            "title": "EXACT lesson title from document",
+                            "title": "Lecture title (use provided title if available, otherwise generate appropriate title)",
                             "description": "Brief lecture description",
                             "durationSeconds": <MANDATORY - time in seconds, MUST be provided>
                         }
@@ -192,14 +186,16 @@ public class FoundryAIService {
                 - If module has 4 lessons: ~5400 seconds (90 minutes) per lesson
                 - If module has 2 lessons: ~10800 seconds (180 minutes) per lesson
                 - Always ensure total lesson durations approximately match module duration
+                - If no time is specified, estimate based on content complexity (minimum 900 seconds = 15 minutes)
                 
                 IMPORTANT: 
-                - Use EXACT titles from the document - do not rephrase or change them
-                - Include ALL modules and lessons from the document
+                - Generate a complete course structure even if the provided information is incomplete
+                - Use provided titles when available, but generate appropriate titles when they're missing
+                - Include ALL modules and lessons - if structure is incomplete, create a logical course structure
                 - EVERY lecture MUST have durationSeconds - never omit this field
-                - If time is not specified, estimate based on content complexity (minimum 900 seconds = 15 minutes)
+                - You MUST return valid JSON - do not ask for more information, just generate the best structure you can
                 
-                Return ONLY valid JSON array, no additional text.
+                CRITICAL: Return ONLY valid JSON array. Do NOT include any explanatory text, greetings, or conversational language before or after the JSON. Start your response directly with '[' and end with ']'. NEVER ask for more information - always generate a course structure.
                 """;
         } else {
             // Standard prompt for general course generation
@@ -234,7 +230,8 @@ public class FoundryAIService {
                 - Comprehensive deep-dive lecture: 2400-3600 seconds (40-60 minutes)
                 
                 Generate %d sections with approximately %d lectures each.
-                Return ONLY valid JSON array, no additional text.
+                
+                CRITICAL: Return ONLY valid JSON array. Do NOT include any explanatory text, greetings, or conversational language before or after the JSON. Start your response directly with '[' and end with ']'.
                 """.formatted(requirements.getNumberOfModules(), requirements.getLecturesPerModule());
         }
         
@@ -242,20 +239,63 @@ public class FoundryAIService {
         
         try {
             String response = callOpenAI(systemPrompt, userPrompt);
-            // Clean response
-            response = response.trim();
-            if (response.startsWith("```json")) {
-                response = response.substring(7);
-            }
-            if (response.startsWith("```")) {
-                response = response.substring(3);
-            }
-            if (response.endsWith("```")) {
-                response = response.substring(0, response.length() - 3);
-            }
-            response = response.trim();
             
-            JsonNode jsonArray = objectMapper.readTree(response);
+            // Try to extract JSON from response
+            String jsonResponse;
+            try {
+                jsonResponse = extractJsonFromResponse(response);
+            } catch (IllegalArgumentException e) {
+                // If PDF prompt failed (AI asked for more info), fall back to standard prompt
+                if (hasPdfStructure) {
+                    logger.warn("PDF structure prompt failed, falling back to standard prompt. Error: {}", e.getMessage());
+                    logger.warn("AI response was: {}", response.length() > 200 ? response.substring(0, 200) + "..." : response);
+                    
+                    // Use standard prompt as fallback
+                    String fallbackPrompt = """
+                        You are an expert course designer. Generate a course structure with sections (modules) and lectures.
+                        Return a JSON array where each section has:
+                        {
+                            "title": "Section title",
+                            "description": "Section description",
+                            "lectures": [
+                                {
+                                    "title": "Lecture title",
+                                    "description": "Brief lecture description",
+                                    "durationSeconds": <MANDATORY - estimated time in seconds for an average student to learn this lecture properly>
+                                }
+                            ]
+                        }
+                        
+                        CRITICAL: The durationSeconds field is MANDATORY for EVERY lecture. You MUST provide it.
+                        
+                        For each lecture, estimate the duration in seconds (durationSeconds) based on:
+                        - The complexity and depth of the content
+                        - Typical reading/learning speed (average student reads ~200-250 words per minute)
+                        - Time needed to understand concepts, practice, and absorb the material
+                        - For video content: actual video length + time for comprehension
+                        - For text content: reading time + time for reflection and understanding
+                        - Include time for examples, exercises, and practical application
+                        
+                        Examples:
+                        - Short introductory lecture: 300-600 seconds (5-10 minutes)
+                        - Standard lecture with concepts and examples: 900-1800 seconds (15-30 minutes)
+                        - Comprehensive deep-dive lecture: 2400-3600 seconds (40-60 minutes)
+                        
+                        Generate %d sections with approximately %d lectures each.
+                        
+                        CRITICAL: Return ONLY valid JSON array. Do NOT include any explanatory text, greetings, or conversational language before or after the JSON. Start your response directly with '[' and end with ']'.
+                        """.formatted(requirements.getNumberOfModules(), requirements.getLecturesPerModule());
+                    
+                    // Retry with standard prompt
+                    response = callOpenAI(fallbackPrompt, userPrompt);
+                    jsonResponse = extractJsonFromResponse(response);
+                } else {
+                    // Re-throw if it wasn't a PDF structure case
+                    throw e;
+                }
+            }
+            
+            JsonNode jsonArray = objectMapper.readTree(jsonResponse);
             List<SectionInfo> sections = new ArrayList<>();
             
             for (JsonNode sectionNode : jsonArray) {
@@ -309,6 +349,11 @@ public class FoundryAIService {
             }
             
             return sections;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            logger.error("Failed to parse JSON response from OpenAI when generating course structure.", e);
+            logger.error("This usually means the AI returned conversational text instead of pure JSON.");
+            logger.error("Check the logs above for the raw response that failed to parse.");
+            throw new RuntimeException("Failed to generate course structure: " + e.getMessage(), e);
         } catch (Exception e) {
             logger.error("Error generating course structure", e);
             throw new RuntimeException("Failed to generate course structure: " + e.getMessage(), e);
@@ -451,27 +496,19 @@ public class FoundryAIService {
             - Comprehensive deep-dive sub-lecture: 2400-3600 seconds (40-60 minutes)
             
             Generate 3-8 sub-lectures that comprehensively cover the topic in the prompt.
-            Return ONLY valid JSON object, no additional text.
+            
+            CRITICAL: Return ONLY valid JSON object. Do NOT include any explanatory text, greetings, or conversational language before or after the JSON. Start your response directly with '{' and end with '}'.
             """;
         
         String userPrompt = "Course Context: " + courseContext + "\n\nUser Request: " + prompt;
         
         try {
             String response = callOpenAI(systemPrompt, userPrompt);
-            // Clean response
-            response = response.trim();
-            if (response.startsWith("```json")) {
-                response = response.substring(7);
-            }
-            if (response.startsWith("```")) {
-                response = response.substring(3);
-            }
-            if (response.endsWith("```")) {
-                response = response.substring(0, response.length() - 3);
-            }
-            response = response.trim();
             
-            JsonNode jsonObject = objectMapper.readTree(response);
+            // Extract JSON from response (handles conversational text)
+            String jsonResponse = extractJsonFromResponse(response);
+            
+            JsonNode jsonObject = objectMapper.readTree(jsonResponse);
             SectionInfo section = new SectionInfo();
             section.setTitle(jsonObject.get("title").asText());
             section.setDescription(jsonObject.has("description") ? jsonObject.get("description").asText() : "");
@@ -518,7 +555,8 @@ public class FoundryAIService {
         String systemPrompt = """
             You are an expert course designer. Generate 3-5 learning objectives for a course.
             Return a JSON array of strings, each being a learning objective.
-            Return ONLY valid JSON array, no additional text.
+            
+            CRITICAL: Return ONLY valid JSON array. Do NOT include any explanatory text, greetings, or conversational language before or after the JSON. Start your response directly with '[' and end with ']'.
             """;
         
         String sectionsText = String.join(", ", sectionTitles);
@@ -529,20 +567,11 @@ public class FoundryAIService {
         
         try {
             String response = callOpenAI(systemPrompt, userPrompt);
-            // Clean response
-            response = response.trim();
-            if (response.startsWith("```json")) {
-                response = response.substring(7);
-            }
-            if (response.startsWith("```")) {
-                response = response.substring(3);
-            }
-            if (response.endsWith("```")) {
-                response = response.substring(0, response.length() - 3);
-            }
-            response = response.trim();
             
-            JsonNode jsonArray = objectMapper.readTree(response);
+            // Extract JSON from response (handles conversational text)
+            String jsonResponse = extractJsonFromResponse(response);
+            
+            JsonNode jsonArray = objectMapper.readTree(jsonResponse);
             List<String> objectives = new ArrayList<>();
             for (JsonNode node : jsonArray) {
                 objectives.add(node.asText());
@@ -552,6 +581,87 @@ public class FoundryAIService {
             logger.error("Error generating learning objectives", e);
             throw new RuntimeException("Failed to generate learning objectives: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Extracts JSON from AI response, handling cases where the AI includes conversational text.
+     * This method tries multiple strategies to find and extract valid JSON.
+     */
+    private String extractJsonFromResponse(String response) {
+        if (response == null || response.trim().isEmpty()) {
+            throw new IllegalArgumentException("Response is null or empty");
+        }
+        
+        // Log the raw response for debugging
+        logger.debug("Raw AI response (first 500 chars): {}", 
+            response.length() > 500 ? response.substring(0, 500) + "..." : response);
+        
+        // Step 1: Remove markdown code blocks
+        response = response.trim();
+        if (response.startsWith("```json")) {
+            response = response.substring(7);
+        }
+        if (response.startsWith("```")) {
+            response = response.substring(3);
+        }
+        if (response.endsWith("```")) {
+            response = response.substring(0, response.length() - 3);
+        }
+        response = response.trim();
+        
+        // Step 2: Try to find JSON array or object boundaries
+        // Look for the first '[' or '{' that starts a JSON structure
+        int jsonStart = -1;
+        for (int i = 0; i < response.length(); i++) {
+            char c = response.charAt(i);
+            if (c == '[' || c == '{') {
+                jsonStart = i;
+                break;
+            }
+        }
+        
+        if (jsonStart == -1) {
+            // No JSON structure found, log and throw
+            logger.error("No JSON structure found in response.");
+            logger.error("Full response (length: {} chars): {}", response.length(), response);
+            logger.error("This usually means the AI returned conversational text instead of JSON.");
+            throw new IllegalArgumentException("Response does not contain valid JSON structure (no '[' or '{' found). Response: " + 
+                (response.length() > 200 ? response.substring(0, 200) + "..." : response));
+        }
+        
+        // Step 3: Find the matching closing bracket/brace
+        char openChar = response.charAt(jsonStart);
+        char closeChar = (openChar == '[') ? ']' : '}';
+        int depth = 0;
+        int jsonEnd = -1;
+        
+        for (int i = jsonStart; i < response.length(); i++) {
+            char c = response.charAt(i);
+            if (c == openChar) {
+                depth++;
+            } else if (c == closeChar) {
+                depth--;
+                if (depth == 0) {
+                    jsonEnd = i + 1;
+                    break;
+                }
+            }
+        }
+        
+        if (jsonEnd == -1) {
+            // Couldn't find matching closing bracket, try to parse what we have
+            logger.warn("Could not find matching closing bracket. Attempting to extract JSON from position {}", jsonStart);
+            // Try to extract from jsonStart to end, or use the whole response
+            String extracted = response.substring(jsonStart).trim();
+            logger.debug("Extracted JSON (partial): {}", extracted.length() > 500 ? extracted.substring(0, 500) + "..." : extracted);
+            return extracted;
+        }
+        
+        // Step 4: Extract the JSON portion
+        String extracted = response.substring(jsonStart, jsonEnd).trim();
+        logger.debug("Extracted JSON (length: {} chars)", extracted.length());
+        
+        return extracted;
     }
     
     private String callOpenAI(String systemPrompt, String userPrompt) {
