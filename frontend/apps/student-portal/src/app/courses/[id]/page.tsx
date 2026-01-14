@@ -45,7 +45,7 @@ export default function CourseDetailPage() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
       const preview = urlParams.get('preview') === 'true'
-      setIsPreviewMode(preview && isAdminUser)
+      setIsPreviewMode(preview && !!isAdminUser)
     }
   }, [isAdminUser])
 
