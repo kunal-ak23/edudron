@@ -9,6 +9,11 @@ spring:
       max-request-size: 2GB
       # Enable file uploads
       enabled: true
+      # Use disk-based storage for files larger than 1MB to prevent heap space issues
+      # Files smaller than this threshold are kept in memory, larger files are written to disk
+      file-size-threshold: 1MB
+      # Location for temporary file storage (uses system temp directory if not specified)
+      location: ${java.io.tmpdir}
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:edudron}?sslmode=${DB_SSLMODE:prefer}
     username: ${DB_USERNAME:edudron}
