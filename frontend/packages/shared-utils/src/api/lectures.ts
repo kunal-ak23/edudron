@@ -132,9 +132,16 @@ export class LecturesApi {
   async uploadVideo(lectureId: string, file: File): Promise<LectureContent> {
     const formData = new FormData()
     formData.append('file', file)
+    
+    // Calculate timeout based on file size: 1 minute per 50MB, minimum 5 minutes, maximum 30 minutes
+    // This ensures large video uploads (e.g., 500MB) don't timeout
+    const fileSizeMB = file.size / (1024 * 1024)
+    const timeoutMs = Math.min(Math.max(fileSizeMB * 60000, 300000), 1800000) // 5-30 minutes
+    
     const response = await this.apiClient.postForm<LectureContent>(
       `/content/api/lectures/${lectureId}/media/video`,
-      formData
+      formData,
+      { timeout: timeoutMs } // Override default 30s timeout for large video uploads
     )
     return response.data
   }
@@ -142,9 +149,15 @@ export class LecturesApi {
   async uploadAudio(lectureId: string, file: File): Promise<LectureContent> {
     const formData = new FormData()
     formData.append('file', file)
+    
+    // Calculate timeout based on file size: 1 minute per 50MB, minimum 2 minutes, maximum 20 minutes
+    const fileSizeMB = file.size / (1024 * 1024)
+    const timeoutMs = Math.min(Math.max(fileSizeMB * 60000, 120000), 1200000) // 2-20 minutes
+    
     const response = await this.apiClient.postForm<LectureContent>(
       `/content/api/lectures/${lectureId}/media/audio`,
-      formData
+      formData,
+      { timeout: timeoutMs } // Override default 30s timeout for large audio uploads
     )
     return response.data
   }
@@ -152,9 +165,15 @@ export class LecturesApi {
   async uploadDocument(lectureId: string, file: File): Promise<LectureContent> {
     const formData = new FormData()
     formData.append('file', file)
+    
+    // Calculate timeout based on file size: 1 minute per 50MB, minimum 2 minutes, maximum 15 minutes
+    const fileSizeMB = file.size / (1024 * 1024)
+    const timeoutMs = Math.min(Math.max(fileSizeMB * 60000, 120000), 900000) // 2-15 minutes
+    
     const response = await this.apiClient.postForm<LectureContent>(
       `/content/api/lectures/${lectureId}/media/document`,
-      formData
+      formData,
+      { timeout: timeoutMs } // Override default 30s timeout for large document uploads
     )
     return response.data
   }

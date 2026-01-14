@@ -47,9 +47,15 @@ export class MediaApi {
     formData.append('file', file)
     formData.append('folder', folder)
 
+    // Calculate timeout based on file size: 1 minute per 50MB, minimum 5 minutes, maximum 30 minutes
+    // This ensures large video uploads (e.g., 500MB) don't timeout
+    const fileSizeMB = file.size / (1024 * 1024)
+    const timeoutMs = Math.min(Math.max(fileSizeMB * 60000, 300000), 1800000) // 5-30 minutes
+
     const response = await this.apiClient.postForm<UploadResponse>(
       '/content/media/upload/video',
-      formData
+      formData,
+      { timeout: timeoutMs } // Override default 30s timeout for large video uploads
     )
 
     return response.data?.url || (response as any).url

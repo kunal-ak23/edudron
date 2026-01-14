@@ -92,6 +92,22 @@ print_info "  Image: ${IMAGE}"
 print_info "  App Name: ${APP_NAME}"
 print_info "  Resource Group: ${RESOURCE_GROUP}"
 
+# Get Container Apps Environment FQDN for gateway URL
+ENV_FQDN=$(az containerapp env show \
+    --name "$ENVIRONMENT_NAME" \
+    --resource-group "$RESOURCE_GROUP" \
+    --query "properties.defaultDomain" -o tsv 2>/dev/null || echo "")
+
+if [ -z "$ENV_FQDN" ]; then
+    print_error "Could not get Container Apps Environment FQDN"
+    exit 1
+fi
+
+# Build gateway URL using internal FQDN format with HTTPS
+GATEWAY_URL="https://gateway-${ENVIRONMENT}.internal.${ENV_FQDN}"
+
+print_info "Gateway URL: ${GATEWAY_URL}"
+
 # Check if app exists
 APP_EXISTS=$(az containerapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query "name" -o tsv 2>/dev/null || echo "")
 
@@ -174,6 +190,7 @@ if [ -z "$APP_EXISTS" ]; then
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
             "STUDENT_SERVICE_PORT=${PORT}" \
+            "GATEWAY_URL=$GATEWAY_URL" \
             "REDIS_SSL=true" \
             "DB_HOST=secretref:db-host" \
             "DB_PORT=5432" \
@@ -246,6 +263,7 @@ else
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
             "STUDENT_SERVICE_PORT=${PORT}" \
+            "GATEWAY_URL=$GATEWAY_URL" \
             "REDIS_SSL=true" \
             "DB_HOST=secretref:db-host" \
             "DB_PORT=5432" \

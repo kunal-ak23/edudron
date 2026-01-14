@@ -59,6 +59,9 @@ springdoc:
 
 server:
   port: ${CONTENT_SERVICE_PORT:8082}
+  # Increase connection timeout for large file uploads (30 minutes = 1800000ms)
+  # This ensures 500MB+ video uploads don't timeout on the server side
+  connection-timeout: 1800000
 
 # JWT Configuration (must match Identity service)
 jwt:
