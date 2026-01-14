@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, X, ArrowLeft, Save } from 'lucide-react'
+import { Loader2, X, ArrowLeft, Save, FileText } from 'lucide-react'
 import { lecturesApi } from '@/lib/api'
 import type { Lecture, LectureContent } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -40,11 +40,13 @@ export default function LectureEditPage() {
   const [saving, setSaving] = useState(false)
   const [lecture, setLecture] = useState<Lecture | null>(null)
   const [textContents, setTextContents] = useState<LectureContent[]>([])
+  const [attachments, setAttachments] = useState<LectureContent[]>([])
   const [currentLectureId, setCurrentLectureId] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    contentType: 'TEXT' as 'VIDEO' | 'TEXT' | 'AUDIO' | 'DOCUMENT',
+    contentType: 'TEXT' as 'VIDEO' | 'TEXT',
     durationSeconds: 0,
     isPublished: false,
     contentUrl: ''
@@ -93,6 +95,7 @@ export default function LectureEditPage() {
           contentUrl: ''
         })
         setTextContents([])
+        setAttachments([])
         setCurrentLectureId(null) // Reset to null for new sub-lectures
         initialDataRef.current = JSON.stringify(formData)
         initialTextContentsRef.current = JSON.stringify([])
@@ -101,9 +104,9 @@ export default function LectureEditPage() {
         const data = await lecturesApi.getLecture(courseId, subLectureId)
         setLecture(data)
         setCurrentLectureId(subLectureId)
-        const contentType: 'VIDEO' | 'TEXT' | 'AUDIO' | 'DOCUMENT' = 
-          (['VIDEO', 'TEXT', 'AUDIO', 'DOCUMENT'].includes(data.contentType as string))
-            ? (data.contentType as 'VIDEO' | 'TEXT' | 'AUDIO' | 'DOCUMENT')
+        const contentType: 'VIDEO' | 'TEXT' = 
+          (['VIDEO', 'TEXT'].includes(data.contentType as string))
+            ? (data.contentType as 'VIDEO' | 'TEXT')
             : 'TEXT'
         const formDataValue: typeof formData = {
           title: data.title || '',
@@ -115,6 +118,7 @@ export default function LectureEditPage() {
         }
         setFormData(formDataValue)
         const { allItems, textItems, updatedFormData } = await loadTextContents(subLectureId, formDataValue)
+        await loadAttachments(subLectureId)
         
         // Don't set initial refs here - let useEffect handle it after state stabilizes
         console.log('[EditPage] Loaded sub-lecture data:', {
@@ -139,6 +143,7 @@ export default function LectureEditPage() {
         }
         setFormData(formDataValue)
         const { allItems, textItems, updatedFormData } = await loadTextContents(lectureId, formDataValue)
+        await loadAttachments(lectureId)
         
         // Don't set initial refs here - let useEffect handle it after state stabilizes
         console.log('[EditPage] Loaded main lecture data:', {
@@ -188,6 +193,24 @@ export default function LectureEditPage() {
       console.error('Failed to load text contents:', error)
       setTextContents([])
       return { allItems: [], textItems: [], updatedFormData: undefined }
+    }
+  }
+
+  const loadAttachments = async (lectureId: string) => {
+    try {
+      console.log('[EditPage] Loading attachments for lectureId:', lectureId)
+      const media = await lecturesApi.getLectureMedia(lectureId)
+      console.log('[EditPage] All media items:', media)
+      // Filter out TEXT and VIDEO content types - only show attachments (PDF, IMAGE, AUDIO, etc.)
+      const attachmentItems = media.filter((content: LectureContent) => 
+        content.contentType !== 'TEXT' && content.contentType !== 'VIDEO'
+      )
+      console.log('[EditPage] Filtered attachment items:', attachmentItems)
+      setAttachments(attachmentItems)
+      console.log('[EditPage] Attachments state updated, count:', attachmentItems.length)
+    } catch (error) {
+      console.error('[EditPage] Failed to load attachments:', error)
+      setAttachments([])
     }
   }
 
@@ -249,6 +272,9 @@ export default function LectureEditPage() {
           // For new sub-lectures, all content items are temporary and need to be created
           await lecturesApi.createTextContent(savedLecture.id, content.textContent || '', content.title || '')
         }
+        
+        // Load attachments for the new lecture
+        await loadAttachments(savedLecture.id)
         
         toast({
           title: 'Sub-lecture created',
@@ -321,6 +347,49 @@ export default function LectureEditPage() {
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleAttachmentUpload = async (files: File[]) => {
+    console.log('[EditPage] handleAttachmentUpload called - files:', files.length, 'currentLectureId:', currentLectureId)
+    try {
+      if (currentLectureId) {
+        console.log('[EditPage] Uploading attachments to lecture:', currentLectureId)
+        await lecturesApi.uploadAttachments(currentLectureId, files)
+        console.log('[EditPage] Upload successful, refreshing list')
+        toast({
+          title: 'Attachments uploaded',
+          description: `${files.length} file(s) uploaded successfully.`,
+        })
+        // Refresh attachments list
+        await loadAttachments(currentLectureId)
+        return []
+      } else {
+        console.warn('[EditPage] Cannot upload - currentLectureId is null')
+        throw new Error('Please save the lecture first, then upload attachments')
+      }
+    } catch (error: any) {
+      console.error('[EditPage] Upload failed:', error)
+      throw new Error(error.message || 'Failed to upload attachments')
+    }
+  }
+
+  const handleDeleteAttachment = async (contentId: string) => {
+    console.log('[EditPage] handleDeleteAttachment called - contentId:', contentId)
+    try {
+      await lecturesApi.deleteMedia(contentId)
+      console.log('[EditPage] Delete successful, updating state')
+      setAttachments(attachments.filter(a => a.id !== contentId))
+      toast({
+        title: 'Attachment deleted',
+      })
+    } catch (error) {
+      console.error('[EditPage] Delete failed:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to delete attachment',
+        description: extractErrorMessage(error),
+      })
     }
   }
 
@@ -630,8 +699,6 @@ export default function LectureEditPage() {
                     <SelectContent>
                       <SelectItem value="VIDEO">Video</SelectItem>
                       <SelectItem value="TEXT">Text/Reading</SelectItem>
-                      <SelectItem value="AUDIO">Audio</SelectItem>
-                      <SelectItem value="DOCUMENT">Document</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -699,6 +766,171 @@ export default function LectureEditPage() {
                     </div>
                   ) : null
                 })()}
+
+                {/* Attachments (Multiple Files) */}
+                <div className="space-y-2 border-t pt-6">
+                  <Label className="text-base font-semibold">
+                    Attachments
+                    {!currentLectureId && <span className="text-xs text-gray-500 ml-2 font-normal">(Upload after saving lecture)</span>}
+                  </Label>
+                  {currentLectureId ? (
+                    <>
+                      {/* Existing Attachments List */}
+                      {attachments.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <Label className="text-sm font-medium">Existing Attachments</Label>
+                          <div className="space-y-2">
+                            {attachments.map((attachment) => (
+                              <div
+                                key={attachment.id}
+                                className="flex items-center justify-between p-3 border border-gray-200 rounded-md bg-gray-50"
+                              >
+                                <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                  <FileText className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">
+                                      {attachment.title || attachment.fileUrl?.split('/').pop() || 'Untitled'}
+                                    </p>
+                                    {attachment.mimeType && (
+                                      <p className="text-xs text-gray-500">{attachment.mimeType}</p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                  {attachment.fileUrl && (
+                                    <a
+                                      href={attachment.fileUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary hover:underline text-sm"
+                                    >
+                                      View
+                                    </a>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeleteAttachment(attachment.id)}
+                                    disabled={saving}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* File Upload with Drag and Drop */}
+                      <div
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (!saving && currentLectureId) {
+                            setIsDragging(true)
+                          }
+                        }}
+                        onDragEnter={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (!saving && currentLectureId) {
+                            setIsDragging(true)
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setIsDragging(false)
+                        }}
+                        onDrop={async (e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setIsDragging(false)
+                          if (saving || !currentLectureId) return
+                          const files = Array.from(e.dataTransfer.files)
+                          if (files.length > 0) {
+                            try {
+                              await handleAttachmentUpload(files)
+                            } catch (error) {
+                              toast({
+                                variant: 'destructive',
+                                title: 'Upload failed',
+                                description: extractErrorMessage(error),
+                              })
+                            }
+                          }
+                        }}
+                        onClick={() => {
+                          if (!saving && currentLectureId) {
+                            const input = document.createElement('input')
+                            input.type = 'file'
+                            input.multiple = true
+                            input.accept = '.pdf,.doc,.docx,.txt,.mp3,.wav,.ogg,.jpg,.jpeg,.png,.gif,.zip,.rar'
+                            input.onchange = async (e) => {
+                              const files = Array.from((e.target as HTMLInputElement).files || [])
+                              if (files.length > 0) {
+                                try {
+                                  await handleAttachmentUpload(files)
+                                } catch (error) {
+                                  toast({
+                                    variant: 'destructive',
+                                    title: 'Upload failed',
+                                    description: extractErrorMessage(error),
+                                  })
+                                }
+                              }
+                            }
+                            input.click()
+                          }
+                        }}
+                        className={`border-2 border-dashed rounded-lg p-6 cursor-pointer transition-colors ${
+                          saving || !currentLectureId
+                            ? 'opacity-50 cursor-not-allowed border-gray-300 bg-gray-50'
+                            : isDragging
+                            ? 'border-primary-500 bg-primary-100'
+                            : 'border-gray-300 hover:border-primary-400 hover:bg-primary-50'
+                        }`}
+                      >
+                        <div className="text-center">
+                          <svg
+                            className="mx-auto h-12 w-12 text-gray-400"
+                            stroke="currentColor"
+                            fill="none"
+                            viewBox="0 0 48 48"
+                          >
+                            <path
+                              d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                          <div className="mt-2">
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium text-primary-600 hover:text-primary-500">
+                                Click to upload
+                              </span>{' '}
+                              or drag and drop
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              PDF, DOC, audio, images, etc. up to 100MB each
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Upload multiple files (PDF, DOC, audio, images, etc. up to 100MB each)
+                      </p>
+                    </>
+                  ) : (
+                    <div className="p-4 border border-gray-300 rounded-md bg-gray-50">
+                      <p className="text-sm text-gray-600">
+                        Save the lecture first, then you can upload attachment files.
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 <div className="space-y-2">
                   <Label>Duration (seconds)</Label>

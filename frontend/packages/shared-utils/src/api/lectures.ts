@@ -4,7 +4,7 @@ import type { Lecture, LectureContent } from './courses'
 export interface CreateLectureRequest {
   title: string
   description?: string
-  contentType?: 'VIDEO' | 'TEXT' | 'AUDIO' | 'DOCUMENT'
+  contentType?: 'VIDEO' | 'TEXT'
   contentUrl?: string
   durationSeconds?: number
 }
@@ -12,7 +12,7 @@ export interface CreateLectureRequest {
 export interface UpdateLectureRequest {
   title?: string
   description?: string
-  contentType?: 'VIDEO' | 'TEXT' | 'AUDIO' | 'DOCUMENT'
+  contentType?: 'VIDEO' | 'TEXT'
   contentUrl?: string
   durationSeconds?: number
   isPublished?: boolean
@@ -144,6 +144,16 @@ export class LecturesApi {
     formData.append('file', file)
     const response = await this.apiClient.postForm<LectureContent>(
       `/content/api/lectures/${lectureId}/media/audio`,
+      formData
+    )
+    return response.data
+  }
+
+  async uploadDocument(lectureId: string, file: File): Promise<LectureContent> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await this.apiClient.postForm<LectureContent>(
+      `/content/api/lectures/${lectureId}/media/document`,
       formData
     )
     return response.data

@@ -94,9 +94,10 @@ public class LectureMediaService {
     }
     
     /**
-     * Upload multiple attachment files for a lecture
+     * Upload a single document file for a lecture
+     * Replaces any existing document content
      */
-    public List<LectureContentDTO> uploadAttachments(String lectureId, List<MultipartFile> files) throws IOException {
+    public LectureContentDTO uploadDocument(String lectureId, MultipartFile file) throws IOException {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -104,7 +105,60 @@ public class LectureMediaService {
         UUID clientId = UUID.fromString(clientIdStr);
         
         // Verify lecture exists
-        lectureRepository.findByIdAndClientId(lectureId, clientId)
+        Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
+        
+        // Delete existing PDF/document content for this lecture
+        List<LectureContent> existingContent = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
+        existingContent.stream()
+            .filter(content -> content.getContentType() == LectureContent.ContentType.PDF)
+            .forEach(content -> {
+                if (content.getFileUrl() != null) {
+                    mediaUploadService.deleteMedia(content.getFileUrl());
+                }
+                lectureContentRepository.delete(content);
+            });
+        
+        // Upload file to Azure Storage
+        String folder = "lectures/documents";
+        String fileUrl = uploadGenericFile(file, folder);
+        
+        // Create new LectureContent
+        LectureContent content = new LectureContent();
+        content.setId(UlidGenerator.nextUlid());
+        content.setClientId(clientId);
+        content.setLectureId(lectureId);
+        content.setContentType(LectureContent.ContentType.PDF);
+        content.setTitle(lecture.getTitle());
+        content.setDescription(lecture.getDescription());
+        content.setFileUrl(fileUrl);
+        content.setFileSizeBytes(file.getSize());
+        content.setMimeType(file.getContentType());
+        content.setSequence(0);
+        
+        LectureContent saved = lectureContentRepository.save(content);
+        return toDTO(saved);
+    }
+    
+    /**
+     * Upload multiple attachment files for a lecture
+     */
+    public List<LectureContentDTO> uploadAttachments(String lectureId, List<MultipartFile> files) throws IOException {
+        if (lectureId == null || lectureId.trim().isEmpty()) {
+            throw new IllegalArgumentException("Lecture ID cannot be null or empty");
+        }
+        if (files == null || files.isEmpty()) {
+            throw new IllegalArgumentException("Files list cannot be null or empty");
+        }
+        
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Verify lecture exists
+        Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
         
         // Get next sequence number
@@ -114,7 +168,7 @@ public class LectureMediaService {
         List<LectureContentDTO> uploadedContents = new java.util.ArrayList<>();
         
         for (MultipartFile file : files) {
-            if (file.isEmpty()) {
+            if (file == null || file.isEmpty()) {
                 continue;
             }
             
@@ -131,7 +185,7 @@ public class LectureMediaService {
             content.setClientId(clientId);
             content.setLectureId(lectureId);
             content.setContentType(contentType);
-            content.setTitle(file.getOriginalFilename());
+            content.setTitle(file.getOriginalFilename() != null ? file.getOriginalFilename() : "Untitled");
             content.setFileUrl(fileUrl);
             content.setFileSizeBytes(file.getSize());
             content.setMimeType(file.getContentType());
@@ -139,6 +193,10 @@ public class LectureMediaService {
             
             LectureContent saved = lectureContentRepository.save(content);
             uploadedContents.add(toDTO(saved));
+        }
+        
+        if (uploadedContents.isEmpty()) {
+            throw new IllegalArgumentException("No valid files were uploaded");
         }
         
         return uploadedContents;

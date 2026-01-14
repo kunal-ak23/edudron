@@ -13,11 +13,15 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @RestController
 @RequestMapping("/content/api/lectures")
 @Tag(name = "Lecture Media", description = "Lecture media upload and management endpoints")
 public class LectureMediaController {
+
+    private static final Logger logger = LoggerFactory.getLogger(LectureMediaController.class);
 
     @Autowired
     private LectureMediaService lectureMediaService;
@@ -48,16 +52,45 @@ public class LectureMediaController {
         }
     }
 
-    @PostMapping("/{lectureId}/media/attachments")
+    @PostMapping("/{lectureId}/media/document")
+    @Operation(summary = "Upload document", description = "Upload a single document file for a lecture (replaces existing document)")
+    public ResponseEntity<LectureContentDTO> uploadDocument(
+            @PathVariable String lectureId,
+            @RequestParam("file") MultipartFile file) {
+        try {
+            LectureContentDTO content = lectureMediaService.uploadDocument(lectureId, file);
+            return ResponseEntity.status(HttpStatus.CREATED).body(content);
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping(value = "/{lectureId}/media/attachments", consumes = "multipart/form-data")
     @Operation(summary = "Upload attachments", description = "Upload multiple attachment files for a lecture")
-    public ResponseEntity<List<LectureContentDTO>> uploadAttachments(
+    public ResponseEntity<?> uploadAttachments(
             @PathVariable String lectureId,
             @RequestParam("files") List<MultipartFile> files) {
         try {
+            logger.info("Uploading attachments for lectureId: {}, file count: {}", lectureId, files != null ? files.size() : 0);
+            if (files == null || files.isEmpty()) {
+                logger.warn("No files provided for attachment upload");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", "No files provided"));
+            }
             List<LectureContentDTO> contents = lectureMediaService.uploadAttachments(lectureId, files);
+            logger.info("Successfully uploaded {} attachments for lectureId: {}", contents.size(), lectureId);
             return ResponseEntity.status(HttpStatus.CREATED).body(contents);
+        } catch (IllegalArgumentException e) {
+            logger.error("Illegal argument error uploading attachments for lectureId: {}", lectureId, e);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
+        } catch (IllegalStateException e) {
+            logger.error("Illegal state error uploading attachments for lectureId: {}", lectureId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
         } catch (IOException e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            logger.error("IO error uploading attachments for lectureId: {}", lectureId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "File upload failed: " + e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Unexpected error uploading attachments for lectureId: {}", lectureId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Unexpected error: " + e.getMessage()));
         }
     }
 

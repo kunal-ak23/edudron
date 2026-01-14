@@ -300,16 +300,16 @@ public class MediaUploadService {
         // Get blob client
         BlobClient blobClient = containerClient.getBlobClient(fileName);
 
-        // Set content type
+        // Upload file first
+        blobClient.upload(file.getInputStream(), file.getSize(), true);
+
+        // Set content type after upload
         String contentType = file.getContentType();
         if (contentType != null) {
             BlobHttpHeaders headers = new BlobHttpHeaders()
                     .setContentType(contentType);
             blobClient.setHttpHeaders(headers);
         }
-
-        // Upload file
-        blobClient.upload(file.getInputStream(), file.getSize(), true);
 
         // Return public URL
         if (!baseUrl.isEmpty()) {
