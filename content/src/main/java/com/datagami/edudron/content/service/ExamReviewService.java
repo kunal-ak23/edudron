@@ -1,13 +1,12 @@
 package com.datagami.edudron.content.service;
 
 import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.content.domain.Assessment;
 import com.datagami.edudron.content.domain.QuizOption;
 import com.datagami.edudron.content.domain.QuizQuestion;
 import com.datagami.edudron.content.repo.AssessmentRepository;
 import com.datagami.edudron.content.repo.QuizQuestionRepository;
-import com.datagami.edudron.student.domain.AssessmentSubmission;
-import com.datagami.edudron.student.repo.AssessmentSubmissionRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -15,12 +14,22 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -40,30 +49,64 @@ public class ExamReviewService {
     private QuizQuestionRepository quizQuestionRepository;
     
     @Autowired
-    private AssessmentSubmissionRepository submissionRepository;
-    
-    @Autowired
     private ObjectMapper objectMapper;
+    
+    @Value("${GATEWAY_URL:http://localhost:8080}")
+    private String gatewayUrl;
+    
+    private RestTemplate restTemplate;
+    
+    private RestTemplate getRestTemplate() {
+        if (restTemplate == null) {
+            restTemplate = new RestTemplate();
+            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+            interceptors.add(new TenantContextRestTemplateInterceptor());
+            interceptors.add((request, body, execution) -> {
+                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    HttpServletRequest currentRequest = attributes.getRequest();
+                    String authHeader = currentRequest.getHeader("Authorization");
+                    if (authHeader != null && !authHeader.isBlank()) {
+                        if (!request.getHeaders().containsKey("Authorization")) {
+                            request.getHeaders().add("Authorization", authHeader);
+                        }
+                    }
+                }
+                return execution.execute(request, body);
+            });
+            restTemplate.setInterceptors(interceptors);
+        }
+        return restTemplate;
+    }
     
     /**
      * Review submission with AI - grades both objective and subjective questions
      */
-    public AssessmentSubmission reviewSubmissionWithAI(String submissionId) {
+    public JsonNode reviewSubmissionWithAI(String submissionId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        AssessmentSubmission submission = submissionRepository.findById(submissionId)
-            .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
+        // Fetch submission from student service
+        String submissionUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
+        ResponseEntity<JsonNode> submissionResponse = getRestTemplate().exchange(
+            submissionUrl,
+            HttpMethod.GET,
+            new HttpEntity<>(new HttpHeaders()),
+            JsonNode.class
+        );
         
-        if (!submission.getClientId().equals(clientId)) {
+        if (!submissionResponse.getStatusCode().is2xxSuccessful() || submissionResponse.getBody() == null) {
             throw new IllegalArgumentException("Submission not found: " + submissionId);
         }
         
-        Assessment exam = assessmentRepository.findByIdAndClientId(submission.getAssessmentId(), clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Assessment not found: " + submission.getAssessmentId()));
+        JsonNode submission = submissionResponse.getBody();
+        String assessmentId = submission.get("assessmentId").asText();
+        
+        Assessment exam = assessmentRepository.findByIdAndClientId(assessmentId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Assessment not found: " + assessmentId));
         
         if (exam.getAssessmentType() != Assessment.AssessmentType.EXAM) {
             throw new IllegalArgumentException("Assessment is not an exam");
@@ -73,7 +116,7 @@ public class ExamReviewService {
         List<QuizQuestion> questions = quizQuestionRepository.findByAssessmentIdAndClientIdOrderBySequenceAsc(
             exam.getId(), clientId);
         
-        JsonNode answersJson = submission.getAnswersJson();
+        JsonNode answersJson = submission.get("answersJson");
         if (answersJson == null) {
             throw new IllegalStateException("No answers found in submission");
         }
@@ -129,31 +172,40 @@ public class ExamReviewService {
                 feedback, isCorrect));
         }
         
-        // Update submission
-        submission.setScore(BigDecimal.valueOf(totalScore).setScale(2, RoundingMode.HALF_UP));
-        submission.setMaxScore(BigDecimal.valueOf(maxScore).setScale(2, RoundingMode.HALF_UP));
-        
+        // Calculate percentage
+        double percentage = 0.0;
         if (maxScore > 0) {
-            double percentage = (totalScore / maxScore) * 100.0;
-            submission.setPercentage(BigDecimal.valueOf(percentage).setScale(2, RoundingMode.HALF_UP));
-            submission.setIsPassed(percentage >= exam.getPassingScorePercentage());
+            percentage = (totalScore / maxScore) * 100.0;
         }
-        
-        submission.setGradedAt(OffsetDateTime.now());
-        submission.setReviewStatus(AssessmentSubmission.ReviewStatus.AI_REVIEWED);
         
         // Store review feedback
         reviewFeedback.set("questionReviews", questionReviews);
         reviewFeedback.put("totalScore", totalScore);
         reviewFeedback.put("maxScore", maxScore);
-        reviewFeedback.put("percentage", submission.getPercentage().doubleValue());
-        submission.setAiReviewFeedback(reviewFeedback);
+        reviewFeedback.put("percentage", percentage);
+        reviewFeedback.put("isPassed", percentage >= exam.getPassingScorePercentage());
         
-        AssessmentSubmission saved = submissionRepository.save(submission);
+        // Update submission in student service
+        ObjectNode updateRequest = objectMapper.createObjectNode();
+        updateRequest.put("score", totalScore);
+        updateRequest.put("maxScore", maxScore);
+        updateRequest.put("percentage", percentage);
+        updateRequest.put("isPassed", percentage >= exam.getPassingScorePercentage());
+        updateRequest.set("aiReviewFeedback", reviewFeedback);
+        updateRequest.put("reviewStatus", "AI_REVIEWED");
+        
+        String updateUrl = gatewayUrl + "/api/assessments/submissions/" + submissionId + "/grade";
+        getRestTemplate().exchange(
+            updateUrl,
+            HttpMethod.POST,
+            new HttpEntity<>(updateRequest, new HttpHeaders()),
+            JsonNode.class
+        );
+        
         logger.info("AI review completed for submission: {}, score: {}/{}", 
             submissionId, totalScore, maxScore);
         
-        return saved;
+        return reviewFeedback;
     }
     
     private double gradeObjectiveQuestion(QuizQuestion question, JsonNode answerNode) {
@@ -197,63 +249,85 @@ public class ExamReviewService {
     /**
      * Submit instructor review (manual override)
      */
-    public AssessmentSubmission submitInstructorReview(String submissionId, BigDecimal score, 
-                                                      BigDecimal maxScore, JsonNode feedback) {
+    public JsonNode submitInstructorReview(String submissionId, BigDecimal score, 
+                                           BigDecimal maxScore, JsonNode feedback) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        AssessmentSubmission submission = submissionRepository.findById(submissionId)
-            .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
+        // Fetch submission to get assessment ID
+        String submissionUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
+        ResponseEntity<JsonNode> submissionResponse = getRestTemplate().exchange(
+            submissionUrl,
+            HttpMethod.GET,
+            new HttpEntity<>(new HttpHeaders()),
+            JsonNode.class
+        );
         
-        if (!submission.getClientId().equals(clientId)) {
+        if (!submissionResponse.getStatusCode().is2xxSuccessful() || submissionResponse.getBody() == null) {
             throw new IllegalArgumentException("Submission not found: " + submissionId);
         }
         
-        Assessment exam = assessmentRepository.findByIdAndClientId(submission.getAssessmentId(), clientId)
+        JsonNode submission = submissionResponse.getBody();
+        String assessmentId = submission.get("assessmentId").asText();
+        
+        Assessment exam = assessmentRepository.findByIdAndClientId(assessmentId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Assessment not found"));
         
-        submission.setScore(score);
-        submission.setMaxScore(maxScore);
-        
+        BigDecimal percentage = BigDecimal.ZERO;
+        boolean isPassed = false;
         if (maxScore != null && maxScore.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal percentage = score.divide(maxScore, 4, RoundingMode.HALF_UP)
+            percentage = score.divide(maxScore, 4, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100));
-            submission.setPercentage(percentage);
-            submission.setIsPassed(percentage.compareTo(BigDecimal.valueOf(exam.getPassingScorePercentage())) >= 0);
+            isPassed = percentage.compareTo(BigDecimal.valueOf(exam.getPassingScorePercentage())) >= 0;
         }
         
-        submission.setGradedAt(OffsetDateTime.now());
-        submission.setReviewStatus(AssessmentSubmission.ReviewStatus.INSTRUCTOR_REVIEWED);
-        
+        // Update submission in student service
+        ObjectNode updateRequest = objectMapper.createObjectNode();
+        updateRequest.put("score", score.doubleValue());
+        updateRequest.put("maxScore", maxScore.doubleValue());
+        updateRequest.put("percentage", percentage.doubleValue());
+        updateRequest.put("isPassed", isPassed);
         if (feedback != null) {
-            submission.setAiReviewFeedback(feedback);
+            updateRequest.set("aiReviewFeedback", feedback);
         }
+        updateRequest.put("reviewStatus", "INSTRUCTOR_REVIEWED");
         
-        return submissionRepository.save(submission);
+        String updateUrl = gatewayUrl + "/api/assessments/submissions/" + submissionId + "/grade";
+        ResponseEntity<JsonNode> updateResponse = getRestTemplate().exchange(
+            updateUrl,
+            HttpMethod.POST,
+            new HttpEntity<>(updateRequest, new HttpHeaders()),
+            JsonNode.class
+        );
+        
+        return updateResponse.getBody();
     }
     
     /**
      * Get review status
      */
-    public AssessmentSubmission.ReviewStatus getReviewStatus(String submissionId) {
-        String clientIdStr = TenantContext.getClientId();
-        if (clientIdStr == null) {
-            throw new IllegalStateException("Tenant context is not set");
+    public String getReviewStatus(String submissionId) {
+        try {
+            String submissionUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
+            ResponseEntity<JsonNode> submissionResponse = getRestTemplate().exchange(
+                submissionUrl,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                JsonNode.class
+            );
+            
+            if (submissionResponse.getStatusCode().is2xxSuccessful() && submissionResponse.getBody() != null) {
+                JsonNode submission = submissionResponse.getBody();
+                return submission.has("reviewStatus") ? 
+                    submission.get("reviewStatus").asText() : "PENDING";
+            }
+        } catch (Exception e) {
+            logger.error("Failed to get review status", e);
         }
-        UUID clientId = UUID.fromString(clientIdStr);
-        
-        AssessmentSubmission submission = submissionRepository.findById(submissionId)
-            .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
-        
-        if (!submission.getClientId().equals(clientId)) {
-            throw new IllegalArgumentException("Submission not found: " + submissionId);
-        }
-        
-        return submission.getReviewStatus() != null ? 
-            submission.getReviewStatus() : AssessmentSubmission.ReviewStatus.PENDING;
+        return "PENDING";
     }
     
     /**

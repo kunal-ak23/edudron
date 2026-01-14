@@ -65,10 +65,32 @@ public class AssessmentSubmissionController {
     @Operation(summary = "Grade submission", description = "Grade an assessment submission (instructor/admin only)")
     public ResponseEntity<AssessmentSubmissionDTO> gradeSubmission(
             @PathVariable String submissionId,
-            @RequestParam BigDecimal score,
-            @RequestParam BigDecimal maxScore) {
-        AssessmentSubmissionDTO submission = submissionService.gradeSubmission(submissionId, score, maxScore);
-        return ResponseEntity.ok(submission);
+            @RequestParam(required = false) BigDecimal score,
+            @RequestParam(required = false) BigDecimal maxScore,
+            @RequestBody(required = false) java.util.Map<String, Object> requestBody) {
+        
+        // Support both old format (query params) and new format (JSON body)
+        if (requestBody != null && !requestBody.isEmpty()) {
+            BigDecimal reqScore = requestBody.get("score") != null ? 
+                new BigDecimal(requestBody.get("score").toString()) : null;
+            BigDecimal reqMaxScore = requestBody.get("maxScore") != null ? 
+                new BigDecimal(requestBody.get("maxScore").toString()) : null;
+            BigDecimal reqPercentage = requestBody.get("percentage") != null ? 
+                new BigDecimal(requestBody.get("percentage").toString()) : null;
+            Boolean reqIsPassed = requestBody.get("isPassed") != null ? 
+                (Boolean) requestBody.get("isPassed") : null;
+            Object reqFeedback = requestBody.get("aiReviewFeedback");
+            String reqReviewStatus = requestBody.get("reviewStatus") != null ? 
+                requestBody.get("reviewStatus").toString() : null;
+            
+            AssessmentSubmissionDTO submission = submissionService.gradeSubmissionWithDetails(
+                submissionId, reqScore, reqMaxScore, reqPercentage, reqIsPassed, reqFeedback, reqReviewStatus);
+            return ResponseEntity.ok(submission);
+        } else {
+            // Legacy format with query params
+            AssessmentSubmissionDTO submission = submissionService.gradeSubmission(submissionId, score, maxScore);
+            return ResponseEntity.ok(submission);
+        }
     }
 }
 

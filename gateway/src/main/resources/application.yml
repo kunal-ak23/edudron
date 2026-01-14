@@ -23,6 +23,10 @@ spring:
         # Content Service (8082)
         # Note: Content service routes forward paths as-is (no StripPrefix)
         # because controllers expect full paths: /content/**, /api/content/**, /content/api/**
+        - id: content-service-exams
+          uri: ${CONTENT_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/exams/**
         - id: content-service
           uri: ${CONTENT_SERVICE_URL:http://localhost:8082}
           predicates:

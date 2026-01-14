@@ -4,6 +4,7 @@ import com.datagami.edudron.content.domain.Assessment;
 import com.datagami.edudron.content.domain.QuizQuestion;
 import com.datagami.edudron.content.repo.QuizQuestionRepository;
 import com.datagami.edudron.content.service.ExamService;
+import com.datagami.edudron.content.service.ExamReviewService;
 import com.datagami.edudron.common.TenantContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -31,6 +33,9 @@ public class ExamController {
     
     @Autowired
     private QuizQuestionRepository quizQuestionRepository;
+    
+    @Autowired
+    private ExamReviewService examReviewService;
     
     @PostMapping
     @Operation(summary = "Create exam", description = "Create a new exam")
@@ -175,6 +180,27 @@ public class ExamController {
     public ResponseEntity<List<Assessment>> getScheduledExams() {
         List<Assessment> exams = examService.getScheduledExams();
         return ResponseEntity.ok(exams);
+    }
+    
+    @GetMapping("/{id}/submissions")
+    @Operation(summary = "Get all submissions", description = "Get all submissions for an exam")
+    public ResponseEntity<List<?>> getSubmissions(@PathVariable String id) {
+        // TODO: Implement submission retrieval from student service
+        return ResponseEntity.ok(new ArrayList<>());
+    }
+    
+    @PostMapping("/{id}/submissions/{submissionId}/review")
+    @Operation(summary = "Review submission with AI", description = "Trigger AI review for a submission")
+    public ResponseEntity<?> reviewSubmission(
+            @PathVariable String id,
+            @PathVariable String submissionId) {
+        try {
+            examReviewService.reviewSubmissionWithAI(submissionId);
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            logger.error("Failed to review submission", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
     
     @DeleteMapping("/{id}")

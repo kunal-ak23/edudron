@@ -62,6 +62,13 @@ public class AssessmentSubmissionService {
     }
     
     public AssessmentSubmissionDTO gradeSubmission(String submissionId, BigDecimal score, BigDecimal maxScore) {
+        return gradeSubmissionWithDetails(submissionId, score, maxScore, null, null, null, null);
+    }
+    
+    public AssessmentSubmissionDTO gradeSubmissionWithDetails(String submissionId, BigDecimal score, 
+                                                             BigDecimal maxScore, BigDecimal percentage,
+                                                             Boolean isPassed, Object aiReviewFeedback,
+                                                             String reviewStatus) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -75,15 +82,40 @@ public class AssessmentSubmissionService {
             throw new IllegalArgumentException("Submission not found: " + submissionId);
         }
         
-        submission.setScore(score);
-        submission.setMaxScore(maxScore);
+        if (score != null) {
+            submission.setScore(score);
+        }
+        if (maxScore != null) {
+            submission.setMaxScore(maxScore);
+        }
         
-        if (maxScore != null && maxScore.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal percentage = score.divide(maxScore, 4, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100));
+        if (percentage != null) {
             submission.setPercentage(percentage);
-            // Consider passed if >= 60%
-            submission.setIsPassed(percentage.compareTo(BigDecimal.valueOf(60)) >= 0);
+        } else if (maxScore != null && maxScore.compareTo(BigDecimal.ZERO) > 0 && score != null) {
+            BigDecimal calculatedPercentage = score.divide(maxScore, 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100));
+            submission.setPercentage(calculatedPercentage);
+        }
+        
+        if (isPassed != null) {
+            submission.setIsPassed(isPassed);
+        } else if (submission.getPercentage() != null) {
+            // Consider passed if >= 60% (default)
+            submission.setIsPassed(submission.getPercentage().compareTo(BigDecimal.valueOf(60)) >= 0);
+        }
+        
+        if (aiReviewFeedback != null) {
+            if (aiReviewFeedback instanceof com.fasterxml.jackson.databind.JsonNode) {
+                submission.setAiReviewFeedback((com.fasterxml.jackson.databind.JsonNode) aiReviewFeedback);
+            }
+        }
+        
+        if (reviewStatus != null) {
+            try {
+                submission.setReviewStatus(com.datagami.edudron.student.domain.AssessmentSubmission.ReviewStatus.valueOf(reviewStatus));
+            } catch (IllegalArgumentException e) {
+                // Invalid status, ignore
+            }
         }
         
         submission.setGradedAt(java.time.OffsetDateTime.now());
