@@ -59,6 +59,7 @@ export default function CourseEditPage() {
   const [showAIGenerateDialog, setShowAIGenerateDialog] = useState(false)
   const [lectureTitle, setLectureTitle] = useState('')
   const [aiPrompt, setAiPrompt] = useState('')
+  const [aiPdfFile, setAiPdfFile] = useState<File | null>(null)
   const [aiDialogType, setAiDialogType] = useState<{ isSubLecture: boolean; sectionId?: string } | null>(null)
   const [showDeleteLectureDialog, setShowDeleteLectureDialog] = useState(false)
   const [showDeleteSubLectureDialog, setShowDeleteSubLectureDialog] = useState(false)
@@ -302,12 +303,13 @@ export default function CourseEditPage() {
   const handleGenerateWithAI = (sectionId?: string, isSubLecture: boolean = false) => {
     if (!courseId || courseId === 'new') return
     setAiPrompt('')
+    setAiPdfFile(null)
     setAiDialogType({ isSubLecture, sectionId })
     setShowAIGenerateDialog(true)
   }
 
   const handleAIGenerateSubmit = async () => {
-    if (!aiPrompt.trim() || !aiDialogType) return
+    if ((!aiPrompt.trim() && !aiPdfFile) || !aiDialogType) return
     
     try {
       setLoadingSections(true)
@@ -315,36 +317,69 @@ export default function CourseEditPage() {
       
       if (aiDialogType.isSubLecture && aiDialogType.sectionId) {
         // Generate sub-lecture with AI - creates a sub-lecture with full AI-generated content
-        await apiClient.post<any>(
-          `/content/api/sections/${aiDialogType.sectionId}/lectures/generate`,
-          {
-            prompt: aiPrompt.trim(),
-            courseId: courseId
-          }
-        )
+        if (aiPdfFile) {
+          // Use multipart/form-data for PDF upload
+          const formData = new FormData()
+          formData.append('prompt', aiPrompt.trim() || '')
+          formData.append('courseId', courseId)
+          formData.append('pdfFile', aiPdfFile, aiPdfFile.name)
+          
+          await apiClient.post<any>(
+            `/content/api/sections/${aiDialogType.sectionId}/lectures/generate`,
+            formData
+          )
+        } else {
+          await apiClient.post<any>(
+            `/content/api/sections/${aiDialogType.sectionId}/lectures/generate`,
+            {
+              prompt: aiPrompt.trim(),
+              courseId: courseId
+            }
+          )
+        }
         toast({
           title: 'Sub-lecture generated',
           description: 'The sub-lecture has been generated with AI content successfully.',
         })
       } else {
         // Generate main lecture with AI - this will create a lecture with sub-lectures
-        const response = await apiClient.post<any>(
-          `/content/courses/${courseId}/lectures/generate`,
-          {
-            prompt: aiPrompt.trim()
-          }
-        ) as any
-        
-        const responseData = (response as any).data || response
-        
-        toast({
-          title: 'Lecture generated',
-          description: `Lecture "${responseData?.title || 'Lecture'}" has been generated with ${responseData?.lectures?.length || 0} sub-lectures.`,
-        })
+        if (aiPdfFile) {
+          // Use multipart/form-data for PDF upload
+          const formData = new FormData()
+          formData.append('prompt', aiPrompt.trim() || '')
+          formData.append('pdfFile', aiPdfFile, aiPdfFile.name)
+          
+          const response = await apiClient.post<any>(
+            `/content/courses/${courseId}/lectures/generate`,
+            formData
+          ) as any
+          
+          const responseData = (response as any).data || response
+          
+          toast({
+            title: 'Lecture generated',
+            description: `Lecture "${responseData?.title || 'Lecture'}" has been generated with ${responseData?.lectures?.length || 0} sub-lectures.`,
+          })
+        } else {
+          const response = await apiClient.post<any>(
+            `/content/courses/${courseId}/lectures/generate`,
+            {
+              prompt: aiPrompt.trim()
+            }
+          ) as any
+          
+          const responseData = (response as any).data || response
+          
+          toast({
+            title: 'Lecture generated',
+            description: `Lecture "${responseData?.title || 'Lecture'}" has been generated with ${responseData?.lectures?.length || 0} sub-lectures.`,
+          })
+        }
       }
       
       await loadCourseSections()
       setAiPrompt('')
+      setAiPdfFile(null)
       setAiDialogType(null)
     } catch (error) {
       console.error('Failed to generate with AI:', error)
@@ -1153,7 +1188,9 @@ export default function CourseEditPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="ai-prompt">Prompt</Label>
+              <Label htmlFor="ai-prompt">
+                Prompt {!aiPdfFile && <span className="text-destructive">*</span>}
+              </Label>
               <Textarea
                 id="ai-prompt"
                 value={aiPrompt}
@@ -1166,6 +1203,110 @@ export default function CourseEditPage() {
                 rows={4}
                 autoFocus
               />
+              <p className="text-xs text-gray-500">
+                {aiDialogType?.isSubLecture
+                  ? 'Enter a prompt to generate sub-lecture content. You can also upload a PDF file with reference content.'
+                  : 'Enter a prompt to generate lecture content. You can also upload a PDF file with reference content.'}
+              </p>
+            </div>
+            
+            {/* PDF Upload */}
+            <div className="space-y-2">
+              <Label>Reference PDF (Optional)</Label>
+              {!aiPdfFile ? (
+                <div>
+                  <input
+                    type="file"
+                    id="ai-pdf-upload"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        if (file.type !== 'application/pdf') {
+                          toast({
+                            variant: 'destructive',
+                            title: 'Invalid file type',
+                            description: 'Please upload a PDF file',
+                          })
+                          return
+                        }
+                        if (file.size > 50 * 1024 * 1024) {
+                          toast({
+                            variant: 'destructive',
+                            title: 'File too large',
+                            description: 'PDF file must be less than 50MB',
+                          })
+                          return
+                        }
+                        setAiPdfFile(file)
+                      }
+                    }}
+                    disabled={loadingSections}
+                  />
+                  <label
+                    htmlFor="ai-pdf-upload"
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
+                  >
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <svg
+                        className="w-8 h-8 mb-2 text-gray-500"
+                        aria-hidden="true"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 20 16"
+                      >
+                        <path
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"
+                        />
+                      </svg>
+                      <p className="mb-2 text-sm text-gray-500">
+                        {loadingSections ? 'Upload disabled during generation' : 'Click to upload a PDF file'}
+                      </p>
+                      <p className="text-xs text-gray-500">PDF files up to 50MB are supported</p>
+                    </div>
+                  </label>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-center gap-3">
+                    <svg
+                      className="w-8 h-8 text-red-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                      />
+                    </svg>
+                    <div>
+                      <p className="text-sm font-medium">{aiPdfFile.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {(aiPdfFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAiPdfFile(null)}
+                    disabled={loadingSections}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              <p className="text-xs text-gray-500">
+                Upload a PDF file containing reference content. The AI will extract the content and use it to generate the lecture.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -1174,6 +1315,7 @@ export default function CourseEditPage() {
               onClick={() => {
                 setShowAIGenerateDialog(false)
                 setAiPrompt('')
+                setAiPdfFile(null)
                 setAiDialogType(null)
               }}
             >
@@ -1181,7 +1323,7 @@ export default function CourseEditPage() {
             </Button>
             <Button
               onClick={handleAIGenerateSubmit}
-              disabled={!aiPrompt.trim() || loadingSections}
+              disabled={(!aiPrompt.trim() && !aiPdfFile) || loadingSections}
             >
               {loadingSections && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <Sparkles className="h-4 w-4 mr-2" />
