@@ -517,6 +517,54 @@ public class CourseService {
         return toDTO(saved);
     }
     
+    /**
+     * Get all published courses assigned to a specific section.
+     * This method is used for automatic enrollment when students are added to sections.
+     * 
+     * @param sectionId The section ID
+     * @return List of published courses assigned to the section
+     */
+    @Transactional(readOnly = true)
+    public List<CourseDTO> getPublishedCoursesBySectionId(String sectionId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        log.debug("Fetching published courses assigned to section {}", sectionId);
+        List<Course> courses = courseRepository.findPublishedCoursesBySectionId(clientId, sectionId);
+        log.info("Found {} published courses assigned to section {}", courses.size(), sectionId);
+        
+        return courses.stream()
+            .map(this::toDTO)
+            .collect(Collectors.toList());
+    }
+    
+    /**
+     * Get all published courses assigned to a specific class.
+     * This method is used for automatic enrollment when students are added to classes.
+     * 
+     * @param classId The class ID
+     * @return List of published courses assigned to the class
+     */
+    @Transactional(readOnly = true)
+    public List<CourseDTO> getPublishedCoursesByClassId(String classId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        log.debug("Fetching published courses assigned to class {}", classId);
+        List<Course> courses = courseRepository.findPublishedCoursesByClassId(clientId, classId);
+        log.info("Found {} published courses assigned to class {}", courses.size(), classId);
+        
+        return courses.stream()
+            .map(this::toDTO)
+            .collect(Collectors.toList());
+    }
+    
     private CourseDTO toDTO(Course course) {
         if (course == null) {
             throw new IllegalArgumentException("Course cannot be null");

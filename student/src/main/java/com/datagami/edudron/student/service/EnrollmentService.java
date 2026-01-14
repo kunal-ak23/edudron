@@ -34,6 +34,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,6 +71,29 @@ public class EnrollmentService {
             restTemplate = new RestTemplate();
             List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
             interceptors.add(new TenantContextRestTemplateInterceptor());
+            // Add interceptor to forward JWT token (Authorization header)
+            interceptors.add((request, body, execution) -> {
+                // Get current request to extract Authorization header
+                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    HttpServletRequest currentRequest = attributes.getRequest();
+                    String authHeader = currentRequest.getHeader("Authorization");
+                    if (authHeader != null && !authHeader.isBlank()) {
+                        // Only add if not already present
+                        if (!request.getHeaders().containsKey("Authorization")) {
+                            request.getHeaders().add("Authorization", authHeader);
+                            log.debug("Propagated Authorization header (JWT token) to content service: {}", request.getURI());
+                        } else {
+                            log.debug("Authorization header already present in request to {}", request.getURI());
+                        }
+                    } else {
+                        log.warn("No Authorization header found in current request - content service call may fail with 403 Forbidden: {}", request.getURI());
+                    }
+                } else {
+                    log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
+                }
+                return execution.execute(request, body);
+            });
             restTemplate.setInterceptors(interceptors);
         }
         return restTemplate;
@@ -239,6 +265,16 @@ public class EnrollmentService {
         Enrollment saved = enrollmentRepository.save(enrollment);
         log.info("Created enrollment for student {} in course {} (classId={}, sectionId={}, enrollmentId={})", 
             studentId, request.getCourseId(), classId, sectionId, saved.getId());
+        
+        // Automatically enroll student in all published courses assigned to this section/class
+        // This happens after the main enrollment is created to ensure consistency
+        try {
+            autoEnrollStudentInAssignedCourses(studentId, sectionId, classId, instituteId, clientId);
+        } catch (Exception e) {
+            // Log error but don't fail the main enrollment
+            log.warn("Failed to auto-enroll student {} in assigned courses for section {} / class {}: {}", 
+                studentId, sectionId, classId, e.getMessage(), e);
+        }
         
         return toDTO(saved);
     }
@@ -548,6 +584,142 @@ public class EnrollmentService {
         
         public String getPhone() { return phone; }
         public void setPhone(String phone) { this.phone = phone; }
+    }
+    
+    /**
+     * Automatically enroll a student in all published courses assigned to their section/class.
+     * This method is called after a student is enrolled with a sectionId or classId.
+     * Package-private to allow access from BulkStudentImportService.
+     * 
+     * @param studentId The student ID
+     * @param sectionId The section ID (can be null)
+     * @param classId The class ID (can be null)
+     * @param instituteId The institute ID
+     * @param clientId The client/tenant ID
+     */
+    void autoEnrollStudentInAssignedCourses(String studentId, String sectionId, String classId, 
+                                                    String instituteId, UUID clientId) {
+        List<CourseDTO> coursesToEnroll = new ArrayList<>();
+        
+        // Priority: If sectionId is provided, only enroll in section-assigned courses (more specific)
+        // If only classId is provided, enroll in class-assigned courses
+        if (sectionId != null && !sectionId.isBlank()) {
+            log.debug("Auto-enrolling student {} in courses assigned to section {}", studentId, sectionId);
+            try {
+                String url = gatewayUrl + "/content/courses/section/" + sectionId;
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<?> entity = new HttpEntity<>(headers);
+                
+                ResponseEntity<CourseDTO[]> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    CourseDTO[].class
+                );
+                
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    coursesToEnroll = List.of(response.getBody());
+                    log.info("Found {} published courses assigned to section {} for auto-enrollment", 
+                        coursesToEnroll.size(), sectionId);
+                } else {
+                    log.warn("Content service returned non-2xx status when fetching courses for section {}: {}", 
+                        sectionId, response.getStatusCode());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch courses assigned to section {} for auto-enrollment: {}", 
+                    sectionId, e.getMessage(), e);
+                return; // Don't proceed if we can't fetch courses
+            }
+        } else if (classId != null && !classId.isBlank()) {
+            log.debug("Auto-enrolling student {} in courses assigned to class {}", studentId, classId);
+            try {
+                String url = gatewayUrl + "/content/courses/class/" + classId;
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<?> entity = new HttpEntity<>(headers);
+                
+                ResponseEntity<CourseDTO[]> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    CourseDTO[].class
+                );
+                
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    coursesToEnroll = List.of(response.getBody());
+                    log.info("Found {} published courses assigned to class {} for auto-enrollment", 
+                        coursesToEnroll.size(), classId);
+                } else {
+                    log.warn("Content service returned non-2xx status when fetching courses for class {}: {}", 
+                        classId, response.getStatusCode());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch courses assigned to class {} for auto-enrollment: {}", 
+                    classId, e.getMessage(), e);
+                return; // Don't proceed if we can't fetch courses
+            }
+        } else {
+            log.debug("No sectionId or classId provided, skipping auto-enrollment");
+            return;
+        }
+        
+        if (coursesToEnroll.isEmpty()) {
+            log.debug("No published courses assigned to section {} / class {}, skipping auto-enrollment", 
+                sectionId, classId);
+            return;
+        }
+        
+        // Enroll student in each course
+        int enrolledCount = 0;
+        int skippedCount = 0;
+        int failedCount = 0;
+        
+        for (CourseDTO course : coursesToEnroll) {
+            try {
+                // Skip if already enrolled
+                if (enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, course.getId())) {
+                    log.debug("Student {} already enrolled in course {}, skipping", studentId, course.getId());
+                    skippedCount++;
+                    continue;
+                }
+                
+                // Create enrollment directly (avoid recursion by not calling enrollStudent again)
+                Enrollment enrollment = new Enrollment();
+                enrollment.setId(UlidGenerator.nextUlid());
+                enrollment.setClientId(clientId);
+                enrollment.setStudentId(studentId);
+                enrollment.setCourseId(course.getId());
+                enrollment.setBatchId(sectionId); // Keep batchId for backward compatibility
+                enrollment.setInstituteId(instituteId);
+                enrollment.setClassId(classId);
+                
+                enrollmentRepository.save(enrollment);
+                enrolledCount++;
+                log.info("Auto-enrolled student {} in course {} (sectionId={}, classId={})", 
+                    studentId, course.getId(), sectionId, classId);
+                    
+            } catch (Exception e) {
+                failedCount++;
+                log.warn("Failed to auto-enroll student {} in course {}: {}", 
+                    studentId, course.getId(), e.getMessage(), e);
+                // Continue with other courses even if one fails
+            }
+        }
+        
+        log.info("Auto-enrollment completed for student {}: {} enrolled, {} skipped (already enrolled), {} failed", 
+            studentId, enrolledCount, skippedCount, failedCount);
+    }
+    
+    /**
+     * Inner class to deserialize course info from content service
+     * Only includes fields needed for auto-enrollment
+     */
+    private static class CourseDTO {
+        private String id;
+        
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
     }
     
     /**

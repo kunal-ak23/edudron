@@ -720,6 +720,16 @@ public class BulkStudentImportService {
                     enrollmentRepository.save(placeholderEnrollment);
                     log.debug("Created placeholder enrollment for student {} to associate with class {} / section {}", 
                         user.getId(), classId, sectionId);
+                    
+                    // Automatically enroll student in all published courses assigned to this section/class
+                    try {
+                        enrollmentService.autoEnrollStudentInAssignedCourses(
+                            user.getId(), sectionId, classId, instituteId, clientId);
+                    } catch (Exception e) {
+                        // Log error but don't fail the import if auto-enrollment fails
+                        log.warn("Failed to auto-enroll student {} in assigned courses after placeholder enrollment: {}", 
+                            user.getId(), e.getMessage(), e);
+                    }
                 }
             } catch (org.springframework.dao.DataAccessException e) {
                 // Handle database-specific errors (including transaction aborted)

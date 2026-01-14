@@ -253,5 +253,19 @@ public class CourseController {
         List<SectionDTO> sections = sectionService.getSectionsByCourse(id);
         return ResponseEntity.ok(sections);
     }
+    
+    @GetMapping("/section/{sectionId}")
+    @Operation(summary = "Get published courses by section", description = "Get all published courses assigned to a specific section. Used for automatic enrollment.")
+    public ResponseEntity<List<CourseDTO>> getPublishedCoursesBySection(@PathVariable String sectionId) {
+        List<CourseDTO> courses = courseService.getPublishedCoursesBySectionId(sectionId);
+        return ResponseEntity.ok(courses);
+    }
+    
+    @GetMapping("/class/{classId}")
+    @Operation(summary = "Get published courses by class", description = "Get all published courses assigned to a specific class. Used for automatic enrollment.")
+    public ResponseEntity<List<CourseDTO>> getPublishedCoursesByClass(@PathVariable String classId) {
+        List<CourseDTO> courses = courseService.getPublishedCoursesByClassId(classId);
+        return ResponseEntity.ok(courses);
+    }
 }
 

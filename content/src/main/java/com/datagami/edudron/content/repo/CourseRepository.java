@@ -49,6 +49,18 @@ public interface CourseRepository extends JpaRepository<Course, String> {
            "AND :tag = ANY(c.tags)", nativeQuery = true)
     List<Course> findByClientIdAndTag(@Param("clientId") UUID clientId, @Param("tag") String tag);
     
+    // Find published courses assigned to a specific section
+    @Query(value = "SELECT * FROM content.courses c WHERE c.client_id = :clientId " +
+           "AND c.is_published = true " +
+           "AND :sectionId = ANY(c.assigned_to_section_ids)", nativeQuery = true)
+    List<Course> findPublishedCoursesBySectionId(@Param("clientId") UUID clientId, @Param("sectionId") String sectionId);
+    
+    // Find published courses assigned to a specific class
+    @Query(value = "SELECT * FROM content.courses c WHERE c.client_id = :clientId " +
+           "AND c.is_published = true " +
+           "AND :classId = ANY(c.assigned_to_class_ids)", nativeQuery = true)
+    List<Course> findPublishedCoursesByClassId(@Param("clientId") UUID clientId, @Param("classId") String classId);
+    
     // Count by tenant
     long countByClientId(UUID clientId);
     
