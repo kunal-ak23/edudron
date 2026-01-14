@@ -664,7 +664,7 @@ public class FoundryAIService {
         return extracted;
     }
     
-    private String callOpenAI(String systemPrompt, String userPrompt) {
+    public String callOpenAI(String systemPrompt, String userPrompt) {
         if (client == null) {
             throw new IllegalStateException("Azure OpenAI is not configured");
         }
@@ -914,6 +914,59 @@ public class FoundryAIService {
         }
         
         throw new RuntimeException("Failed to get response from OpenAI after " + maxRetries + " retries");
+    }
+    
+    public String generateExamQuestions(String moduleContent, Integer numberOfQuestions, String difficulty) {
+        if (client == null) {
+            throw new IllegalStateException("Azure OpenAI is not configured");
+        }
+        
+        logger.info("Generating {} exam questions with difficulty: {}", numberOfQuestions, difficulty);
+        
+        String systemPrompt = """
+            You are an expert exam question generator. Generate exam questions based on the provided course content.
+            
+            Generate a mix of question types:
+            - MULTIPLE_CHOICE: Questions with 4 options, exactly one correct answer
+            - SHORT_ANSWER: Brief answer questions (1-2 sentences expected)
+            - ESSAY: Longer answer questions requiring detailed explanation
+            
+            For each question, provide:
+            {
+                "question": "The question text",
+                "type": "MULTIPLE_CHOICE|SHORT_ANSWER|ESSAY",
+                "points": <points value, typically 1-5>,
+                "options": [  // Only for MULTIPLE_CHOICE
+                    {"text": "Option 1", "isCorrect": true/false},
+                    {"text": "Option 2", "isCorrect": true/false},
+                    {"text": "Option 3", "isCorrect": true/false},
+                    {"text": "Option 4", "isCorrect": true/false}
+                ],
+                "tentativeAnswer": "Expected answer text"  // Only for SHORT_ANSWER and ESSAY
+            }
+            
+            IMPORTANT RULES:
+            - For MULTIPLE_CHOICE: Provide exactly 4 options, exactly one must be correct
+            - For SHORT_ANSWER and ESSAY: Provide a comprehensive tentativeAnswer that represents the expected answer
+            - Questions should test understanding, not just memorization
+            - Difficulty level: %s
+            - Generate approximately 60%% MULTIPLE_CHOICE, 25%% SHORT_ANSWER, 15%% ESSAY
+            
+            CRITICAL: Return ONLY a valid JSON array. Do NOT include any explanatory text before or after. Start with '[' and end with ']'.
+            """.formatted(difficulty);
+        
+        String userPrompt = "Course Content:\n\n" + moduleContent + 
+                          "\n\nGenerate " + numberOfQuestions + " exam questions based on this content.";
+        
+        try {
+            String response = callOpenAI(systemPrompt, userPrompt);
+            String jsonResponse = extractJsonFromResponse(response);
+            logger.info("Successfully generated exam questions");
+            return jsonResponse;
+        } catch (Exception e) {
+            logger.error("Failed to generate exam questions", e);
+            throw new RuntimeException("Failed to generate exam questions: " + e.getMessage(), e);
+        }
     }
     
     // Inner classes for structure generation

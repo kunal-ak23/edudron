@@ -146,6 +146,16 @@ public class AssessmentSubmissionService {
         dto.setSubmittedAt(submission.getSubmittedAt());
         dto.setGradedAt(submission.getGradedAt());
         dto.setCreatedAt(submission.getCreatedAt());
+        
+        // Exam-specific fields
+        dto.setStartedAt(submission.getStartedAt());
+        dto.setCompletedAt(submission.getCompletedAt());
+        dto.setTimeRemainingSeconds(submission.getTimeRemainingSeconds());
+        if (submission.getReviewStatus() != null) {
+            dto.setReviewStatus(submission.getReviewStatus().name());
+        }
+        dto.setAiReviewFeedback(submission.getAiReviewFeedback());
+        
         return dto;
     }
 }

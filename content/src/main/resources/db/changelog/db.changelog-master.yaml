@@ -39,4 +39,6 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0006-course-generation-index.yaml
   - include:
       file: db/changelog/db.changelog-0009-course-assignments.yaml
+  - include:
+      file: db/changelog/db.changelog-0010-exam-module.yaml
 

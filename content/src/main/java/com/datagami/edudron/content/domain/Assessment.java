@@ -76,8 +76,34 @@ public class Assessment {
     private List<QuizQuestion> questions = new ArrayList<>();
 
     public enum AssessmentType {
-        QUIZ, ASSIGNMENT, PRACTICE_TEST, PROJECT
+        QUIZ, ASSIGNMENT, PRACTICE_TEST, PROJECT, EXAM
     }
+    
+    public enum ExamStatus {
+        DRAFT, SCHEDULED, LIVE, COMPLETED
+    }
+    
+    public enum ReviewMethod {
+        INSTRUCTOR, AI, BOTH
+    }
+    
+    // Exam-specific fields
+    @Column(name = "start_time")
+    private OffsetDateTime startTime;
+    
+    @Column(name = "end_time")
+    private OffsetDateTime endTime;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
+    private ExamStatus status;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "review_method", length = 20)
+    private ReviewMethod reviewMethod;
+    
+    @Column(name = "module_ids", columnDefinition = "text[]")
+    private List<String> moduleIds = new ArrayList<>();
 
     // Constructors
     public Assessment() {
@@ -148,6 +174,21 @@ public class Assessment {
 
     public List<QuizQuestion> getQuestions() { return questions; }
     public void setQuestions(List<QuizQuestion> questions) { this.questions = questions; }
+
+    public OffsetDateTime getStartTime() { return startTime; }
+    public void setStartTime(OffsetDateTime startTime) { this.startTime = startTime; }
+
+    public OffsetDateTime getEndTime() { return endTime; }
+    public void setEndTime(OffsetDateTime endTime) { this.endTime = endTime; }
+
+    public ExamStatus getStatus() { return status; }
+    public void setStatus(ExamStatus status) { this.status = status; }
+
+    public ReviewMethod getReviewMethod() { return reviewMethod; }
+    public void setReviewMethod(ReviewMethod reviewMethod) { this.reviewMethod = reviewMethod; }
+
+    public List<String> getModuleIds() { return moduleIds; }
+    public void setModuleIds(List<String> moduleIds) { this.moduleIds = moduleIds; }
 
     @PreUpdate
     public void preUpdate() {

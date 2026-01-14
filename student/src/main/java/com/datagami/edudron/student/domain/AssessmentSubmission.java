@@ -51,8 +51,30 @@ public class AssessmentSubmission {
 
     private OffsetDateTime gradedAt;
 
+    // Exam-specific fields
+    @Column(name = "started_at")
+    private OffsetDateTime startedAt;
+
+    @Column(name = "completed_at")
+    private OffsetDateTime completedAt;
+
+    @Column(name = "time_remaining_seconds")
+    private Integer timeRemainingSeconds;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "review_status", length = 20)
+    private ReviewStatus reviewStatus;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "ai_review_feedback", columnDefinition = "jsonb")
+    private JsonNode aiReviewFeedback;
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
+    
+    public enum ReviewStatus {
+        PENDING, AI_REVIEWED, INSTRUCTOR_REVIEWED, COMPLETED
+    }
 
     // Constructors
     public AssessmentSubmission() {
@@ -102,6 +124,21 @@ public class AssessmentSubmission {
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+
+    public OffsetDateTime getStartedAt() { return startedAt; }
+    public void setStartedAt(OffsetDateTime startedAt) { this.startedAt = startedAt; }
+
+    public OffsetDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(OffsetDateTime completedAt) { this.completedAt = completedAt; }
+
+    public Integer getTimeRemainingSeconds() { return timeRemainingSeconds; }
+    public void setTimeRemainingSeconds(Integer timeRemainingSeconds) { this.timeRemainingSeconds = timeRemainingSeconds; }
+
+    public ReviewStatus getReviewStatus() { return reviewStatus; }
+    public void setReviewStatus(ReviewStatus reviewStatus) { this.reviewStatus = reviewStatus; }
+
+    public JsonNode getAiReviewFeedback() { return aiReviewFeedback; }
+    public void setAiReviewFeedback(JsonNode aiReviewFeedback) { this.aiReviewFeedback = aiReviewFeedback; }
 }
 
 

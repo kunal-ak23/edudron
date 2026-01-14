@@ -20,6 +20,13 @@ public class AssessmentSubmissionDTO {
     private OffsetDateTime submittedAt;
     private OffsetDateTime gradedAt;
     private OffsetDateTime createdAt;
+    
+    // Exam-specific fields
+    private OffsetDateTime startedAt;
+    private OffsetDateTime completedAt;
+    private Integer timeRemainingSeconds;
+    private String reviewStatus;
+    private JsonNode aiReviewFeedback;
 
     // Constructors
     public AssessmentSubmissionDTO() {}
@@ -66,6 +73,21 @@ public class AssessmentSubmissionDTO {
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
+
+    public OffsetDateTime getStartedAt() { return startedAt; }
+    public void setStartedAt(OffsetDateTime startedAt) { this.startedAt = startedAt; }
+
+    public OffsetDateTime getCompletedAt() { return completedAt; }
+    public void setCompletedAt(OffsetDateTime completedAt) { this.completedAt = completedAt; }
+
+    public Integer getTimeRemainingSeconds() { return timeRemainingSeconds; }
+    public void setTimeRemainingSeconds(Integer timeRemainingSeconds) { this.timeRemainingSeconds = timeRemainingSeconds; }
+
+    public String getReviewStatus() { return reviewStatus; }
+    public void setReviewStatus(String reviewStatus) { this.reviewStatus = reviewStatus; }
+
+    public JsonNode getAiReviewFeedback() { return aiReviewFeedback; }
+    public void setAiReviewFeedback(JsonNode aiReviewFeedback) { this.aiReviewFeedback = aiReviewFeedback; }
 }
 
 

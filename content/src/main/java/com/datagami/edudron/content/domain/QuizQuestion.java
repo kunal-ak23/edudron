@@ -34,6 +34,16 @@ public class QuizQuestion {
     @Column(columnDefinition = "text")
     private String explanation;
 
+    // Tentative answer fields for subjective questions
+    @Column(name = "tentative_answer", columnDefinition = "text")
+    private String tentativeAnswer;
+
+    @Column(name = "edited_tentative_answer", columnDefinition = "text")
+    private String editedTentativeAnswer;
+
+    @Column(name = "use_tentative_answer_for_grading", nullable = false)
+    private Boolean useTentativeAnswerForGrading = true;
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -95,6 +105,15 @@ public class QuizQuestion {
 
     public List<QuizOption> getOptions() { return options; }
     public void setOptions(List<QuizOption> options) { this.options = options; }
+
+    public String getTentativeAnswer() { return tentativeAnswer; }
+    public void setTentativeAnswer(String tentativeAnswer) { this.tentativeAnswer = tentativeAnswer; }
+
+    public String getEditedTentativeAnswer() { return editedTentativeAnswer; }
+    public void setEditedTentativeAnswer(String editedTentativeAnswer) { this.editedTentativeAnswer = editedTentativeAnswer; }
+
+    public Boolean getUseTentativeAnswerForGrading() { return useTentativeAnswerForGrading; }
+    public void setUseTentativeAnswerForGrading(Boolean useTentativeAnswerForGrading) { this.useTentativeAnswerForGrading = useTentativeAnswerForGrading; }
 
     @PreUpdate
     public void preUpdate() {

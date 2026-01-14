@@ -1,0 +1,21 @@
+databaseChangeLog:
+  # Add exam-specific fields to assessment_submissions table
+  - changeSet:
+      id: student-0012-exam-submission-fields
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: assessment_submissions
+            schemaName: student
+            columns:
+              - column: { name: started_at, type: timestamptz }
+              - column: { name: completed_at, type: timestamptz }
+              - column: { name: time_remaining_seconds, type: integer }
+              - column: { name: review_status, type: varchar(20) }
+              - column: { name: ai_review_feedback, type: jsonb }
+        - createIndex:
+            tableName: assessment_submissions
+            schemaName: student
+            indexName: idx_student_assessment_submissions_review_status
+            columns:
+              - column: { name: review_status }

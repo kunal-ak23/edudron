@@ -1,0 +1,41 @@
+databaseChangeLog:
+  # Add exam fields to assessments table
+  - changeSet:
+      id: content-0010-exam-fields-assessments
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: assessments
+            schemaName: content
+            columns:
+              - column: { name: start_time, type: timestamptz }
+              - column: { name: end_time, type: timestamptz }
+              - column: { name: status, type: varchar(20) }
+              - column: { name: review_method, type: varchar(20) }
+              - column: { name: module_ids, type: text[] }
+        - createIndex:
+            tableName: assessments
+            schemaName: content
+            indexName: idx_content_assessments_status
+            columns:
+              - column: { name: status }
+        - createIndex:
+            tableName: assessments
+            schemaName: content
+            indexName: idx_content_assessments_start_end_time
+            columns:
+              - column: { name: start_time }
+              - column: { name: end_time }
+
+  # Add tentative answer fields to quiz_questions table
+  - changeSet:
+      id: content-0011-exam-tentative-answers
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: quiz_questions
+            schemaName: content
+            columns:
+              - column: { name: tentative_answer, type: text }
+              - column: { name: edited_tentative_answer, type: text }
+              - column: { name: use_tentative_answer_for_grading, type: boolean, defaultValueBoolean: true }

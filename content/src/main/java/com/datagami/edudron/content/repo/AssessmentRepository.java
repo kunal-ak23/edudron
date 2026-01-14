@@ -25,6 +25,23 @@ public interface AssessmentRepository extends JpaRepository<Assessment, String> 
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);
     
     void deleteByLectureIdAndClientId(String lectureId, UUID clientId);
+    
+    // Exam-specific queries
+    List<Assessment> findByAssessmentTypeAndClientIdOrderByCreatedAtDesc(Assessment.AssessmentType assessmentType, UUID clientId);
+    
+    @Query("SELECT a FROM Assessment a WHERE a.assessmentType = :assessmentType AND a.clientId = :clientId AND a.status = :status ORDER BY a.startTime ASC")
+    List<Assessment> findByAssessmentTypeAndStatusAndClientIdOrderByStartTimeAsc(
+        @Param("assessmentType") Assessment.AssessmentType assessmentType,
+        @Param("status") Assessment.ExamStatus status,
+        @Param("clientId") UUID clientId
+    );
+    
+    @Query("SELECT a FROM Assessment a WHERE a.assessmentType = :assessmentType AND a.clientId = :clientId AND a.status IN :statuses ORDER BY a.startTime ASC")
+    List<Assessment> findByAssessmentTypeAndStatusInAndClientIdOrderByStartTimeAsc(
+        @Param("assessmentType") Assessment.AssessmentType assessmentType,
+        @Param("statuses") List<Assessment.ExamStatus> statuses,
+        @Param("clientId") UUID clientId
+    );
 }
 
 
