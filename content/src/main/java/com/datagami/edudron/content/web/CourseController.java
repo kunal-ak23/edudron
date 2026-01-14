@@ -215,11 +215,21 @@ public class CourseController {
      */
     private String buildPromptWithPdf(String userPrompt, String pdfText) {
         if (userPrompt == null || userPrompt.trim().isEmpty()) {
-            // If no user prompt, use PDF content as the main prompt
-            return "Generate a course based on the following course structure document:\n\n" + pdfText;
+            // If no user prompt, use PDF content as the main prompt with clear instructions
+            return "Generate a course by following the EXACT structure from the course structure document below. " +
+                   "IMPORTANT: Use the EXACT module titles, lesson titles, and time durations specified in the document. " +
+                   "Convert all time durations (hours) to seconds (1 hour = 3600 seconds). " +
+                   "Ensure every lesson has a time duration attached.\n\n" +
+                   "Course Structure Document:\n" + pdfText;
         } else {
-            // Combine user prompt with PDF content
-            return "Course Structure Document:\n" + pdfText + "\n\nUser Instructions:\n" + userPrompt;
+            // Combine user prompt with PDF content, emphasizing structure following
+            return "Course Structure Document (FOLLOW THIS EXACT STRUCTURE):\n" + pdfText + 
+                   "\n\nIMPORTANT INSTRUCTIONS:\n" +
+                   "- Use the EXACT module titles and lesson titles from the document above\n" +
+                   "- Extract time durations (in hours) from the document and convert to seconds (1 hour = 3600 seconds)\n" +
+                   "- Ensure EVERY lesson has a time duration attached\n" +
+                   "- Follow the structure and organization exactly as shown\n\n" +
+                   "User Instructions:\n" + userPrompt;
         }
     }
     

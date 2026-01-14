@@ -146,37 +146,97 @@ public class FoundryAIService {
             throw new IllegalStateException("Azure OpenAI is not configured");
         }
         
-        String systemPrompt = """
-            You are an expert course designer. Generate a course structure with sections (modules) and lectures.
-            Return a JSON array where each section has:
-            {
-                "title": "Section title",
-                "description": "Section description",
-                "lectures": [
-                    {
-                        "title": "Lecture title",
-                        "description": "Brief lecture description",
-                        "durationSeconds": <estimated time in seconds for an average student to learn this lecture properly>
-                    }
-                ]
-            }
-            
-            IMPORTANT: For each lecture, estimate the duration in seconds (durationSeconds) based on:
-            - The complexity and depth of the content
-            - Typical reading/learning speed (average student reads ~200-250 words per minute)
-            - Time needed to understand concepts, practice, and absorb the material
-            - For video content: actual video length + time for comprehension
-            - For text content: reading time + time for reflection and understanding
-            - Include time for examples, exercises, and practical application
-            
-            Examples:
-            - Short introductory lecture: 300-600 seconds (5-10 minutes)
-            - Standard lecture with concepts and examples: 900-1800 seconds (15-30 minutes)
-            - Comprehensive deep-dive lecture: 2400-3600 seconds (40-60 minutes)
-            
-            Generate %d sections with approximately %d lectures each.
-            Return ONLY valid JSON array, no additional text.
-            """.formatted(requirements.getNumberOfModules(), requirements.getLecturesPerModule());
+        // Check if the description contains PDF content with module structure
+        String description = requirements.getDescription();
+        boolean hasPdfStructure = description != null && (
+            description.contains("Module") || 
+            description.contains("Hours") || 
+            description.contains("hours") ||
+            description.contains("–") || // En dash used in "Module 1: Title – 6 Hours"
+            description.contains("-") // Hyphen alternative
+        );
+        
+        String systemPrompt;
+        if (hasPdfStructure) {
+            // Enhanced prompt for PDF-based course structures
+            systemPrompt = """
+                You are an expert course designer. You MUST follow the EXACT course structure provided in the user's prompt.
+                
+                CRITICAL REQUIREMENTS:
+                1. Follow the EXACT module titles, lesson titles, and structure from the provided document
+                2. Extract time durations (in hours) from the document and convert them to seconds
+                   - 1 hour = 3600 seconds
+                   - If a module shows "6 Hours", that's 21600 seconds total for that module
+                   - Distribute the module time across its lessons proportionally
+                3. If individual lesson times are specified, use those and convert to seconds
+                4. If only module times are specified, divide the module time evenly across its lessons
+                5. EVERY lecture MUST have a durationSeconds field - this is MANDATORY
+                
+                Return a JSON array where each section (module) has:
+                {
+                    "title": "EXACT module title from document",
+                    "description": "Section description",
+                    "moduleDurationHours": <hours for this module if specified>,
+                    "lectures": [
+                        {
+                            "title": "EXACT lesson title from document",
+                            "description": "Brief lecture description",
+                            "durationSeconds": <MANDATORY - time in seconds, MUST be provided>
+                        }
+                    ]
+                }
+                
+                TIME CONVERSION RULES:
+                - If document says "Module X: Title – 6 Hours", extract 6 hours = 21600 seconds
+                - Distribute 21600 seconds across all lessons in that module
+                - If module has 4 lessons: ~5400 seconds (90 minutes) per lesson
+                - If module has 2 lessons: ~10800 seconds (180 minutes) per lesson
+                - Always ensure total lesson durations approximately match module duration
+                
+                IMPORTANT: 
+                - Use EXACT titles from the document - do not rephrase or change them
+                - Include ALL modules and lessons from the document
+                - EVERY lecture MUST have durationSeconds - never omit this field
+                - If time is not specified, estimate based on content complexity (minimum 900 seconds = 15 minutes)
+                
+                Return ONLY valid JSON array, no additional text.
+                """;
+        } else {
+            // Standard prompt for general course generation
+            systemPrompt = """
+                You are an expert course designer. Generate a course structure with sections (modules) and lectures.
+                Return a JSON array where each section has:
+                {
+                    "title": "Section title",
+                    "description": "Section description",
+                    "lectures": [
+                        {
+                            "title": "Lecture title",
+                            "description": "Brief lecture description",
+                            "durationSeconds": <MANDATORY - estimated time in seconds for an average student to learn this lecture properly>
+                        }
+                    ]
+                }
+                
+                CRITICAL: The durationSeconds field is MANDATORY for EVERY lecture. You MUST provide it.
+                
+                For each lecture, estimate the duration in seconds (durationSeconds) based on:
+                - The complexity and depth of the content
+                - Typical reading/learning speed (average student reads ~200-250 words per minute)
+                - Time needed to understand concepts, practice, and absorb the material
+                - For video content: actual video length + time for comprehension
+                - For text content: reading time + time for reflection and understanding
+                - Include time for examples, exercises, and practical application
+                
+                Examples:
+                - Short introductory lecture: 300-600 seconds (5-10 minutes)
+                - Standard lecture with concepts and examples: 900-1800 seconds (15-30 minutes)
+                - Comprehensive deep-dive lecture: 2400-3600 seconds (40-60 minutes)
+                
+                Generate %d sections with approximately %d lectures each.
+                Return ONLY valid JSON array, no additional text.
+                """.formatted(requirements.getNumberOfModules(), requirements.getLecturesPerModule());
+        }
         
         String userPrompt = "Course: " + requirements.getTitle() + "\nDescription: " + requirements.getDescription();
         
@@ -203,15 +263,44 @@ public class FoundryAIService {
                 section.setTitle(sectionNode.get("title").asText());
                 section.setDescription(sectionNode.has("description") ? sectionNode.get("description").asText() : "");
                 
+                // Extract module duration if available
+                Integer moduleDurationHours = null;
+                if (sectionNode.has("moduleDurationHours")) {
+                    moduleDurationHours = sectionNode.get("moduleDurationHours").asInt();
+                }
+                
                 List<LectureInfo> lectures = new ArrayList<>();
                 if (sectionNode.has("lectures")) {
+                    int lectureCount = sectionNode.get("lectures").size();
+                    int totalModuleSeconds = moduleDurationHours != null ? moduleDurationHours * 3600 : 0;
+                    
                     for (JsonNode lectureNode : sectionNode.get("lectures")) {
                         LectureInfo lecture = new LectureInfo();
                         lecture.setTitle(lectureNode.get("title").asText());
                         lecture.setDescription(lectureNode.has("description") ? lectureNode.get("description").asText() : "");
+                        
+                        // Get duration from AI response
+                        Integer durationSeconds = null;
                         if (lectureNode.has("durationSeconds")) {
-                            lecture.setDurationSeconds(lectureNode.get("durationSeconds").asInt());
+                            durationSeconds = lectureNode.get("durationSeconds").asInt();
                         }
+                        
+                        // Fallback: If no duration provided, calculate from module duration or use default
+                        if (durationSeconds == null || durationSeconds <= 0) {
+                            if (totalModuleSeconds > 0 && lectureCount > 0) {
+                                // Distribute module time evenly across lectures
+                                durationSeconds = totalModuleSeconds / lectureCount;
+                                logger.info("Calculated duration {} seconds for lecture '{}' from module duration", 
+                                    durationSeconds, lecture.getTitle());
+                            } else {
+                                // Default: 15 minutes (900 seconds) for a standard lecture
+                                durationSeconds = 900;
+                                logger.warn("No duration provided for lecture '{}', using default 900 seconds (15 minutes)", 
+                                    lecture.getTitle());
+                            }
+                        }
+                        
+                        lecture.setDurationSeconds(durationSeconds);
                         lectures.add(lecture);
                     }
                 }
@@ -341,10 +430,12 @@ public class FoundryAIService {
                     {
                         "title": "Sub-lecture title",
                         "description": "Brief sub-lecture description",
-                        "durationSeconds": <estimated time in seconds for an average student to learn this sub-lecture properly>
+                        "durationSeconds": <MANDATORY - estimated time in seconds for an average student to learn this sub-lecture properly>
                     }
                 ]
             }
+            
+            CRITICAL: The durationSeconds field is MANDATORY for EVERY sub-lecture. You MUST provide it.
             
             IMPORTANT: For each sub-lecture, estimate the duration in seconds (durationSeconds) based on:
             - The complexity and depth of the content
@@ -391,9 +482,22 @@ public class FoundryAIService {
                     LectureInfo lecture = new LectureInfo();
                     lecture.setTitle(lectureNode.get("title").asText());
                     lecture.setDescription(lectureNode.has("description") ? lectureNode.get("description").asText() : "");
+                    
+                    // Get duration from AI response
+                    Integer durationSeconds = null;
                     if (lectureNode.has("durationSeconds")) {
-                        lecture.setDurationSeconds(lectureNode.get("durationSeconds").asInt());
+                        durationSeconds = lectureNode.get("durationSeconds").asInt();
                     }
+                    
+                    // Fallback: If no duration provided, use default
+                    if (durationSeconds == null || durationSeconds <= 0) {
+                        // Default: 15 minutes (900 seconds) for a standard sub-lecture
+                        durationSeconds = 900;
+                        logger.warn("No duration provided for sub-lecture '{}', using default 900 seconds (15 minutes)", 
+                            lecture.getTitle());
+                    }
+                    
+                    lecture.setDurationSeconds(durationSeconds);
                     lectures.add(lecture);
                 }
             }
