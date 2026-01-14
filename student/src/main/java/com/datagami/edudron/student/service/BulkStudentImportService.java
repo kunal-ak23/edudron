@@ -12,6 +12,7 @@ import com.datagami.edudron.student.dto.BulkStudentImportRequest;
 import com.datagami.edudron.student.dto.BulkStudentImportResult;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
 import com.datagami.edudron.student.dto.StudentImportRowResult;
+import com.datagami.edudron.student.dto.UpdateUserRequestDTO;
 import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.InstituteRepository;
@@ -33,6 +34,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.HttpClientErrorException;
@@ -412,38 +414,8 @@ public class BulkStudentImportService {
                 rowResult.setSuccess(true);
                 rowResult.setStudentId(user.getId());
                 
-                // Create enrollment if needed
-                if (options.getAutoEnroll() != null && options.getAutoEnroll() && StringUtils.hasText(courseId)) {
-                    try {
-                        CreateEnrollmentRequest enrollmentRequest = new CreateEnrollmentRequest();
-                        enrollmentRequest.setCourseId(courseId);
-                        enrollmentRequest.setClassId(classId);
-                        enrollmentRequest.setBatchId(sectionId); // batchId is used for sectionId
-                        enrollmentRequest.setInstituteId(instituteId);
-                        
-                        enrollmentService.enrollStudent(user.getId(), enrollmentRequest);
-                    } catch (Exception e) {
-                        log.warn("Failed to enroll student {} in course {}: {}", user.getId(), courseId, e.getMessage());
-                        // Don't fail the import if enrollment fails
-                    }
-                }
-                
-                // Enroll in default courses if provided
-                if (options.getDefaultCourseIds() != null && !options.getDefaultCourseIds().isEmpty()) {
-                    for (String defaultCourseId : options.getDefaultCourseIds()) {
-                        try {
-                            CreateEnrollmentRequest enrollmentRequest = new CreateEnrollmentRequest();
-                            enrollmentRequest.setCourseId(defaultCourseId);
-                            enrollmentRequest.setClassId(classId);
-                            enrollmentRequest.setBatchId(sectionId);
-                            enrollmentRequest.setInstituteId(instituteId);
-                            
-                            enrollmentService.enrollStudent(user.getId(), enrollmentRequest);
-                        } catch (Exception e) {
-                            log.warn("Failed to enroll student {} in default course {}: {}", user.getId(), defaultCourseId, e.getMessage());
-                        }
-                    }
-                }
+                // Handle enrollments and associations
+                handleEnrollmentsAndAssociations(user, classId, sectionId, courseId, instituteId, options, clientId, rowResult);
             } else {
                 rowResult.setSuccess(false);
                 rowResult.setErrorMessage("Failed to create user: " + (response.getBody() != null ? response.getBody().toString() : "Unknown error"));
@@ -460,10 +432,26 @@ public class BulkStudentImportService {
             // Check if user already exists
             if (errorMessage.contains("already exists") || errorMessage.contains("User already exists")) {
                 if (options.getUpsertExisting() != null && options.getUpsertExisting()) {
-                    // Try to get existing user - for now, mark as skipped
-                    // In future, could fetch user and update if needed
-                    rowResult.setSuccess(false);
-                    rowResult.setErrorMessage("User already exists (upsert not yet implemented)");
+                    // Try to update existing user
+                    try {
+                        UserResponseDTO existingUser = findUserByEmail(email, clientId);
+                        if (existingUser != null) {
+                            // Update the user
+                            UserResponseDTO updatedUser = updateExistingUser(existingUser.getId(), email, name, phone, instituteId, clientId);
+                            rowResult.setSuccess(true);
+                            rowResult.setStudentId(updatedUser.getId());
+                            
+                            // Handle enrollments and associations (same as for new users)
+                            handleEnrollmentsAndAssociations(updatedUser, classId, sectionId, courseId, instituteId, options, clientId, rowResult);
+                        } else {
+                            rowResult.setSuccess(false);
+                            rowResult.setErrorMessage("User already exists but could not be found for update");
+                        }
+                    } catch (Exception updateException) {
+                        log.error("Row {}: Failed to update existing user {}: {}", rowNumber, email, updateException.getMessage());
+                        rowResult.setSuccess(false);
+                        rowResult.setErrorMessage("Failed to update existing user: " + updateException.getMessage());
+                    }
                 } else {
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("User already exists with this email");
@@ -480,11 +468,41 @@ public class BulkStudentImportService {
                 }
             } catch (Exception ignored) {}
             
-            log.error("Row {}: Server error creating user. Status: {}, Response: {}", 
-                rowNumber, e.getStatusCode(), errorMessage);
-            
-            rowResult.setSuccess(false);
-            rowResult.setErrorMessage(errorMessage);
+            // Check if this is a "user already exists" error (sometimes returned as 500)
+            if (errorMessage.contains("already exists") || errorMessage.contains("User already exists")) {
+                if (options.getUpsertExisting() != null && options.getUpsertExisting()) {
+                    // Try to update existing user
+                    try {
+                        UserResponseDTO existingUser = findUserByEmail(email, clientId);
+                        if (existingUser != null) {
+                            // Update the user
+                            UserResponseDTO updatedUser = updateExistingUser(existingUser.getId(), email, name, phone, instituteId, clientId);
+                            rowResult.setSuccess(true);
+                            rowResult.setStudentId(updatedUser.getId());
+                            
+                            // Handle enrollments and associations (same as for new users)
+                            handleEnrollmentsAndAssociations(updatedUser, classId, sectionId, courseId, instituteId, options, clientId, rowResult);
+                        } else {
+                            rowResult.setSuccess(false);
+                            rowResult.setErrorMessage("User already exists but could not be found for update");
+                        }
+                    } catch (Exception updateException) {
+                        log.error("Row {}: Failed to update existing user {}: {}", rowNumber, email, updateException.getMessage());
+                        rowResult.setSuccess(false);
+                        rowResult.setErrorMessage("Failed to update existing user: " + updateException.getMessage());
+                    }
+                } else {
+                    log.error("Row {}: Server error creating user. Status: {}, Response: {}", 
+                        rowNumber, e.getStatusCode(), errorMessage);
+                    rowResult.setSuccess(false);
+                    rowResult.setErrorMessage(errorMessage);
+                }
+            } else {
+                log.error("Row {}: Server error creating user. Status: {}, Response: {}", 
+                    rowNumber, e.getStatusCode(), errorMessage);
+                rowResult.setSuccess(false);
+                rowResult.setErrorMessage(errorMessage);
+            }
         } catch (Exception e) {
             log.error("Row {}: Unexpected error creating user", rowNumber, e);
             rowResult.setSuccess(false);
@@ -554,6 +572,164 @@ public class BulkStudentImportService {
                 return cell.getCellFormula();
             default:
                 return null;
+        }
+    }
+    
+    /**
+     * Find user by email by searching through all users
+     */
+    private UserResponseDTO findUserByEmail(String email, UUID clientId) {
+        try {
+            String usersUrl = gatewayUrl + "/idp/users";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<UserResponseDTO[]> response = getRestTemplate().exchange(
+                usersUrl,
+                HttpMethod.GET,
+                entity,
+                UserResponseDTO[].class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                for (UserResponseDTO user : response.getBody()) {
+                    if (email.equalsIgnoreCase(user.getEmail()) && 
+                        (clientId == null || clientId.equals(user.getClientId()))) {
+                        return user;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to find user by email {}: {}", email, e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Update an existing user
+     */
+    private UserResponseDTO updateExistingUser(String userId, String email, String name, String phone, 
+                                               String instituteId, UUID clientId) {
+        try {
+            // Create update request
+            UpdateUserRequestDTO updateRequest = new UpdateUserRequestDTO();
+            updateRequest.setEmail(email);
+            updateRequest.setName(name);
+            updateRequest.setPhone(phone);
+            updateRequest.setRole("STUDENT");
+            updateRequest.setActive(true);
+            if (StringUtils.hasText(instituteId)) {
+                updateRequest.setInstituteIds(java.util.Collections.singletonList(instituteId));
+            }
+            
+            String updateUrl = gatewayUrl + "/idp/users/" + userId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<UpdateUserRequestDTO> entity = new HttpEntity<>(updateRequest, headers);
+            
+            ResponseEntity<UserResponseDTO> response = getRestTemplate().exchange(
+                updateUrl,
+                HttpMethod.PUT,
+                entity,
+                UserResponseDTO.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.error("Failed to update user {}: {}", userId, e.getMessage());
+            throw new RuntimeException("Failed to update user: " + e.getMessage(), e);
+        }
+        return null;
+    }
+    
+    /**
+     * Handle enrollments and class/section associations for a user
+     */
+    private void handleEnrollmentsAndAssociations(UserResponseDTO user, String classId, String sectionId, 
+                                                   String courseId, String instituteId,
+                                                   BulkStudentImportRequest options, UUID clientId,
+                                                   StudentImportRowResult rowResult) {
+        boolean hasEnrollment = false;
+        
+        // Create enrollment if needed
+        if (options.getAutoEnroll() != null && options.getAutoEnroll() && StringUtils.hasText(courseId)) {
+            try {
+                CreateEnrollmentRequest enrollmentRequest = new CreateEnrollmentRequest();
+                enrollmentRequest.setCourseId(courseId);
+                enrollmentRequest.setClassId(classId);
+                enrollmentRequest.setBatchId(sectionId); // batchId is used for sectionId
+                enrollmentRequest.setInstituteId(instituteId);
+                
+                enrollmentService.enrollStudent(user.getId(), enrollmentRequest);
+                hasEnrollment = true;
+            } catch (Exception e) {
+                log.warn("Failed to enroll student {} in course {}: {}", user.getId(), courseId, e.getMessage());
+                // Don't fail the import if enrollment fails
+            }
+        }
+        
+        // Enroll in default courses if provided
+        if (options.getDefaultCourseIds() != null && !options.getDefaultCourseIds().isEmpty()) {
+            for (String defaultCourseId : options.getDefaultCourseIds()) {
+                try {
+                    CreateEnrollmentRequest enrollmentRequest = new CreateEnrollmentRequest();
+                    enrollmentRequest.setCourseId(defaultCourseId);
+                    enrollmentRequest.setClassId(classId);
+                    enrollmentRequest.setBatchId(sectionId);
+                    enrollmentRequest.setInstituteId(instituteId);
+                    
+                    enrollmentService.enrollStudent(user.getId(), enrollmentRequest);
+                    hasEnrollment = true;
+                } catch (Exception e) {
+                    log.warn("Failed to enroll student {} in default course {}: {}", user.getId(), defaultCourseId, e.getMessage());
+                }
+            }
+        }
+        
+        // If student has classId or sectionId but no enrollment created yet, create a placeholder enrollment
+        if (!hasEnrollment && (StringUtils.hasText(classId) || StringUtils.hasText(sectionId))) {
+            try {
+                String placeholderCourseId = "__PLACEHOLDER_ASSOCIATION__";
+                
+                // Check if placeholder enrollment already exists
+                // Use try-catch to handle potential transaction errors
+                boolean exists = false;
+                try {
+                    exists = enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, user.getId(), placeholderCourseId);
+                } catch (Exception checkException) {
+                    // If the check fails (e.g., transaction aborted), log and skip creation
+                    log.debug("Could not check for existing placeholder enrollment for student {}: {}", 
+                        user.getId(), checkException.getMessage());
+                    return; // Skip enrollment creation if we can't check
+                }
+                
+                if (!exists) {
+                    // Create enrollment directly in repository to associate student with class/section
+                    Enrollment placeholderEnrollment = new Enrollment();
+                    placeholderEnrollment.setId(com.datagami.edudron.common.UlidGenerator.nextUlid());
+                    placeholderEnrollment.setClientId(clientId);
+                    placeholderEnrollment.setStudentId(user.getId());
+                    placeholderEnrollment.setCourseId(placeholderCourseId);
+                    placeholderEnrollment.setClassId(classId);
+                    placeholderEnrollment.setBatchId(sectionId); // batchId is used for sectionId
+                    placeholderEnrollment.setInstituteId(instituteId);
+                    
+                    enrollmentRepository.save(placeholderEnrollment);
+                    log.debug("Created placeholder enrollment for student {} to associate with class {} / section {}", 
+                        user.getId(), classId, sectionId);
+                }
+            } catch (org.springframework.dao.DataAccessException e) {
+                // Handle database-specific errors (including transaction aborted)
+                log.warn("Failed to create placeholder enrollment for student {} due to database error: {}", 
+                    user.getId(), e.getMessage());
+                // Don't fail the import if placeholder enrollment fails
+            } catch (Exception e) {
+                log.warn("Failed to create placeholder enrollment for student {}: {}", user.getId(), e.getMessage());
+                // Don't fail the import if placeholder enrollment fails
+            }
         }
     }
 }

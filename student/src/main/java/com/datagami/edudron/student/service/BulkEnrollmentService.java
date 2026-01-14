@@ -84,6 +84,7 @@ public class BulkEnrollmentService {
         
         // Get all students in the class (across all sections)
         // Students are identified by having enrollments with this classId
+        // This includes both real course enrollments and placeholder enrollments (used for association)
         List<Enrollment> classEnrollments = enrollmentRepository.findByClientIdAndClassId(clientId, classId);
         Set<String> studentIds = classEnrollments.stream()
             .map(Enrollment::getStudentId)
@@ -115,6 +116,7 @@ public class BulkEnrollmentService {
         validateCourseAssignment(courseId, classId, sectionId, clientId);
         
         // Get all students in the section (using batchId for backward compatibility)
+        // This includes both real course enrollments and placeholder enrollments (used for association)
         List<Enrollment> sectionEnrollments = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId);
         Set<String> studentIds = sectionEnrollments.stream()
             .map(Enrollment::getStudentId)
@@ -231,6 +233,18 @@ public class BulkEnrollmentService {
                 if (enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId)) {
                     result.setSkippedStudents(result.getSkippedStudents() + 1);
                     continue;
+                }
+                
+                // Remove placeholder enrollment if it exists (student was associated but not enrolled in any course)
+                List<Enrollment> placeholderEnrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId)
+                    .stream()
+                    .filter(e -> "__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()) && 
+                                 (classId != null && classId.equals(e.getClassId())) &&
+                                 (sectionId == null || sectionId.equals(e.getBatchId())))
+                    .collect(Collectors.toList());
+                for (Enrollment placeholder : placeholderEnrollments) {
+                    enrollmentRepository.delete(placeholder);
+                    log.debug("Removed placeholder enrollment for student {} when enrolling in course {}", studentId, courseId);
                 }
                 
                 // Create enrollment

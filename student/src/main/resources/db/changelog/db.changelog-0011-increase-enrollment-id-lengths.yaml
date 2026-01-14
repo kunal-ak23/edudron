@@ -1,0 +1,41 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0011-increase-enrollment-id-lengths
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - tableExists:
+            tableName: enrollments
+            schemaName: student
+      changes:
+        - modifyDataType:
+            tableName: enrollments
+            schemaName: student
+            columnName: id
+            newDataType: varchar(50)
+        - modifyDataType:
+            tableName: enrollments
+            schemaName: student
+            columnName: student_id
+            newDataType: varchar(50)
+        - modifyDataType:
+            tableName: enrollments
+            schemaName: student
+            columnName: course_id
+            newDataType: varchar(50)
+        - modifyDataType:
+            tableName: enrollments
+            schemaName: student
+            columnName: institute_id
+            newDataType: varchar(50)
+        - modifyDataType:
+            tableName: enrollments
+            schemaName: student
+            columnName: class_id
+            newDataType: varchar(50)
+        - modifyDataType:
+            tableName: enrollments
+            schemaName: student
+            columnName: batch_id
+            newDataType: varchar(50)

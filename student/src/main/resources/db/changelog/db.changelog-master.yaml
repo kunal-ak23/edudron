@@ -19,4 +19,6 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0009-feedback-notes-issues.yaml
   - include:
       file: db/changelog/db.changelog-0010-notes-anchor-support.yaml
+  - include:
+      file: db/changelog/db.changelog-0011-increase-enrollment-id-lengths.yaml
 

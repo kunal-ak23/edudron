@@ -70,8 +70,13 @@ export default function ClassEnrollPage() {
       const sectionsData = await sectionsApi.listSectionsByClass(classId)
       setSections(sectionsData)
       
-      // Show all published courses - backend will validate assignment
-      setCourses(coursesData.filter(c => c.isPublished && c.status !== 'ARCHIVED'))
+      // Filter courses to only show those assigned to this class
+      const assignedCourses = coursesData.filter(c => 
+        c.isPublished && 
+        c.status !== 'ARCHIVED' &&
+        (c.assignedToClassIds?.includes(classId) || false)
+      )
+      setCourses(assignedCourses)
       
       // Estimate student count (students with enrollments in this class)
       // This is an approximation - actual count would require API call
@@ -200,12 +205,17 @@ export default function ClassEnrollPage() {
             <CardHeader>
               <CardTitle>Select Courses</CardTitle>
               <CardDescription>
-                Select courses to enroll all students in this class
+                Select courses to enroll all students in this class. Only courses assigned to this class are shown.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {courses.length === 0 ? (
-                <p className="text-gray-500">No published courses available</p>
+                <div className="space-y-2">
+                  <p className="text-gray-500">No courses assigned to this class.</p>
+                  <p className="text-sm text-gray-400">
+                    Assign courses to this class from the course edit page first.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {courses.map((course) => (

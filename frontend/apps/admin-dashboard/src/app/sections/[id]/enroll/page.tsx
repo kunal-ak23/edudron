@@ -60,7 +60,14 @@ export default function SectionEnrollPage() {
       const instituteData = await institutesApi.getInstitute(classData.instituteId)
       setInstitute(instituteData)
       
-      setCourses(coursesData.filter(c => c.isPublished && c.status !== 'ARCHIVED'))
+      // Filter courses to only show those assigned to this section or its class
+      const assignedCourses = coursesData.filter(c => 
+        c.isPublished && 
+        c.status !== 'ARCHIVED' &&
+        (c.assignedToSectionIds?.includes(sectionId) || 
+         c.assignedToClassIds?.includes(classData.id) || false)
+      )
+      setCourses(assignedCourses)
     } catch (err: any) {
       console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
@@ -184,12 +191,17 @@ export default function SectionEnrollPage() {
             <CardHeader>
               <CardTitle>Select Courses</CardTitle>
               <CardDescription>
-                Select courses to enroll all students in this section
+                Select courses to enroll all students in this section. Only courses assigned to this section or its class are shown.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {courses.length === 0 ? (
-                <p className="text-gray-500">No published courses available</p>
+                <div className="space-y-2">
+                  <p className="text-gray-500">No courses assigned to this section or its class.</p>
+                  <p className="text-sm text-gray-400">
+                    Assign courses to this section or class from the course edit page first.
+                  </p>
+                </div>
               ) : (
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {courses.map((course) => (
