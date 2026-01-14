@@ -36,7 +36,6 @@ function getPageTitle(pathname: string): string {
   }
   if (pathname === '/institutes') return 'Institutes'
   if (pathname.startsWith('/institutes')) return 'Institute Details'
-  if (pathname === '/classes') return 'Classes'
   if (pathname.startsWith('/classes')) return 'Class Details'
   if (pathname === '/courses') return 'Courses'
   if (pathname.startsWith('/courses')) {

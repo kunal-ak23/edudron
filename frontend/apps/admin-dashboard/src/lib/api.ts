@@ -1,4 +1,4 @@
-import { ApiClient, CoursesApi, CourseGenerationIndexApi, EnrollmentsApi, PaymentsApi, MediaApi, TenantsApi, TenantBrandingApi, InstitutesApi, ClassesApi, SectionsApi, LecturesApi, StudentsApi } from '@kunal-ak23/edudron-shared-utils'
+import { ApiClient, CoursesApi, CourseGenerationIndexApi, EnrollmentsApi, PaymentsApi, MediaApi, TenantsApi, TenantBrandingApi, TenantFeaturesApi, InstitutesApi, ClassesApi, SectionsApi, LecturesApi, StudentsApi } from '@kunal-ak23/edudron-shared-utils'
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080'
 
@@ -10,6 +10,7 @@ export const paymentsApi = new PaymentsApi(apiClient)
 export const mediaApi = new MediaApi(apiClient)
 export const tenantsApi = new TenantsApi(apiClient)
 export const tenantBrandingApi = new TenantBrandingApi(apiClient)
+export const tenantFeaturesApi = new TenantFeaturesApi(apiClient)
 export const institutesApi = new InstitutesApi(apiClient)
 export const classesApi = new ClassesApi(apiClient)
 export const sectionsApi = new SectionsApi(apiClient)

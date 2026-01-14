@@ -1,6 +1,7 @@
 package com.datagami.edudron.student.service;
 
 import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.Enrollment;
@@ -12,14 +13,26 @@ import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.InstituteRepository;
 import com.datagami.edudron.student.repo.SectionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -27,6 +40,8 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class EnrollmentService {
+    
+    private static final Logger log = LoggerFactory.getLogger(EnrollmentService.class);
     
     @Autowired
     private EnrollmentRepository enrollmentRepository;
@@ -40,12 +55,89 @@ public class EnrollmentService {
     @Autowired
     private InstituteRepository instituteRepository;
     
+    @Value("${GATEWAY_URL:http://localhost:8080}")
+    private String gatewayUrl;
+    
+    private RestTemplate restTemplate;
+    
+    private RestTemplate getRestTemplate() {
+        if (restTemplate == null) {
+            restTemplate = new RestTemplate();
+            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+            interceptors.add(new TenantContextRestTemplateInterceptor());
+            restTemplate.setInterceptors(interceptors);
+        }
+        return restTemplate;
+    }
+    
+    /**
+     * Get the current user's role from SecurityContext.
+     */
+    private String getCurrentUserRole() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getAuthorities() != null) {
+            for (GrantedAuthority authority : authentication.getAuthorities()) {
+                String authorityStr = authority.getAuthority();
+                if (authorityStr.startsWith("ROLE_")) {
+                    return authorityStr.substring(5); // Remove "ROLE_" prefix
+                }
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Check if student self-enrollment is enabled for the current tenant.
+     */
+    private boolean isStudentSelfEnrollmentEnabled(UUID clientId) {
+        try {
+            String featureUrl = gatewayUrl + "/api/tenant/features/student-self-enrollment";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Boolean> response = getRestTemplate().exchange(
+                featureUrl,
+                HttpMethod.GET,
+                entity,
+                Boolean.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return Boolean.TRUE.equals(response.getBody());
+            }
+            
+            // Default to false if call fails
+            log.warn("Failed to fetch student self-enrollment feature, defaulting to false");
+            return false;
+        } catch (Exception e) {
+            log.error("Error checking student self-enrollment feature: {}", e.getMessage(), e);
+            // Default to false on error
+            return false;
+        }
+    }
+    
     public EnrollmentDTO enrollStudent(String studentId, CreateEnrollmentRequest request) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Check if user is a student trying to self-enroll
+        String userRole = getCurrentUserRole();
+        boolean isStudent = "STUDENT".equals(userRole);
+        
+        if (isStudent) {
+            // Check if student self-enrollment is enabled for this tenant
+            boolean selfEnrollmentEnabled = isStudentSelfEnrollmentEnabled(clientId);
+            if (!selfEnrollmentEnabled) {
+                throw new org.springframework.security.access.AccessDeniedException(
+                    "Student self-enrollment is disabled. Please contact your instructor to enroll you in this course."
+                );
+            }
+        }
+        // Admins, instructors, and other roles can always enroll students
         
         // Check if already enrolled
         if (enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, request.getCourseId())) {

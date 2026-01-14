@@ -80,12 +80,6 @@ const menuItems: MenuItem[] = [
     requiresTenant: true,
   },
   {
-    name: 'Classes',
-    href: '/classes',
-    icon: GraduationCap,
-    requiresTenant: true,
-  },
-  {
     name: 'Courses',
     href: '/courses',
     icon: BookOpen,
@@ -166,7 +160,6 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
   const getParentSection = (path: string) => {
     if (path.startsWith('/super-admin')) return 'System Management'
     if (path.startsWith('/institutes')) return 'Institutes'
-    if (path.startsWith('/classes')) return 'Classes'
     if (path.startsWith('/courses')) return 'Courses'
     if (path.startsWith('/enrollments')) return 'Enrollments'
     if (path.startsWith('/payments')) return 'Payments'

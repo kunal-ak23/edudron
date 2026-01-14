@@ -72,28 +72,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            if (jwtUtil.validateToken(jwt)) {
-                // Set tenant context
-                if (tenantHeader != null) {
-                    TenantContext.setClientId(tenantHeader);
-                }
-
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        username, null, new ArrayList<>());
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            } else {
-                // Token is invalid (not expired, but validation failed)
-                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                response.setContentType("application/json");
-                response.setCharacterEncoding("UTF-8");
-                response.getWriter().write("{\"error\":\"Invalid token\",\"code\":\"UNAUTHORIZED\"}");
-                return;
+        // Set tenant context from header (if present) for all requests
+        try {
+            if (tenantHeader != null && !tenantHeader.isBlank()) {
+                TenantContext.setClientId(tenantHeader);
             }
-        }
 
-        filterChain.doFilter(request, response);
+            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                if (jwtUtil.validateToken(jwt)) {
+                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                            username, null, new ArrayList<>());
+                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                } else {
+                    // Token is invalid (not expired, but validation failed)
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("UTF-8");
+                    response.getWriter().write("{\"error\":\"Invalid token\",\"code\":\"UNAUTHORIZED\"}");
+                    return;
+                }
+            }
+
+            filterChain.doFilter(request, response);
+        } finally {
+            // Always clear tenant context after request
+            TenantContext.clear();
+        }
     }
 }
 

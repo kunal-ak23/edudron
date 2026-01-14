@@ -5,12 +5,14 @@ import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, Button, Card } from '@kunal-ak23/edudron-ui-components'
 import { coursesApi, enrollmentsApi, lecturesApi } from '@/lib/api'
 import type { Course, Section } from '@kunal-ak23/edudron-shared-utils'
+import { TenantFeaturesApi, TenantFeatureType } from '@kunal-ak23/edudron-shared-utils'
 import { CommitmentModal } from '@/components/CommitmentModal'
 import { EnrollmentSuccessModal } from '@/components/EnrollmentSuccessModal'
 import { PreviewVideoModal } from '@/components/PreviewVideoModal'
 import { StudentLayout } from '@/components/StudentLayout'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
+import { getApiClient } from '@/lib/api'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -34,6 +36,10 @@ export default function CourseDetailPage() {
   // Check for preview mode
   const [isPreviewMode, setIsPreviewMode] = useState(false)
   const isAdminUser = user && user.role !== 'STUDENT'
+  const [selfEnrollmentEnabled, setSelfEnrollmentEnabled] = useState<boolean | null>(null)
+  
+  // Initialize tenant features API
+  const tenantFeaturesApi = new TenantFeaturesApi(getApiClient())
   
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -42,6 +48,27 @@ export default function CourseDetailPage() {
       setIsPreviewMode(preview && isAdminUser)
     }
   }, [isAdminUser])
+
+  // Check if student self-enrollment is enabled
+  useEffect(() => {
+    const checkSelfEnrollment = async () => {
+      // Only check for students
+      if (user?.role === 'STUDENT') {
+        try {
+          const enabled = await tenantFeaturesApi.isStudentSelfEnrollmentEnabled()
+          setSelfEnrollmentEnabled(enabled)
+        } catch (error) {
+          console.error('Failed to check self-enrollment feature:', error)
+          // Default to false if check fails
+          setSelfEnrollmentEnabled(false)
+        }
+      } else {
+        // Admins/instructors can always enroll
+        setSelfEnrollmentEnabled(true)
+      }
+    }
+    checkSelfEnrollment()
+  }, [user])
 
   const loadCourse = useCallback(async () => {
     try {
@@ -342,33 +369,46 @@ export default function CourseDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex gap-3 mb-3">
-                  <Button
-                    onClick={handleEnrollClick}
-                    variant="primary"
-                    size="lg"
-                    className="font-bold !text-white"
-                  >
-                    {course.isFree ? 'Start learning' : 'Enroll for Free'}
-                  </Button>
-                  {course.previewVideoUrl ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowPreviewVideoModal(true)}
-                      size="lg"
-                      className="font-bold border-gray-300"
-                    >
-                      Preview
-                    </Button>
+                <div className="mb-3">
+                  {selfEnrollmentEnabled === false && user?.role === 'STUDENT' ? (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <p className="text-amber-800 text-sm font-medium mb-1">
+                        Enrollment is managed by your instructor
+                      </p>
+                      <p className="text-amber-700 text-xs">
+                        Please contact your instructor to enroll you in this course.
+                      </p>
+                    </div>
                   ) : (
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push(`/courses/${courseId}/learn`)}
-                      size="lg"
-                      className="font-bold border-gray-300"
-                    >
-                      Preview
-                    </Button>
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={handleEnrollClick}
+                        variant="primary"
+                        size="lg"
+                        className="font-bold !text-white"
+                      >
+                        {course.isFree ? 'Start learning' : 'Enroll for Free'}
+                      </Button>
+                      {course.previewVideoUrl ? (
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowPreviewVideoModal(true)}
+                          size="lg"
+                          className="font-bold border-gray-300"
+                        >
+                          Preview
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          onClick={() => router.push(`/courses/${courseId}/learn`)}
+                          size="lg"
+                          className="font-bold border-gray-300"
+                        >
+                          Preview
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

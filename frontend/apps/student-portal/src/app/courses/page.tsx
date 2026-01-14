@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ProtectedRoute, CourseCard, SearchBar, FilterBar } from '@kunal-ak23/edudron-ui-components'
 import { coursesApi, enrollmentsApi } from '@/lib/api'
 import { StudentLayout } from '@/components/StudentLayout'
-import type { Course } from '@kunal-ak23/edudron-shared-utils'
+import type { Course, Enrollment } from '@kunal-ak23/edudron-shared-utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -22,6 +22,7 @@ export default function CoursesPage() {
     price: ''
   })
   const [user, setUser] = useState<any>(null)
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([])
 
   const loadData = useCallback(async () => {
     try {
@@ -30,9 +31,27 @@ export default function CoursesPage() {
         setUser(JSON.parse(userStr))
       }
 
-      const coursesData = await coursesApi.listCourses({ status: 'PUBLISHED' })
-      setCourses(coursesData)
-      setFilteredCourses(coursesData)
+      // Fetch published courses and enrollments in parallel
+      const [coursesData, enrollmentsData] = await Promise.all([
+        coursesApi.listCourses({ status: 'PUBLISHED' }),
+        enrollmentsApi.listEnrollments().catch(() => []) // Don't fail if enrollments fail
+      ])
+
+      setEnrollments(enrollmentsData)
+      
+      // Get enrolled course IDs
+      const enrolledCourseIds = new Set(enrollmentsData.map(e => e.courseId))
+      
+      // Fetch all courses (including drafts) to check for enrolled draft courses
+      const allCourses = await coursesApi.listCourses().catch(() => coursesData)
+      
+      // Filter: show published courses OR enrolled courses (even if draft)
+      const visibleCourses = allCourses.filter(course => 
+        course.isPublished || enrolledCourseIds.has(course.id)
+      )
+      
+      setCourses(visibleCourses)
+      setFilteredCourses(visibleCourses)
     } catch (error) {
       console.error('Failed to load courses:', error)
     } finally {

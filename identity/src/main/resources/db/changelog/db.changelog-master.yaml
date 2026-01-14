@@ -54,4 +54,6 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0005-user-institutes.yaml
   - include:
       file: db/changelog/db.changelog-0006-password-reset.yaml
+  - include:
+      file: db/changelog/db.changelog-0007-tenant-features.yaml
 
