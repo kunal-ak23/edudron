@@ -9,6 +9,8 @@ import com.datagami.edudron.student.domain.Institute;
 import com.datagami.edudron.student.domain.Section;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
 import com.datagami.edudron.student.dto.EnrollmentDTO;
+import com.datagami.edudron.student.dto.SectionStudentDTO;
+import com.datagami.edudron.student.dto.StudentClassSectionInfoDTO;
 import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.InstituteRepository;
@@ -311,6 +313,200 @@ public class EnrollmentService {
         Enrollment enrollment = enrollments.get(0); // Use first (most recent) enrollment if duplicates exist
         
         enrollmentRepository.delete(enrollment);
+    }
+    
+    /**
+     * Get student's current class and section information from their enrollments.
+     * Returns the most recent enrollment that has both class and section associations.
+     * Returns null if no class/section association is found.
+     */
+    @Transactional(readOnly = true)
+    public StudentClassSectionInfoDTO getStudentClassSectionInfo(String studentId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        log.debug("Fetching class/section info for student {} in tenant {}", studentId, clientId);
+        
+        // Get all enrollments for the student
+        List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId);
+        log.debug("Found {} enrollments for student {}", enrollments.size(), studentId);
+        
+        // Find the most recent enrollment with both classId and sectionId
+        Enrollment enrollmentWithSection = null;
+        Enrollment enrollmentWithClass = null;
+        Enrollment enrollmentWithOnlySection = null;
+        
+        for (Enrollment enrollment : enrollments) {
+            // Prefer enrollment with both class and section
+            if (enrollment.getClassId() != null && enrollment.getBatchId() != null) {
+                enrollmentWithSection = enrollment;
+                log.debug("Found enrollment with both class {} and section {}", 
+                    enrollment.getClassId(), enrollment.getBatchId());
+                break; // Found the best match
+            }
+            // Fallback to enrollment with just class
+            if (enrollmentWithClass == null && enrollment.getClassId() != null) {
+                enrollmentWithClass = enrollment;
+                log.debug("Found enrollment with class {} (no section)", enrollment.getClassId());
+            }
+            // Also check for enrollment with just section (batchId)
+            if (enrollmentWithOnlySection == null && enrollment.getBatchId() != null) {
+                enrollmentWithOnlySection = enrollment;
+                log.debug("Found enrollment with section {} (no class in enrollment)", enrollment.getBatchId());
+            }
+        }
+        
+        Enrollment targetEnrollment = enrollmentWithSection != null ? enrollmentWithSection : 
+                                      (enrollmentWithClass != null ? enrollmentWithClass : enrollmentWithOnlySection);
+        
+        if (targetEnrollment == null) {
+            log.debug("No enrollment with class/section found for student {}", studentId);
+            return null; // No class/section association found
+        }
+        
+        String classId = targetEnrollment.getClassId();
+        String sectionId = targetEnrollment.getBatchId(); // batchId is sectionId
+        
+        // If we have a sectionId but no classId, get classId from the section
+        if (sectionId != null && classId == null) {
+            Section section = sectionRepository.findByIdAndClientId(sectionId, clientId).orElse(null);
+            if (section != null) {
+                classId = section.getClassId();
+                log.debug("Retrieved classId {} from section {}", classId, sectionId);
+            }
+        }
+        
+        String className = null;
+        String sectionName = null;
+        
+        // Fetch class name
+        if (classId != null) {
+            Class classEntity = classRepository.findByIdAndClientId(classId, clientId).orElse(null);
+            if (classEntity != null) {
+                className = classEntity.getName();
+                log.debug("Found class name: {}", className);
+            } else {
+                log.warn("Class {} not found for student {}", classId, studentId);
+            }
+        }
+        
+        // Fetch section name
+        if (sectionId != null) {
+            Section section = sectionRepository.findByIdAndClientId(sectionId, clientId).orElse(null);
+            if (section != null) {
+                sectionName = section.getName();
+                log.debug("Found section name: {}", sectionName);
+            } else {
+                log.warn("Section {} not found for student {}", sectionId, studentId);
+            }
+        }
+        
+        StudentClassSectionInfoDTO result = new StudentClassSectionInfoDTO(classId, className, sectionId, sectionName);
+        log.debug("Returning class/section info for student {}: class={}, section={}", 
+            studentId, className, sectionName);
+        return result;
+    }
+    
+    /**
+     * Get all students enrolled in a section.
+     * Returns a list of student information (id, name, email, phone) for students associated with the section.
+     */
+    @Transactional(readOnly = true)
+    public List<SectionStudentDTO> getStudentsBySection(String sectionId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Validate section exists
+        Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+        
+        // Get all enrollments for this section (batchId is sectionId)
+        List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId);
+        
+        // Extract unique student IDs
+        List<String> studentIds = enrollments.stream()
+            .map(Enrollment::getStudentId)
+            .distinct()
+            .collect(Collectors.toList());
+        
+        if (studentIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Fetch user details from identity service
+        List<SectionStudentDTO> students = new ArrayList<>();
+        for (String studentId : studentIds) {
+            try {
+                UserDTO user = getUserFromIdentityService(studentId);
+                if (user != null) {
+                    students.add(new SectionStudentDTO(
+                        user.getId(),
+                        user.getName(),
+                        user.getEmail(),
+                        user.getPhone()
+                    ));
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch user details for student {}: {}", studentId, e.getMessage());
+                // Continue with other students even if one fails
+            }
+        }
+        
+        return students;
+    }
+    
+    /**
+     * Inner class to deserialize user info from identity service
+     */
+    private static class UserDTO {
+        private String id;
+        private String name;
+        private String email;
+        private String phone;
+        
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        
+        public String getPhone() { return phone; }
+        public void setPhone(String phone) { this.phone = phone; }
+    }
+    
+    /**
+     * Fetch user details from identity service
+     */
+    private UserDTO getUserFromIdentityService(String userId) {
+        try {
+            String url = gatewayUrl + "/idp/users/" + userId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<UserDTO> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                entity,
+                UserDTO.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.debug("Could not fetch user details for user {}: {}", userId, e.getMessage());
+        }
+        return null;
     }
     
     private EnrollmentDTO toDTO(Enrollment enrollment) {

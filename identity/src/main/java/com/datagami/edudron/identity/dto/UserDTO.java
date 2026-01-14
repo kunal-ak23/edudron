@@ -16,6 +16,12 @@ public class UserDTO {
     private List<String> instituteIds;
     private OffsetDateTime createdAt;
     private OffsetDateTime lastLoginAt;
+    
+    // Student-specific fields (only populated for STUDENT role)
+    private String classId;
+    private String className;
+    private String sectionId;
+    private String sectionName;
 
     // Constructors
     public UserDTO() {}
@@ -99,6 +105,18 @@ public class UserDTO {
 
     public Boolean getPasswordResetRequired() { return passwordResetRequired; }
     public void setPasswordResetRequired(Boolean passwordResetRequired) { this.passwordResetRequired = passwordResetRequired; }
+
+    public String getClassId() { return classId; }
+    public void setClassId(String classId) { this.classId = classId; }
+
+    public String getClassName() { return className; }
+    public void setClassName(String className) { this.className = className; }
+
+    public String getSectionId() { return sectionId; }
+    public void setSectionId(String sectionId) { this.sectionId = sectionId; }
+
+    public String getSectionName() { return sectionName; }
+    public void setSectionName(String sectionName) { this.sectionName = sectionName; }
 }
 
 

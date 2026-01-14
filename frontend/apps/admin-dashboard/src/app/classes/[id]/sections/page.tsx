@@ -15,11 +15,18 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Plus, Loader2, ArrowLeft, Users, Edit } from 'lucide-react'
-import { classesApi, sectionsApi, institutesApi } from '@/lib/api'
+import { classesApi, sectionsApi, institutesApi, apiClient } from '@/lib/api'
 import type { Class, Section, Institute } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export default function ClassSectionsPage() {
   const router = useRouter()
@@ -30,6 +37,10 @@ export default function ClassSectionsPage() {
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [loading, setLoading] = useState(true)
+  const [studentsDialogOpen, setStudentsDialogOpen] = useState(false)
+  const [selectedSection, setSelectedSection] = useState<Section | null>(null)
+  const [students, setStudents] = useState<Array<{id: string, name: string, email: string, phone: string | null}>>([])
+  const [loadingStudents, setLoadingStudents] = useState(false)
 
   useEffect(() => {
     if (classId) {
@@ -65,6 +76,40 @@ export default function ClassSectionsPage() {
 
   const handleEdit = (section: Section) => {
     router.push(`/sections/${section.id}`)
+  }
+
+  const handleViewStudents = async (section: Section) => {
+    setSelectedSection(section)
+    setStudentsDialogOpen(true)
+    setLoadingStudents(true)
+    setStudents([])
+    
+    try {
+      const response = await apiClient.get<Array<{id: string, name: string, email: string, phone: string | null}>>(
+        `/api/sections/${section.id}/students`
+      )
+      
+      // Handle different response formats
+      let studentsData: Array<{id: string, name: string, email: string, phone: string | null}> = []
+      if (Array.isArray(response)) {
+        studentsData = response
+      } else if (response && typeof response === 'object' && 'data' in response && Array.isArray(response.data)) {
+        studentsData = response.data as Array<{id: string, name: string, email: string, phone: string | null}>
+      }
+      
+      setStudents(studentsData)
+    } catch (err: any) {
+      console.error('Error loading students:', err)
+      const errorMessage = extractErrorMessage(err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to load students',
+        description: errorMessage,
+      })
+      setStudents([]) // Ensure students is always an array even on error
+    } finally {
+      setLoadingStudents(false)
+    }
   }
 
   if (loading) {
@@ -154,11 +199,17 @@ export default function ClassSectionsPage() {
                         <TableCell>{section.endDate || '-'}</TableCell>
                         <TableCell>{section.maxStudents ? `${section.maxStudents}` : 'Unlimited'}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleViewStudents(section)}
+                            className="flex items-center gap-1 hover:text-primary cursor-pointer transition-colors"
+                            disabled={!section.studentCount || section.studentCount === 0}
+                          >
                             <Users className="h-4 w-4 text-gray-400" />
-                            {section.studentCount || 0}
+                            <span className={section.studentCount && section.studentCount > 0 ? 'hover:underline' : ''}>
+                              {section.studentCount || 0}
+                            </span>
                             {section.maxStudents && ` / ${section.maxStudents}`}
-                          </div>
+                          </button>
                         </TableCell>
                         <TableCell>
                           <Badge variant={section.isActive ? 'default' : 'secondary'}>
@@ -182,6 +233,56 @@ export default function ClassSectionsPage() {
               )}
             </CardContent>
           </Card>
+
+          <Dialog open={studentsDialogOpen} onOpenChange={setStudentsDialogOpen}>
+            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  Students in {selectedSection?.name}
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedSection && (
+                    <>
+                      Total students: {selectedSection.studentCount || 0}
+                      {selectedSection.maxStudents && ` (Capacity: ${selectedSection.maxStudents})`}
+                    </>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+              {loadingStudents ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : !Array.isArray(students) || students.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-semibold text-gray-900">No students found</h3>
+                  <p className="mt-1 text-sm text-gray-500">This section has no enrolled students.</p>
+                </div>
+              ) : (
+                <div className="mt-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Phone</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Array.isArray(students) && students.map((student) => (
+                        <TableRow key={student.id}>
+                          <TableCell className="font-medium">{student.name}</TableCell>
+                          <TableCell>{student.email}</TableCell>
+                          <TableCell>{student.phone || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
   )

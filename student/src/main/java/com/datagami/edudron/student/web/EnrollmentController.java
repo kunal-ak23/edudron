@@ -2,11 +2,12 @@ package com.datagami.edudron.student.web;
 
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
 import com.datagami.edudron.student.dto.EnrollmentDTO;
+import com.datagami.edudron.student.dto.SectionStudentDTO;
+import com.datagami.edudron.student.dto.StudentClassSectionInfoDTO;
 import com.datagami.edudron.student.service.EnrollmentService;
 import com.datagami.edudron.student.util.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -78,6 +79,24 @@ public class EnrollmentController {
         String studentId = UserUtil.getCurrentUserId();
         enrollmentService.unenroll(studentId, courseId);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/students/{studentId}/class-section")
+    @Operation(summary = "Get student class and section info", description = "Get the current class and section information for a student")
+    public ResponseEntity<StudentClassSectionInfoDTO> getStudentClassSectionInfo(@PathVariable String studentId) {
+        StudentClassSectionInfoDTO info = enrollmentService.getStudentClassSectionInfo(studentId);
+        if (info == null) {
+            // Return empty DTO instead of 204 to avoid issues with RestTemplate
+            return ResponseEntity.ok(new StudentClassSectionInfoDTO(null, null, null, null));
+        }
+        return ResponseEntity.ok(info);
+    }
+
+    @GetMapping("/sections/{sectionId}/students")
+    @Operation(summary = "Get students by section", description = "Get all students enrolled in a section")
+    public ResponseEntity<List<SectionStudentDTO>> getStudentsBySection(@PathVariable String sectionId) {
+        List<SectionStudentDTO> students = enrollmentService.getStudentsBySection(sectionId);
+        return ResponseEntity.ok(students);
     }
 }
 

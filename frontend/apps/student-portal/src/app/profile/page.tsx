@@ -21,6 +21,11 @@ interface UserProfile {
   instituteIds?: string[]
   createdAt: string
   lastLoginAt?: string
+  // Student-specific fields
+  classId?: string
+  className?: string
+  sectionId?: string
+  sectionName?: string
 }
 
 export default function ProfilePage() {
@@ -229,6 +234,28 @@ export default function ProfilePage() {
               <Label className="text-gray-600">Role</Label>
               <p className="text-sm font-medium mt-1 text-gray-900">{profile.role}</p>
             </div>
+            {profile.role?.toUpperCase() === 'STUDENT' && (
+              <>
+                {profile.className && (
+                  <div>
+                    <Label className="text-gray-600">Class</Label>
+                    <p className="text-sm font-medium mt-1 text-gray-900">{profile.className}</p>
+                  </div>
+                )}
+                {profile.sectionName && (
+                  <div>
+                    <Label className="text-gray-600">Section</Label>
+                    <p className="text-sm font-medium mt-1 text-gray-900">{profile.sectionName}</p>
+                  </div>
+                )}
+                {!profile.className && !profile.sectionName && (
+                  <div>
+                    <Label className="text-gray-600">Class/Section</Label>
+                    <p className="text-sm font-medium mt-1 text-gray-500 italic">Not assigned</p>
+                  </div>
+                )}
+              </>
+            )}
             <div>
               <Label className="text-gray-600">Account Created</Label>
               <p className="text-sm font-medium mt-1 text-gray-900">{formatDate(profile.createdAt)}</p>

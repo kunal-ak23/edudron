@@ -2,6 +2,16 @@ package com.datagami.edudron.identity.service;
 
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.UlidGenerator;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 import com.datagami.edudron.identity.domain.User;
 import com.datagami.edudron.identity.domain.UserInstitute;
 import com.datagami.edudron.identity.dto.CreateUserRequest;
@@ -37,6 +47,12 @@ public class UserService {
     
     @Autowired
     private PasswordEncoder passwordEncoder;
+    
+    @Autowired
+    private RestTemplate restTemplate;
+    
+    @Value("${GATEWAY_URL:http://localhost:8080}")
+    private String gatewayUrl;
     
     @Transactional(readOnly = true)
     public List<UserDTO> getAllUsers() {
@@ -486,7 +502,7 @@ public class UserService {
     
     private UserDTO toDTO(User user) {
         List<String> instituteIds = getUserInstitutes(user.getId());
-        return new UserDTO(
+        UserDTO dto = new UserDTO(
             user.getId(),
             user.getClientId(),
             user.getEmail(),
@@ -499,6 +515,106 @@ public class UserService {
             user.getCreatedAt(),
             user.getLastLoginAt()
         );
+        
+        // If user is a STUDENT, fetch class and section info
+        if (user.getRole() == User.Role.STUDENT && user.getClientId() != null) {
+            try {
+                StudentClassSectionInfo info = getStudentClassSectionInfo(user.getId());
+                if (info != null) {
+                    dto.setClassId(info.getClassId());
+                    dto.setClassName(info.getClassName());
+                    dto.setSectionId(info.getSectionId());
+                    dto.setSectionName(info.getSectionName());
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch class/section info for student {}: {}", user.getId(), e.getMessage());
+                // Continue without class/section info rather than failing
+            }
+        }
+        
+        return dto;
+    }
+    
+    /**
+     * Inner class to deserialize student class/section info from student service
+     */
+    private static class StudentClassSectionInfo {
+        private String classId;
+        private String className;
+        private String sectionId;
+        private String sectionName;
+        
+        public String getClassId() { return classId; }
+        public void setClassId(String classId) { this.classId = classId; }
+        
+        public String getClassName() { return className; }
+        public void setClassName(String className) { this.className = className; }
+        
+        public String getSectionId() { return sectionId; }
+        public void setSectionId(String sectionId) { this.sectionId = sectionId; }
+        
+        public String getSectionName() { return sectionName; }
+        public void setSectionName(String sectionName) { this.sectionName = sectionName; }
+    }
+    
+    /**
+     * Fetch student's class and section info from student service
+     */
+    private StudentClassSectionInfo getStudentClassSectionInfo(String studentId) {
+        try {
+            String url = gatewayUrl + "/api/students/" + studentId + "/class-section";
+            log.debug("Fetching class/section info for student {} from URL: {}", studentId, url);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            
+            // Forward the Authorization header from the current request
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                String authHeader = request.getHeader("Authorization");
+                if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                    headers.set("Authorization", authHeader);
+                    log.debug("Forwarding Authorization header to student service");
+                } else {
+                    log.warn("No Authorization header found in current request, student service call may fail");
+                }
+            } else {
+                log.warn("No request context available, cannot forward Authorization header");
+            }
+            
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<StudentClassSectionInfo> response = restTemplate.exchange(
+                url,
+                HttpMethod.GET,
+                entity,
+                StudentClassSectionInfo.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful()) {
+                if (response.getStatusCode().value() == 204 || response.getBody() == null) {
+                    log.debug("Student {} has no class/section association (204 No Content)", studentId);
+                    return null;
+                }
+                log.debug("Successfully fetched class/section info for student {}: class={}, section={}", 
+                    studentId, response.getBody().getClassName(), response.getBody().getSectionName());
+                return response.getBody();
+            } else {
+                log.warn("Unexpected status code {} when fetching class/section info for student {}", 
+                    response.getStatusCode(), studentId);
+            }
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 204) {
+                log.debug("Student {} has no class/section association (204 No Content)", studentId);
+            } else {
+                log.warn("HTTP error fetching class/section info for student {}: {} - {}", 
+                    studentId, e.getStatusCode(), e.getMessage());
+            }
+        } catch (Exception e) {
+            log.warn("Error fetching class/section info for student {}: {}", studentId, e.getMessage(), e);
+        }
+        return null;
     }
 }
 
