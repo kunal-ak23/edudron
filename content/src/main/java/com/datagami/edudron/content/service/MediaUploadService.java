@@ -217,8 +217,16 @@ public class MediaUploadService {
                     .setMaxConcurrency(4); // 4 parallel uploads
             
             // Upload from file - this streams from disk, not memory
-            // Method signature: uploadFromFile(path, parallelTransferOptions, headers, metadata, requestConditions)
-            blobClient.uploadFromFile(tempFile.getAbsolutePath(), parallelTransferOptions, headers, null, null);
+            // Method signature: uploadFromFile(path, parallelTransferOptions, headers, metadata, accessTier, requestConditions, timeout)
+            blobClient.uploadFromFile(
+                    tempFile.getAbsolutePath(), 
+                    parallelTransferOptions, 
+                    headers, 
+                    null, // metadata
+                    null, // accessTier
+                    null, // requestConditions
+                    null  // timeout
+            );
         } finally {
             // Clean up temp file
             if (tempFile != null && tempFile.exists()) {
