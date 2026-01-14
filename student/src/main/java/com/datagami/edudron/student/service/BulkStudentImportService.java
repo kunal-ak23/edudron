@@ -35,6 +35,8 @@ import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -185,10 +187,42 @@ public class BulkStudentImportService {
         String name = safeValue(record, "name");
         String phone = safeValue(record, "phone");
         String password = safeValue(record, "password");
+        
+        // Try multiple case variations for instituteId
         String instituteId = safeValue(record, "instituteid");
+        if (instituteId == null || instituteId.isEmpty()) {
+            instituteId = safeValue(record, "instituteId");
+        }
+        if (instituteId == null || instituteId.isEmpty()) {
+            instituteId = safeValue(record, "INSTITUTEID");
+        }
+        
+        // Try multiple case variations for classId
         String classId = safeValue(record, "classid");
+        if (classId == null || classId.isEmpty()) {
+            classId = safeValue(record, "classId");
+        }
+        if (classId == null || classId.isEmpty()) {
+            classId = safeValue(record, "CLASSID");
+        }
+        
+        // Try multiple case variations for sectionId
         String sectionId = safeValue(record, "sectionid");
+        if (sectionId == null || sectionId.isEmpty()) {
+            sectionId = safeValue(record, "sectionId");
+        }
+        if (sectionId == null || sectionId.isEmpty()) {
+            sectionId = safeValue(record, "SECTIONID");
+        }
+        
+        // Try multiple case variations for courseId
         String courseId = safeValue(record, "courseid");
+        if (courseId == null || courseId.isEmpty()) {
+            courseId = safeValue(record, "courseId");
+        }
+        if (courseId == null || courseId.isEmpty()) {
+            courseId = safeValue(record, "COURSEID");
+        }
         
         processStudentData(rowNumber, email, name, phone, password, instituteId, classId, sectionId, courseId, options, clientId, rowResults);
     }
@@ -199,10 +233,42 @@ public class BulkStudentImportService {
         String name = getCellValue(row, columnMap, "name");
         String phone = getCellValue(row, columnMap, "phone");
         String password = getCellValue(row, columnMap, "password");
+        
+        // Try multiple case variations for instituteId
         String instituteId = getCellValue(row, columnMap, "instituteid");
+        if (instituteId == null || instituteId.isEmpty()) {
+            instituteId = getCellValue(row, columnMap, "instituteId");
+        }
+        if (instituteId == null || instituteId.isEmpty()) {
+            instituteId = getCellValue(row, columnMap, "INSTITUTEID");
+        }
+        
+        // Try multiple case variations for classId
         String classId = getCellValue(row, columnMap, "classid");
+        if (classId == null || classId.isEmpty()) {
+            classId = getCellValue(row, columnMap, "classId");
+        }
+        if (classId == null || classId.isEmpty()) {
+            classId = getCellValue(row, columnMap, "CLASSID");
+        }
+        
+        // Try multiple case variations for sectionId
         String sectionId = getCellValue(row, columnMap, "sectionid");
+        if (sectionId == null || sectionId.isEmpty()) {
+            sectionId = getCellValue(row, columnMap, "sectionId");
+        }
+        if (sectionId == null || sectionId.isEmpty()) {
+            sectionId = getCellValue(row, columnMap, "SECTIONID");
+        }
+        
+        // Try multiple case variations for courseId
         String courseId = getCellValue(row, columnMap, "courseid");
+        if (courseId == null || courseId.isEmpty()) {
+            courseId = getCellValue(row, columnMap, "courseId");
+        }
+        if (courseId == null || courseId.isEmpty()) {
+            courseId = getCellValue(row, columnMap, "COURSEID");
+        }
         
         processStudentData(rowNumber, email, name, phone, password, instituteId, classId, sectionId, courseId, options, clientId, rowResults);
     }
@@ -215,6 +281,7 @@ public class BulkStudentImportService {
         rowResult.setEmail(email);
         rowResult.setName(name);
         
+        com.datagami.edudron.student.dto.CreateUserRequestDTO createUserRequest = null;
         try {
             // Validate required fields
             if (!StringUtils.hasText(email) || !StringUtils.hasText(name)) {
@@ -300,16 +367,33 @@ public class BulkStudentImportService {
                     rowResults.add(rowResult);
                     return;
                 }
+            } else {
+                log.warn("Row {}: No instituteId found after processing", rowNumber);
             }
             
             // Create user via identity service
-            com.datagami.edudron.student.dto.CreateUserRequestDTO createUserRequest = new com.datagami.edudron.student.dto.CreateUserRequestDTO();
+            createUserRequest = new com.datagami.edudron.student.dto.CreateUserRequestDTO();
             createUserRequest.setEmail(email);
             createUserRequest.setPassword(password);
             createUserRequest.setName(name);
             createUserRequest.setPhone(phone);
             createUserRequest.setRole("STUDENT");
             createUserRequest.setActive(true);
+            
+            // Set instituteIds - required for non-SYSTEM_ADMIN users
+            if (StringUtils.hasText(instituteId)) {
+                createUserRequest.setInstituteIds(java.util.Collections.singletonList(instituteId));
+            } else {
+                rowResult.setSuccess(false);
+                rowResult.setErrorMessage("Institute ID is required");
+                rowResults.add(rowResult);
+                return;
+            }
+            
+            // Set autoGeneratePassword based on options (password is already generated if needed)
+            if (options.getAutoGeneratePassword() != null && options.getAutoGeneratePassword()) {
+                createUserRequest.setAutoGeneratePassword(true);
+            }
             
             String identityUrl = gatewayUrl + "/idp/users";
             HttpHeaders headers = new HttpHeaders();
@@ -388,7 +472,21 @@ public class BulkStudentImportService {
                 rowResult.setSuccess(false);
                 rowResult.setErrorMessage(errorMessage);
             }
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            String errorMessage = "Internal server error";
+            try {
+                if (e.getResponseBodyAsString() != null) {
+                    errorMessage = e.getResponseBodyAsString();
+                }
+            } catch (Exception ignored) {}
+            
+            log.error("Row {}: Server error creating user. Status: {}, Response: {}", 
+                rowNumber, e.getStatusCode(), errorMessage);
+            
+            rowResult.setSuccess(false);
+            rowResult.setErrorMessage(errorMessage);
         } catch (Exception e) {
+            log.error("Row {}: Unexpected error creating user", rowNumber, e);
             rowResult.setSuccess(false);
             rowResult.setErrorMessage(e.getMessage() != null ? e.getMessage() : "Unknown error: " + e.getClass().getSimpleName());
         }
@@ -408,7 +506,11 @@ public class BulkStudentImportService {
     private String safeValue(CSVRecord record, String key) {
         try {
             String value = record.get(key);
-            return value != null ? value.trim() : null;
+            String trimmed = value != null ? value.trim() : null;
+            if (trimmed != null && trimmed.isEmpty()) {
+                trimmed = null;
+            }
+            return trimmed;
         } catch (IllegalArgumentException e) {
             return null;
         }
@@ -420,7 +522,11 @@ public class BulkStudentImportService {
             return null;
         }
         Cell cell = row.getCell(index);
-        return getCellValueAsString(cell);
+        String value = getCellValueAsString(cell);
+        if (value != null && value.isEmpty()) {
+            value = null;
+        }
+        return value;
     }
     
     private String getCellValueAsString(Cell cell) {

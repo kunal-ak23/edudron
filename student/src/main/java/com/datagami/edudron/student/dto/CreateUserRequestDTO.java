@@ -1,5 +1,7 @@
 package com.datagami.edudron.student.dto;
 
+import java.util.List;
+
 public class CreateUserRequestDTO {
     private String email;
     private String password;
@@ -7,6 +9,8 @@ public class CreateUserRequestDTO {
     private String phone;
     private String role;
     private Boolean active;
+    private List<String> instituteIds;
+    private Boolean autoGeneratePassword;
 
     // Getters and Setters
     public String getEmail() {
@@ -55,6 +59,22 @@ public class CreateUserRequestDTO {
 
     public void setActive(Boolean active) {
         this.active = active;
+    }
+
+    public List<String> getInstituteIds() {
+        return instituteIds;
+    }
+
+    public void setInstituteIds(List<String> instituteIds) {
+        this.instituteIds = instituteIds;
+    }
+
+    public Boolean getAutoGeneratePassword() {
+        return autoGeneratePassword;
+    }
+
+    public void setAutoGeneratePassword(Boolean autoGeneratePassword) {
+        this.autoGeneratePassword = autoGeneratePassword;
     }
 }
 

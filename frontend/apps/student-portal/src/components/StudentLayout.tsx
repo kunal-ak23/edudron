@@ -59,6 +59,13 @@ export function StudentLayout({ children }: StudentLayoutProps) {
     loadTenantInfo()
   }, [tenantId])
 
+  // Check if password reset is required (except on profile page)
+  useEffect(() => {
+    if (user?.passwordResetRequired && typeof window !== 'undefined' && pathname !== '/profile') {
+      router.push('/profile')
+    }
+  }, [user, pathname, router])
+
   const handleLogout = async () => {
     try {
       await logout()
@@ -139,9 +146,13 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                       <p className="text-xs text-gray-500">{user.email}</p>
                     )}
                   </div>
-                  <div className="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center font-semibold cursor-pointer">
+                  <button
+                    onClick={() => router.push('/profile')}
+                    className="w-8 h-8 rounded-full bg-primary-600 text-white flex items-center justify-center font-semibold cursor-pointer hover:bg-primary-700 transition-colors"
+                    title="View Profile"
+                  >
                     {user.name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase() || 'U'}
-                  </div>
+                  </button>
                 </div>
               )}
               <button

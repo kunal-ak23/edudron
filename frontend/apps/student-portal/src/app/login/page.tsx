@@ -24,6 +24,12 @@ export default function LoginPage() {
       const credentials: LoginCredentials = { email, password }
       const response = await authService.login(credentials)
 
+      // Check if password reset is required - redirect to profile page
+      if (response.user?.passwordResetRequired) {
+        router.push('/profile')
+        return
+      }
+
       if (response.needsTenantSelection && response.availableTenants) {
         router.push('/select-tenant')
       } else {
