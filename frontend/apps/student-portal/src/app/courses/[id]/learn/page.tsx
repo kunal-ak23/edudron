@@ -53,8 +53,6 @@ export default function LearnPage() {
   const [attachments, setAttachments] = useState<LectureContent[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   
-  // PDF Viewer state
-  const [selectedPDF, setSelectedPDF] = useState<{ url: string; fileName: string } | null>(null)
 
   // Refs for scrollable containers
   const mainContentRef = useRef<HTMLDivElement>(null)
@@ -1016,9 +1014,7 @@ export default function LearnPage() {
                                     <div
                                       key={attachment.id}
                                       onClick={() => {
-                                        if (isPDF && fileUrl) {
-                                          setSelectedPDF({ url: fileUrl, fileName })
-                                        } else if (fileUrl) {
+                                        if (fileUrl) {
                                           window.open(fileUrl, '_blank', 'noopener,noreferrer')
                                         }
                                       }}
@@ -1286,9 +1282,7 @@ export default function LearnPage() {
                                       <div
                                         key={attachment.id}
                                         onClick={() => {
-                                          if (isPDF && fileUrl) {
-                                            setSelectedPDF({ url: fileUrl, fileName })
-                                          } else if (fileUrl) {
+                                          if (fileUrl) {
                                             window.open(fileUrl, '_blank', 'noopener,noreferrer')
                                           }
                                         }}
@@ -1505,15 +1499,6 @@ export default function LearnPage() {
           onUpdateNote={handleUpdateNote}
         />
 
-        {/* PDF Viewer */}
-        {selectedPDF && (
-          <PDFViewer
-            fileUrl={selectedPDF.url}
-            fileName={selectedPDF.fileName}
-            isOpen={!!selectedPDF}
-            onClose={() => setSelectedPDF(null)}
-          />
-        )}
       </StudentLayout>
     </ProtectedRoute>
   )
