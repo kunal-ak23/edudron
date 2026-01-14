@@ -6,6 +6,8 @@ import { ProtectedRoute, CourseCard, SearchBar, FilterBar } from '@kunal-ak23/ed
 import { coursesApi, enrollmentsApi } from '@/lib/api'
 import { StudentLayout } from '@/components/StudentLayout'
 import type { Course, Enrollment } from '@kunal-ak23/edudron-shared-utils'
+import { TenantFeaturesApi } from '@kunal-ak23/edudron-shared-utils'
+import { getApiClient } from '@/lib/api'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -23,12 +25,34 @@ export default function CoursesPage() {
   })
   const [user, setUser] = useState<any>(null)
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
+  const [selfEnrollmentEnabled, setSelfEnrollmentEnabled] = useState<boolean | null>(null)
+  
+  // Initialize tenant features API
+  const tenantFeaturesApi = new TenantFeaturesApi(getApiClient())
 
   const loadData = useCallback(async () => {
     try {
       const userStr = localStorage.getItem('user')
+      let currentUser = null
       if (userStr) {
-        setUser(JSON.parse(userStr))
+        currentUser = JSON.parse(userStr)
+        setUser(currentUser)
+      }
+
+      // Check if student self-enrollment is enabled (only for students)
+      let isSelfEnrollmentEnabled = true // Default to true for admins/instructors
+      if (currentUser?.role === 'STUDENT') {
+        try {
+          isSelfEnrollmentEnabled = await tenantFeaturesApi.isStudentSelfEnrollmentEnabled()
+          setSelfEnrollmentEnabled(isSelfEnrollmentEnabled)
+        } catch (error) {
+          console.error('Failed to check self-enrollment feature:', error)
+          // Default to false if check fails
+          isSelfEnrollmentEnabled = false
+          setSelfEnrollmentEnabled(false)
+        }
+      } else {
+        setSelfEnrollmentEnabled(true)
       }
 
       // Fetch published courses and enrollments in parallel
@@ -45,10 +69,19 @@ export default function CoursesPage() {
       // Fetch all courses (including drafts) to check for enrolled draft courses
       const allCourses = await coursesApi.listCourses().catch(() => coursesData)
       
-      // Filter: show published courses OR enrolled courses (even if draft)
-      const visibleCourses = allCourses.filter(course => 
-        course.isPublished || enrolledCourseIds.has(course.id)
-      )
+      // Filter courses based on self-enrollment status
+      let visibleCourses: Course[]
+      if (currentUser?.role === 'STUDENT' && !isSelfEnrollmentEnabled) {
+        // If self-enrollment is disabled, only show enrolled courses (even if draft)
+        visibleCourses = allCourses.filter(course => 
+          enrolledCourseIds.has(course.id)
+        )
+      } else {
+        // If self-enrollment is enabled OR user is admin/instructor, show published courses OR enrolled courses (even if draft)
+        visibleCourses = allCourses.filter(course => 
+          course.isPublished || enrolledCourseIds.has(course.id)
+        )
+      }
       
       setCourses(visibleCourses)
       setFilteredCourses(visibleCourses)
