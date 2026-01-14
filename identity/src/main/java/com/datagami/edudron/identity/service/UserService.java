@@ -5,6 +5,7 @@ import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.identity.domain.User;
 import com.datagami.edudron.identity.domain.UserInstitute;
 import com.datagami.edudron.identity.dto.CreateUserRequest;
+import com.datagami.edudron.identity.dto.UpdateUserRequest;
 import com.datagami.edudron.identity.dto.UserDTO;
 import com.datagami.edudron.identity.repo.UserInstituteRepository;
 import com.datagami.edudron.identity.repo.UserRepository;
@@ -195,6 +196,91 @@ public class UserService {
         if (user == null) {
             throw new IllegalArgumentException("Failed to create user. Please try again.");
         }
+        return toDTO(user);
+    }
+    
+    @Transactional
+    public UserDTO updateUser(String id, UpdateUserRequest request) {
+        // Load user and validate access
+        User user = userRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
+        
+        // Check tenant access
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+            UUID clientId = UUID.fromString(clientIdStr);
+            if (user.getClientId() != null && !user.getClientId().equals(clientId)) {
+                throw new IllegalArgumentException("User not found: " + id);
+            }
+        }
+        
+        // Get current user to check permissions
+        User currentUser = getCurrentUser();
+        boolean isCurrentUserSystemAdmin = currentUser != null && currentUser.getRole() == User.Role.SYSTEM_ADMIN;
+        
+        User.Role newRole = User.Role.valueOf(request.getRole().toUpperCase());
+        
+        // SECURITY: Only SYSTEM_ADMIN can change role to SYSTEM_ADMIN
+        if (newRole == User.Role.SYSTEM_ADMIN && user.getRole() != User.Role.SYSTEM_ADMIN) {
+            if (!isCurrentUserSystemAdmin) {
+                throw new IllegalArgumentException("SYSTEM_ADMIN role can only be assigned by existing SYSTEM_ADMIN users.");
+            }
+        }
+        
+        // SECURITY: Only SYSTEM_ADMIN can change SYSTEM_ADMIN users
+        if (user.getRole() == User.Role.SYSTEM_ADMIN && !isCurrentUserSystemAdmin) {
+            throw new IllegalArgumentException("SYSTEM_ADMIN users can only be modified by existing SYSTEM_ADMIN users.");
+        }
+        
+        // Validate email uniqueness if email is being changed
+        if (!user.getEmail().equals(request.getEmail())) {
+            UUID clientId = user.getClientId();
+            if (clientId != null) {
+                // For tenant users, check uniqueness within tenant
+                if (userRepository.existsByEmailAndClientId(request.getEmail(), clientId) &&
+                    !userRepository.findByEmailAndClientId(request.getEmail(), clientId).get().getId().equals(id)) {
+                    throw new IllegalArgumentException("User already exists with this email in this tenant");
+                }
+            } else {
+                // For SYSTEM_ADMIN users, check global uniqueness
+                var existingUser = userRepository.findByEmailAndRoleAndActiveTrue(request.getEmail(), User.Role.SYSTEM_ADMIN);
+                if (existingUser.isPresent() && !existingUser.get().getId().equals(id)) {
+                    throw new IllegalArgumentException("SYSTEM_ADMIN user already exists with this email");
+                }
+            }
+        }
+        
+        // Update user fields
+        user.setEmail(request.getEmail());
+        user.setName(request.getName());
+        user.setPhone(request.getPhone());
+        user.setRole(newRole);
+        user.setActive(request.getActive() != null ? request.getActive() : true);
+        
+        // Handle role change from SYSTEM_ADMIN to non-SYSTEM_ADMIN
+        if (user.getRole() != User.Role.SYSTEM_ADMIN && user.getClientId() == null) {
+            // If changing from SYSTEM_ADMIN, we need a tenant context
+            if (clientIdStr == null || "SYSTEM".equals(clientIdStr) || "PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                throw new IllegalArgumentException("Cannot change SYSTEM_ADMIN to non-SYSTEM_ADMIN without tenant context");
+            }
+            UUID clientId = UUID.fromString(clientIdStr);
+            user.setClientId(clientId);
+        }
+        
+        // Handle role change to SYSTEM_ADMIN
+        if (user.getRole() == User.Role.SYSTEM_ADMIN) {
+            user.setClientId(null);
+            // Clear institute associations for SYSTEM_ADMIN
+            userInstituteRepository.deleteByUserId(user.getId());
+        } else {
+            // For non-SYSTEM_ADMIN users, validate and update institutes
+            if (request.getInstituteIds() == null || request.getInstituteIds().isEmpty()) {
+                throw new IllegalArgumentException("At least one institute must be assigned to the user");
+            }
+            assignInstitutesToUser(user.getId(), request.getInstituteIds());
+        }
+        
+        user = userRepository.save(user);
         return toDTO(user);
     }
     

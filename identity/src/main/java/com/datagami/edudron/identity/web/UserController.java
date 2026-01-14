@@ -2,6 +2,7 @@ package com.datagami.edudron.identity.web;
 
 import com.datagami.edudron.identity.dto.ChangePasswordRequest;
 import com.datagami.edudron.identity.dto.CreateUserRequest;
+import com.datagami.edudron.identity.dto.UpdateUserRequest;
 import com.datagami.edudron.identity.dto.UserDTO;
 import com.datagami.edudron.identity.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,7 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.ArrayList;
 
 @RestController
 @RequestMapping("/idp/users")
@@ -49,6 +49,15 @@ public class UserController {
     public ResponseEntity<UserDTO> createUser(@Valid @RequestBody CreateUserRequest request) {
         UserDTO user = userService.createUser(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(user);
+    }
+    
+    @PutMapping("/{id}")
+    @Operation(summary = "Update user", description = "Update user details. SYSTEM_ADMIN users can only be modified by existing SYSTEM_ADMIN users. Non-SYSTEM_ADMIN users must have at least one institute assigned.")
+    public ResponseEntity<UserDTO> updateUser(
+            @PathVariable String id,
+            @Valid @RequestBody UpdateUserRequest request) {
+        UserDTO user = userService.updateUser(id, request);
+        return ResponseEntity.ok(user);
     }
     
     @PutMapping("/{id}/institutes")

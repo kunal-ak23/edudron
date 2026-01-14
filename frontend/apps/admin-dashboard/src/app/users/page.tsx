@@ -199,7 +199,11 @@ export default function UsersPage() {
                           {new Date(user.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => router.push(`/users/${user.id}/edit`)}
+                          >
                             Edit
                           </Button>
                         </TableCell>
