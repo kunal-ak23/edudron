@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { ProtectedRoute, Button } from '@kunal-ak23/edudron-ui-components'
 import { coursesApi, enrollmentsApi, lecturesApi, feedbackApi, notesApi, issuesApi } from '@/lib/api'
-import type { Course, Section, Lecture, Progress, Feedback, Note, FeedbackType, IssueType } from '@kunal-ak23/edudron-shared-utils'
+import type { Course, Section, Lecture, Progress, Feedback, Note, FeedbackType, IssueType, LectureContent } from '@kunal-ak23/edudron-shared-utils'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -14,11 +14,18 @@ import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { IssueReportDialog } from '@/components/IssueReportDialog'
 import { MarkdownWithHighlights } from '@/components/MarkdownWithHighlights'
 import { NotesSidebar } from '@/components/NotesSidebar'
+import dynamicImport from 'next/dynamic'
+
+// Dynamically import PDFViewer to avoid SSR issues with pdfjs-dist
+const PDFViewer = dynamicImport(() => import('@/components/PDFViewer').then((mod) => mod.PDFViewer), {
+  ssr: false,
+  loading: () => null,
+})
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
 
-type TabType = 'transcript' | 'notes' | 'downloads'
+type TabType = 'transcript' | 'notes'
 
 export default function LearnPage() {
   const router = useRouter()
@@ -51,10 +58,19 @@ export default function LearnPage() {
   // Transcript state
   const [transcriptText, setTranscriptText] = useState<string | null>(null)
   const [loadingTranscript, setLoadingTranscript] = useState(false)
+  
+  // Attachments state
+  const [attachments, setAttachments] = useState<LectureContent[]>([])
+  const [loadingAttachments, setLoadingAttachments] = useState(false)
+  
+  // PDF Viewer state
+  const [selectedPDF, setSelectedPDF] = useState<{ url: string; fileName: string } | null>(null)
 
   // Refs for scrollable containers
   const mainContentRef = useRef<HTMLDivElement>(null)
   const textContentRef = useRef<HTMLDivElement>(null)
+  // Ref to track if we're manually updating completion to prevent useEffect from interfering
+  const isUpdatingCompletionRef = useRef(false)
 
   // Helper function to get localStorage key for course position
   const getStorageKey = (courseId: string) => `course_position_${courseId}`
@@ -292,9 +308,9 @@ export default function LearnPage() {
 
   // Save position to localStorage when selectedLecture changes
   useEffect(() => {
-    if (selectedLecture) {
+    if (selectedLecture && !isUpdatingCompletionRef.current) {
       savePositionToStorage(selectedLecture)
-      // Update progress to track last accessed position
+      // Update progress to track last accessed position (only when lecture changes, not when completion status changes)
       enrollmentsApi.updateProgress(courseId, {
         lectureId: selectedLecture.id,
         progressPercentage: completedLectures.has(selectedLecture.id) ? 100 : 0
@@ -302,19 +318,40 @@ export default function LearnPage() {
         console.warn('[LearnPage] Failed to update progress for last accessed position:', error)
       })
     }
-  }, [selectedLecture, courseId, completedLectures, savePositionToStorage])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLecture, courseId, savePositionToStorage])
+
+  // Load attachments for a lecture
+  const loadAttachments = useCallback(async (lectureId: string) => {
+    try {
+      setLoadingAttachments(true)
+      const media = await lecturesApi.getLectureMedia(lectureId)
+      // Filter out VIDEO and TEXT content types - only show attachments (PDF, IMAGE, AUDIO, etc.)
+      const attachmentItems = media.filter((item: LectureContent) => 
+        item.contentType !== 'VIDEO' && item.contentType !== 'TEXT'
+      )
+      setAttachments(attachmentItems)
+    } catch (error) {
+      console.error('[LearnPage] Failed to load attachments:', error)
+      setAttachments([])
+    } finally {
+      setLoadingAttachments(false)
+    }
+  }, [])
 
   // Load feedback and notes whenever selectedLecture changes
   useEffect(() => {
     if (selectedLecture?.id) {
       console.log('[LearnPage] selectedLecture changed, loading notes for:', selectedLecture.id)
       loadFeedbackAndNotes(selectedLecture.id)
+      loadAttachments(selectedLecture.id)
     } else {
       // Clear notes when no lecture is selected
       setNotes([])
       setCurrentFeedback(null)
+      setAttachments([])
     }
-  }, [selectedLecture?.id, loadFeedbackAndNotes])
+  }, [selectedLecture?.id, loadFeedbackAndNotes, loadAttachments])
 
   // Scroll to top when lecture changes
   useEffect(() => {
@@ -517,6 +554,9 @@ export default function LearnPage() {
 
   const handleMarkComplete = async (lectureId: string, isCompleted: boolean) => {
     try {
+      // Set flag to prevent useEffect from interfering
+      isUpdatingCompletionRef.current = true
+      
       const newCompleted = new Set(completedLectures)
       if (isCompleted) {
         newCompleted.add(lectureId)
@@ -567,6 +607,9 @@ export default function LearnPage() {
         reverted.add(lectureId)
       }
       setCompletedLectures(reverted)
+    } finally {
+      // Clear flag after update is complete
+      isUpdatingCompletionRef.current = false
     }
   }
 
@@ -966,6 +1009,73 @@ export default function LearnPage() {
                           </div>
                         )}
 
+                        {/* Attachments Section for TEXT lectures */}
+                        {attachments.length > 0 && (
+                          <div className="mt-8 pt-6 border-t border-gray-200">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-4">Attachments</h3>
+                            {loadingAttachments ? (
+                              <p className="text-sm text-gray-500">Loading attachments...</p>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {attachments.map((attachment) => {
+                                  const fileUrl = attachment.fileUrl || attachment.videoUrl || attachment.externalUrl
+                                  const fileName = attachment.title || `Attachment.${attachment.contentType?.toLowerCase() || 'file'}`
+                                  const isPDF = attachment.contentType === 'PDF'
+                                  
+                                  return (
+                                    <div
+                                      key={attachment.id}
+                                      onClick={() => {
+                                        if (isPDF && fileUrl) {
+                                          setSelectedPDF({ url: fileUrl, fileName })
+                                        } else if (fileUrl) {
+                                          window.open(fileUrl, '_blank', 'noopener,noreferrer')
+                                        }
+                                      }}
+                                      className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors"
+                                    >
+                                      <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                        {/* File type icon */}
+                                        {attachment.contentType === 'PDF' && (
+                                          <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                          </svg>
+                                        )}
+                                        {attachment.contentType === 'IMAGE' && (
+                                          <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                          </svg>
+                                        )}
+                                        {attachment.contentType === 'AUDIO' && (
+                                          <svg className="w-5 h-5 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                          </svg>
+                                        )}
+                                        {!['PDF', 'IMAGE', 'AUDIO'].includes(attachment.contentType || '') && (
+                                          <svg className="w-5 h-5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                          </svg>
+                                        )}
+                                        <span className="text-gray-700 text-sm truncate">{fileName}</span>
+                                      </div>
+                                      {isPDF ? (
+                                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                        </svg>
+                                      ) : (
+                                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
                         {/* Controls at end of TEXT content */}
                         <div className="mt-12 pt-6 border-t border-gray-200">
                           {/* Save note and Report issue */}
@@ -1155,32 +1265,86 @@ export default function LearnPage() {
                         )}
 
                         {activeTab === 'notes' && (
-                          <div>
-                            <p className="text-gray-700 mb-3">
-                              Click the &apos;Save Note&apos; button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you&apos;ve captured.
-                            </p>
-                            <a href="#" className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center space-x-1">
-                              <span>View all notes</span>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                            </a>
-                          </div>
-                        )}
-
-                        {activeTab === 'downloads' && (
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                              <span className="text-gray-700 text-sm">Lecture Video (240p) mp4</span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Notes Section */}
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900 mb-3">Course Notes</h3>
+                              <p className="text-gray-700 mb-3 text-sm">
+                                Click the &apos;Save Note&apos; button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you&apos;ve captured.
+                              </p>
+                              <a href="#" className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center space-x-1">
+                                <span>View all notes</span>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </a>
                             </div>
-                            <div className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                              <span className="text-gray-700 text-sm">Lecture Video (1080p) mp4</span>
-                            </div>
-                            <div className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                              <span className="text-gray-700 text-sm">Subtitles (English) WebVTT</span>
-                            </div>
-                            <div className="flex items-center justify-between p-2 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer">
-                              <span className="text-gray-700 text-sm">Transcript (English) txt</span>
+                            
+                            {/* Attachments Section */}
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900 mb-3">Attachments</h3>
+                              {loadingAttachments ? (
+                                <p className="text-sm text-gray-500">Loading attachments...</p>
+                              ) : attachments.length > 0 ? (
+                                <div className="space-y-2">
+                                  {attachments.map((attachment) => {
+                                    const fileUrl = attachment.fileUrl || attachment.videoUrl || attachment.externalUrl
+                                    const fileName = attachment.title || `Attachment.${attachment.contentType?.toLowerCase() || 'file'}`
+                                    const isPDF = attachment.contentType === 'PDF'
+                                    
+                                    return (
+                                      <div
+                                        key={attachment.id}
+                                        onClick={() => {
+                                          if (isPDF && fileUrl) {
+                                            setSelectedPDF({ url: fileUrl, fileName })
+                                          } else if (fileUrl) {
+                                            window.open(fileUrl, '_blank', 'noopener,noreferrer')
+                                          }
+                                        }}
+                                        className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors"
+                                      >
+                                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                          {/* File type icon */}
+                                          {attachment.contentType === 'PDF' && (
+                                            <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                            </svg>
+                                          )}
+                                          {attachment.contentType === 'IMAGE' && (
+                                            <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                            </svg>
+                                          )}
+                                          {attachment.contentType === 'AUDIO' && (
+                                            <svg className="w-5 h-5 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                            </svg>
+                                          )}
+                                          {!['PDF', 'IMAGE', 'AUDIO'].includes(attachment.contentType || '') && (
+                                            <svg className="w-5 h-5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                            </svg>
+                                          )}
+                                          <span className="text-gray-700 text-sm truncate">{fileName}</span>
+                                        </div>
+                                        {isPDF ? (
+                                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                          </svg>
+                                        ) : (
+                                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                          </svg>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-500">No attachments available for this lecture.</p>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1210,16 +1374,6 @@ export default function LearnPage() {
                             }`}
                           >
                             Notes
-                          </button>
-                          <button
-                            onClick={() => setActiveTab('downloads')}
-                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              activeTab === 'downloads'
-                                ? 'border-primary-600 text-primary-600'
-                                : 'border-transparent text-gray-600 hover:text-gray-900'
-                            }`}
-                          >
-                            Downloads
                           </button>
                         </div>
                       </div>
@@ -1360,6 +1514,16 @@ export default function LearnPage() {
           onDeleteNote={handleDeleteNote}
           onUpdateNote={handleUpdateNote}
         />
+
+        {/* PDF Viewer */}
+        {selectedPDF && (
+          <PDFViewer
+            fileUrl={selectedPDF.url}
+            fileName={selectedPDF.fileName}
+            isOpen={!!selectedPDF}
+            onClose={() => setSelectedPDF(null)}
+          />
+        )}
       </StudentLayout>
     </ProtectedRoute>
   )
