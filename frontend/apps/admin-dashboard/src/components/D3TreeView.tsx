@@ -38,6 +38,7 @@ export function D3TreeView({
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
   const [showIdList, setShowIdList] = useState(false)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
   const { toast } = useToast()
 
   // Build tree structure
@@ -151,7 +152,9 @@ export function D3TreeView({
 
     const treeData = buildTree()
     const root = d3.hierarchy(treeData)
-    const treeLayout = d3.tree().size([height - 200, width - 400])
+    // Increase horizontal spacing to prevent overlap - use more of the width
+    const horizontalSpacing = Math.max(width - 200, 800) // Minimum 800px spacing
+    const treeLayout = d3.tree().size([height - 200, horizontalSpacing])
     treeLayout(root)
 
     // Color scheme
@@ -196,13 +199,13 @@ export function D3TreeView({
       .attr('stroke', '#fff')
       .attr('stroke-width', 2)
 
-    // Node labels container
+    // Node labels container - reduced width for less clutter
     const labels = nodes
       .append('foreignObject')
       .attr('x', 15)
-      .attr('y', -50)
-      .attr('width', 320)
-      .attr('height', 140)
+      .attr('y', -45)
+      .attr('width', 280)
+      .attr('height', 120)
       .style('overflow', 'visible')
       .style('pointer-events', 'auto')
 
@@ -213,55 +216,133 @@ export function D3TreeView({
       const labelDiv = foreignObject.append('xhtml:div')
         .style('display', 'flex')
         .style('flex-direction', 'column')
-        .style('gap', '8px')
-        .style('padding', '14px')
+        .style('gap', '6px')
+        .style('padding', '10px 12px')
         .style('background', 'white')
         .style('border', `2px solid ${colors[node.type]}`)
         .style('border-radius', '8px')
         .style('box-shadow', '0 2px 8px rgba(0,0,0,0.1)')
-        .style('min-width', '290px')
+        .style('min-width', '250px')
         .style('width', '100%')
         .style('max-width', '100%')
         .style('box-sizing', 'border-box')
         .style('overflow', 'visible')
         .style('min-height', 'auto')
+        .style('cursor', 'pointer')
 
-      // Name
-      labelDiv.append('xhtml:div')
+      // Name row with badge inline
+      const nameRow = labelDiv.append('xhtml:div')
+        .style('display', 'flex')
+        .style('align-items', 'center')
+        .style('justify-content', 'space-between')
+        .style('gap', '8px')
+
+      const nameDiv = nameRow.append('xhtml:div')
         .style('font-weight', '600')
         .style('font-size', '14px')
         .style('color', '#1f2937')
+        .style('flex', '1')
         .text(node.name)
 
-      // ID with copy button
-      const idRow = labelDiv.append('xhtml:div')
+      // Badge for type - moved to name row
+      const badge = nameRow.append('xhtml:div')
+        .style('display', 'inline-block')
+        .style('padding', '2px 8px')
+        .style('background', `${colors[node.type]}20`)
+        .style('color', colors[node.type])
+        .style('border-radius', '4px')
+        .style('font-size', '10px')
+        .style('font-weight', '500')
+        .style('white-space', 'nowrap')
+        .text(node.type.charAt(0).toUpperCase() + node.type.slice(1))
+
+      // ID section - hidden by default, shown on hover or when expanded
+      const isExpanded = expandedIds.has(node.id)
+      const idContainer = labelDiv.append('xhtml:div')
+        .attr('class', `id-container-${node.id}`)
+        .style('display', isExpanded ? 'flex' : 'none')
+        .style('flex-direction', 'column')
+        .style('gap', '4px')
+        .style('margin-top', '4px')
+        .style('padding-top', '6px')
+        .style('border-top', '1px solid #e5e7eb')
+
+      // Hint when ID is hidden
+      const hintDiv = labelDiv.append('xhtml:div')
+        .attr('class', `hint-${node.id}`)
+        .style('display', isExpanded ? 'none' : 'block')
+        .style('font-size', '9px')
+        .style('color', '#9ca3af')
+        .style('margin-top', '2px')
+        .style('font-style', 'italic')
+        .text('Hover to view ID')
+
+      // Add hover handlers to labelDiv after elements are created
+      labelDiv
+        .on('mouseenter', function() {
+          d3.select(this).style('box-shadow', '0 4px 12px rgba(0,0,0,0.15)')
+          // Show ID container on hover (if not already expanded)
+          if (!expandedIds.has(node.id)) {
+            idContainer.style('display', 'flex')
+            hintDiv.style('display', 'none')
+          }
+        })
+        .on('mouseleave', function() {
+          d3.select(this).style('box-shadow', '0 2px 8px rgba(0,0,0,0.1)')
+          // Hide ID container on leave (if not expanded)
+          if (!expandedIds.has(node.id)) {
+            idContainer.style('display', 'none')
+            hintDiv.style('display', 'block')
+          }
+        })
+
+      const idRow = idContainer.append('xhtml:div')
         .style('display', 'flex')
         .style('align-items', 'center')
-        .style('gap', '8px')
-        .style('font-size', '11px')
+        .style('gap', '6px')
+        .style('font-size', '10px')
         .style('color', '#6b7280')
         .style('font-family', 'monospace')
-        .style('flex-wrap', 'wrap')
-        .style('word-break', 'break-all')
 
+      const truncatedId = node.id.length > 24 ? `${node.id.substring(0, 24)}...` : node.id
+      const fullIdShown = expandedIds.has(node.id)
+      
       const idSpan = idRow.append('xhtml:span')
-        .text(`ID: ${node.id}`)
+        .text(fullIdShown ? `ID: ${node.id}` : `ID: ${truncatedId}`)
         .style('flex', '1')
-        .style('min-width', '150px')
         .style('word-break', 'break-all')
         .style('overflow-wrap', 'break-word')
         .style('line-height', '1.4')
+        .style('cursor', 'pointer')
+        .on('click', function(e) {
+          e.stopPropagation()
+          const newExpanded = new Set(expandedIds)
+          if (fullIdShown) {
+            newExpanded.delete(node.id)
+            // Update visibility immediately
+            idContainer.style('display', 'none')
+            hintDiv.style('display', 'block')
+          } else {
+            newExpanded.add(node.id)
+            // Update visibility immediately
+            idContainer.style('display', 'flex')
+            hintDiv.style('display', 'none')
+            // Update text to show full ID
+            idSpan.text(`ID: ${node.id}`)
+          }
+          setExpandedIds(newExpanded)
+        })
 
       const copyBtn = idRow.append('xhtml:button')
         .style('background', copiedId === node.id ? '#10b98120' : 'transparent')
         .style('border', '1px solid #e5e7eb')
         .style('border-radius', '4px')
         .style('cursor', 'pointer')
-        .style('padding', '4px 8px')
+        .style('padding', '3px 6px')
         .style('display', 'flex')
         .style('align-items', 'center')
         .style('color', copiedId === node.id ? '#10b981' : '#6b7280')
-        .style('font-size', '10px')
+        .style('font-size', '9px')
         .style('transition', 'all 0.2s')
         .style('flex-shrink', '0')
         .style('white-space', 'nowrap')
@@ -277,25 +358,13 @@ export function D3TreeView({
         })
 
       if (copiedId === node.id) {
-        copyBtn.append('xhtml:span').html('✓ Copied')
+        copyBtn.append('xhtml:span').html('✓')
       } else {
-        copyBtn.append('xhtml:span').html('📋 Copy ID')
+        copyBtn.append('xhtml:span').html('📋')
       }
 
-      // Badge for type
-      labelDiv.append('xhtml:div')
-        .style('display', 'inline-block')
-        .style('padding', '2px 8px')
-        .style('background', `${colors[node.type]}20`)
-        .style('color', colors[node.type])
-        .style('border-radius', '4px')
-        .style('font-size', '10px')
-        .style('font-weight', '500')
-        .style('width', 'fit-content')
-        .style('margin-top', '2px')
-        .text(node.type.charAt(0).toUpperCase() + node.type.slice(1))
-
       // Additional info
+      // Additional info - shown inline with name or below
       if (node.type === 'class') {
         const cls = node.data as Class
         if (cls.code) {
@@ -338,7 +407,7 @@ export function D3TreeView({
       )
     }
 
-  }, [institute, classes, sectionsByClass, copiedId])
+  }, [institute, classes, sectionsByClass, copiedId, expandedIds])
 
   return (
     <div className="space-y-4">
