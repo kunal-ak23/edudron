@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Card } from '@kunal-ak23/edudron-ui-components'
 import { tenantsApi } from '@/lib/api'
@@ -27,24 +27,7 @@ export default function SelectTenantPage() {
     loadTenants()
   }, [])
 
-  const loadTenants = async () => {
-    try {
-      setLoading(true)
-      const activeTenants = await tenantsApi.getActiveTenants()
-      setTenants(activeTenants)
-      
-      // Auto-select if only one tenant
-      if (activeTenants.length === 1) {
-        handleTenantSelect(activeTenants[0].id)
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load tenants')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleTenantSelect = async (tenantId: string) => {
+  const handleTenantSelect = useCallback(async (tenantId: string) => {
     if (submitting) return
 
     try {
@@ -59,7 +42,35 @@ export default function SelectTenantPage() {
       setError(err.message || 'Failed to select tenant')
       setSubmitting(false)
     }
-  }
+  }, [submitting, router])
+
+  const loadTenants = useCallback(async () => {
+    try {
+      setLoading(true)
+      const activeTenants = await tenantsApi.getActiveTenants()
+      setTenants(activeTenants)
+      
+      // Auto-select if only one tenant
+      if (activeTenants.length === 1) {
+        handleTenantSelect(activeTenants[0].id)
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load tenants')
+    } finally {
+      setLoading(false)
+    }
+  }, [handleTenantSelect])
+
+  useEffect(() => {
+    // Get user from localStorage
+    const userStr = localStorage.getItem('user')
+    if (userStr) {
+      setUser(JSON.parse(userStr))
+    }
+
+    // Load available tenants
+    loadTenants()
+  }, [loadTenants])
 
   const handleNoTenants = () => {
     // For SYSTEM_ADMIN with no tenants, go to tenant management

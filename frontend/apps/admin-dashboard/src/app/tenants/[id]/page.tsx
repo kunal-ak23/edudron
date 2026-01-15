@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -33,13 +33,7 @@ export default function TenantEditPage() {
   const [error, setError] = useState('')
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
 
-  useEffect(() => {
-    if (tenantId) {
-      loadTenant()
-    }
-  }, [tenantId])
-
-  const loadTenant = async () => {
+  const loadTenant = useCallback(async () => {
     try {
       setLoading(true)
       setError('')
@@ -62,7 +56,13 @@ export default function TenantEditPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenantId, toast])
+
+  useEffect(() => {
+    if (tenantId) {
+      loadTenant()
+    }
+  }, [tenantId, loadTenant])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

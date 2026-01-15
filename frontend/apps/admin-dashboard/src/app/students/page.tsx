@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -40,24 +40,7 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
 
-  useEffect(() => {
-    loadStudents()
-  }, [])
-
-  // Role-based access control
-  useEffect(() => {
-    if (!isAuthenticated() || !user) {
-      router.push('/login')
-      return
-    }
-    
-    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
-    if (!allowedRoles.includes(user.role)) {
-      router.push('/unauthorized')
-    }
-  }, [user, isAuthenticated, router])
-
-  const loadStudents = async () => {
+  const loadStudents = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -90,7 +73,24 @@ export default function StudentsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    loadStudents()
+  }, [loadStudents])
+
+  // Role-based access control
+  useEffect(() => {
+    if (!isAuthenticated() || !user) {
+      router.push('/login')
+      return
+    }
+    
+    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
+    if (!allowedRoles.includes(user.role)) {
+      router.push('/unauthorized')
+    }
+  }, [user, isAuthenticated, router])
 
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -42,13 +42,7 @@ export default function ClassSectionsPage() {
   const [students, setStudents] = useState<Array<{id: string, name: string, email: string, phone: string | null}>>([])
   const [loadingStudents, setLoadingStudents] = useState(false)
 
-  useEffect(() => {
-    if (classId) {
-      loadData()
-    }
-  }, [classId])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const classData = await classesApi.getClass(classId)
@@ -72,7 +66,13 @@ export default function ClassSectionsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [classId, toast, router])
+
+  useEffect(() => {
+    if (classId) {
+      loadData()
+    }
+  }, [classId, loadData])
 
   const handleEdit = (section: Section) => {
     router.push(`/sections/${section.id}`)

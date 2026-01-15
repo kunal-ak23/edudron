@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { FileUpload } from '@kunal-ak23/edudron-ui-components'
@@ -35,11 +35,7 @@ export default function TenantBrandingPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  useEffect(() => {
-    loadBranding()
-  }, [tenantId])
-
-  const loadBranding = async () => {
+  const loadBranding = useCallback(async () => {
     try {
       setLoading(true)
       // Set tenant context before calling API
@@ -66,7 +62,11 @@ export default function TenantBrandingPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [tenantId])
+
+  useEffect(() => {
+    loadBranding()
+  }, [tenantId, loadBranding])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Loader2, ArrowLeft, Network } from 'lucide-react'
@@ -21,13 +21,7 @@ export default function InstituteTreePage() {
   const [sectionsByClass, setSectionsByClass] = useState<Record<string, Section[]>>({})
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    if (instituteId) {
-      loadData()
-    }
-  }, [instituteId])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const [instituteData, classesData] = await Promise.all([
@@ -67,7 +61,13 @@ export default function InstituteTreePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [instituteId, toast])
+
+  useEffect(() => {
+    if (instituteId) {
+      loadData()
+    }
+  }, [instituteId, loadData])
 
   const handleAddClass = () => {
     router.push(`/institutes/${instituteId}/classes/new`)

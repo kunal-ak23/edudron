@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -42,11 +42,7 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
-  useEffect(() => {
-    loadProfile()
-  }, [])
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       const response = await apiClient.get<UserProfile>('/idp/users/me')
       const profileData = 'data' in response ? response.data : response
@@ -62,7 +58,11 @@ export default function ProfilePage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    loadProfile()
+  }, [loadProfile])
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault()

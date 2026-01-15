@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { FileUpload } from '@kunal-ak23/edudron-ui-components'
@@ -67,15 +67,6 @@ export default function CourseEditPage() {
   const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
 
-  useEffect(() => {
-    loadHierarchyData()
-    if (courseId && courseId !== 'new') {
-      loadCourse()
-    } else {
-      setLoading(false)
-    }
-  }, [courseId])
-
   // Separate effect for beforeunload warning
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -89,62 +80,7 @@ export default function CourseEditPage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [hasUnsavedChanges])
 
-  const loadHierarchyData = async () => {
-    try {
-      const [institutesData, classesData] = await Promise.all([
-        institutesApi.listInstitutes(),
-        institutesApi.listInstitutes().then(async (insts) => {
-          const allClasses: Class[] = []
-          for (const inst of insts) {
-            const instClasses = await classesApi.listClassesByInstitute(inst.id)
-            allClasses.push(...instClasses)
-          }
-          return allClasses
-        })
-      ])
-      setInstitutes(institutesData)
-      setClasses(classesData)
-      
-      // Load sections for all classes
-      const allSections: Section[] = []
-      for (const classItem of classesData) {
-        const classSections = await sectionsApi.listSectionsByClass(classItem.id)
-        allSections.push(...classSections)
-      }
-      setSections(allSections)
-    } catch (err) {
-      console.error('Failed to load hierarchy data:', err)
-    }
-  }
-
-  const loadCourse = async () => {
-    try {
-      const data = await coursesApi.getCourse(courseId)
-      setCourse(data)
-      setSelectedClassIds(data.assignedToClassIds || [])
-      setSelectedSectionIds(data.assignedToSectionIds || [])
-      await loadCourseSections()
-      
-      // Store initial state for unsaved changes detection
-      initialCourseRef.current = JSON.stringify({
-        ...data,
-        assignedToClassIds: data.assignedToClassIds || [],
-        assignedToSectionIds: data.assignedToSectionIds || []
-      })
-      setHasUnsavedChanges(false)
-    } catch (error) {
-      console.error('Failed to load course:', error)
-      toast({
-        variant: 'destructive',
-        title: 'Failed to load course',
-        description: extractErrorMessage(error),
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadCourseSections = async () => {
+  const loadCourseSections = useCallback(async () => {
     if (!courseId || courseId === 'new') return
     
     try {
@@ -177,7 +113,71 @@ export default function CourseEditPage() {
     } finally {
       setLoadingSections(false)
     }
-  }
+  }, [courseId, toast])
+
+  const loadCourse = useCallback(async () => {
+    try {
+      const data = await coursesApi.getCourse(courseId)
+      setCourse(data)
+      setSelectedClassIds(data.assignedToClassIds || [])
+      setSelectedSectionIds(data.assignedToSectionIds || [])
+      await loadCourseSections()
+      
+      // Store initial state for unsaved changes detection
+      initialCourseRef.current = JSON.stringify({
+        ...data,
+        assignedToClassIds: data.assignedToClassIds || [],
+        assignedToSectionIds: data.assignedToSectionIds || []
+      })
+      setHasUnsavedChanges(false)
+    } catch (error) {
+      console.error('Failed to load course:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to load course',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [courseId, toast, loadCourseSections])
+
+  const loadHierarchyData = useCallback(async () => {
+    try {
+      const [institutesData, classesData] = await Promise.all([
+        institutesApi.listInstitutes(),
+        institutesApi.listInstitutes().then(async (insts) => {
+          const allClasses: Class[] = []
+          for (const inst of insts) {
+            const instClasses = await classesApi.listClassesByInstitute(inst.id)
+            allClasses.push(...instClasses)
+          }
+          return allClasses
+        })
+      ])
+      setInstitutes(institutesData)
+      setClasses(classesData)
+      
+      // Load sections for all classes
+      const allSections: Section[] = []
+      for (const classItem of classesData) {
+        const classSections = await sectionsApi.listSectionsByClass(classItem.id)
+        allSections.push(...classSections)
+      }
+      setSections(allSections)
+    } catch (err) {
+      console.error('Failed to load hierarchy data:', err)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadHierarchyData()
+    if (courseId && courseId !== 'new') {
+      loadCourse()
+    } else {
+      setLoading(false)
+    }
+  }, [courseId, loadHierarchyData, loadCourse])
 
   const toggleSection = (sectionId: string) => {
     const newExpanded = new Set(expandedSections)

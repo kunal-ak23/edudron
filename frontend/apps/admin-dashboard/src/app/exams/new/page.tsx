@@ -12,7 +12,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Sparkles, Loader2, ArrowLeft } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, coursesApi } from '@/lib/api'
-import type { Course, Section } from '@kunal-ak23/edudron-shared-utils'
+import type { Course, Section, Chapter } from '@kunal-ak23/edudron-shared-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +22,7 @@ export default function NewExamPage() {
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [courses, setCourses] = useState<Course[]>([])
-  const [sections, setSections] = useState<Section[]>([])
+  const [sections, setSections] = useState<Chapter[]>([])
   const [formData, setFormData] = useState({
     courseId: '',
     title: '',

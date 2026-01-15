@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,11 +20,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    loadFeatures()
-  }, [])
-
-  const loadFeatures = async () => {
+  const loadFeatures = useCallback(async () => {
     try {
       setLoading(true)
       const featuresData = await tenantFeaturesApi.getAllFeatures()
@@ -39,7 +35,11 @@ export default function SettingsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    loadFeatures()
+  }, [loadFeatures])
 
   const handleToggleFeature = async (feature: TenantFeatureType, enabled: boolean) => {
     try {

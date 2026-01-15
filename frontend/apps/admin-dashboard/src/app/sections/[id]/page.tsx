@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -35,13 +35,7 @@ export default function SectionDetailPage() {
     maxStudents: undefined
   })
 
-  useEffect(() => {
-    if (sectionId) {
-      loadSection()
-    }
-  }, [sectionId])
-
-  const loadSection = async () => {
+  const loadSection = useCallback(async () => {
     try {
       setLoading(true)
       const sectionData = await sectionsApi.getSection(sectionId)
@@ -73,7 +67,13 @@ export default function SectionDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [sectionId, toast, router])
+
+  useEffect(() => {
+    if (sectionId) {
+      loadSection()
+    }
+  }, [sectionId, loadSection])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()

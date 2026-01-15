@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -43,15 +43,7 @@ export default function EnrollmentsPage() {
   const [selectedClassId, setSelectedClassId] = useState<string>('all')
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all')
 
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  useEffect(() => {
-    filterEnrollments()
-  }, [enrollments, selectedInstituteId, selectedClassId, selectedSectionId])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const [enrollmentsData, institutesData] = await Promise.all([
@@ -96,9 +88,9 @@ export default function EnrollmentsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
-  const filterEnrollments = () => {
+  const filterEnrollments = useCallback(() => {
     let filtered = [...enrollments]
 
     if (selectedInstituteId && selectedInstituteId !== 'all') {
@@ -112,7 +104,15 @@ export default function EnrollmentsPage() {
     }
 
     setFilteredEnrollments(filtered)
-  }
+  }, [enrollments, selectedInstituteId, selectedClassId, selectedSectionId])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  useEffect(() => {
+    filterEnrollments()
+  }, [filterEnrollments])
 
   const getHierarchyPath = (enrollment: Enrollment) => {
     const parts: string[] = []

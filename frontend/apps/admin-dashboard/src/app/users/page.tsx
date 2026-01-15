@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -41,16 +41,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
 
-  useEffect(() => {
-    loadUsers()
-  }, [])
-
-  useEffect(() => {
-    filterUsers()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [users, searchQuery])
-
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     try {
       // Spring Boot returns ResponseEntity<List<UserDTO>> which serializes as an array
       // ApiClient.get returns response.data, which will be the array directly
@@ -79,9 +70,9 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
-  const filterUsers = () => {
+  const filterUsers = useCallback(() => {
     if (!searchQuery) {
       setFilteredUsers(users)
       return
@@ -95,7 +86,15 @@ export default function UsersPage() {
         user.role.toLowerCase().includes(query)
     )
     setFilteredUsers(filtered)
-  }
+  }, [users, searchQuery])
+
+  useEffect(() => {
+    loadUsers()
+  }, [loadUsers])
+
+  useEffect(() => {
+    filterUsers()
+  }, [filterUsers])
 
   const getRoleBadgeVariant = (role: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (role) {

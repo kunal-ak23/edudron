@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -37,13 +37,7 @@ export default function SectionEnrollPage() {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
   const [result, setResult] = useState<BulkEnrollmentResult | null>(null)
 
-  useEffect(() => {
-    if (sectionId) {
-      loadData()
-    }
-  }, [sectionId])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const [sectionData, coursesData] = await Promise.all([
@@ -79,7 +73,13 @@ export default function SectionEnrollPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [sectionId, toast])
+
+  useEffect(() => {
+    if (sectionId) {
+      loadData()
+    }
+  }, [sectionId, loadData])
 
   const handleEnroll = async () => {
     if (selectedCourseIds.length === 0) {

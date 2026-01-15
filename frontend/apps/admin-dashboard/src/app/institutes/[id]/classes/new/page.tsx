@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -32,14 +32,7 @@ export default function CreateClassPage() {
     isActive: true
   })
 
-  useEffect(() => {
-    if (instituteId) {
-      loadInstitute()
-      setFormData(prev => ({ ...prev, instituteId: instituteId }))
-    }
-  }, [instituteId])
-
-  const loadInstitute = async () => {
+  const loadInstitute = useCallback(async () => {
     try {
       setLoading(true)
       const data = await institutesApi.getInstitute(instituteId)
@@ -56,7 +49,14 @@ export default function CreateClassPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [instituteId, toast, router])
+
+  useEffect(() => {
+    if (instituteId) {
+      loadInstitute()
+      setFormData(prev => ({ ...prev, instituteId: instituteId }))
+    }
+  }, [instituteId, loadInstitute])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -73,16 +73,20 @@ export default function ExamResultsPage() {
       
       // Load exam
       try {
-        const examData = await apiClient.get<Exam>(`/api/student/exams/${examId}`)
-        setExam(examData)
+        const examResponse = await apiClient.get<Exam>(`/api/student/exams/${examId}`)
+        // Handle response - apiClient might return data directly or wrapped
+        const examData = (examResponse as any)?.data || examResponse
+        setExam(examData as Exam)
       } catch (error) {
         console.error('Failed to load exam:', error)
       }
 
       // Load submission
       try {
-        const submissionData = await apiClient.get<Submission>(`/api/student/exams/${examId}/submission`)
-        setSubmission(submissionData)
+        const submissionResponse = await apiClient.get<Submission>(`/api/student/exams/${examId}/submission`)
+        // Handle response - apiClient might return data directly or wrapped
+        const submissionData = (submissionResponse as any)?.data || submissionResponse
+        setSubmission(submissionData as Submission)
       } catch (error) {
         console.error('Failed to load submission:', error)
       }

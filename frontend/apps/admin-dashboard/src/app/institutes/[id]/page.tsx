@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -41,13 +41,7 @@ export default function InstituteDetailPage() {
     isActive: true
   })
 
-  useEffect(() => {
-    if (instituteId) {
-      loadInstitute()
-    }
-  }, [instituteId])
-
-  const loadInstitute = async () => {
+  const loadInstitute = useCallback(async () => {
     try {
       setLoading(true)
       const data = await institutesApi.getInstitute(instituteId)
@@ -71,7 +65,13 @@ export default function InstituteDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [instituteId, toast, router])
+
+  useEffect(() => {
+    if (instituteId) {
+      loadInstitute()
+    }
+  }, [instituteId, loadInstitute])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()

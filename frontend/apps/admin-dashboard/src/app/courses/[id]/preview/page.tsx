@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { coursesApi, lecturesApi } from '@/lib/api'
 import type { Course } from '@kunal-ak23/edudron-shared-utils'
@@ -162,10 +163,11 @@ export default function CoursePreviewPage() {
                   {course.previewVideoUrl ? (
                     <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
                       <div className="absolute inset-0 bg-gray-900">
-                        <img
+                        <Image
                           src={course.thumbnailUrl || ''}
                           alt={course.title}
-                          className="w-full h-full object-cover"
+                          fill
+                          className="object-cover"
                         />
                         <button
                           onClick={() => setShowPreviewVideoModal(true)}
@@ -184,11 +186,12 @@ export default function CoursePreviewPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="relative w-full">
-                      <img
+                    <div className="relative w-full" style={{ aspectRatio: '16/9' }}>
+                      <Image
                         src={course.thumbnailUrl || ''}
                         alt={course.title}
-                        className="w-full h-auto object-contain"
+                        fill
+                        className="object-cover"
                       />
                     </div>
                   )}

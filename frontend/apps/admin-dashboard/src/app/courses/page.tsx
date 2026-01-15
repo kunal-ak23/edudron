@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -62,17 +62,7 @@ export default function CoursesPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [courseToDelete, setCourseToDelete] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadCourses()
-  }, [])
-
-  useEffect(() => {
-    console.log('[CoursesPage] Filtering courses - courses:', courses.length, 'searchQuery:', searchQuery, 'statusFilter:', statusFilter)
-    filterCourses()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courses, searchQuery, statusFilter])
-
-  const loadCourses = async () => {
+  const loadCourses = useCallback(async () => {
     try {
       console.log('[CoursesPage] Starting to load courses...')
       console.log('[CoursesPage] coursesApi:', coursesApi)
@@ -114,9 +104,9 @@ export default function CoursesPage() {
       setLoading(false)
       console.log('[CoursesPage] Loading finished')
     }
-  }
+  }, [toast])
 
-  const filterCourses = () => {
+  const filterCourses = useCallback(() => {
     console.log('[CoursesPage.filterCourses] Starting filter - courses:', courses.length)
     let filtered = [...courses]
     console.log('[CoursesPage.filterCourses] Initial filtered count:', filtered.length)
@@ -147,7 +137,16 @@ export default function CoursesPage() {
     console.log('[CoursesPage.filterCourses] Final filtered count:', filtered.length)
     console.log('[CoursesPage.filterCourses] Filtered courses:', filtered.map(c => ({ id: c.id, title: c.title, isPublished: c.isPublished })))
     setFilteredCourses(filtered)
-  }
+  }, [courses, searchQuery, statusFilter])
+
+  useEffect(() => {
+    loadCourses()
+  }, [loadCourses])
+
+  useEffect(() => {
+    console.log('[CoursesPage] Filtering courses - courses:', courses.length, 'searchQuery:', searchQuery, 'statusFilter:', statusFilter)
+    filterCourses()
+  }, [courses, searchQuery, statusFilter, filterCourses])
 
   const handleDeleteClick = (courseId: string, e: React.MouseEvent) => {
     e.stopPropagation()

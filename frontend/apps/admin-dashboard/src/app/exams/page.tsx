@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,11 +29,7 @@ export default function ExamsPage() {
   const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    loadExams()
-  }, [])
-
-  const loadExams = async () => {
+  const loadExams = useCallback(async () => {
     try {
       setLoading(true)
       const response = await apiClient.get<Exam[]>('/api/exams')
@@ -87,7 +83,11 @@ export default function ExamsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
+
+  useEffect(() => {
+    loadExams()
+  }, [loadExams])
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {

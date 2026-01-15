@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -36,13 +36,7 @@ export default function ClassDetailPage() {
     isActive: true
   })
 
-  useEffect(() => {
-    if (classId) {
-      loadClass()
-    }
-  }, [classId])
-
-  const loadClass = async () => {
+  const loadClass = useCallback(async () => {
     try {
       setLoading(true)
       const classData = await classesApi.getClass(classId)
@@ -72,7 +66,13 @@ export default function ClassDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [classId, toast, router])
+
+  useEffect(() => {
+    if (classId) {
+      loadClass()
+    }
+  }, [classId, loadClass])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()

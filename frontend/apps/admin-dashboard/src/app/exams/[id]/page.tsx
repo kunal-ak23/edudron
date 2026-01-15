@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -77,11 +77,7 @@ export default function ExamDetailPage() {
   const [showQuestionEditor, setShowQuestionEditor] = useState(false)
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false)
 
-  useEffect(() => {
-    loadExam()
-  }, [examId])
-
-  const loadExam = async () => {
+  const loadExam = useCallback(async () => {
     try {
       setLoading(true)
       const response = await apiClient.get<any>(`/api/exams/${examId}`)
@@ -93,8 +89,8 @@ export default function ExamDetailPage() {
       }
       console.log('Loaded exam response:', response)
       console.log('Loaded exam data:', data)
-      console.log('Questions count:', data?.questions?.length || 0)
-      setExam(data)
+      console.log('Questions count:', (data as any)?.questions?.length || 0)
+      setExam(data as unknown as Exam)
     } catch (error) {
       console.error('Failed to load exam:', error)
       toast({
@@ -105,7 +101,11 @@ export default function ExamDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [examId, toast])
+
+  useEffect(() => {
+    loadExam()
+  }, [examId, loadExam])
 
   const handleSchedule = async () => {
     if (!scheduleData.startTime || !scheduleData.endTime) {
@@ -136,12 +136,13 @@ export default function ExamDetailPage() {
       }
       console.log('Schedule response:', response)
       console.log('Updated exam:', updated)
-      console.log('Updated exam questions count:', updated?.questions?.length || 0)
-      setExam(updated)
+      console.log('Updated exam questions count:', (updated as any)?.questions?.length || 0)
+      setExam(updated as unknown as Exam)
       setShowScheduleDialog(false)
+      const examStatus = (updated as any)?.status || 'DRAFT'
       toast({
         title: 'Success',
-        description: exam.status === 'SCHEDULED' 
+        description: examStatus === 'SCHEDULED' 
           ? 'Exam schedule updated successfully'
           : 'Exam scheduled successfully'
       })
@@ -676,11 +677,7 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
   const [loadingSubmissionDetails, setLoadingSubmissionDetails] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    loadSubmissions()
-  }, [examId])
-
-  const loadSubmissions = async () => {
+  const loadSubmissions = useCallback(async () => {
     try {
       setLoading(true)
       const response = await apiClient.get<any>(`/api/exams/${examId}/submissions`)
@@ -704,7 +701,11 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
     } finally {
       setLoading(false)
     }
-  }
+  }, [examId, toast])
+
+  useEffect(() => {
+    loadSubmissions()
+  }, [examId, loadSubmissions])
 
   if (loading) {
     return (
@@ -1006,7 +1007,7 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
                             )}
                             
                             <div>
-                              <Label className="text-sm font-medium text-gray-700">Student's Answer:</Label>
+                              <Label className="text-sm font-medium text-gray-700">Student&apos;s Answer:</Label>
                               {answerDisplay ? (
                                 <div className={`mt-1 p-3 rounded border text-sm ${
                                   isCorrect === true

@@ -124,19 +124,16 @@ export default function TakeExamPage() {
       setLoading(true)
       
       // Get exam details
-      const examData = await apiClient.get<Exam>(`/api/student/exams/${examId}`)
-      console.log('Exam data received:', examData)
-      console.log('Exam questions:', examData?.questions)
-      console.log('Questions type:', typeof examData?.questions)
-      console.log('Is array?', Array.isArray(examData?.questions))
+      const examResponse = await apiClient.get<Exam>(`/api/student/exams/${examId}`)
       
       // Handle response - apiClient might return data directly or wrapped
-      let exam = examData
-      if (examData && typeof examData === 'object' && 'data' in examData && !('id' in examData)) {
-        // Response is wrapped in { data: {...} }
-        exam = (examData as any).data
-        console.log('Unwrapped exam data:', exam)
-      }
+      let exam = (examResponse as any)?.data || examResponse
+      exam = exam as Exam
+      
+      console.log('Exam data received:', exam)
+      console.log('Exam questions:', exam?.questions)
+      console.log('Questions type:', typeof exam?.questions)
+      console.log('Is array?', Array.isArray(exam?.questions))
       
       // Ensure questions is always an array
       const examWithQuestions = {
