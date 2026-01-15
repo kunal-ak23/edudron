@@ -19,6 +19,9 @@ public interface AssessmentRepository extends JpaRepository<Assessment, String> 
     
     Optional<Assessment> findByIdAndClientId(String id, UUID clientId);
     
+    @Query("SELECT DISTINCT a FROM Assessment a LEFT JOIN FETCH a.questions WHERE a.id = :id AND a.clientId = :clientId")
+    Optional<Assessment> findByIdAndClientIdWithQuestions(@Param("id") String id, @Param("clientId") UUID clientId);
+    
     @Query("SELECT MAX(a.sequence) FROM Assessment a WHERE a.courseId = :courseId AND a.clientId = :clientId")
     Integer findMaxSequenceByCourseIdAndClientId(@Param("courseId") String courseId, @Param("clientId") UUID clientId);
     

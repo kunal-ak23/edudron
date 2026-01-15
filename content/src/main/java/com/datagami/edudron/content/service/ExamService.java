@@ -117,6 +117,11 @@ public class ExamService {
             throw new IllegalArgumentException("Start time cannot be in the past");
         }
         
+        // Store old times for logging
+        OffsetDateTime oldStartTime = exam.getStartTime();
+        OffsetDateTime oldEndTime = exam.getEndTime();
+        boolean isReschedule = oldStartTime != null || oldEndTime != null;
+        
         exam.setStartTime(startTime);
         exam.setEndTime(endTime);
         
@@ -131,7 +136,12 @@ public class ExamService {
         }
         
         Assessment updated = assessmentRepository.save(exam);
-        logger.info("Scheduled exam: {} from {} to {}", examId, startTime, endTime);
+        if (isReschedule) {
+            logger.info("Rescheduled exam: {} from {} to {} (was: {} to {})", 
+                examId, startTime, endTime, oldStartTime, oldEndTime);
+        } else {
+            logger.info("Scheduled exam: {} from {} to {}", examId, startTime, endTime);
+        }
         return updated;
     }
     
@@ -191,12 +201,21 @@ public class ExamService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        Assessment exam = assessmentRepository.findByIdAndClientId(examId, clientId)
+        // Use JOIN FETCH to eagerly load questions
+        Assessment exam = assessmentRepository.findByIdAndClientIdWithQuestions(examId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Exam not found: " + examId));
         
         if (exam.getAssessmentType() != Assessment.AssessmentType.EXAM) {
             throw new IllegalArgumentException("Assessment is not an exam: " + examId);
         }
+        
+        // Ensure questions are initialized (in case of lazy loading)
+        if (exam.getQuestions() != null) {
+            exam.getQuestions().size(); // Force initialization
+        }
+        
+        logger.debug("Retrieved exam {} with {} questions", examId, 
+            exam.getQuestions() != null ? exam.getQuestions().size() : 0);
         
         return exam;
     }

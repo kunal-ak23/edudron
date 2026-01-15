@@ -130,6 +130,16 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                 >
                   My Courses
                 </button>
+                <button
+                  onClick={() => router.push('/exams')}
+                  className={`font-medium transition-colors ${
+                    pathname?.startsWith('/exams')
+                      ? 'text-primary-600'
+                      : 'text-gray-700 hover:text-primary-600'
+                  }`}
+                >
+                  Exams
+                </button>
               </nav>
             </div>
             <div className="flex items-center space-x-4">
