@@ -61,6 +61,13 @@ public class AssessmentSubmissionController {
         return ResponseEntity.ok(submission);
     }
 
+    @GetMapping("/assessments/{assessmentId}/submissions")
+    @Operation(summary = "Get submissions by assessment", description = "Get all submissions for an assessment (instructor/admin only)")
+    public ResponseEntity<List<AssessmentSubmissionDTO>> getSubmissionsByAssessment(@PathVariable String assessmentId) {
+        List<AssessmentSubmissionDTO> submissions = submissionService.getSubmissionsByAssessmentId(assessmentId);
+        return ResponseEntity.ok(submissions);
+    }
+    
     @PostMapping("/assessments/submissions/{submissionId}/grade")
     @Operation(summary = "Grade submission", description = "Grade an assessment submission (instructor/admin only)")
     public ResponseEntity<AssessmentSubmissionDTO> gradeSubmission(

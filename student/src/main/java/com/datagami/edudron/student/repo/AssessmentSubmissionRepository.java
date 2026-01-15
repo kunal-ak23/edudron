@@ -25,6 +25,10 @@ public interface AssessmentSubmissionRepository extends JpaRepository<Assessment
     
     Optional<AssessmentSubmission> findFirstByClientIdAndStudentIdAndAssessmentIdOrderBySubmittedAtDesc(
         UUID clientId, String studentId, String assessmentId);
+    
+    List<AssessmentSubmission> findByClientIdAndAssessmentId(UUID clientId, String assessmentId);
+    
+    Page<AssessmentSubmission> findByClientIdAndAssessmentId(UUID clientId, String assessmentId, Pageable pageable);
 }
 
 

@@ -1,5 +1,6 @@
 package com.datagami.edudron.content.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -59,14 +60,17 @@ public class Assessment {
     private OffsetDateTime updatedAt;
 
     // Relationships (read-only, for navigation only)
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_id", insertable = false, updatable = false)
     private Course course;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "section_id", insertable = false, updatable = false)
     private Section section;
 
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "lecture_id", insertable = false, updatable = false)
     private Lecture lecture;

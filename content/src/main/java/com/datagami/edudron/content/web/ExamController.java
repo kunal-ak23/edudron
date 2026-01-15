@@ -6,16 +6,28 @@ import com.datagami.edudron.content.repo.QuizQuestionRepository;
 import com.datagami.edudron.content.service.ExamService;
 import com.datagami.edudron.content.service.ExamReviewService;
 import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +48,39 @@ public class ExamController {
     
     @Autowired
     private ExamReviewService examReviewService;
+    
+    @Value("${GATEWAY_URL:http://localhost:8080}")
+    private String gatewayUrl;
+    
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
+    
+    private RestTemplate getRestTemplate() {
+        if (restTemplate == null) {
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    restTemplate = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    interceptors.add((request, body, execution) -> {
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                }
+                            }
+                        }
+                        return execution.execute(request, body);
+                    });
+                    restTemplate.setInterceptors(interceptors);
+                }
+            }
+        }
+        return restTemplate;
+    }
     
     @PostMapping
     @Operation(summary = "Create exam", description = "Create a new exam")
@@ -128,8 +173,29 @@ public class ExamController {
             return ResponseEntity.badRequest().build();
         }
         
-        OffsetDateTime startTime = OffsetDateTime.parse(startTimeStr);
-        OffsetDateTime endTime = OffsetDateTime.parse(endTimeStr);
+        // Parse date-time strings with timezone (ISO 8601 format: "2026-01-16T19:00:00+05:30")
+        // Frontend now sends timezone-aware datetimes to support students in different timezones
+        OffsetDateTime startTime;
+        OffsetDateTime endTime;
+        
+        try {
+            // Try parsing as OffsetDateTime (with timezone) - this is the expected format now
+            startTime = OffsetDateTime.parse(startTimeStr);
+            endTime = OffsetDateTime.parse(endTimeStr);
+        } catch (Exception e) {
+            // Fallback: if timezone is missing, parse as LocalDateTime and assume UTC
+            // This maintains backward compatibility but frontend should always send timezone
+            try {
+                LocalDateTime startLocal = LocalDateTime.parse(startTimeStr);
+                LocalDateTime endLocal = LocalDateTime.parse(endTimeStr);
+                startTime = startLocal.atOffset(ZoneOffset.UTC);
+                endTime = endLocal.atOffset(ZoneOffset.UTC);
+                logger.warn("Received datetime without timezone, assuming UTC. startTime={}, endTime={}", startTimeStr, endTimeStr);
+            } catch (Exception e2) {
+                logger.error("Failed to parse date-time strings: startTime={}, endTime={}", startTimeStr, endTimeStr, e2);
+                return ResponseEntity.badRequest().build();
+            }
+        }
         
         Assessment exam = examService.scheduleExam(id, startTime, endTime);
         return ResponseEntity.ok(exam);
@@ -184,9 +250,41 @@ public class ExamController {
     
     @GetMapping("/{id}/submissions")
     @Operation(summary = "Get all submissions", description = "Get all submissions for an exam")
-    public ResponseEntity<List<?>> getSubmissions(@PathVariable String id) {
-        // TODO: Implement submission retrieval from student service
-        return ResponseEntity.ok(new ArrayList<>());
+    public ResponseEntity<List<Map<String, Object>>> getSubmissions(@PathVariable String id) {
+        try {
+            String url = gatewayUrl + "/api/assessments/" + id + "/submissions";
+            
+            // Use ParameterizedTypeReference to properly deserialize List
+            org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>> responseType = 
+                new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {};
+            
+            ResponseEntity<List<Map<String, Object>>> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                responseType
+            );
+            
+            List<Map<String, Object>> submissions = response.getBody();
+            if (submissions == null) {
+                submissions = new ArrayList<>();
+            }
+            
+            // Filter out deeply nested JSON fields to prevent nesting depth errors
+            List<Map<String, Object>> simplifiedSubmissions = new ArrayList<>();
+            for (Map<String, Object> submission : submissions) {
+                Map<String, Object> simplified = new java.util.HashMap<>(submission);
+                // Remove deeply nested JSON fields that cause nesting depth issues
+                simplified.remove("answersJson");
+                simplified.remove("aiReviewFeedback");
+                simplifiedSubmissions.add(simplified);
+            }
+            
+            return ResponseEntity.ok(simplifiedSubmissions);
+        } catch (Exception e) {
+            logger.error("Failed to fetch submissions", e);
+            return ResponseEntity.ok(new ArrayList<>());
+        }
     }
     
     @PostMapping("/{id}/submissions/{submissionId}/review")

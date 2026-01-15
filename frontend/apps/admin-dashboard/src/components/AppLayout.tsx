@@ -43,6 +43,11 @@ function getPageTitle(pathname: string): string {
     if (pathname === '/course-index') return 'Course Index'
     return 'Course Details'
   }
+  if (pathname === '/exams') return 'Exams'
+  if (pathname.startsWith('/exams')) {
+    if (pathname === '/exams/new') return 'Create Exam'
+    return 'Exam Details'
+  }
   if (pathname === '/enrollments') return 'Enrollments'
   if (pathname === '/payments') return 'Payments'
   if (pathname === '/settings') return 'Settings'
@@ -70,6 +75,11 @@ function getPageSubtitle(pathname: string): string {
     if (pathname === '/courses/generate') return 'Generate courses using AI'
     if (pathname === '/course-index') return 'Manage course generation indexes'
     return 'View and edit course details'
+  }
+  if (pathname === '/exams') return 'Manage and create exams'
+  if (pathname.startsWith('/exams')) {
+    if (pathname === '/exams/new') return 'Create a new exam with AI-powered question generation'
+    return 'View and manage exam details, questions, and submissions'
   }
   if (pathname === '/enrollments') return 'Manage student enrollments'
   if (pathname === '/payments') return 'Manage payment transactions'

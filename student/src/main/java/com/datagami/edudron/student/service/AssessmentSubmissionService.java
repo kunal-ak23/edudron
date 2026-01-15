@@ -162,6 +162,28 @@ public class AssessmentSubmissionService {
         return toDTO(submission);
     }
     
+    public List<AssessmentSubmissionDTO> getSubmissionsByAssessmentId(String assessmentId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        List<AssessmentSubmission> submissions = submissionRepository.findByClientIdAndAssessmentId(clientId, assessmentId);
+        return submissions.stream().map(this::toDTO).collect(Collectors.toList());
+    }
+    
+    public Page<AssessmentSubmissionDTO> getSubmissionsByAssessmentId(String assessmentId, Pageable pageable) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        Page<AssessmentSubmission> submissions = submissionRepository.findByClientIdAndAssessmentId(clientId, assessmentId, pageable);
+        return submissions.map(this::toDTO);
+    }
+    
     private AssessmentSubmissionDTO toDTO(AssessmentSubmission submission) {
         AssessmentSubmissionDTO dto = new AssessmentSubmissionDTO();
         dto.setId(submission.getId());

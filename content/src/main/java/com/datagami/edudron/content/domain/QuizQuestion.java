@@ -1,5 +1,6 @@
 package com.datagami.edudron.content.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -51,6 +52,7 @@ public class QuizQuestion {
     private OffsetDateTime updatedAt;
 
     // Relationships
+    @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assessment_id", insertable = false, updatable = false)
     private Assessment assessment;

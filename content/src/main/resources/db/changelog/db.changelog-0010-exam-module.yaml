@@ -8,11 +8,21 @@ databaseChangeLog:
             tableName: assessments
             schemaName: content
             columns:
-              - column: { name: start_time, type: timestamptz }
-              - column: { name: end_time, type: timestamptz }
-              - column: { name: status, type: varchar(20) }
-              - column: { name: review_method, type: varchar(20) }
-              - column: { name: module_ids, type: text[] }
+              - column:
+                  name: start_time
+                  type: timestamptz
+              - column:
+                  name: end_time
+                  type: timestamptz
+              - column:
+                  name: status
+                  type: varchar(20)
+              - column:
+                  name: review_method
+                  type: varchar(20)
+              - column:
+                  name: module_ids
+                  type: "text[]"
         - createIndex:
             tableName: assessments
             schemaName: content

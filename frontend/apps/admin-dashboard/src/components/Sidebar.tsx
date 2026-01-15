@@ -24,7 +24,8 @@ import {
   UserCog,
   Database,
   CreditCard,
-  Sparkles
+  Sparkles,
+  ClipboardList
 } from 'lucide-react'
 
 interface MenuItem {
@@ -101,6 +102,12 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
+    name: 'Exams',
+    href: '/exams',
+    icon: ClipboardList,
+    requiresTenant: true,
+  },
+  {
     name: 'Enrollments',
     href: '/enrollments',
     icon: Users,
@@ -162,6 +169,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
     if (path.startsWith('/super-admin')) return 'System Management'
     if (path.startsWith('/institutes')) return 'Institutes'
     if (path.startsWith('/courses')) return 'Courses'
+    if (path.startsWith('/exams')) return 'Exams'
     if (path.startsWith('/enrollments')) return 'Enrollments'
     if (path.startsWith('/payments')) return 'Payments'
     if (path.startsWith('/settings')) return 'Settings'
