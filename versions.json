@@ -1,9 +1,9 @@
 {
-  "gateway": "0.1.9",
-  "identity": "0.1.5",
-  "content": "0.1.9",
-  "student": "0.1.6",
-  "payment": "0.1.5"
+  "gateway": "0.1.10",
+  "identity": "0.1.6",
+  "content": "0.1.10",
+  "student": "0.1.7",
+  "payment": "0.1.6"
 }
 
 
