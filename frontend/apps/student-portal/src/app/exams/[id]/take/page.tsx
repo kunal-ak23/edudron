@@ -155,11 +155,7 @@ export default function TakeExamPage() {
       try {
         const response = await apiClient.get<any>(`/api/student/exams/${examId}/submission`)
         // Handle response - apiClient might return data directly or wrapped
-        let submission = response
-        if (response && typeof response === 'object' && 'data' in response && !('id' in response)) {
-          // Response is wrapped in { data: {...} }
-          submission = (response as any).data
-        }
+        const submission = ((response as any)?.data || response) as any
         
         console.log('Submission response:', response)
         console.log('Extracted submission:', submission)
@@ -185,11 +181,7 @@ export default function TakeExamPage() {
             timeLimitSeconds: examWithQuestions.timeLimitSeconds
           })
           // Handle response - apiClient might return data directly or wrapped
-          let submission = response
-          if (response && typeof response === 'object' && 'data' in response && !('id' in response)) {
-            // Response is wrapped in { data: {...} }
-            submission = (response as any).data
-          }
+          const submission = ((response as any)?.data || response) as any
           
           console.log('Start exam response:', response)
           console.log('Extracted submission:', submission)
@@ -345,11 +337,13 @@ export default function TakeExamPage() {
       }
       try {
         console.log('Attempting to create submission...')
-        const submission = await apiClient.post<any>(`/api/student/exams/${examId}/start`, {
+        const submissionResponse = await apiClient.post<any>(`/api/student/exams/${examId}/start`, {
           courseId: exam.courseId || '',
           timeLimitSeconds: exam.timeLimitSeconds
         })
-        const newSubmissionId = submission.id || submission.submissionId
+        // Handle response - apiClient might return data directly or wrapped
+        const submission = ((submissionResponse as any)?.data || submissionResponse) as any
+        const newSubmissionId = submission?.id || submission?.submissionId
         if (newSubmissionId) {
           setSubmissionId(newSubmissionId)
           // Save answers immediately
