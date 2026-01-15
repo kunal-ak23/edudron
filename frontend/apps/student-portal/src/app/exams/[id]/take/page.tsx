@@ -156,29 +156,74 @@ export default function TakeExamPage() {
       // Check for existing submission or start new one
       let submissionIdValue: string | null = null
       try {
-        const submission = await apiClient.get<any>(`/api/student/exams/${examId}/submission`)
-        submissionIdValue = submission.id || submission.submissionId
+        const response = await apiClient.get<any>(`/api/student/exams/${examId}/submission`)
+        // Handle response - apiClient might return data directly or wrapped
+        let submission = response
+        if (response && typeof response === 'object' && 'data' in response && !('id' in response)) {
+          // Response is wrapped in { data: {...} }
+          submission = (response as any).data
+        }
+        
+        console.log('Submission response:', response)
+        console.log('Extracted submission:', submission)
+        
+        submissionIdValue = submission?.id || submission?.submissionId || null
         setSubmissionId(submissionIdValue)
-        if (submission.answersJson) {
+        
+        if (submission?.answersJson) {
           setAnswers(submission.answersJson)
         }
-        if (submission.timeRemainingSeconds !== null) {
+        if (submission?.timeRemainingSeconds !== null && submission?.timeRemainingSeconds !== undefined) {
           setTimeRemaining(submission.timeRemainingSeconds)
         } else if (examWithQuestions.timeLimitSeconds) {
           setTimeRemaining(examWithQuestions.timeLimitSeconds)
         }
         console.log('Loaded existing submission:', submissionIdValue)
-      } catch (error) {
-        // No existing submission, start new exam
-        console.log('No existing submission found, creating new one...')
+      } catch (error: any) {
+        // No existing submission (404) or other error, start new exam
+        console.log('No existing submission found (or error fetching), creating new one...', error?.status || error?.message)
         try {
-          const submission = await apiClient.post<any>(`/api/student/exams/${examId}/start`, {
+          const response = await apiClient.post<any>(`/api/student/exams/${examId}/start`, {
             courseId: examWithQuestions.courseId,
             timeLimitSeconds: examWithQuestions.timeLimitSeconds
           })
-          submissionIdValue = submission.id || submission.submissionId
+          // Handle response - apiClient might return data directly or wrapped
+          let submission = response
+          if (response && typeof response === 'object' && 'data' in response && !('id' in response)) {
+            // Response is wrapped in { data: {...} }
+            submission = (response as any).data
+          }
+          
+          console.log('Start exam response:', response)
+          console.log('Extracted submission:', submission)
+          
+          submissionIdValue = submission?.id || submission?.submissionId || null
+          
+          if (!submissionIdValue) {
+            console.error('Failed to extract submission ID from response:', submission)
+            console.error('Full response:', response)
+            // Try alternative extraction methods
+            if (submission && typeof submission === 'object') {
+              const keys = Object.keys(submission)
+              console.log('Submission object keys:', keys)
+              // Try to find ID in any property
+              for (const key of keys) {
+                if (key.toLowerCase().includes('id') && submission[key]) {
+                  submissionIdValue = String(submission[key])
+                  console.log(`Found ID in property ${key}:`, submissionIdValue)
+                  break
+                }
+              }
+            }
+          }
+          
+          if (!submissionIdValue) {
+            console.error('Could not extract submission ID from start exam response')
+            throw new Error('Could not extract submission ID from start exam response')
+          }
+          
           setSubmissionId(submissionIdValue)
-          setTimeRemaining(submission.timeRemainingSeconds || examWithQuestions.timeLimitSeconds || 0)
+          setTimeRemaining(submission?.timeRemainingSeconds || examWithQuestions.timeLimitSeconds || 0)
           console.log('Created new submission:', submissionIdValue)
           
           // Immediately save empty answers to ensure submission exists
@@ -187,24 +232,27 @@ export default function TakeExamPage() {
               await apiClient.post(`/api/student/exams/${examId}/save-progress`, {
                 submissionId: submissionIdValue,
                 answers: {},
-                timeRemainingSeconds: submission.timeRemainingSeconds || examWithQuestions.timeLimitSeconds || 0
+                timeRemainingSeconds: submission?.timeRemainingSeconds || examWithQuestions.timeLimitSeconds || 0
               })
               console.log('Initial save completed')
             } catch (saveError) {
               console.error('Failed to do initial save:', saveError)
             }
           }
-        } catch (startError) {
+        } catch (startError: any) {
           console.error('Failed to start exam submission:', startError)
-          throw startError
+          console.error('Error details:', startError?.response || startError?.message)
+          // Don't throw - let the page continue to load even if starting fails
         }
       }
 
       // Start auto-save only if we have a submission ID
       if (submissionIdValue) {
+        console.log('Starting auto-save with submission ID:', submissionIdValue)
         startAutoSave()
       } else {
         console.error('No submission ID available, cannot start auto-save')
+        console.error('This may prevent auto-save from working. Please refresh the page.')
       }
     } catch (error) {
       console.error('Failed to load exam:', error)

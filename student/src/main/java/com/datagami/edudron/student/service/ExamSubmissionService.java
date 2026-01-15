@@ -37,7 +37,7 @@ public class ExamSubmissionService {
     /**
      * Start an exam attempt - initialize with timer
      */
-    public AssessmentSubmission startExam(String studentId, String courseId, String examId, Integer timeLimitSeconds) {
+    public AssessmentSubmission startExam(String studentId, String courseId, String examId, Integer timeLimitSeconds, Integer maxAttempts) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -68,6 +68,31 @@ public class ExamSubmissionService {
                 // Resume existing attempt
                 logger.info("Resuming exam attempt: {} for student: {}", examId, studentId);
                 return submission;
+            }
+            
+            // Check maxAttempts limit (if exam has one)
+            if (maxAttempts != null && maxAttempts > 0) {
+                // Count completed submissions
+                long completedCount = existingSubmissions.stream()
+                    .filter(s -> s.getCompletedAt() != null)
+                    .count();
+                
+                if (completedCount >= maxAttempts) {
+                    throw new IllegalStateException(
+                        String.format("Maximum attempts (%d) reached for this exam", maxAttempts));
+                }
+                
+                logger.info("Student {} attempting exam {} (attempt {}/{})", 
+                    studentId, examId, completedCount + 1, maxAttempts);
+            } else if (!existingSubmissions.isEmpty()) {
+                // Log warning if multiple attempts without limit
+                long completedCount = existingSubmissions.stream()
+                    .filter(s -> s.getCompletedAt() != null)
+                    .count();
+                if (completedCount > 0) {
+                    logger.warn("Student {} attempting exam {} again. Completed attempts: {} (no maxAttempts limit set)", 
+                        studentId, examId, completedCount);
+                }
             }
         }
         

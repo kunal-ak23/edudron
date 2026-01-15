@@ -287,6 +287,38 @@ public class ExamController {
         }
     }
     
+    @GetMapping("/{id}/submissions/{submissionId}")
+    @Operation(summary = "Get submission details", description = "Get full submission details including answers")
+    public ResponseEntity<Map<String, Object>> getSubmissionDetails(
+            @PathVariable String id,
+            @PathVariable String submissionId) {
+        try {
+            logger.info("Fetching submission details for examId: {}, submissionId: {}", id, submissionId);
+            String url = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
+            logger.info("Calling student service at: {}", url);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            Map<String, Object> submission = response.getBody();
+            if (submission == null) {
+                logger.warn("Submission not found: {}", submissionId);
+                return ResponseEntity.notFound().build();
+            }
+            
+            logger.info("Successfully fetched submission details. Has answersJson: {}", submission.containsKey("answersJson"));
+            // Return full submission with answersJson included
+            return ResponseEntity.ok(submission);
+        } catch (Exception e) {
+            logger.error("Failed to fetch submission details for examId: {}, submissionId: {}", id, submissionId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
     @PostMapping("/{id}/submissions/{submissionId}/review")
     @Operation(summary = "Review submission with AI", description = "Trigger AI review for a submission")
     public ResponseEntity<?> reviewSubmission(

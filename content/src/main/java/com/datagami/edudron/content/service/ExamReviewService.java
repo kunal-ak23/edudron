@@ -7,6 +7,7 @@ import com.datagami.edudron.content.domain.QuizOption;
 import com.datagami.edudron.content.domain.QuizQuestion;
 import com.datagami.edudron.content.repo.AssessmentRepository;
 import com.datagami.edudron.content.repo.QuizQuestionRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
@@ -195,10 +197,20 @@ public class ExamReviewService {
         updateRequest.put("reviewStatus", "AI_REVIEWED");
         
         String updateUrl = gatewayUrl + "/api/assessments/submissions/" + submissionId + "/grade";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        // Convert ObjectNode to String to ensure JSON serialization
+        String requestBody;
+        try {
+            requestBody = objectMapper.writeValueAsString(updateRequest);
+        } catch (JsonProcessingException e) {
+            logger.error("Failed to serialize update request", e);
+            throw new RuntimeException("Failed to serialize update request", e);
+        }
         getRestTemplate().exchange(
             updateUrl,
             HttpMethod.POST,
-            new HttpEntity<>(updateRequest, new HttpHeaders()),
+            new HttpEntity<>(requestBody, headers),
             JsonNode.class
         );
         
@@ -296,10 +308,20 @@ public class ExamReviewService {
         updateRequest.put("reviewStatus", "INSTRUCTOR_REVIEWED");
         
         String updateUrl = gatewayUrl + "/api/assessments/submissions/" + submissionId + "/grade";
+        HttpHeaders instructorHeaders = new HttpHeaders();
+        instructorHeaders.setContentType(MediaType.APPLICATION_JSON);
+        // Convert ObjectNode to String to ensure JSON serialization
+        String requestBody;
+        try {
+            requestBody = objectMapper.writeValueAsString(updateRequest);
+        } catch (JsonProcessingException e) {
+            logger.error("Failed to serialize update request", e);
+            throw new RuntimeException("Failed to serialize update request", e);
+        }
         ResponseEntity<JsonNode> updateResponse = getRestTemplate().exchange(
             updateUrl,
             HttpMethod.POST,
-            new HttpEntity<>(updateRequest, new HttpHeaders()),
+            new HttpEntity<>(requestBody, instructorHeaders),
             JsonNode.class
         );
         
