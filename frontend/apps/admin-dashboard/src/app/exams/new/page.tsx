@@ -73,14 +73,7 @@ export default function NewExamPage() {
       return
     }
 
-    if (formData.moduleIds.length === 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select at least one module',
-        variant: 'destructive'
-      })
-      return
-    }
+    // Modules are optional - only required for AI generation
 
     setLoading(true)
     try {
@@ -121,6 +114,15 @@ export default function NewExamPage() {
       toast({
         title: 'Validation Error',
         description: 'Please fill in course and title first',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (formData.moduleIds.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select at least one module for AI generation',
         variant: 'destructive'
       })
       return
@@ -265,9 +267,12 @@ export default function NewExamPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Select Modules</CardTitle>
+              <CardTitle>Select Modules (Optional)</CardTitle>
             </CardHeader>
             <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                Modules are only required if you plan to generate questions with AI. You can create an empty exam and add questions manually.
+              </p>
               {!formData.courseId ? (
                 <p className="text-gray-500 text-sm">Please select a course first</p>
               ) : sections.length === 0 ? (

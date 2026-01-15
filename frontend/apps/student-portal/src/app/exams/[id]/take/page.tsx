@@ -641,16 +641,22 @@ export default function TakeExamPage() {
 
                       {currentQuestion.questionType === 'TRUE_FALSE' && (
                         <RadioGroup
-                          value={answers[currentQuestion.id] || ''}
+                          value={
+                            answers[currentQuestion.id] === undefined || answers[currentQuestion.id] === null
+                              ? ''
+                              : answers[currentQuestion.id] === true || answers[currentQuestion.id] === 'true'
+                              ? 'true'
+                              : 'false'
+                          }
                           onValueChange={(value) => handleAnswerChange(currentQuestion.id, value === 'true')}
                         >
                           <div className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            <RadioGroupItem value="true" id="true" />
-                            <Label htmlFor="true" className="flex-1 cursor-pointer text-gray-900">True</Label>
+                            <RadioGroupItem value="true" id={`true-${currentQuestion.id}`} />
+                            <Label htmlFor={`true-${currentQuestion.id}`} className="flex-1 cursor-pointer text-gray-900">True</Label>
                           </div>
                           <div className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                            <RadioGroupItem value="false" id="false" />
-                            <Label htmlFor="false" className="flex-1 cursor-pointer text-gray-900">False</Label>
+                            <RadioGroupItem value="false" id={`false-${currentQuestion.id}`} />
+                            <Label htmlFor={`false-${currentQuestion.id}`} className="flex-1 cursor-pointer text-gray-900">False</Label>
                           </div>
                         </RadioGroup>
                       )}

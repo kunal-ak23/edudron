@@ -5,6 +5,7 @@ import com.datagami.edudron.content.domain.QuizQuestion;
 import com.datagami.edudron.content.repo.QuizQuestionRepository;
 import com.datagami.edudron.content.service.ExamService;
 import com.datagami.edudron.content.service.ExamReviewService;
+import com.datagami.edudron.content.service.QuestionService;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,6 +49,9 @@ public class ExamController {
     
     @Autowired
     private ExamReviewService examReviewService;
+    
+    @Autowired
+    private QuestionService questionService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -331,6 +335,90 @@ public class ExamController {
             logger.error("Failed to review submission", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+    
+    @PostMapping("/{id}/questions")
+    @Operation(summary = "Create question", description = "Create a new question for an exam")
+    public ResponseEntity<QuizQuestion> createQuestion(
+            @PathVariable String id,
+            @RequestBody Map<String, Object> request) {
+        
+        String questionTypeStr = (String) request.get("questionType");
+        QuizQuestion.QuestionType questionType = QuizQuestion.QuestionType.valueOf(questionTypeStr);
+        String questionText = (String) request.get("questionText");
+        Integer points = request.get("points") != null ? 
+            ((Number) request.get("points")).intValue() : 1;
+        String tentativeAnswer = (String) request.get("tentativeAnswer");
+        
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> optionsData = (List<Map<String, Object>>) request.get("options");
+        List<QuestionService.OptionData> options = null;
+        if (optionsData != null) {
+            options = new ArrayList<>();
+            for (Map<String, Object> optData : optionsData) {
+                String text = (String) optData.get("text");
+                Boolean isCorrect = optData.get("isCorrect") != null ? 
+                    ((Boolean) optData.get("isCorrect")) : false;
+                options.add(new QuestionService.OptionData(text, isCorrect));
+            }
+        }
+        
+        QuizQuestion question = questionService.createQuestion(id, questionType, questionText, points, options, tentativeAnswer);
+        return ResponseEntity.status(HttpStatus.CREATED).body(question);
+    }
+    
+    @PutMapping("/{id}/questions/{questionId}")
+    @Operation(summary = "Update question", description = "Update an existing question")
+    public ResponseEntity<QuizQuestion> updateQuestion(
+            @PathVariable String id,
+            @PathVariable String questionId,
+            @RequestBody Map<String, Object> request) {
+        
+        String questionText = (String) request.get("questionText");
+        Integer points = request.get("points") != null ? 
+            ((Number) request.get("points")).intValue() : null;
+        String tentativeAnswer = (String) request.get("tentativeAnswer");
+        
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> optionsData = (List<Map<String, Object>>) request.get("options");
+        List<QuestionService.OptionData> options = null;
+        if (optionsData != null) {
+            options = new ArrayList<>();
+            for (Map<String, Object> optData : optionsData) {
+                String text = (String) optData.get("text");
+                Boolean isCorrect = optData.get("isCorrect") != null ? 
+                    ((Boolean) optData.get("isCorrect")) : false;
+                options.add(new QuestionService.OptionData(text, isCorrect));
+            }
+        }
+        
+        QuizQuestion question = questionService.updateQuestion(questionId, questionText, points, options, tentativeAnswer);
+        return ResponseEntity.ok(question);
+    }
+    
+    @DeleteMapping("/{id}/questions/{questionId}")
+    @Operation(summary = "Delete question", description = "Delete a question from an exam")
+    public ResponseEntity<Void> deleteQuestion(
+            @PathVariable String id,
+            @PathVariable String questionId) {
+        questionService.deleteQuestion(questionId);
+        return ResponseEntity.noContent().build();
+    }
+    
+    @PostMapping("/{id}/questions/reorder")
+    @Operation(summary = "Reorder questions", description = "Reorder questions in an exam")
+    public ResponseEntity<Void> reorderQuestions(
+            @PathVariable String id,
+            @RequestBody Map<String, Object> request) {
+        
+        @SuppressWarnings("unchecked")
+        List<String> questionIds = (List<String>) request.get("questionIds");
+        if (questionIds == null || questionIds.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        
+        questionService.reorderQuestions(id, questionIds);
+        return ResponseEntity.ok().build();
     }
     
     @DeleteMapping("/{id}")

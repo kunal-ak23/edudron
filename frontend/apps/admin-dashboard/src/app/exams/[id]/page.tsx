@@ -9,9 +9,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Loader2, Calendar, Clock, Users, Edit, Save, Sparkles, Eye } from 'lucide-react'
+import { ArrowLeft, Loader2, Calendar, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { apiClient } from '@/lib/api'
+import { apiClient, questionsApi, type QuestionData } from '@/lib/api'
+import { QuestionEditor } from '@/components/exams/QuestionEditor'
 import {
   Dialog,
   DialogContent,
@@ -73,6 +74,8 @@ export default function ExamDetailPage() {
   })
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const [showTentativeAnswerDialog, setShowTentativeAnswerDialog] = useState(false)
+  const [showQuestionEditor, setShowQuestionEditor] = useState(false)
+  const [isCreatingQuestion, setIsCreatingQuestion] = useState(false)
 
   useEffect(() => {
     loadExam()
@@ -338,6 +341,18 @@ export default function ExamDetailPage() {
           </TabsContent>
 
           <TabsContent value="questions" className="space-y-4">
+            {exam.status === 'DRAFT' && (
+              <div className="flex justify-end">
+                <Button onClick={() => {
+                  setIsCreatingQuestion(true)
+                  setEditingQuestion(null)
+                  setShowQuestionEditor(true)
+                }}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Question
+                </Button>
+              </div>
+            )}
             {questions.length > 0 ? (
               <div className="space-y-4">
                 {questions.map((question, index) => (
@@ -347,7 +362,49 @@ export default function ExamDetailPage() {
                         <CardTitle className="text-lg">
                           Question {index + 1} ({question.points} points)
                         </CardTitle>
-                        <Badge variant="outline">{question.questionType}</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">{question.questionType}</Badge>
+                          {exam.status === 'DRAFT' && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setEditingQuestion(question)
+                                  setIsCreatingQuestion(false)
+                                  setShowQuestionEditor(true)
+                                }}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={async () => {
+                                  if (confirm('Are you sure you want to delete this question?')) {
+                                    try {
+                                      await questionsApi.delete(examId, question.id)
+                                      await loadExam()
+                                      toast({
+                                        title: 'Success',
+                                        description: 'Question deleted successfully'
+                                      })
+                                    } catch (error) {
+                                      console.error('Failed to delete question:', error)
+                                      toast({
+                                        title: 'Error',
+                                        description: 'Failed to delete question',
+                                        variant: 'destructive'
+                                      })
+                                    }
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -407,34 +464,46 @@ export default function ExamDetailPage() {
             ) : (
               <Card>
                 <CardContent className="py-12 text-center">
-                  <p className="text-gray-500 mb-4">No questions generated yet</p>
-                  <Button onClick={async () => {
-                    setSaving(true)
-                    try {
-                      await apiClient.post(`/api/exams/${examId}/generate`, {
-                        numberOfQuestions: 10,
-                        difficulty: 'INTERMEDIATE'
-                      })
-                      await loadExam()
-                      toast({
-                        title: 'Success',
-                        description: 'Questions generated successfully'
-                      })
-                    } catch (error) {
-                      console.error('Failed to generate questions:', error)
-                      toast({
-                        title: 'Error',
-                        description: 'Failed to generate questions',
-                        variant: 'destructive'
-                      })
-                    } finally {
-                      setSaving(false)
-                    }
-                  }} disabled={saving}>
-                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
-                     <Sparkles className="h-4 w-4 mr-2" />}
-                    Generate Questions with AI
-                  </Button>
+                  <p className="text-gray-500 mb-4">No questions added yet</p>
+                  <div className="flex gap-2 justify-center">
+                    <Button onClick={() => {
+                      setIsCreatingQuestion(true)
+                      setEditingQuestion(null)
+                      setShowQuestionEditor(true)
+                    }}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Question Manually
+                    </Button>
+                    {exam.moduleIds && exam.moduleIds.length > 0 && (
+                      <Button onClick={async () => {
+                        setSaving(true)
+                        try {
+                          await apiClient.post(`/api/exams/${examId}/generate`, {
+                            numberOfQuestions: 10,
+                            difficulty: 'INTERMEDIATE'
+                          })
+                          await loadExam()
+                          toast({
+                            title: 'Success',
+                            description: 'Questions generated successfully'
+                          })
+                        } catch (error) {
+                          console.error('Failed to generate questions:', error)
+                          toast({
+                            title: 'Error',
+                            description: 'Failed to generate questions',
+                            variant: 'destructive'
+                          })
+                        } finally {
+                          setSaving(false)
+                        }
+                      }} disabled={saving} variant="outline">
+                        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
+                         <Sparkles className="h-4 w-4 mr-2" />}
+                        Generate Questions with AI
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -541,6 +610,56 @@ export default function ExamDetailPage() {
                 Save
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Question Editor Dialog */}
+        <Dialog open={showQuestionEditor} onOpenChange={setShowQuestionEditor}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <QuestionEditor
+              question={editingQuestion ? {
+                id: editingQuestion.id,
+                questionType: editingQuestion.questionType,
+                questionText: editingQuestion.questionText,
+                points: editingQuestion.points,
+                options: editingQuestion.options,
+                tentativeAnswer: editingQuestion.editedTentativeAnswer || editingQuestion.tentativeAnswer
+              } : undefined}
+              onSave={async (questionData: QuestionData) => {
+                try {
+                  if (isCreatingQuestion) {
+                    await questionsApi.create(examId, questionData)
+                    toast({
+                      title: 'Success',
+                      description: 'Question added successfully'
+                    })
+                  } else if (editingQuestion) {
+                    await questionsApi.update(examId, editingQuestion.id, questionData)
+                    toast({
+                      title: 'Success',
+                      description: 'Question updated successfully'
+                    })
+                  }
+                  await loadExam()
+                  setShowQuestionEditor(false)
+                  setEditingQuestion(null)
+                  setIsCreatingQuestion(false)
+                } catch (error) {
+                  console.error('Failed to save question:', error)
+                  toast({
+                    title: 'Error',
+                    description: isCreatingQuestion ? 'Failed to add question' : 'Failed to update question',
+                    variant: 'destructive'
+                  })
+                  throw error
+                }
+              }}
+              onCancel={() => {
+                setShowQuestionEditor(false)
+                setEditingQuestion(null)
+                setIsCreatingQuestion(false)
+              }}
+            />
           </DialogContent>
         </Dialog>
     </div>
