@@ -733,12 +733,12 @@ export default function LearnPage() {
                 const aspectRatioPercent = (videoHeight / videoWidth) * 100
                 // Set the video element to maintain its natural aspect ratio
                 const playerEl = player.el()
-                if (playerEl) {
+                if (playerEl && playerEl instanceof HTMLElement) {
                   // Update padding-top to match video's aspect ratio
                   playerEl.style.paddingTop = `${aspectRatioPercent}%`
                   playerEl.style.maxHeight = '80vh'
                   // Ensure the video tech maintains aspect ratio
-                  if (tech.el_) {
+                  if (tech.el_ && tech.el_ instanceof HTMLElement) {
                     tech.el_.style.objectFit = 'contain'
                   }
                 }
