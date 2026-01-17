@@ -76,6 +76,8 @@ export interface LectureContent {
   textContent?: string
   externalUrl?: string
   embeddedCode?: string
+  fileSizeBytes?: number
+  mimeType?: string
   sequence: number
   createdAt: string
   updatedAt: string

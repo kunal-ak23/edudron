@@ -186,7 +186,7 @@ export function GamifiedPsychometricTest({
           <div className="text-center mb-6">
             <div className="text-6xl mb-4">🎯</div>
             <h2 className="text-3xl font-bold text-gray-900 mb-2">Discover Your Path</h2>
-            <p className="text-lg text-gray-600">Let's find out what career path suits you best!</p>
+            <p className="text-lg text-gray-600">Let&apos;s find out what career path suits you best!</p>
           </div>
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-lg">
             <div className="flex">
@@ -207,7 +207,7 @@ export function GamifiedPsychometricTest({
               onClick={handleDisclaimerAccept} 
               className="px-8 py-3 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg shadow-lg transform hover:scale-105 transition-all"
             >
-              Let's Begin! 🚀
+              Let&apos;s Begin! 🚀
             </Button>
           </div>
         </div>
