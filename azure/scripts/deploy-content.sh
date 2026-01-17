@@ -127,6 +127,8 @@ if [ -z "$APP_EXISTS" ]; then
     fi
     
     # Create app with system-assigned managed identity
+    # Note: Ephemeral storage is automatically allocated based on CPU:
+    # - 2.0 CPU automatically provides 8Gi ephemeral storage (sufficient for video processing)
     print_info "Creating container app..."
     if ! az containerapp create \
         --name "$APP_NAME" \
@@ -190,13 +192,10 @@ if [ -z "$APP_EXISTS" ]; then
             "azure-storage-base-url=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-BASE-URL,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
-    # Configure ephemeral storage for video processing (4GB for 2GB videos)
-    print_info "Configuring ephemeral storage for video processing..."
-    az containerapp update \
-        --name "$APP_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --ephemeral-storage 4Gi \
-        --output none 2>/dev/null || print_warning "Could not set ephemeral storage (may require newer Azure CLI version)"
+    # Ephemeral storage is automatically allocated based on CPU:
+    # - 0.25 CPU → 1Gi, 0.5 CPU → 2Gi, 1.0 CPU → 4Gi, 2.0 CPU → 8Gi
+    # With 2.0 CPU, we automatically get 8Gi ephemeral storage (more than enough for video processing)
+    print_info "Ephemeral storage: Automatically allocated based on CPU (2.0 CPU = 8Gi storage)"
     
     # Set environment variables
     print_info "Setting environment variables..."
@@ -288,6 +287,7 @@ else
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
     # Update image, resources, and environment variables
+    # Note: Ephemeral storage is automatically allocated based on CPU (2.0 CPU = 8Gi)
     print_info "Updating container app configuration..."
     az containerapp update \
         --name "$APP_NAME" \
@@ -295,7 +295,6 @@ else
         --image "$IMAGE" \
         --cpu "$CPU" \
         --memory "$MEMORY" \
-        --ephemeral-storage 4Gi \
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
             "CONTENT_SERVICE_PORT=${PORT}" \

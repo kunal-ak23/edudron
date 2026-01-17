@@ -28,52 +28,35 @@ For video processing, you need temporary disk space:
 
 Azure Container Apps provides two storage options:
 
-#### Option 1: Ephemeral Storage (Recommended for Most Cases)
+#### Option 1: Ephemeral Storage (Recommended - Automatically Allocated)
 
 **What it is:**
 - Built-in temporary storage per replica
-- Default: 2GB per replica
-- Can be increased up to 4GB per replica
+- **Automatically allocated based on CPU** (no manual configuration needed)
 - **Free** (included in Container Apps pricing)
 - Cleared when container restarts
 
-**When to use:**
-- Videos up to 2GB (needs 4GB temp space)
-- Single replica or low concurrency
-- Temporary processing only
+**Automatic Allocation:**
+- **≤ 0.25 CPU** → **1Gi** ephemeral storage
+- **0.5 CPU** → **2Gi** ephemeral storage
+- **1.0 CPU** → **4Gi** ephemeral storage
+- **2.0 CPU** → **8Gi** ephemeral storage (our configuration)
+- **> 2.0 CPU** → **8Gi** ephemeral storage
 
-**Configuration:**
-
-Update your deployment script or use Azure CLI:
-
-```bash
-# Update existing container app
-az containerapp update \
-  --name content-dev \
-  --resource-group your-resource-group \
-  --cpu 1.0 \
-  --memory 2.0Gi \
-  --ephemeral-storage 4Gi
-```
-
-Or in Bicep/ARM template:
-```bicep
-resources: {
-  cpu: json('1.0')
-  memory: '2.0Gi'
-  ephemeralStorage: '4Gi'  // Add this line
-}
-```
+**Current Configuration:**
+- **CPU: 2.0** → **Automatically provides 8Gi ephemeral storage** ✅
+- More than sufficient for 2GB video processing (needs ~4GB temp space)
+- No manual configuration needed!
 
 **Pros:**
 - ✅ Free (no additional cost)
-- ✅ Simple configuration
+- ✅ Automatic (no configuration needed)
 - ✅ Fast (local SSD)
 - ✅ Automatic cleanup
+- ✅ 8Gi with 2.0 CPU (plenty for video processing)
 
 **Cons:**
 - ❌ Lost on container restart
-- ❌ Limited to 4GB per replica
 - ❌ Not shared across replicas
 
 #### Option 2: Azure Files Volume (For Larger Videos or High Concurrency)
@@ -154,10 +137,10 @@ az containerapp update \
   --name content-dev \
   --resource-group your-resource-group \
   --cpu 1.0 \
-  --memory 2.0Gi \
-  --ephemeral-storage 4Gi
+  --memory 2.0Gi
 ```
 
+**Ephemeral Storage**: Automatically 4Gi (with 1.0 CPU)  
 **Cost**: No additional storage cost
 
 ### For Production (Videos up to 2GB, Low Concurrency)
