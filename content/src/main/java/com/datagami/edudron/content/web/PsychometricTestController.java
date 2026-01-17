@@ -5,6 +5,13 @@ import com.datagami.edudron.content.domain.PsychometricTestResult;
 import com.datagami.edudron.content.domain.PsychometricTestSession;
 import com.datagami.edudron.content.dto.*;
 import com.datagami.edudron.content.service.PsychometricTestService;
+import com.datagami.edudron.content.service.HybridPsychometricTestService;
+import com.datagami.edudron.content.service.psychometric.Question;
+import com.datagami.edudron.content.service.psychometric.ReportGenerationService;
+import com.datagami.edudron.content.service.psychometric.TestResult;
+import com.datagami.edudron.content.service.psychometric.SessionState;
+import com.datagami.edudron.content.dto.QuestionDTO;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -43,7 +50,13 @@ public class PsychometricTestController {
     private static final Logger logger = LoggerFactory.getLogger(PsychometricTestController.class);
     
     @Autowired
-    private PsychometricTestService testService;
+    private PsychometricTestService testService; // Legacy service
+    
+    @Autowired
+    private HybridPsychometricTestService hybridTestService; // New hybrid service
+    
+    @Autowired
+    private ReportGenerationService reportGenerationService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -142,7 +155,8 @@ public class PsychometricTestController {
             //     testService.verifyPayment(null, request.getPaymentId());
             // }
             
-            PsychometricTestSession session = testService.startTest(studentId);
+            // Use hybrid service for new sessions
+            PsychometricTestSession session = hybridTestService.startTest(studentId);
             return ResponseEntity.status(HttpStatus.CREATED).body(toSessionDTO(session));
         } catch (IllegalStateException e) {
             logger.error("Failed to start test", e);
@@ -182,7 +196,8 @@ public class PsychometricTestController {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
             }
             
-            session = testService.submitAnswer(sessionId, request.getAnswer());
+            // Use hybrid service
+            session = hybridTestService.submitAnswer(sessionId, request.getAnswer());
             return ResponseEntity.ok(toSessionDTO(session));
         } catch (IllegalArgumentException e) {
             logger.error("Invalid request", e);
@@ -214,7 +229,7 @@ public class PsychometricTestController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
             
-            PsychometricTestSession session = testService.getTestStatus(sessionId);
+            PsychometricTestSession session = hybridTestService.getTestStatus(sessionId);
             if (!session.getStudentId().equals(studentId)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
@@ -246,12 +261,12 @@ public class PsychometricTestController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
             
-            PsychometricTestSession session = testService.getTestStatus(sessionId);
+            PsychometricTestSession session = hybridTestService.getTestStatus(sessionId);
             if (!session.getStudentId().equals(studentId)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
             
-            PsychometricTestResult result = testService.completeTest(sessionId);
+            PsychometricTestResult result = hybridTestService.completeTest(sessionId);
             return ResponseEntity.ok(toResultDTO(result));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
@@ -281,7 +296,7 @@ public class PsychometricTestController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
             
-            PsychometricTestResult result = testService.getTestResult(sessionId);
+            PsychometricTestResult result = hybridTestService.getTestResult(sessionId);
             if (!result.getStudentId().equals(studentId)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
@@ -312,7 +327,7 @@ public class PsychometricTestController {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
             
-            List<PsychometricTestResult> results = testService.getStudentResults(studentId);
+            List<PsychometricTestResult> results = hybridTestService.getStudentResults(studentId);
             List<PsychometricTestResultDTO> resultDTOs = results.stream()
                 .map(this::toResultDTO)
                 .collect(Collectors.toList());
@@ -322,6 +337,107 @@ public class PsychometricTestController {
             logger.error("Failed to get all results", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+    
+    /**
+     * Get current question for a session
+     */
+    @GetMapping("/{sessionId}/question")
+    @Operation(summary = "Get current question", description = "Get the current question for a test session")
+    public ResponseEntity<QuestionDTO> getCurrentQuestion(@PathVariable String sessionId) {
+        try {
+            // Check feature availability
+            if (!testService.isFeatureEnabled()) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
+            // Verify student owns this session
+            String studentId = getCurrentStudentId();
+            if (studentId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            
+            PsychometricTestSession session = hybridTestService.getTestStatus(sessionId);
+            if (!session.getStudentId().equals(studentId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
+            Question question = hybridTestService.getCurrentQuestion(sessionId);
+            if (question == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
+            
+            QuestionDTO questionDTO = toQuestionDTO(question, session);
+            return ResponseEntity.ok(questionDTO);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        } catch (Exception e) {
+            logger.error("Failed to get current question", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * Generate report for test results
+     */
+    @GetMapping("/results/{sessionId}/report")
+    @Operation(summary = "Get test report", description = "Generate downloadable report for test results")
+    public ResponseEntity<Map<String, String>> getTestReport(@PathVariable String sessionId) {
+        try {
+            // Check feature availability
+            if (!testService.isFeatureEnabled()) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
+            // Verify student owns this result
+            String studentId = getCurrentStudentId();
+            if (studentId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            
+            PsychometricTestResult result = hybridTestService.getTestResult(sessionId);
+            if (!result.getStudentId().equals(studentId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
+            // Parse test result from recommendations JSON
+            TestResult testResult = parseTestResultFromJson(result.getRecommendations());
+            
+            // Get student name (simplified - should fetch from student service)
+            String studentName = "Student"; // TODO: Fetch from student service
+            
+            // Generate report HTML
+            String reportHtml = reportGenerationService.generateReportHtml(result, testResult, studentName);
+            
+            Map<String, String> response = new java.util.HashMap<>();
+            response.put("html", reportHtml);
+            response.put("format", "html");
+            
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        } catch (Exception e) {
+            logger.error("Failed to generate report", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * Parse TestResult from JSON recommendations
+     */
+    private TestResult parseTestResultFromJson(JsonNode recommendations) {
+        // This is a simplified parser - in production, use proper JSON deserialization
+        TestResult testResult = new TestResult();
+        if (recommendations != null && recommendations.isObject()) {
+            if (recommendations.has("primaryStream")) {
+                testResult.setPrimaryStream(recommendations.get("primaryStream").asText());
+            }
+            if (recommendations.has("secondaryStream")) {
+                testResult.setSecondaryStream(recommendations.get("secondaryStream").asText());
+            }
+            // Add more fields as needed
+        }
+        return testResult;
     }
     
     /**
@@ -404,6 +520,66 @@ public class PsychometricTestController {
         dto.setRecommendations(result.getRecommendations());
         dto.setTestSummary(result.getTestSummary());
         dto.setCreatedAt(result.getCreatedAt());
+        return dto;
+    }
+    
+    /**
+     * Convert question entity to DTO.
+     */
+    private QuestionDTO toQuestionDTO(Question question, PsychometricTestSession session) {
+        QuestionDTO dto = new QuestionDTO();
+        dto.setId(question.getId());
+        dto.setText(question.getText());
+        dto.setType(question.getType().name());
+        dto.setOptions(question.getOptions());
+        dto.setModule(question.getModule());
+        dto.setOrder(question.getOrder());
+        
+        // Calculate progress based on phase
+        try {
+            SessionState state = hybridTestService.getSessionState(session.getId());
+            if (state != null) {
+                int totalQuestions = 18; // Core questions
+                int currentQuestion = 0;
+                
+                if ("CORE".equals(state.getPhase())) {
+                    // Core phase: 1-18
+                    totalQuestions = 18;
+                    // Use number of answered questions + 1 (for current)
+                    int answered = state.getCoreAnswers() != null ? state.getCoreAnswers().size() : 0;
+                    currentQuestion = Math.max(answered + 1, state.getCurrentQuestionIndex() != null ? state.getCurrentQuestionIndex() + 1 : 1);
+                } else if (state.getPhase().startsWith("ADAPTIVE")) {
+                    // Adaptive phase: 19-38 (18 core + up to 20 adaptive)
+                    int coreCompleted = state.getCoreAnswers() != null ? state.getCoreAnswers().size() : 18;
+                    int adaptiveCompleted = state.getAdaptiveAnswers() != null ? state.getAdaptiveAnswers().size() : 0;
+                    currentQuestion = coreCompleted + adaptiveCompleted + 1; // +1 for current question
+                    int adaptiveMax = state.getSelectedModules() != null ? state.getSelectedModules().size() * 10 : 20;
+                    totalQuestions = 18 + adaptiveMax;
+                }
+                
+                dto.setTotalQuestions(totalQuestions);
+                dto.setCurrentQuestionNumber(currentQuestion);
+            } else {
+                // Fallback
+                if ("CORE".equals(question.getModule())) {
+                    dto.setTotalQuestions(18);
+                    dto.setCurrentQuestionNumber(question.getOrder());
+                } else {
+                    dto.setTotalQuestions(10);
+                    dto.setCurrentQuestionNumber(question.getOrder());
+                }
+            }
+        } catch (Exception e) {
+            // Fallback on error
+            if ("CORE".equals(question.getModule())) {
+                dto.setTotalQuestions(18);
+                dto.setCurrentQuestionNumber(question.getOrder());
+            } else {
+                dto.setTotalQuestions(10);
+                dto.setCurrentQuestionNumber(question.getOrder());
+            }
+        }
+        
         return dto;
     }
 }

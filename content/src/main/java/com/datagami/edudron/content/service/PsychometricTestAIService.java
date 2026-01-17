@@ -252,6 +252,31 @@ public class PsychometricTestAIService {
     }
     
     /**
+     * Generate reasoning for test results
+     */
+    public String generateReasoning(String prompt) {
+        String systemPrompt = """
+            You are a career guidance assistant generating explanations for psychometric test results.
+            Generate brief, student-friendly explanations (2-3 sentences) that:
+            - Use phrases like "Based on your responses", "May suit you", "Suggested"
+            - Do NOT use deterministic language like "You should" or "You must"
+            - Are age-appropriate and encouraging
+            - Explain why suggestions were made based on the test results
+            
+            Return ONLY the explanation text. Do not include any additional commentary.
+            """;
+        
+        try {
+            String response = foundryAIService.callOpenAI(systemPrompt, prompt);
+            logger.info("Generated reasoning (length: {} chars)", response != null ? response.length() : 0);
+            return response != null ? response.trim() : "Based on your responses, we have generated personalized suggestions for you.";
+        } catch (Exception e) {
+            logger.error("Failed to generate reasoning", e);
+            return "Based on your responses, we have generated personalized suggestions for you.";
+        }
+    }
+    
+    /**
      * Extract JSON from AI response, handling cases where response includes explanatory text.
      */
     private String extractJsonFromResponse(String response) {

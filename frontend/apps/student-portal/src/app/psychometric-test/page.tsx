@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ProtectedRoute, Button } from '@kunal-ak23/edudron-ui-components'
 import { StudentLayout } from '@/components/StudentLayout'
-import { PsychometricTestChat, ChatMessage } from '@/components/PsychometricTestChat'
+import { HybridPsychometricTest } from '@/components/HybridPsychometricTest'
+import { GamifiedPsychometricTest } from '@/components/GamifiedPsychometricTest'
 import { usePsychometricTestFeature } from '@/hooks/usePsychometricTestFeature'
 import { getApiClient } from '@/lib/api'
 
@@ -32,7 +33,6 @@ export default function PsychometricTestPage() {
   const router = useRouter()
   const { enabled, loading: featureLoading } = usePsychometricTestFeature()
   const [session, setSession] = useState<TestSession | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isCompleting, setIsCompleting] = useState(false)
@@ -45,18 +45,6 @@ export default function PsychometricTestPage() {
       loadOrStartSession()
     }
   }, [featureLoading, enabled])
-
-  // Convert conversation history to messages
-  useEffect(() => {
-    if (session?.conversationHistory) {
-      const chatMessages: ChatMessage[] = session.conversationHistory.map((msg: any) => ({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content || '',
-        timestamp: msg.timestamp
-      }))
-      setMessages(chatMessages)
-    }
-  }, [session])
 
   const loadOrStartSession = async () => {
     try {
@@ -268,41 +256,26 @@ export default function PsychometricTestPage() {
               </div>
             )}
 
-            {/* Chat Interface */}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden" style={{ height: '600px' }}>
+            {/* Hybrid Test Interface */}
+            <div className="bg-white rounded-lg shadow-md overflow-hidden min-h-[600px]">
               {isLoading && !session ? (
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center justify-center h-full min-h-[600px]">
                   <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
                     <p className="text-gray-600">Starting your test...</p>
                   </div>
                 </div>
               ) : session ? (
-                <>
-                  <div className="h-[520px]">
-                    <PsychometricTestChat
-                      messages={messages}
-                      onSendMessage={handleSendMessage}
-                      isLoading={isLoading}
-                      disabled={session.status !== 'IN_PROGRESS' || isCompleting}
-                    />
-                  </div>
-                  
-                  {/* Complete Button */}
-                  {session.status === 'IN_PROGRESS' && (
-                    <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
-                      <Button
-                        onClick={handleCompleteTest}
-                        disabled={isCompleting || isLoading}
-                        variant="outline"
-                      >
-                        {isCompleting ? 'Completing...' : 'Complete Test'}
-                      </Button>
-                    </div>
-                  )}
-                </>
+                <div className="p-6">
+                  <GamifiedPsychometricTest
+                    sessionId={session.id}
+                    onComplete={handleCompleteTest}
+                    onAnswerSubmit={handleSendMessage}
+                    isLoading={isLoading || isCompleting}
+                  />
+                </div>
               ) : (
-                <div className="flex items-center justify-center h-full">
+                <div className="flex items-center justify-center h-full min-h-[600px]">
                   <div className="text-center">
                     <p className="text-gray-600 mb-4">Failed to load test session.</p>
                     <Button onClick={loadOrStartSession}>Retry</Button>
