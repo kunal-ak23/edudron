@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 
 const nextConfig = {
-  transpilePackages: ['@edudron/ui-components', '@edudron/shared-utils'],
+  transpilePackages: ['@edudron/ui-components', '@edudron/shared-utils', 'video.js'],
   // Note: 'standalone' output removed to fix build - can be re-enabled if needed
   // output: 'standalone',
   trailingSlash: false,

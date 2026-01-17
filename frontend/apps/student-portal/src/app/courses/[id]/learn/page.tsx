@@ -14,6 +14,8 @@ import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { IssueReportDialog } from '@/components/IssueReportDialog'
 import { MarkdownWithHighlights } from '@/components/MarkdownWithHighlights'
 import { NotesSidebar } from '@/components/NotesSidebar'
+import videojs from 'video.js'
+import 'video.js/dist/video-js.css'
 
 type TabType = 'transcript' | 'notes'
 
@@ -59,6 +61,9 @@ export default function LearnPage() {
   const textContentRef = useRef<HTMLDivElement>(null)
   // Ref to track if we're manually updating completion to prevent useEffect from interfering
   const isUpdatingCompletionRef = useRef(false)
+  // Ref for Video.js player
+  const videoRef = useRef<HTMLDivElement>(null)
+  const playerRef = useRef<any>(null)
 
   // Helper function to get localStorage key for course position
   const getStorageKey = (courseId: string) => `course_position_${courseId}`
@@ -294,6 +299,225 @@ export default function LearnPage() {
     loadCourseData()
   }, [loadCourseData])
 
+  // Add styles to prevent Video.js from overlapping content and apply primary theme
+  useEffect(() => {
+    const style = document.createElement('style')
+    style.textContent = `
+      [data-vjs-player] {
+        position: relative !important;
+        overflow: hidden !important;
+        max-width: 100% !important;
+        min-height: 400px !important;
+      }
+      .video-js {
+        position: relative !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+      }
+      .video-js.vjs-fluid {
+        padding-top: 56.25% !important; /* 16:9 default, will be overridden by video's natural aspect ratio */
+      }
+      .video-js .vjs-tech {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+        object-position: center center !important;
+      }
+      .video-js video {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+        object-position: center center !important;
+      }
+      .video-js .vjs-poster {
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+        object-position: center center !important;
+      }
+      .video-js .vjs-tech-wrapper {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        height: 100% !important;
+      }
+      
+      /* Primary Theme - Big Play Button */
+      .video-js .vjs-big-play-button {
+        background-color: hsl(var(--primary-600)) !important;
+        border-color: hsl(var(--primary-600)) !important;
+        border-radius: 50% !important;
+        width: 80px !important;
+        height: 80px !important;
+        line-height: 80px !important;
+        margin-top: -40px !important;
+        margin-left: -40px !important;
+        border-width: 4px !important;
+        transition: all 0.3s ease !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+      }
+      .video-js .vjs-big-play-button:hover {
+        background-color: hsl(var(--primary-700)) !important;
+        border-color: hsl(var(--primary-700)) !important;
+        transform: translate(-50%, -50%) scale(1.1) !important;
+      }
+      .video-js .vjs-big-play-button .vjs-icon-placeholder:before {
+        color: white !important;
+        font-size: 2.5em !important;
+      }
+      
+      /* Primary Theme - Control Bar */
+      .video-js .vjs-control-bar {
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent) !important;
+        height: 4.5em !important;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        overflow: visible !important;
+        white-space: nowrap !important;
+      }
+      .video-js .vjs-control-bar > * {
+        flex-shrink: 0 !important;
+        flex-grow: 0 !important;
+        display: inline-flex !important;
+      }
+      .video-js .vjs-progress-control {
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        display: flex !important;
+      }
+      .video-js .vjs-control {
+        display: inline-flex !important;
+        align-items: center !important;
+        white-space: nowrap !important;
+      }
+      .video-js .vjs-button {
+        display: inline-flex !important;
+        align-items: center !important;
+        white-space: nowrap !important;
+      }
+      
+      /* Primary Theme - Progress Bar */
+      .video-js .vjs-play-progress {
+        background-color: hsl(var(--primary-600)) !important;
+      }
+      .video-js .vjs-load-progress {
+        background-color: rgba(255, 255, 255, 0.3) !important;
+      }
+      .video-js .vjs-progress-holder {
+        background-color: rgba(255, 255, 255, 0.2) !important;
+      }
+      .video-js .vjs-play-progress:before {
+        color: hsl(var(--primary-600)) !important;
+      }
+      
+      /* Primary Theme - Control Buttons */
+      .video-js .vjs-play-control:hover,
+      .video-js .vjs-play-control:focus {
+        color: hsl(var(--primary-400)) !important;
+      }
+      .video-js .vjs-play-control.vjs-playing .vjs-icon-placeholder:before {
+        color: hsl(var(--primary-400)) !important;
+      }
+      .video-js .vjs-play-control.vjs-paused .vjs-icon-placeholder:before {
+        color: hsl(var(--primary-400)) !important;
+      }
+      
+      /* Primary Theme - Volume Control */
+      .video-js .vjs-volume-level {
+        background-color: hsl(var(--primary-600)) !important;
+      }
+      .video-js .vjs-volume-bar {
+        background-color: rgba(255, 255, 255, 0.2) !important;
+      }
+      .video-js .vjs-volume-control:hover .vjs-volume-level {
+        background-color: hsl(var(--primary-700)) !important;
+      }
+      
+      /* Primary Theme - Time Displays */
+      .video-js .vjs-current-time,
+      .video-js .vjs-duration,
+      .video-js .vjs-remaining-time {
+        color: rgba(255, 255, 255, 0.9) !important;
+        font-weight: 500 !important;
+      }
+      
+      /* Primary Theme - Fullscreen Button */
+      .video-js .vjs-fullscreen-control:hover {
+        color: hsl(var(--primary-400)) !important;
+      }
+      
+      /* Primary Theme - Picture-in-Picture */
+      .video-js .vjs-picture-in-picture-control:hover {
+        color: hsl(var(--primary-400)) !important;
+      }
+      
+      /* Primary Theme - Playback Rate Menu */
+      .video-js .vjs-playback-rate .vjs-playback-rate-value {
+        color: hsl(var(--primary-400)) !important;
+        font-weight: 600 !important;
+      }
+      .video-js .vjs-menu-button-popup .vjs-menu .vjs-menu-content {
+        background-color: rgba(0, 0, 0, 0.9) !important;
+        border: 1px solid hsl(var(--primary-600)) !important;
+      }
+      .video-js .vjs-menu li.vjs-menu-item:hover,
+      .video-js .vjs-menu li.vjs-menu-item:focus {
+        background-color: hsl(var(--primary-600)) !important;
+        color: white !important;
+      }
+      .video-js .vjs-menu li.vjs-menu-item.vjs-selected {
+        background-color: hsl(var(--primary-700)) !important;
+        color: white !important;
+      }
+      
+      /* Primary Theme - Subtitles/Captions Button */
+      .video-js .vjs-subs-caps-button:hover,
+      .video-js .vjs-chapters-button:hover,
+      .video-js .vjs-descriptions-button:hover {
+        color: hsl(var(--primary-400)) !important;
+      }
+      
+      /* Primary Theme - Seek Bar Handle */
+      .video-js .vjs-progress-control .vjs-play-progress .vjs-time-tooltip {
+        background-color: hsl(var(--primary-600)) !important;
+        color: white !important;
+        border: 1px solid hsl(var(--primary-700)) !important;
+      }
+      
+      /* Primary Theme - Loading Spinner */
+      .video-js .vjs-loading-spinner {
+        border-color: hsl(var(--primary-600)) transparent transparent transparent !important;
+      }
+    `
+    style.setAttribute('data-videojs-theme', 'true')
+    document.head.appendChild(style)
+    
+    return () => {
+      const existingStyle = document.head.querySelector('style[data-videojs-theme]')
+      if (existingStyle) {
+        document.head.removeChild(existingStyle)
+      }
+    }
+  }, [])
+
   // Save position to localStorage when selectedLecture changes
   useEffect(() => {
     if (selectedLecture && !isUpdatingCompletionRef.current) {
@@ -372,6 +596,169 @@ export default function LearnPage() {
       return () => clearTimeout(timeoutId)
     }
   }, [selectedLecture])
+
+  // Initialize Video.js player
+  useEffect(() => {
+    if (selectedLecture?.contentType === 'VIDEO' && videoRef.current) {
+      const videoContent = selectedLecture.contents?.find((c: any) => 
+        c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
+      )
+      const videoUrl = videoContent?.videoUrl || videoContent?.fileUrl || selectedLecture.contentUrl
+      
+      if (videoUrl) {
+        // Dispose existing player if it exists
+        if (playerRef.current) {
+          playerRef.current.dispose()
+          playerRef.current = null
+        }
+        
+        // Clear and prepare container
+        videoRef.current.innerHTML = ''
+        
+        // Create video element for Video.js
+        const videoElement = document.createElement('video-js')
+        videoElement.className = 'video-js vjs-big-play-centered vjs-fluid'
+        videoElement.setAttribute('playsinline', 'true')
+        videoElement.setAttribute('data-setup', '{}')
+        videoRef.current.appendChild(videoElement)
+        
+        // Initialize Video.js player with enhanced controls
+        const player = videojs(videoElement, {
+          controls: true,
+          responsive: true,
+          fluid: true, // Use fluid mode for responsive sizing
+          playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
+          preload: 'auto',
+          // Enable seeking to unbuffered positions
+          html5: {
+            vhs: {
+              overrideNative: true
+            },
+            nativeVideoTracks: false,
+            nativeAudioTracks: false,
+            nativeTextTracks: false
+          },
+          sources: [{
+            src: videoUrl,
+            type: 'video/mp4'
+          }],
+          // Control bar configuration with all useful controls
+          controlBar: {
+            children: [
+              'playToggle',
+              'volumePanel',
+              'currentTimeDisplay',
+              'timeDivider',
+              'durationDisplay',
+              'progressControl',
+              'remainingTimeDisplay',
+              'customControlSpacer',
+              'playbackRateMenuButton', // Playback speed control (0.5x to 2x)
+              'chaptersButton',
+              'descriptionsButton',
+              'subsCapsButton',
+              'audioTrackButton',
+              'fullscreenToggle',
+              'pictureInPictureToggle'
+            ]
+          },
+          // Enable keyboard shortcuts
+          userActions: {
+            hotkeys: {
+              volumeStep: 0.1,
+              seekStep: 5,
+              enableModifiersForNumbers: false
+            }
+          }
+        })
+        
+        // Ensure proper seeking behavior
+        player.ready(() => {
+          const tech = player.tech()
+          if (tech && tech.el_) {
+            const videoEl = tech.el_ as HTMLVideoElement
+            
+            // Enable seeking to unbuffered positions
+            videoEl.setAttribute('preload', 'auto')
+            
+            // Get the progress control and ensure accurate seeking
+            const progressControl = player.getChild('ControlBar')?.getChild('ProgressControl')
+            if (progressControl) {
+              const seekBar = progressControl.getChild('SeekBar')
+              if (seekBar) {
+                // Override the seek behavior to ensure accurate seeking
+                seekBar.on('click', (event: any) => {
+                  const seekBarEl = seekBar.el()
+                  if (seekBarEl) {
+                    const rect = seekBarEl.getBoundingClientRect()
+                    const percent = (event.clientX - rect.left) / rect.width
+                    const duration = player.duration()
+                    if (duration && !isNaN(duration)) {
+                      const newTime = percent * duration
+                      // Seek to the exact clicked position
+                      player.currentTime(newTime)
+                      videoEl.currentTime = newTime
+                    }
+                  }
+                })
+              }
+            }
+            
+            // Handle seeking to ensure it goes to the requested time
+            player.on('seeking', () => {
+              const requestedTime = player.currentTime()
+              // Ensure the underlying video element seeks to the same time
+              if (requestedTime !== undefined && !isNaN(requestedTime)) {
+                const time = requestedTime as number
+                if (videoEl.currentTime !== time) {
+                  videoEl.currentTime = time
+                }
+              }
+            })
+            
+            // Improve buffering for better seeking experience
+            player.on('canplay', () => {
+              // Video is ready, ensure seeking works properly
+              if (videoEl.readyState >= 2) {
+                // Video has enough data to seek
+              }
+            })
+            
+            // Handle video loadedmetadata to preserve aspect ratio
+            player.on('loadedmetadata', () => {
+              const videoWidth = videoEl.videoWidth
+              const videoHeight = videoEl.videoHeight
+              if (videoWidth && videoHeight && videoWidth > 0 && videoHeight > 0) {
+                // Calculate aspect ratio percentage for padding-top (fluid mode)
+                const aspectRatioPercent = (videoHeight / videoWidth) * 100
+                // Set the video element to maintain its natural aspect ratio
+                const playerEl = player.el()
+                if (playerEl) {
+                  // Update padding-top to match video's aspect ratio
+                  playerEl.style.paddingTop = `${aspectRatioPercent}%`
+                  playerEl.style.maxHeight = '80vh'
+                  // Ensure the video tech maintains aspect ratio
+                  if (tech.el_) {
+                    tech.el_.style.objectFit = 'contain'
+                  }
+                }
+              }
+            })
+          }
+        })
+        
+        playerRef.current = player
+      }
+    }
+    
+    // Cleanup on unmount or when lecture changes
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.dispose()
+        playerRef.current = null
+      }
+    }
+  }, [selectedLecture?.id, selectedLecture?.contentType])
 
   // Load transcript when selectedLecture changes
   useEffect(() => {
@@ -937,7 +1324,7 @@ export default function LearnPage() {
                 </div>
 
                 {/* Video/Content Player */}
-                <div className="bg-white flex-1 flex items-center justify-center relative min-h-0">
+                <div className="bg-white flex-shrink-0 flex items-center justify-center relative" style={{ minHeight: '60vh', maxHeight: '80vh' }}>
                   {selectedLecture.contentType === 'VIDEO' ? (() => {
                     // Find video URL from contents array
                     const videoContent = selectedLecture.contents?.find((c: any) => 
@@ -946,15 +1333,21 @@ export default function LearnPage() {
                     const videoUrl = videoContent?.videoUrl || videoContent?.fileUrl || selectedLecture.contentUrl
                     
                     return videoUrl ? (
-                      <div className="w-full h-full flex items-center justify-center p-4">
-                        <div className="w-full max-w-7xl h-full max-h-[90vh] flex items-center justify-center">
-                          <video
-                            controls
-                            className="w-full h-full object-contain"
-                            src={videoUrl}
-                          >
-                            Your browser does not support the video tag.
-                          </video>
+                      <div className="w-full flex items-center justify-center p-4" style={{ maxHeight: '80vh', minHeight: '400px', width: '100%' }}>
+                        <div className="w-full max-w-7xl flex items-center justify-center" style={{ maxHeight: '80vh', position: 'relative', width: '100%' }}>
+                          <div 
+                            data-vjs-player 
+                            ref={videoRef} 
+                            className="w-full" 
+                            style={{ 
+                              maxHeight: '80vh',
+                              maxWidth: '100%',
+                              position: 'relative',
+                              overflow: 'hidden',
+                              minHeight: '400px',
+                              margin: '0 auto'
+                            }} 
+                          />
                         </div>
                       </div>
                     ) : (
