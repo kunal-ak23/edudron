@@ -40,6 +40,9 @@ export type { FilterBarProps } from './components/FilterBar'
 export { default as FileUpload } from './components/FileUpload'
 export type { FileUploadProps } from './components/FileUpload'
 
+export { VideoPlayer } from './components/VideoPlayer'
+export type { VideoPlayerProps } from './components/VideoPlayer'
+
 // Utils
 export { cn } from './utils/cn'
 

@@ -151,11 +151,11 @@ az containerapp update \
   --resource-group your-resource-group \
   --cpu 2.0 \
   --memory 4.0Gi \
-  --ephemeral-storage 4Gi \
   --min-replicas 1 \
   --max-replicas 3
 ```
 
+**Ephemeral Storage**: Automatically 8Gi (with 2.0 CPU)  
 **Cost**: No additional storage cost
 
 ### For Production (Large Videos or High Concurrency)
@@ -251,7 +251,14 @@ az containerapp exec \
 ### Check Storage
 
 ```bash
-# Check ephemeral storage
+# Check ephemeral storage allocation
+az containerapp show \
+  --name content-dev \
+  --resource-group your-resource-group \
+  --query "properties.template.containers[0].resources.ephemeralStorage" \
+  -o tsv
+
+# Check actual disk usage inside container
 az containerapp exec \
   --name content-dev \
   --resource-group your-resource-group \
@@ -303,16 +310,22 @@ az containerapp exec \
 
 **For your use case (2-hour videos, up to 2GB):**
 
-✅ **Recommended**: Use ephemeral storage (4GB)
-- Configure: `--ephemeral-storage 4Gi`
+✅ **Ephemeral Storage**: **Automatically 8Gi** (with 2.0 CPU)
+- No manual configuration needed
 - Cost: $0 additional
-- Sufficient for videos up to 2GB
+- More than sufficient for videos up to 2GB (needs ~4GB temp space)
 
-✅ **Memory**: Increase to 2-4Gi for better performance
+✅ **Memory**: 4.0Gi (configured)
 
-✅ **CPU**: Increase to 1.0-2.0 for faster processing
+✅ **CPU**: 2.0 (configured) → Provides 8Gi ephemeral storage automatically
 
-The 4GB ephemeral storage should be sufficient for your needs. You only need Azure Files if:
+**Current Status:**
+- ✅ CPU: 2.0 → Automatically provides 8Gi ephemeral storage
+- ✅ Memory: 4.0Gi
+- ✅ FFmpeg: Installed in Docker image
+- ✅ Video Processing: Configured and ready
+
+**You only need Azure Files if:**
 - Videos are larger than 2GB
-- You have many concurrent uploads
-- You need persistent temp storage
+- You have many concurrent uploads (need shared storage)
+- You need persistent temp storage across restarts
