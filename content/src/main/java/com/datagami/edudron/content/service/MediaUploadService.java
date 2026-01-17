@@ -4,6 +4,7 @@ import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.models.BlobHttpHeaders;
+import com.azure.storage.blob.models.ParallelTransferOptions;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.content.constants.MediaFolderConstants;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -200,23 +202,45 @@ public class MediaUploadService {
         BlobHttpHeaders headers = new BlobHttpHeaders()
                 .setContentType(contentType);
 
-        // CRITICAL MEMORY SAFETY: With file-size-threshold: 0 in application.yml, Spring Boot
-        // writes ALL files to disk immediately as they arrive, NOT in memory.
+        // MEMORY SAFETY: Use temp file approach to prevent OOM errors
+        // Even with file-size-threshold: 0, Spring Boot's multipart parser may still buffer
+        // the request body in memory before writing to disk. Using temp file ensures:
+        // 1. Spring Boot writes to temp file (on disk, not memory)
+        // 2. We stream from temp file to Azure (minimal memory usage)
+        // 3. Temp file is cleaned up after upload
         //
-        // This means:
-        // - 700MB file → Written to disk in chunks as received, NOT buffered in memory
-        // - getInputStream() streams from the disk file, not memory
-        // - Memory usage: Only small buffers (~KB) for parsing/streaming, NOT 700MB
-        // - Prevents OOM errors in Azure containers with limited memory (0.5GB)
-        //
-        // Flow: Client uploads → Spring Boot writes to disk → getInputStream() → Azure (streams from disk)
-        // 
-        // Note: Spring Boot's multipart parser uses minimal memory for boundary parsing,
-        // but the actual file content goes directly to disk, not memory.
-        blobClient.upload(file.getInputStream(), file.getSize(), true);
-        
-        // Set headers after upload
-        blobClient.setHttpHeaders(headers);
+        // This is safer than streaming directly from MultipartFile.getInputStream() which
+        // might still have the request buffered in memory.
+        File tempFile = null;
+        try {
+            // Create temp file - Spring Boot will write to this (on disk)
+            tempFile = File.createTempFile("video-upload-", ".tmp");
+            file.transferTo(tempFile);
+            
+            // Configure parallel transfer options for large files
+            // Use 4MB block size and 2-3 parallel transfers for better performance
+            // Reduced concurrency (2-3 instead of 4) to limit memory: 4MB × 3 = 12MB buffers
+            ParallelTransferOptions parallelTransferOptions = new ParallelTransferOptions()
+                    .setBlockSizeLong(4L * 1024 * 1024) // 4MB blocks
+                    .setMaxConcurrency(3); // 3 parallel uploads (reduced from 4 for memory safety)
+            
+            // Upload from temp file using parallel transfers - streams from disk, not memory
+            // This is the original safe approach: temp file on disk → parallel chunk upload to Azure
+            blobClient.uploadFromFile(
+                    tempFile.getAbsolutePath(), 
+                    parallelTransferOptions, 
+                    headers, 
+                    null, // metadata
+                    null, // accessTier
+                    null, // requestConditions
+                    null  // timeout
+            );
+        } finally {
+            // Always clean up temp file
+            if (tempFile != null && tempFile.exists()) {
+                tempFile.delete();
+            }
+        }
 
         // Return public URL
         if (!baseUrl.isEmpty()) {

@@ -620,6 +620,8 @@ export default function LearnPage() {
         videoElement.className = 'video-js vjs-big-play-centered vjs-fluid'
         videoElement.setAttribute('playsinline', 'true')
         videoElement.setAttribute('data-setup', '{}')
+        // Remove any title attribute to prevent overlay text
+        videoElement.removeAttribute('title')
         videoRef.current.appendChild(videoElement)
         
         // Initialize Video.js player with enhanced controls
@@ -642,7 +644,7 @@ export default function LearnPage() {
             src: videoUrl,
             type: 'video/mp4'
           }],
-          // Control bar configuration with all useful controls
+          // Control bar configuration with properly ordered controls
           controlBar: {
             children: [
               'playToggle',
@@ -651,7 +653,6 @@ export default function LearnPage() {
               'timeDivider',
               'durationDisplay',
               'progressControl',
-              'remainingTimeDisplay',
               'customControlSpacer',
               'playbackRateMenuButton', // Playback speed control (0.5x to 2x)
               'chaptersButton',
@@ -721,6 +722,26 @@ export default function LearnPage() {
               // Video is ready, ensure seeking works properly
               if (videoEl.readyState >= 2) {
                 // Video has enough data to seek
+              }
+            })
+            
+            // Fix control bar layout and spacing
+            player.on('ready', () => {
+              const playerEl = player.el()
+              if (playerEl) {
+                // Remove any title attributes that might show as overlay
+                playerEl.removeAttribute('title')
+                const videoEl = player.tech()?.el_ as HTMLVideoElement
+                if (videoEl) {
+                  videoEl.removeAttribute('title')
+                }
+                
+                // Ensure big play button doesn't cover content
+                const bigPlayButton = playerEl.querySelector('.vjs-big-play-button')
+                if (bigPlayButton instanceof HTMLElement) {
+                  bigPlayButton.style.zIndex = '2'
+                  bigPlayButton.style.pointerEvents = 'auto'
+                }
               }
             })
             

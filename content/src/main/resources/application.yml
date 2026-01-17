@@ -13,16 +13,17 @@ spring:
       # This prevents OOM errors for large files (700MB+). Without this, Spring Boot would buffer
       # files in memory up to the threshold, which could cause container memory issues.
       # 
-      # IMPORTANT: Even with this setting, Spring Boot's multipart parser may still use a small
-      # buffer for parsing multipart boundaries, but the actual file content is written to disk
-      # as it arrives, not buffered in memory. The getInputStream() then streams from disk.
+      # IMPORTANT: Even with this setting, Spring Boot's multipart parser may still buffer
+      # the request body in memory before writing to disk. To be safe, we use temp files:
+      # 1. Spring Boot writes multipart file to temp file (on disk)
+      # 2. We stream from temp file to Azure (minimal memory usage)
+      # 3. Temp file is cleaned up after upload
       #
-      # Memory usage: Only small parsing buffers (~KB), NOT the entire file size
+      # Memory usage: Only small buffers for streaming (~KB), NOT the entire file size
       #
-      # PROGRESS TRACKING: With this setting, XMLHttpRequest progress events fire during
-      # client-to-Spring Boot upload. This is sufficient for UI - users see progress as the
-      # file uploads from their browser to the server. Server-to-Azure streaming happens
-      # after client upload completes, so no additional progress needed.
+      # PROGRESS TRACKING: XMLHttpRequest progress events fire during client-to-Spring Boot upload.
+      # This is sufficient for UI - users see progress as the file uploads from browser to server.
+      # Server-to-Azure streaming happens after client upload completes.
       file-size-threshold: 0
       # Location for temporary file storage (uses system temp directory if not specified)
       location: ${java.io.tmpdir}
