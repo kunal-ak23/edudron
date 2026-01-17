@@ -2,11 +2,12 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
+import { DynamicHead } from '@/components/DynamicHead'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'EduDron Student Portal',
+  title: 'EduDron',
   description: 'Learning Management System Student Portal',
 }
 
@@ -39,7 +40,10 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <Providers>{children}</Providers>
+        <Providers>
+          <DynamicHead />
+          {children}
+        </Providers>
       </body>
     </html>
   )
