@@ -1,6 +1,15 @@
 import React, { useRef, useState } from 'react'
 import { cn } from '../utils/cn'
 
+// Helper function to check if a URL is an image (data URL or HTTP/HTTPS URL)
+const isImageUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false
+  return url.startsWith('data:image') || 
+         url.startsWith('http://') || 
+         url.startsWith('https://') ||
+         url.startsWith('/')
+}
+
 export interface FileUploadProps {
   label: string
   accept?: string
@@ -32,9 +41,10 @@ export default function FileUpload({
 }: FileUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  
   // Only show preview for images, not for videos or other file types
   const [preview, setPreview] = useState<string | null>(
-    value && value.startsWith('data:image') ? value : null
+    value && isImageUrl(value) ? value : null
   )
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -117,7 +127,7 @@ export default function FileUpload({
 
   // Update preview when value changes (only for images)
   React.useEffect(() => {
-    if (value && value.startsWith('data:image')) {
+    if (value && isImageUrl(value)) {
       setPreview(value)
     } else if (!value) {
       setPreview(null)
@@ -139,7 +149,7 @@ export default function FileUpload({
 
       <div className="space-y-2">
         {/* Preview - only for images */}
-        {preview && preview.startsWith('data:image') && (
+        {preview && isImageUrl(preview) && (
           <div className="relative inline-block">
             <div className="relative">
               <img
