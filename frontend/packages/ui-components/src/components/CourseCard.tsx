@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { cn } from '../utils/cn'
 
 export interface CourseCardProps {
@@ -19,6 +19,31 @@ export interface CourseCardProps {
   }
   onClick?: () => void
   className?: string
+}
+
+// Gradient direction classes for random selection
+const gradientClasses = [
+  'bg-gradient-to-br', // bottom-right
+  'bg-gradient-to-bl', // bottom-left
+  'bg-gradient-to-tr', // top-right
+  'bg-gradient-to-tl', // top-left
+  'bg-gradient-to-r',  // right
+  'bg-gradient-to-l',  // left
+  'bg-gradient-to-b',  // bottom
+  'bg-gradient-to-t',  // top
+]
+
+// Generate a consistent random gradient direction based on course ID
+const getGradientClass = (courseId: string): string => {
+  // Use course ID to generate a consistent hash
+  let hash = 0
+  for (let i = 0; i < courseId.length; i++) {
+    hash = ((hash << 5) - hash) + courseId.charCodeAt(i)
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  // Use absolute value and modulo to get index
+  const index = Math.abs(hash) % gradientClasses.length
+  return gradientClasses[index]
 }
 
 export default function CourseCard({ course, onClick, className }: CourseCardProps) {
@@ -42,6 +67,9 @@ export default function CourseCard({ course, onClick, className }: CourseCardPro
 
   const instructorNames = course.instructors?.map(i => i.name).join(', ') || 'Instructor'
 
+  // Generate consistent gradient class for this course
+  const gradientClass = useMemo(() => getGradientClass(course.id), [course.id])
+
   return (
     <div
       className={cn(
@@ -50,8 +78,12 @@ export default function CourseCard({ course, onClick, className }: CourseCardPro
       )}
       onClick={onClick}
     >
-      {/* Course Image */}
-      <div className="relative w-full h-40 bg-gradient-to-br from-primary-500 to-purple-600">
+      {/* Course Image - 16:9 aspect ratio */}
+      <div className={cn(
+        'relative w-full aspect-video overflow-hidden',
+        !course.thumbnailUrl && gradientClass,
+        !course.thumbnailUrl && 'from-primary-500 to-purple-600'
+      )}>
         {course.thumbnailUrl ? (
           <img
             src={course.thumbnailUrl}
@@ -59,7 +91,11 @@ export default function CourseCard({ course, onClick, className }: CourseCardPro
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-white text-2xl font-bold">
+          <div className={cn(
+            'w-full h-full flex items-center justify-center text-white text-2xl font-bold',
+            gradientClass,
+            'from-primary-500 to-purple-600'
+          )}>
             {course.title.charAt(0).toUpperCase()}
           </div>
         )}

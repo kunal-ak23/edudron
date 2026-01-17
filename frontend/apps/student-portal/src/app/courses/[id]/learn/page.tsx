@@ -294,130 +294,59 @@ export default function LearnPage() {
     loadCourseData()
   }, [loadCourseData])
 
-  // Add styles to prevent Video.js from overlapping content and apply primary theme
+  // Apply primary color theme to Video.js and YouTube-like layout
   useEffect(() => {
     const style = document.createElement('style')
     style.textContent = `
-      [data-vjs-player] {
-        position: relative !important;
-        overflow: hidden !important;
-        max-width: 100% !important;
-        min-height: 400px !important;
-      }
-      .video-js {
-        position: relative !important;
-        width: 100% !important;
-        max-width: 100% !important;
-        overflow: hidden !important;
+      /* YouTube-like Control Bar Layout - All controls on one line */
+      .video-js .vjs-control-bar {
         display: flex !important;
+        flex-wrap: nowrap !important;
         align-items: center !important;
-        justify-content: center !important;
       }
-      .video-js.vjs-fluid {
-        padding-top: 56.25% !important; /* 16:9 default, will be overridden by video's natural aspect ratio */
+      .video-js .vjs-progress-control {
+        flex: 1 1 auto !important;
+        order: 5 !important;
+        margin: 0 0.5em !important;
       }
-      .video-js .vjs-tech {
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: contain !important;
-        object-position: center center !important;
+      .video-js .vjs-play-toggle {
+        order: 1 !important;
       }
-      .video-js video {
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: contain !important;
-        object-position: center center !important;
+      .video-js .vjs-current-time {
+        order: 2 !important;
       }
-      .video-js .vjs-poster {
-        position: absolute !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100% !important;
-        height: 100% !important;
-        object-fit: contain !important;
-        object-position: center center !important;
+      .video-js .vjs-time-divider {
+        order: 3 !important;
       }
-      .video-js .vjs-tech-wrapper {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 100% !important;
-        height: 100% !important;
+      .video-js .vjs-duration {
+        order: 4 !important;
+      }
+      .video-js .vjs-volume-panel {
+        order: 6 !important;
+      }
+      .video-js .vjs-playback-rate {
+        order: 7 !important;
+      }
+      .video-js .vjs-subs-caps-button {
+        order: 8 !important;
+      }
+      .video-js .vjs-fullscreen-control {
+        order: 9 !important;
       }
       
       /* Primary Theme - Big Play Button */
       .video-js .vjs-big-play-button {
         background-color: hsl(var(--primary-600)) !important;
         border-color: hsl(var(--primary-600)) !important;
-        border-radius: 50% !important;
-        width: 80px !important;
-        height: 80px !important;
-        line-height: 80px !important;
-        margin-top: -40px !important;
-        margin-left: -40px !important;
-        border-width: 4px !important;
-        transition: all 0.3s ease !important;
-        top: 50% !important;
-        left: 50% !important;
-        transform: translate(-50%, -50%) !important;
       }
       .video-js .vjs-big-play-button:hover {
         background-color: hsl(var(--primary-700)) !important;
         border-color: hsl(var(--primary-700)) !important;
-        transform: translate(-50%, -50%) scale(1.1) !important;
-      }
-      .video-js .vjs-big-play-button .vjs-icon-placeholder:before {
-        color: white !important;
-        font-size: 2.5em !important;
-      }
-      
-      /* Primary Theme - Control Bar */
-      .video-js .vjs-control-bar {
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent) !important;
-        height: 4.5em !important;
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        align-items: center !important;
-        justify-content: flex-start !important;
-        overflow: visible !important;
-        white-space: nowrap !important;
-      }
-      .video-js .vjs-control-bar > * {
-        flex-shrink: 0 !important;
-        flex-grow: 0 !important;
-        display: inline-flex !important;
-      }
-      .video-js .vjs-progress-control {
-        flex: 1 1 auto !important;
-        min-width: 0 !important;
-        display: flex !important;
-      }
-      .video-js .vjs-control {
-        display: inline-flex !important;
-        align-items: center !important;
-        white-space: nowrap !important;
-      }
-      .video-js .vjs-button {
-        display: inline-flex !important;
-        align-items: center !important;
-        white-space: nowrap !important;
       }
       
       /* Primary Theme - Progress Bar */
       .video-js .vjs-play-progress {
         background-color: hsl(var(--primary-600)) !important;
-      }
-      .video-js .vjs-load-progress {
-        background-color: rgba(255, 255, 255, 0.3) !important;
-      }
-      .video-js .vjs-progress-holder {
-        background-color: rgba(255, 255, 255, 0.2) !important;
       }
       .video-js .vjs-play-progress:before {
         color: hsl(var(--primary-600)) !important;
@@ -428,9 +357,7 @@ export default function LearnPage() {
       .video-js .vjs-play-control:focus {
         color: hsl(var(--primary-400)) !important;
       }
-      .video-js .vjs-play-control.vjs-playing .vjs-icon-placeholder:before {
-        color: hsl(var(--primary-400)) !important;
-      }
+      .video-js .vjs-play-control.vjs-playing .vjs-icon-placeholder:before,
       .video-js .vjs-play-control.vjs-paused .vjs-icon-placeholder:before {
         color: hsl(var(--primary-400)) !important;
       }
@@ -439,19 +366,8 @@ export default function LearnPage() {
       .video-js .vjs-volume-level {
         background-color: hsl(var(--primary-600)) !important;
       }
-      .video-js .vjs-volume-bar {
-        background-color: rgba(255, 255, 255, 0.2) !important;
-      }
       .video-js .vjs-volume-control:hover .vjs-volume-level {
         background-color: hsl(var(--primary-700)) !important;
-      }
-      
-      /* Primary Theme - Time Displays */
-      .video-js .vjs-current-time,
-      .video-js .vjs-duration,
-      .video-js .vjs-remaining-time {
-        color: rgba(255, 255, 255, 0.9) !important;
-        font-weight: 500 !important;
       }
       
       /* Primary Theme - Fullscreen Button */
@@ -467,20 +383,16 @@ export default function LearnPage() {
       /* Primary Theme - Playback Rate Menu */
       .video-js .vjs-playback-rate .vjs-playback-rate-value {
         color: hsl(var(--primary-400)) !important;
-        font-weight: 600 !important;
       }
       .video-js .vjs-menu-button-popup .vjs-menu .vjs-menu-content {
-        background-color: rgba(0, 0, 0, 0.9) !important;
         border: 1px solid hsl(var(--primary-600)) !important;
       }
       .video-js .vjs-menu li.vjs-menu-item:hover,
       .video-js .vjs-menu li.vjs-menu-item:focus {
         background-color: hsl(var(--primary-600)) !important;
-        color: white !important;
       }
       .video-js .vjs-menu li.vjs-menu-item.vjs-selected {
         background-color: hsl(var(--primary-700)) !important;
-        color: white !important;
       }
       
       /* Primary Theme - Subtitles/Captions Button */
@@ -493,7 +405,6 @@ export default function LearnPage() {
       /* Primary Theme - Seek Bar Handle */
       .video-js .vjs-progress-control .vjs-play-progress .vjs-time-tooltip {
         background-color: hsl(var(--primary-600)) !important;
-        color: white !important;
         border: 1px solid hsl(var(--primary-700)) !important;
       }
       
@@ -1167,8 +1078,8 @@ export default function LearnPage() {
                     const videoUrl = videoContent?.fileUrl || videoContent?.videoUrl || selectedLecture.contentUrl
                     
                     return videoUrl ? (
-                      <div className="w-full flex items-center justify-center p-4" style={{ maxHeight: '80vh', minHeight: '400px', width: '100%' }}>
-                        <div className="w-full max-w-7xl flex items-center justify-center" style={{ maxHeight: '80vh', position: 'relative', width: '100%' }}>
+                      <div className="w-full flex items-center justify-center p-4" style={{ maxHeight: '80vh', minHeight: '400px', width: '100%', overflow: 'hidden' }}>
+                        <div className="w-full max-w-7xl flex items-center justify-center" style={{ maxHeight: '80vh', position: 'relative', width: '100%', overflow: 'hidden' }}>
                           <VideoPlayer
                             videoUrl={videoUrl}
                             autoplay={false}

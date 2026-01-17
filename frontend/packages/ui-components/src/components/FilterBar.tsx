@@ -37,7 +37,7 @@ export default function FilterBar({
           <select
             value={selectedFilters.difficulty || ''}
             onChange={(e) => onFilterChange('difficulty', e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary-500 focus:border-primary-500"
+            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors duration-200"
           >
             <option value="">All Levels</option>
             {filters.difficulty.map((option) => (
@@ -57,7 +57,7 @@ export default function FilterBar({
           <select
             value={selectedFilters.category || ''}
             onChange={(e) => onFilterChange('category', e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary-500 focus:border-primary-500"
+            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors duration-200"
           >
             <option value="">All Categories</option>
             {filters.category.map((option) => (
@@ -77,7 +77,7 @@ export default function FilterBar({
           <select
             value={selectedFilters.price || ''}
             onChange={(e) => onFilterChange('price', e.target.value)}
-            className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-primary-500 focus:border-primary-500"
+            className="block w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors duration-200"
           >
             <option value="">All Prices</option>
             {filters.price.map((option) => (

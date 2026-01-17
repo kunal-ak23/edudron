@@ -72,28 +72,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       controlBar: {
         children: showAllControls
           ? [
-              'playToggle',
-              'volumePanel',
-              'currentTimeDisplay',
-              'timeDivider',
-              'durationDisplay',
-              'progressControl',
-              'customControlSpacer',
-              'playbackRateMenuButton',
-              'chaptersButton',
-              'descriptionsButton',
-              'subsCapsButton',
-              'audioTrackButton',
-              'fullscreenToggle',
-              'pictureInPictureToggle'
+              'playToggle',           // 1. Play/Pause button
+              'currentTimeDisplay',    // 2. Current time
+              'timeDivider',           // 3. Time divider (/)
+              'durationDisplay',       // 4. Duration
+              'progressControl',       // 5. Progress/seek bar
+              'volumePanel',           // 6. Volume control
+              'playbackRateMenuButton', // 7. Playback speed
+              'subsCapsButton',        // 8. Subtitles/Captions
+              'fullscreenToggle'       // 9. Fullscreen
             ]
           : [
               'playToggle',
-              'volumePanel',
               'currentTimeDisplay',
               'timeDivider',
               'durationDisplay',
               'progressControl',
+              'volumePanel',
               'playbackRateMenuButton',
               'fullscreenToggle'
             ]

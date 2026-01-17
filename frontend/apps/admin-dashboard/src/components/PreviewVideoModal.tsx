@@ -37,26 +37,40 @@ if (typeof document !== 'undefined') {
         font-size: 2.5em !important;
       }
       
-      /* Primary Theme - Control Bar */
+      /* YouTube-like Control Bar Layout - All controls on one line */
       .video-js .vjs-control-bar {
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent) !important;
-        height: 4.5em !important;
         display: flex !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
-        justify-content: flex-start !important;
-        overflow: visible !important;
-        white-space: nowrap !important;
-      }
-      .video-js .vjs-control-bar > * {
-        flex-shrink: 0 !important;
-        flex-grow: 0 !important;
-        display: inline-flex !important;
       }
       .video-js .vjs-progress-control {
         flex: 1 1 auto !important;
-        min-width: 0 !important;
-        display: flex !important;
+        order: 5 !important;
+        margin: 0 0.5em !important;
+      }
+      .video-js .vjs-play-toggle {
+        order: 1 !important;
+      }
+      .video-js .vjs-current-time {
+        order: 2 !important;
+      }
+      .video-js .vjs-time-divider {
+        order: 3 !important;
+      }
+      .video-js .vjs-duration {
+        order: 4 !important;
+      }
+      .video-js .vjs-volume-panel {
+        order: 6 !important;
+      }
+      .video-js .vjs-playback-rate {
+        order: 7 !important;
+      }
+      .video-js .vjs-subs-caps-button {
+        order: 8 !important;
+      }
+      .video-js .vjs-fullscreen-control {
+        order: 9 !important;
       }
       .video-js .vjs-control {
         display: inline-flex !important;

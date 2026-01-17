@@ -52,29 +52,37 @@ body {
     rgb(var(--background-start-rgb));
 }
 
-/* Video.js Control Bar Fixes */
+/* Video.js Control Bar - YouTube-like Layout */
 .video-js .vjs-control-bar {
   display: flex !important;
+  flex-wrap: nowrap !important;
   align-items: center !important;
   height: 4em !important;
   padding: 0 1em !important;
   background: rgba(0, 0, 0, 0.7) !important;
 }
 
-.video-js .vjs-volume-panel {
-  margin-right: 0.5em !important;
-  min-width: 5em !important;
+/* YouTube-like control order */
+.video-js .vjs-play-toggle {
+  order: 1 !important;
+}
+
+.video-js .vjs-current-time {
   order: 2 !important;
+  margin: 0 0.3em !important;
+  min-width: 3.5em !important;
+  text-align: center !important;
+  flex-shrink: 0 !important;
 }
 
-.video-js .vjs-volume-control {
-  margin-right: 0.5em !important;
-  width: 5em !important;
+.video-js .vjs-time-divider {
+  order: 3 !important;
+  margin: 0 0.3em !important;
+  flex-shrink: 0 !important;
 }
 
-.video-js .vjs-current-time,
-.video-js .vjs-time-divider,
 .video-js .vjs-duration {
+  order: 4 !important;
   margin: 0 0.3em !important;
   min-width: 3.5em !important;
   text-align: center !important;
@@ -83,18 +91,41 @@ body {
 
 .video-js .vjs-progress-control {
   flex: 1 1 auto !important;
+  order: 5 !important;
   margin: 0 0.5em !important;
   min-width: 0 !important;
-  order: 3 !important;
 }
 
-.video-js .vjs-custom-control-spacer {
-  flex: 1 1 auto !important;
-  order: 4 !important;
+.video-js .vjs-volume-panel {
+  order: 6 !important;
+  margin-right: 0.5em !important;
+  min-width: 5em !important;
+}
+
+.video-js .vjs-volume-control {
+  margin-right: 0.5em !important;
+  width: 5em !important;
+}
+
+.video-js .vjs-playback-rate {
+  order: 7 !important;
+  margin: 0 0.2em !important;
+  flex-shrink: 0 !important;
+}
+
+.video-js .vjs-subs-caps-button {
+  order: 8 !important;
+  margin: 0 0.2em !important;
+  flex-shrink: 0 !important;
+}
+
+.video-js .vjs-fullscreen-control {
+  order: 9 !important;
+  margin: 0 0.2em !important;
+  flex-shrink: 0 !important;
 }
 
 .video-js .vjs-control:not(.vjs-progress-control):not(.vjs-volume-panel) {
-  margin: 0 0.2em !important;
   flex-shrink: 0 !important;
 }
 
