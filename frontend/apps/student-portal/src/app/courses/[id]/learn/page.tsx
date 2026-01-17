@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ProtectedRoute, Button } from '@kunal-ak23/edudron-ui-components'
+import { ProtectedRoute, Button, VideoPlayer } from '@kunal-ak23/edudron-ui-components'
 import { coursesApi, enrollmentsApi, lecturesApi, feedbackApi, notesApi, issuesApi } from '@/lib/api'
 import type { Course, Section, Lecture, Progress, Feedback, Note, FeedbackType, IssueType, LectureContent } from '@kunal-ak23/edudron-shared-utils'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
@@ -14,8 +14,6 @@ import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { IssueReportDialog } from '@/components/IssueReportDialog'
 import { MarkdownWithHighlights } from '@/components/MarkdownWithHighlights'
 import { NotesSidebar } from '@/components/NotesSidebar'
-import videojs from 'video.js'
-import 'video.js/dist/video-js.css'
 
 type TabType = 'transcript' | 'notes'
 
@@ -61,9 +59,6 @@ export default function LearnPage() {
   const textContentRef = useRef<HTMLDivElement>(null)
   // Ref to track if we're manually updating completion to prevent useEffect from interfering
   const isUpdatingCompletionRef = useRef(false)
-  // Ref for Video.js player
-  const videoRef = useRef<HTMLDivElement>(null)
-  const playerRef = useRef<any>(null)
 
   // Helper function to get localStorage key for course position
   const getStorageKey = (courseId: string) => `course_position_${courseId}`
@@ -597,297 +592,6 @@ export default function LearnPage() {
     }
   }, [selectedLecture])
 
-  // Initialize Video.js player
-  useEffect(() => {
-    if (selectedLecture?.contentType === 'VIDEO' && videoRef.current) {
-      const videoContent = selectedLecture.contents?.find((c: any) => 
-        c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
-      )
-      const videoUrl = videoContent?.videoUrl || videoContent?.fileUrl || selectedLecture.contentUrl
-      
-      if (videoUrl) {
-        // Dispose existing player if it exists
-        if (playerRef.current) {
-          playerRef.current.dispose()
-          playerRef.current = null
-        }
-        
-        // Clear and prepare container
-        videoRef.current.innerHTML = ''
-        
-        // Create video element for Video.js
-        const videoElement = document.createElement('video-js')
-        videoElement.className = 'video-js vjs-big-play-centered vjs-fluid'
-        videoElement.setAttribute('playsinline', 'true')
-        videoElement.setAttribute('data-setup', '{}')
-        // Remove any title attribute to prevent overlay text
-        videoElement.removeAttribute('title')
-        videoRef.current.appendChild(videoElement)
-        
-        // Initialize Video.js player with enhanced controls
-        const player = videojs(videoElement, {
-          controls: true,
-          responsive: true,
-          fluid: true, // Use fluid mode for responsive sizing
-          playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
-          preload: 'metadata', // Load metadata first to enable seeking, then auto-buffer
-          // Enable seeking to unbuffered positions with better range request support
-          html5: {
-            vhs: {
-              overrideNative: true,
-              // Enable range requests for better seeking in long videos
-              withCredentials: false
-            },
-            nativeVideoTracks: false,
-            nativeAudioTracks: false,
-            nativeTextTracks: false
-          },
-          sources: [{
-            src: videoUrl,
-            type: 'video/mp4'
-          }],
-          // Control bar configuration with properly ordered controls
-          controlBar: {
-            children: [
-              'playToggle',
-              'volumePanel',
-              'currentTimeDisplay',
-              'timeDivider',
-              'durationDisplay',
-              'progressControl',
-              'customControlSpacer',
-              'playbackRateMenuButton', // Playback speed control (0.5x to 2x)
-              'chaptersButton',
-              'descriptionsButton',
-              'subsCapsButton',
-              'audioTrackButton',
-              'fullscreenToggle',
-              'pictureInPictureToggle'
-            ]
-          },
-          // Enable keyboard shortcuts
-          userActions: {
-            hotkeys: {
-              volumeStep: 0.1,
-              seekStep: 5,
-              enableModifiersForNumbers: false
-            }
-          }
-        })
-        
-        // Ensure proper seeking behavior
-        player.ready(() => {
-          const tech = player.tech()
-          if (tech && tech.el_) {
-            const videoEl = tech.el_ as HTMLVideoElement
-            
-            // Configure buffering for long videos - allow seeking to unbuffered positions
-            // Byte-range requests work without crossOrigin when server supports range requests
-            // Modern browsers support range requests natively for seeking to unbuffered positions
-            
-            // Track requested seek time to prevent jumping back to buffered positions
-            let requestedSeekTime: number | null = null
-            let isSeekingToUnbuffered = false
-            
-            // Helper function to check if a time is within buffered ranges
-            const isTimeBuffered = (time: number): boolean => {
-              const buffered = videoEl.buffered
-              for (let i = 0; i < buffered.length; i++) {
-                if (time >= buffered.start(i) && time <= buffered.end(i)) {
-                  return true
-                }
-              }
-              return false
-            }
-            
-            // Helper function to check if a time is seekable (can be seeked to, even if not buffered)
-            const isTimeSeekable = (time: number): boolean => {
-              const seekable = videoEl.seekable
-              for (let i = 0; i < seekable.length; i++) {
-                if (time >= seekable.start(i) && time <= seekable.end(i)) {
-                  return true
-                }
-              }
-              return false
-            }
-            
-            // Log seekable ranges for debugging
-            const logSeekableRanges = () => {
-              const seekable = videoEl.seekable
-              const ranges: string[] = []
-              for (let i = 0; i < seekable.length; i++) {
-                ranges.push(`${seekable.start(i).toFixed(2)}-${seekable.end(i).toFixed(2)}`)
-              }
-              console.log('[VideoPlayer] Seekable ranges:', ranges.join(', '))
-            }
-            
-            // Handle seeking - prevent video from jumping back to buffered positions
-            player.on('seeking', () => {
-              const seekTime = player.currentTime()
-              if (seekTime !== undefined && !isNaN(seekTime)) {
-                requestedSeekTime = seekTime
-                
-                // Check if the time is seekable (server supports range requests)
-                const isSeekable = isTimeSeekable(seekTime)
-                const isBuffered = isTimeBuffered(seekTime)
-                
-                if (!isBuffered && isSeekable) {
-                  // Seeking to unbuffered but seekable position - server will fetch via range request
-                  isSeekingToUnbuffered = true
-                  console.log('[VideoPlayer] Seeking to unbuffered but seekable position:', seekTime)
-                  
-                  // Force the video to stay at the requested time
-                  // This prevents the browser from jumping back to buffered range
-                  if (videoEl.currentTime !== seekTime) {
-                    videoEl.currentTime = seekTime
-                  }
-                } else if (!isSeekable) {
-                  // Time is not seekable - might be outside video duration or server doesn't support range requests
-                  console.warn('[VideoPlayer] Attempting to seek to non-seekable position:', seekTime)
-                  isSeekingToUnbuffered = false
-                } else {
-                  // Seeking to buffered position - normal behavior
-                  isSeekingToUnbuffered = false
-                  console.log('[VideoPlayer] Seeking to buffered position:', seekTime)
-                }
-              }
-            })
-            
-            // Log seekable ranges when metadata is loaded
-            player.on('loadedmetadata', () => {
-              logSeekableRanges()
-            })
-            
-            // Handle seeked event - ensure we stay at requested position even if unbuffered
-            player.on('seeked', () => {
-              if (requestedSeekTime !== null && isSeekingToUnbuffered) {
-                // If we seeked to an unbuffered position, ensure we stay there
-                const currentTime = player.currentTime()
-                if (currentTime !== undefined && !isNaN(currentTime)) {
-                  if (Math.abs(currentTime - requestedSeekTime) > 0.5) {
-                    // Video jumped back, force it to the requested position
-                    console.log('[VideoPlayer] Video jumped back, forcing to:', requestedSeekTime)
-                    player.currentTime(requestedSeekTime)
-                    videoEl.currentTime = requestedSeekTime
-                  }
-                }
-              }
-            })
-            
-            // Handle timeupdate - prevent jumping back while buffering unbuffered position
-            player.on('timeupdate', () => {
-              if (isSeekingToUnbuffered && requestedSeekTime !== null) {
-                const currentTime = player.currentTime()
-                if (currentTime !== undefined && !isNaN(currentTime)) {
-                  const buffered = videoEl.buffered
-                  
-                  // Check if we now have data at the requested position
-                  let hasDataAtRequestedTime = false
-                  for (let i = 0; i < buffered.length; i++) {
-                    if (requestedSeekTime >= buffered.start(i) && requestedSeekTime <= buffered.end(i)) {
-                      hasDataAtRequestedTime = true
-                      break
-                    }
-                  }
-                  
-                  // If we still don't have data and video jumped back, force it forward
-                  if (!hasDataAtRequestedTime && Math.abs(currentTime - requestedSeekTime) > 1) {
-                    // Video jumped back to buffered range, force it to requested position
-                    if (currentTime < requestedSeekTime) {
-                      player.currentTime(requestedSeekTime)
-                      videoEl.currentTime = requestedSeekTime
-                    }
-                  } else if (hasDataAtRequestedTime) {
-                    // We now have data, allow normal playback
-                    isSeekingToUnbuffered = false
-                  }
-                }
-              }
-            })
-            
-            // Handle waiting event - video is buffering
-            player.on('waiting', () => {
-              // If we're waiting while seeking to unbuffered position, ensure we stay there
-              if (isSeekingToUnbuffered && requestedSeekTime !== null) {
-                const currentTime = player.currentTime()
-                if (currentTime !== undefined && !isNaN(currentTime)) {
-                  if (Math.abs(currentTime - requestedSeekTime) > 0.5) {
-                    // Ensure we're at the requested position
-                    player.currentTime(requestedSeekTime)
-                    videoEl.currentTime = requestedSeekTime
-                  }
-                }
-              }
-              const bufferingTime = player.currentTime()
-              console.log('[VideoPlayer] Buffering at:', bufferingTime)
-            })
-            
-            // Handle canplaythrough - enough data buffered to play through
-            player.on('canplaythrough', () => {
-              console.log('[VideoPlayer] Enough data buffered to play through')
-              // Reset seeking flag once we have enough data
-              if (isSeekingToUnbuffered && requestedSeekTime !== null) {
-                if (isTimeBuffered(requestedSeekTime)) {
-                  isSeekingToUnbuffered = false
-                }
-              }
-            })
-            
-            // Fix control bar layout and spacing
-            player.on('ready', () => {
-              const playerEl = player.el()
-              if (playerEl) {
-                // Remove any title attributes that might show as overlay
-                playerEl.removeAttribute('title')
-                const videoEl = player.tech()?.el_ as HTMLVideoElement
-                if (videoEl) {
-                  videoEl.removeAttribute('title')
-                }
-                
-                // Ensure big play button doesn't cover content
-                const bigPlayButton = playerEl.querySelector('.vjs-big-play-button')
-                if (bigPlayButton instanceof HTMLElement) {
-                  bigPlayButton.style.zIndex = '2'
-                  bigPlayButton.style.pointerEvents = 'auto'
-                }
-              }
-            })
-            
-            // Handle video loadedmetadata to preserve aspect ratio
-            player.on('loadedmetadata', () => {
-              const videoWidth = videoEl.videoWidth
-              const videoHeight = videoEl.videoHeight
-              if (videoWidth && videoHeight && videoWidth > 0 && videoHeight > 0) {
-                // Calculate aspect ratio percentage for padding-top (fluid mode)
-                const aspectRatioPercent = (videoHeight / videoWidth) * 100
-                // Set the video element to maintain its natural aspect ratio
-                const playerEl = player.el()
-                if (playerEl && playerEl instanceof HTMLElement) {
-                  // Update padding-top to match video's aspect ratio
-                  playerEl.style.paddingTop = `${aspectRatioPercent}%`
-                  playerEl.style.maxHeight = '80vh'
-                  // Ensure the video tech maintains aspect ratio
-                  if (tech.el_ && tech.el_ instanceof HTMLElement) {
-                    tech.el_.style.objectFit = 'contain'
-                  }
-                }
-              }
-            })
-          }
-        })
-        
-        playerRef.current = player
-      }
-    }
-    
-    // Cleanup on unmount or when lecture changes
-    return () => {
-      if (playerRef.current) {
-        playerRef.current.dispose()
-        playerRef.current = null
-      }
-    }
-  }, [selectedLecture?.id, selectedLecture?.contentType])
 
   // Load transcript when selectedLecture changes
   useEffect(() => {
@@ -1464,18 +1168,12 @@ export default function LearnPage() {
                     return videoUrl ? (
                       <div className="w-full flex items-center justify-center p-4" style={{ maxHeight: '80vh', minHeight: '400px', width: '100%' }}>
                         <div className="w-full max-w-7xl flex items-center justify-center" style={{ maxHeight: '80vh', position: 'relative', width: '100%' }}>
-                          <div 
-                            data-vjs-player 
-                            ref={videoRef} 
-                            className="w-full" 
-                            style={{ 
-                              maxHeight: '80vh',
-                              maxWidth: '100%',
-                              position: 'relative',
-                              overflow: 'hidden',
-                              minHeight: '400px',
-                              margin: '0 auto'
-                            }} 
+                          <VideoPlayer
+                            videoUrl={videoUrl}
+                            autoplay={false}
+                            className="w-full"
+                            logPrefix="VideoPlayer"
+                            showAllControls={true}
                           />
                         </div>
                       </div>
