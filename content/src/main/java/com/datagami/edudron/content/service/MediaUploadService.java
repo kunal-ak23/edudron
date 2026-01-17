@@ -31,7 +31,7 @@ public class MediaUploadService {
     private String baseUrl;
 
     private static final long MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
-    private static final long MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
+    private static final long MAX_VIDEO_SIZE = 2L * 1024 * 1024 * 1024; // 2GB
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB for generic files
 
     public String uploadImage(MultipartFile file, String folder) throws IOException {
@@ -159,7 +159,7 @@ public class MediaUploadService {
 
         // Validate file size
         if (file.getSize() > MAX_VIDEO_SIZE) {
-            throw new IllegalArgumentException("Video size must be less than 500MB");
+            throw new IllegalArgumentException("Video size must be less than 2GB");
         }
 
         // Validate folder name

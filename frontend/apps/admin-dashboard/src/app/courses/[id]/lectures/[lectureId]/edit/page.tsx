@@ -710,7 +710,7 @@ export default function LectureEditPage() {
                     <FileUpload
                       label="Video File"
                       accept="video/*"
-                      maxSize={500 * 1024 * 1024} // 500MB
+                      maxSize={2 * 1024 * 1024 * 1024} // 2GB
                       value={formData.contentUrl || ''}
                       onChange={(url) => setFormData({ ...formData, contentUrl: url })}
                       onUpload={async (file) => {
@@ -723,7 +723,7 @@ export default function LectureEditPage() {
                         setFormData({ ...formData, contentUrl: url })
                         return url
                       }}
-                      helperText={!currentLectureId ? "Please save the sub-lecture first, then upload the video file (MP4, MOV, etc. up to 500MB)" : "Upload a video file for this lecture (MP4, MOV, etc. up to 500MB)"}
+                      helperText={!currentLectureId ? "Please save the sub-lecture first, then upload the video file (MP4, MOV, etc. up to 2GB)" : "Upload a video file for this lecture (MP4, MOV, etc. up to 2GB)"}
                       disabled={!currentLectureId || saving}
                     />
                   </div>

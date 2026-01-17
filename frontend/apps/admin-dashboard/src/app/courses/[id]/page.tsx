@@ -1034,11 +1034,11 @@ export default function CourseEditPage() {
                       <FileUpload
                         label="Preview Video"
                         accept="video/*"
-                        maxSize={500 * 1024 * 1024} // 500MB
+                        maxSize={2 * 1024 * 1024 * 1024} // 2GB
                         value={course?.previewVideoUrl || ''}
                         onChange={(url) => setCourse({ ...course, previewVideoUrl: url })}
                         onUpload={async (file) => await mediaApi.uploadVideo(file, 'preview-videos')}
-                        helperText="Upload a preview video for the course (MP4, MOV, etc. up to 500MB)"
+                        helperText="Upload a preview video for the course (MP4, MOV, etc. up to 2GB)"
                       />
                     </div>
                   </div>
