@@ -48,8 +48,8 @@
     },
     "content": {
       "port": 8082,
-      "cpu": "0.5",
-      "memory": "3.0Gi",
+      "cpu": "2.0",
+      "memory": "4.0Gi",
       "minReplicas": 1,
       "maxReplicas": 5,
       "ingressExternal": false,
