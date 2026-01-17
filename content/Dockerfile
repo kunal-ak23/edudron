@@ -22,10 +22,14 @@ RUN gradle :content:bootJar --no-daemon
 # Runtime stage
 FROM eclipse-temurin:21-jre
 
-# Install curl for health checks
+# Install curl for health checks and ffmpeg for video processing
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        curl \
+        ffmpeg && \
+    rm -rf /var/lib/apt/lists/* && \
+    # Verify ffmpeg installation
+    ffmpeg -version
 
 # Add labels for versioning
 ARG VERSION

@@ -110,3 +110,16 @@ azure:
     deployment-name: ${AZURE_OPENAI_DEPLOYMENT_NAME:gpt-4}
     api-version: ${AZURE_OPENAI_API_VERSION:2024-02-15-preview}
 
+# Video Processing Configuration
+video:
+  processing:
+    # Enable/disable video processing with ffmpeg
+    # When enabled, videos are optimized for streaming (faststart flag)
+    # This moves the moov atom to the beginning, enabling immediate seeking
+    enabled: ${VIDEO_PROCESSING_ENABLED:true}
+    # Path to ffmpeg executable (default: "ffmpeg" - must be in system PATH)
+    # For Docker: use "/usr/bin/ffmpeg" or install ffmpeg in container
+    # For local: use "ffmpeg" if installed, or full path like "/usr/local/bin/ffmpeg"
+    ffmpeg-path: ${VIDEO_PROCESSING_FFMPEG_PATH:ffmpeg}
+    # Temporary directory for video processing (default: system temp directory)
+    temp-dir: ${VIDEO_PROCESSING_TEMP_DIR:${java.io.tmpdir}}

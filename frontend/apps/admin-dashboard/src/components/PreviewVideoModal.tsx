@@ -212,8 +212,8 @@ export function PreviewVideoModal({ videoUrl, courseTitle, isOpen, onClose }: Pr
         responsive: true,
         fluid: true, // Use fluid mode for responsive sizing
         playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
-        preload: 'auto',
-        // Enable seeking to unbuffered positions
+        preload: 'metadata',
+        // Enable seeking to unbuffered positions (keeps byte-range)
         html5: {
           vhs: {
             overrideNative: true
@@ -262,49 +262,143 @@ export function PreviewVideoModal({ videoUrl, courseTitle, isOpen, onClose }: Pr
         if (tech && tech.el_) {
           const videoEl = tech.el_ as HTMLVideoElement
           
-          // Enable seeking to unbuffered positions
-          videoEl.setAttribute('preload', 'auto')
+          // Byte-range requests work without crossOrigin when server supports range requests
+          // Browser automatically makes range requests when seeking to unbuffered positions
           
-          // Get the progress control and ensure accurate seeking
-          const progressControl = player.getChild('ControlBar')?.getChild('ProgressControl')
-          if (progressControl) {
-            const seekBar = progressControl.getChild('SeekBar')
-            if (seekBar) {
-              // Override the seek behavior to ensure accurate seeking
-              seekBar.on('click', (event: any) => {
-                const seekBarEl = seekBar.el()
-                if (seekBarEl) {
-                  const rect = seekBarEl.getBoundingClientRect()
-                  const percent = (event.clientX - rect.left) / rect.width
-                  const duration = player.duration()
-                  if (duration && !isNaN(duration)) {
-                    const newTime = percent * duration
-                    // Seek to the exact clicked position
-                    player.currentTime(newTime)
-                    videoEl.currentTime = newTime
-                  }
-                }
-              })
+          // Track requested seek time to prevent jumping back to buffered positions
+          let requestedSeekTime: number | null = null
+          let isSeekingToUnbuffered = false
+          
+          // Helper function to check if a time is within buffered ranges
+          const isTimeBuffered = (time: number): boolean => {
+            const buffered = videoEl.buffered
+            for (let i = 0; i < buffered.length; i++) {
+              if (time >= buffered.start(i) && time <= buffered.end(i)) {
+                return true
+              }
             }
+            return false
           }
           
-          // Handle seeking to ensure it goes to the requested time
+          // Helper function to check if a time is seekable (can be seeked to, even if not buffered)
+          const isTimeSeekable = (time: number): boolean => {
+            const seekable = videoEl.seekable
+            for (let i = 0; i < seekable.length; i++) {
+              if (time >= seekable.start(i) && time <= seekable.end(i)) {
+                return true
+              }
+            }
+            return false
+          }
+          
+          // Log seekable ranges for debugging
+          const logSeekableRanges = () => {
+            const seekable = videoEl.seekable
+            const ranges: string[] = []
+            for (let i = 0; i < seekable.length; i++) {
+              ranges.push(`${seekable.start(i).toFixed(2)}-${seekable.end(i).toFixed(2)}`)
+            }
+            console.log('[PreviewVideoModal] Seekable ranges:', ranges.join(', '))
+          }
+          
+          // Handle seeking - prevent video from jumping back to buffered positions
           player.on('seeking', () => {
-            const requestedTime = player.currentTime()
-            // Ensure the underlying video element seeks to the same time
-            if (requestedTime !== undefined && !isNaN(requestedTime)) {
-              const time = requestedTime as number
-              if (videoEl.currentTime !== time) {
-                videoEl.currentTime = time
+            const seekTime = player.currentTime()
+            if (seekTime !== undefined && !isNaN(seekTime)) {
+              requestedSeekTime = seekTime
+              
+              // Check if the time is seekable (server supports range requests)
+              const isSeekable = isTimeSeekable(seekTime)
+              const isBuffered = isTimeBuffered(seekTime)
+              
+              if (!isBuffered && isSeekable) {
+                // Seeking to unbuffered but seekable position - server will fetch via range request
+                isSeekingToUnbuffered = true
+                console.log('[PreviewVideoModal] Seeking to unbuffered but seekable position:', seekTime)
+                
+                // Force the video to stay at the requested time
+                if (videoEl.currentTime !== seekTime) {
+                  videoEl.currentTime = seekTime
+                }
+              } else if (!isSeekable) {
+                // Time is not seekable - might be outside video duration or server doesn't support range requests
+                console.warn('[PreviewVideoModal] Attempting to seek to non-seekable position:', seekTime)
+                isSeekingToUnbuffered = false
+              } else {
+                // Seeking to buffered position - normal behavior
+                isSeekingToUnbuffered = false
+                console.log('[PreviewVideoModal] Seeking to buffered position:', seekTime)
               }
             }
           })
           
-          // Improve buffering for better seeking experience
-          player.on('canplay', () => {
-            // Video is ready, ensure seeking works properly
-            if (videoEl.readyState >= 2) {
-              // Video has enough data to seek
+          // Log seekable ranges when metadata is loaded
+          player.on('loadedmetadata', () => {
+            logSeekableRanges()
+          })
+          
+          // Handle seeked event - ensure we stay at requested position even if unbuffered
+          player.on('seeked', () => {
+            if (requestedSeekTime !== null && isSeekingToUnbuffered) {
+              const currentTime = player.currentTime()
+              if (currentTime !== undefined && !isNaN(currentTime)) {
+                if (Math.abs(currentTime - requestedSeekTime) > 0.5) {
+                  console.log('[PreviewVideoModal] Video jumped back, forcing to:', requestedSeekTime)
+                  player.currentTime(requestedSeekTime)
+                  videoEl.currentTime = requestedSeekTime
+                }
+              }
+            }
+          })
+          
+          // Handle timeupdate - prevent jumping back while buffering unbuffered position
+          player.on('timeupdate', () => {
+            if (isSeekingToUnbuffered && requestedSeekTime !== null) {
+              const currentTime = player.currentTime()
+              if (currentTime !== undefined && !isNaN(currentTime)) {
+                const buffered = videoEl.buffered
+                
+                // Check if we now have data at the requested position
+                let hasDataAtRequestedTime = false
+                for (let i = 0; i < buffered.length; i++) {
+                  if (requestedSeekTime >= buffered.start(i) && requestedSeekTime <= buffered.end(i)) {
+                    hasDataAtRequestedTime = true
+                    break
+                  }
+                }
+                
+                // If we still don't have data and video jumped back, force it forward
+                if (!hasDataAtRequestedTime && Math.abs(currentTime - requestedSeekTime) > 1) {
+                  if (currentTime < requestedSeekTime) {
+                    player.currentTime(requestedSeekTime)
+                    videoEl.currentTime = requestedSeekTime
+                  }
+                } else if (hasDataAtRequestedTime) {
+                  isSeekingToUnbuffered = false
+                }
+              }
+            }
+          })
+          
+          // Handle waiting event - video is buffering
+          player.on('waiting', () => {
+            if (isSeekingToUnbuffered && requestedSeekTime !== null) {
+              const currentTime = player.currentTime()
+              if (currentTime !== undefined && !isNaN(currentTime)) {
+                if (Math.abs(currentTime - requestedSeekTime) > 0.5) {
+                  player.currentTime(requestedSeekTime)
+                  videoEl.currentTime = requestedSeekTime
+                }
+              }
+            }
+          })
+          
+          // Handle canplaythrough - enough data buffered to play through
+          player.on('canplaythrough', () => {
+            if (isSeekingToUnbuffered && requestedSeekTime !== null) {
+              if (isTimeBuffered(requestedSeekTime)) {
+                isSeekingToUnbuffered = false
+              }
             }
           })
           

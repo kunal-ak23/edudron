@@ -24,6 +24,12 @@ public class MediaUploadService {
     @Autowired(required = false)
     private BlobServiceClient blobServiceClient;
 
+    @Autowired(required = false)
+    private VideoProcessingService videoProcessingService;
+    
+    @Autowired(required = false)
+    private VideoProcessingTask videoProcessingTask;
+
     @Value("${azure.storage.container-name:edudron-media}")
     private String containerName;
 
@@ -206,37 +212,52 @@ public class MediaUploadService {
         // Even with file-size-threshold: 0, Spring Boot's multipart parser may still buffer
         // the request body in memory before writing to disk. Using temp file ensures:
         // 1. Spring Boot writes to temp file (on disk, not memory)
-        // 2. We stream from temp file to Azure (minimal memory usage)
-        // 3. Temp file is cleaned up after upload
+        // 2. We upload unprocessed video immediately (fast response)
+        // 3. We process video asynchronously in background
+        // 4. We update blob with optimized version when ready
+        // 5. Temp files are cleaned up after processing
         //
-        // This is safer than streaming directly from MultipartFile.getInputStream() which
-        // might still have the request buffered in memory.
+        // ASYNC PROCESSING STRATEGY:
+        // - Upload unprocessed video immediately → return URL fast
+        // - Process video in background → no user waiting
+        // - Update blob with optimized version → seamless upgrade
         File tempFile = null;
         try {
             // Create temp file - Spring Boot will write to this (on disk)
             tempFile = File.createTempFile("video-upload-", ".tmp");
             file.transferTo(tempFile);
             
-            // Configure parallel transfer options for large files
-            // Use 4MB block size and 2-3 parallel transfers for better performance
-            // Reduced concurrency (2-3 instead of 4) to limit memory: 4MB × 3 = 12MB buffers
+            // Upload unprocessed video immediately (fast response)
+            // Video will be available immediately, even if not optimized
             ParallelTransferOptions parallelTransferOptions = new ParallelTransferOptions()
                     .setBlockSizeLong(4L * 1024 * 1024) // 4MB blocks
-                    .setMaxConcurrency(3); // 3 parallel uploads (reduced from 4 for memory safety)
+                    .setMaxConcurrency(3); // 3 parallel uploads
             
-            // Upload from temp file using parallel transfers - streams from disk, not memory
-            // This is the original safe approach: temp file on disk → parallel chunk upload to Azure
             blobClient.uploadFromFile(
                     tempFile.getAbsolutePath(), 
                     parallelTransferOptions, 
                     headers, 
-                    null, // metadata
-                    null, // accessTier
-                    null, // requestConditions
-                    null  // timeout
+                    null, null, null, null
             );
+            
+            // Process video asynchronously in background
+            // This will update the blob with optimized version when ready
+            if (videoProcessingTask != null && videoProcessingService != null) {
+                // Keep temp file for async processing (will be deleted by async task)
+                File finalTempFile = tempFile;
+                tempFile = null; // Don't delete in finally block
+                
+                videoProcessingTask.processAndUpdateVideo(
+                        finalTempFile,
+                        blobClient,
+                        contentType,
+                        originalFilename,
+                        tenantId
+                );
+            }
+            
         } finally {
-            // Always clean up temp file
+            // Only clean up temp file if not used for async processing
             if (tempFile != null && tempFile.exists()) {
                 tempFile.delete();
             }

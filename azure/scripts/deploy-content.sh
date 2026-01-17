@@ -190,6 +190,14 @@ if [ -z "$APP_EXISTS" ]; then
             "azure-storage-base-url=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-BASE-URL,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
+    # Configure ephemeral storage for video processing (4GB for 2GB videos)
+    print_info "Configuring ephemeral storage for video processing..."
+    az containerapp update \
+        --name "$APP_NAME" \
+        --resource-group "$RESOURCE_GROUP" \
+        --ephemeral-storage 4Gi \
+        --output none 2>/dev/null || print_warning "Could not set ephemeral storage (may require newer Azure CLI version)"
+    
     # Set environment variables
     print_info "Setting environment variables..."
     az containerapp update \
@@ -279,11 +287,15 @@ else
             "azure-storage-base-url=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-BASE-URL,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
-    # Update image and environment variables
+    # Update image, resources, and environment variables
+    print_info "Updating container app configuration..."
     az containerapp update \
         --name "$APP_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --image "$IMAGE" \
+        --cpu "$CPU" \
+        --memory "$MEMORY" \
+        --ephemeral-storage 4Gi \
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
             "CONTENT_SERVICE_PORT=${PORT}" \
