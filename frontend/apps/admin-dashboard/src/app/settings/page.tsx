@@ -97,6 +97,8 @@ export default function SettingsPage() {
     switch (feature) {
       case TenantFeatureType.STUDENT_SELF_ENROLLMENT:
         return 'Student Self-Enrollment'
+      case TenantFeatureType.PSYCHOMETRIC_TEST:
+        return 'Psychometric Test'
       default:
         return feature
     }
@@ -106,6 +108,8 @@ export default function SettingsPage() {
     switch (feature) {
       case TenantFeatureType.STUDENT_SELF_ENROLLMENT:
         return 'Allow students to enroll themselves in courses. When disabled, only admins and instructors can enroll students.'
+      case TenantFeatureType.PSYCHOMETRIC_TEST:
+        return 'Enable AI-powered psychometric test feature for students. This allows students to take a dynamic, chat-based test to discover their career and field inclinations.'
       default:
         return ''
     }

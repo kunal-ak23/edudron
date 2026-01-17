@@ -9,7 +9,13 @@ public enum TenantFeatureType {
      * Controls whether students can self-enroll in courses.
      * Default: false (students cannot self-enroll by default)
      */
-    STUDENT_SELF_ENROLLMENT(false, "Allow students to self-enroll in courses");
+    STUDENT_SELF_ENROLLMENT(false, "Allow students to self-enroll in courses"),
+
+    /**
+     * Controls whether psychometric test feature is available for students.
+     * Default: false (psychometric test is disabled by default)
+     */
+    PSYCHOMETRIC_TEST(false, "Enable psychometric test feature for students");
 
     private final boolean defaultValue;
     private final String description;

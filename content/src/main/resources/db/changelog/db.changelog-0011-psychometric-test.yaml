@@ -1,0 +1,95 @@
+databaseChangeLog:
+  # Psychometric Test Sessions
+  - changeSet:
+      id: content-0012-psychometric-test-sessions
+      author: edudron
+      changes:
+        - createTable:
+            tableName: psychometric_test_sessions
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: current_phase, type: varchar(30), constraints: { nullable: false } }
+              - column: { name: identified_fields, type: jsonb }
+              - column: { name: conversation_history, type: jsonb }
+              - column: { name: payment_id, type: varchar(26) }
+              - column: { name: payment_required, type: boolean, defaultValueBoolean: false }
+              - column: { name: payment_status, type: varchar(20), defaultValue: "NOT_REQUIRED" }
+              - column: { name: started_at, type: timestamptz }
+              - column: { name: completed_at, type: timestamptz }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: psychometric_test_sessions
+            schemaName: content
+            indexName: idx_content_psychometric_sessions_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: psychometric_test_sessions
+            schemaName: content
+            indexName: idx_content_psychometric_sessions_student_id
+            columns:
+              - column: { name: student_id }
+        - createIndex:
+            tableName: psychometric_test_sessions
+            schemaName: content
+            indexName: idx_content_psychometric_sessions_status
+            columns:
+              - column: { name: status }
+        - createIndex:
+            tableName: psychometric_test_sessions
+            schemaName: content
+            indexName: idx_content_psychometric_sessions_student_status
+            columns:
+              - column: { name: student_id }
+              - column: { name: status }
+
+  # Psychometric Test Results
+  - changeSet:
+      id: content-0013-psychometric-test-results
+      author: edudron
+      changes:
+        - createTable:
+            tableName: psychometric_test_results
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: session_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: field_scores, type: jsonb }
+              - column: { name: primary_field, type: text }
+              - column: { name: secondary_fields, type: jsonb }
+              - column: { name: recommendations, type: jsonb }
+              - column: { name: test_summary, type: text }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: psychometric_test_results
+            baseTableSchemaName: content
+            baseColumnNames: session_id
+            referencedTableName: psychometric_test_sessions
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_psychometric_results_session
+        - createIndex:
+            tableName: psychometric_test_results
+            schemaName: content
+            indexName: idx_content_psychometric_results_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: psychometric_test_results
+            schemaName: content
+            indexName: idx_content_psychometric_results_student_id
+            columns:
+              - column: { name: student_id }
+        - createIndex:
+            tableName: psychometric_test_results
+            schemaName: content
+            indexName: idx_content_psychometric_results_session_id
+            columns:
+              - column: { name: session_id }

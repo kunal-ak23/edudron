@@ -4,7 +4,8 @@ import { ApiClient } from './ApiClient'
  * Enum defining all tenant-level feature flags.
  */
 export enum TenantFeatureType {
-  STUDENT_SELF_ENROLLMENT = 'STUDENT_SELF_ENROLLMENT'
+  STUDENT_SELF_ENROLLMENT = 'STUDENT_SELF_ENROLLMENT',
+  PSYCHOMETRIC_TEST = 'PSYCHOMETRIC_TEST'
 }
 
 /**
