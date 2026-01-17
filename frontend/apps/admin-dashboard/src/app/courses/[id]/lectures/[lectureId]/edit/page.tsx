@@ -25,6 +25,15 @@ import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
 
+// Utility function to format file size
+function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes || bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
+}
+
 export default function LectureEditPage() {
   const router = useRouter()
   const params = useParams()
@@ -54,7 +63,12 @@ export default function LectureEditPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showDeleteVideoDialog, setShowDeleteVideoDialog] = useState(false)
   const [contentToDelete, setContentToDelete] = useState<string | null>(null)
+  const [selectedFileSize, setSelectedFileSize] = useState<number | null>(null)
+  const [uploadingFileSize, setUploadingFileSize] = useState<number | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<{ loaded: number; total: number } | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false) // Track server-to-Azure processing phase
   const pendingNavigation = useRef<(() => void) | null>(null)
   const initialDataRef = useRef<string | null>(null)
   const initialTextContentsRef = useRef<string | null>(null)
@@ -333,10 +347,14 @@ export default function LectureEditPage() {
           title: 'Lecture saved',
           description: 'The lecture has been saved successfully.',
         })
+        
+        // Don't navigate away for sub-lectures - stay on the edit page
+        setHasUnsavedChanges(false)
+        return // Stay on the sub-lecture edit page
       }
       
       setHasUnsavedChanges(false)
-      // Navigate back to course page
+      // Navigate back to course page only for main lectures
       router.push(`/courses/${courseId}`)
     } catch (error) {
       console.error('Failed to save lecture:', error)
@@ -393,6 +411,38 @@ export default function LectureEditPage() {
     }
   }
 
+  const handleDeleteVideo = async () => {
+    const videoContent = textContents.find((c: any) => c.contentType === 'VIDEO')
+    if (!videoContent || !videoContent.id) {
+      toast({
+        variant: 'destructive',
+        title: 'No video found',
+        description: 'No video content found to delete.',
+      })
+      return
+    }
+
+    try {
+      await lecturesApi.deleteMedia(videoContent.id)
+      // Remove video from textContents
+      setTextContents(textContents.filter(c => c.id !== videoContent.id))
+      // Clear contentUrl
+      setFormData({ ...formData, contentUrl: '' })
+      setShowDeleteVideoDialog(false)
+      toast({
+        title: 'Video deleted',
+        description: 'The video has been removed from Azure storage and the lecture.',
+      })
+    } catch (error) {
+      console.error('[EditPage] Delete video failed:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to delete video',
+        description: extractErrorMessage(error),
+      })
+    }
+  }
+
   const handleBack = () => {
     if (hasUnsavedChanges) {
       pendingNavigation.current = () => router.push(`/courses/${courseId}`)
@@ -427,6 +477,19 @@ export default function LectureEditPage() {
       })
     }
   }, [formData, textContents, loading])
+
+  // Track upload progress changes
+  useEffect(() => {
+    if (uploadProgress) {
+      console.log('[EditPage] uploadProgress state changed:', {
+        loaded: uploadProgress.loaded,
+        total: uploadProgress.total,
+        percentage: ((uploadProgress.loaded / uploadProgress.total) * 100).toFixed(2) + '%',
+        loadedFormatted: formatFileSize(uploadProgress.loaded),
+        totalFormatted: formatFileSize(uploadProgress.total)
+      })
+    }
+  }, [uploadProgress])
 
   // Track unsaved changes
   useEffect(() => {
@@ -706,22 +769,227 @@ export default function LectureEditPage() {
                 {/* Video Upload (only for VIDEO content type) */}
                 {formData.contentType === 'VIDEO' && (
                   <div className="space-y-2">
-                    <Label>Video File</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>Video File</Label>
+                      {(() => {
+                        const videoContent = textContents.find((c: any) => c.contentType === 'VIDEO')
+                        if (videoContent && (videoContent.videoUrl || videoContent.fileUrl)) {
+                          return (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowDeleteVideoDialog(true)}
+                              disabled={saving}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Remove Video
+                            </Button>
+                          )
+                        }
+                        return null
+                      })()}
+                    </div>
+                    {(() => {
+                      const videoContent = textContents.find((c: any) => c.contentType === 'VIDEO')
+                      const hasVideo = !!videoContent && (videoContent.videoUrl || videoContent.fileUrl)
+                      const fileSize = videoContent?.fileSizeBytes
+                      
+                      return (
+                        <>
+                          {hasVideo && fileSize && (
+                            <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border border-gray-200">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">Uploaded Video:</span>
+                                <span className="text-gray-500">{formatFileSize(fileSize)}</span>
+                              </div>
+                              {videoContent.videoUrl && (
+                                <a
+                                  href={videoContent.videoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline text-xs mt-1 block truncate"
+                                >
+                                  {videoContent.videoUrl}
+                                </a>
+                              )}
+                            </div>
+                          )}
+                          {uploadProgress && uploadingFileSize && (
+                            <div className={`text-sm text-gray-600 p-2 rounded border ${isProcessing ? 'bg-blue-50 border-blue-200' : 'bg-yellow-50 border-yellow-200'}`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  {isProcessing ? (
+                                    <span>Processing: <span className="font-medium">Uploading to Azure Storage...</span></span>
+                                  ) : (
+                                    <span>Uploading: <span className="font-medium">{formatFileSize(uploadProgress.loaded)}</span> of <span className="font-medium">{formatFileSize(uploadProgress.total)}</span></span>
+                                  )}
+                                </div>
+                                <span className="text-gray-500 font-medium">
+                                  {isProcessing ? 'Processing...' : `${Math.round((uploadProgress.loaded / uploadProgress.total) * 100)}%`}
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className={`h-2 rounded-full transition-all duration-300 ${isProcessing ? 'bg-blue-500 animate-pulse' : 'bg-primary'}`}
+                                  style={{ width: `${Math.min(100, (uploadProgress.loaded / uploadProgress.total) * 100)}%` }}
+                                />
+                              </div>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {isProcessing 
+                                  ? 'Server is uploading your file to Azure Storage. This may take a moment...'
+                                  : 'Upload progress - transferring from browser to server'}
+                              </p>
+                            </div>
+                          )}
+                          {selectedFileSize && !hasVideo && !uploadingFileSize && (
+                            <div className="text-sm text-gray-600 bg-blue-50 p-2 rounded border border-blue-200">
+                              Selected file size: <span className="font-medium">{formatFileSize(selectedFileSize)}</span>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
                     <FileUpload
                       label="Video File"
                       accept="video/*"
                       maxSize={2 * 1024 * 1024 * 1024} // 2GB
                       value={formData.contentUrl || ''}
-                      onChange={(url) => setFormData({ ...formData, contentUrl: url })}
+                      onChange={(url) => {
+                        setFormData({ ...formData, contentUrl: url })
+                        setSelectedFileSize(null)
+                        setUploadingFileSize(null)
+                        setUploadProgress(null)
+                        setIsProcessing(false)
+                      }}
                       onUpload={async (file) => {
                         if (!currentLectureId) {
                           throw new Error('Please save the sub-lecture first, then upload the video')
                         }
-                        // Upload video for existing sub-lectures
-                        const content = await lecturesApi.uploadVideo(currentLectureId, file)
-                        const url = content.videoUrl || content.fileUrl || ''
-                        setFormData({ ...formData, contentUrl: url })
-                        return url
+                        // Show file size before upload starts
+                        setSelectedFileSize(file.size)
+                        setUploadingFileSize(file.size)
+                        setUploadProgress({ loaded: 0, total: file.size })
+                        console.log('[EditPage] Starting video upload:', {
+                          fileSize: file.size,
+                          fileName: file.name,
+                          currentLectureId,
+                          fileSizeMB: (file.size / (1024 * 1024)).toFixed(2) + ' MB'
+                        })
+                        
+                        // NOTE: Spring Boot's multipart resolver buffers the entire request before processing,
+                        // so XMLHttpRequest progress events may not fire until buffering completes.
+                        // We use a time-based fallback progress that estimates upload speed.
+                        let fallbackProgressInterval: NodeJS.Timeout | null = null
+                        let realProgressStarted = false
+                        let uploadCompleted = false
+                        const uploadStartTime = Date.now()
+                        
+                        // Estimate upload time: ~2-5 seconds per MB depending on connection
+                        // This provides realistic progress estimation while Spring Boot buffers
+                        const mbSize = file.size / (1024 * 1024)
+                        const estimatedSecondsPerMB = 3 // Conservative estimate: 3 seconds per MB
+                        const estimatedTotalTime = Math.max(30000, mbSize * estimatedSecondsPerMB * 1000) // Min 30 seconds
+                        
+                        console.log('[EditPage] Starting upload with time-based progress estimation:', {
+                          fileSizeMB: mbSize.toFixed(2),
+                          estimatedTimeSeconds: (estimatedTotalTime / 1000).toFixed(0),
+                          note: 'Spring Boot buffers request before processing, so using time-based estimation'
+                        })
+                        
+                        // Start fallback progress that gradually increases based on elapsed time
+                        // This provides visual feedback during the buffering phase
+                        fallbackProgressInterval = setInterval(() => {
+                          if (realProgressStarted || uploadCompleted) {
+                            if (fallbackProgressInterval) {
+                              clearInterval(fallbackProgressInterval)
+                              fallbackProgressInterval = null
+                            }
+                            return
+                          }
+                          
+                          const elapsed = Date.now() - uploadStartTime
+                          const progressPercent = Math.min(95, (elapsed / estimatedTotalTime) * 100)
+                          const loaded = Math.floor((progressPercent / 100) * file.size)
+                          
+                          // Update progress every 500ms with smooth progression
+                          setUploadProgress({ loaded, total: file.size })
+                          
+                          if (progressPercent >= 95) {
+                            // Stop at 95% to leave room for real progress or completion
+                            if (fallbackProgressInterval) {
+                              clearInterval(fallbackProgressInterval)
+                              fallbackProgressInterval = null
+                            }
+                          }
+                        }, 500) // Update every 500ms
+                        
+                        try {
+                          // Upload video for existing sub-lectures with progress tracking
+                          // Using XMLHttpRequest for more reliable progress updates
+                          const content = await lecturesApi.uploadVideo(
+                            currentLectureId, 
+                            file,
+                            (progress) => {
+                              console.log('[EditPage] Real progress event received:', {
+                                loaded: progress.loaded,
+                                total: progress.total,
+                                percentage: ((progress.loaded / progress.total) * 100).toFixed(2) + '%'
+                              })
+                              // Mark that real progress has started (XMLHttpRequest events are firing)
+                              realProgressStarted = true
+                              // Clear fallback interval when real progress starts
+                              if (fallbackProgressInterval) {
+                                clearInterval(fallbackProgressInterval)
+                                fallbackProgressInterval = null
+                              }
+                              
+                              // Check if client upload is complete (100%) - switch to processing phase
+                              const isComplete = progress.loaded >= progress.total
+                              if (isComplete && !isProcessing) {
+                                console.log('[EditPage] Client upload complete, switching to processing phase')
+                                setIsProcessing(true)
+                              }
+                              
+                              setUploadProgress(progress)
+                            }
+                          )
+                          console.log('[EditPage] Upload completed, content received:', content)
+                          uploadCompleted = true
+                          // Clear fallback timeout on completion
+                          if (fallbackProgressInterval) {
+                            clearTimeout(fallbackProgressInterval)
+                            fallbackProgressInterval = null
+                          }
+                          // Set to 100% on completion - ensure user sees completion
+                          console.log('[EditPage] Setting progress to 100% - upload complete')
+                          setUploadProgress({ loaded: file.size, total: file.size })
+                          setIsProcessing(false) // Processing complete
+                          // Show 100% for a moment before clearing
+                          await new Promise(resolve => setTimeout(resolve, 1000))
+                          const url = content.videoUrl || content.fileUrl || ''
+                          setFormData({ ...formData, contentUrl: url })
+                          setSelectedFileSize(null)
+                          setUploadingFileSize(null)
+                          setUploadProgress(null)
+                          setIsProcessing(false)
+                          // Reload text contents to get updated file size
+                          await loadTextContents(currentLectureId, formData)
+                          return url
+                        } catch (error) {
+                          // Clear fallback timeout on error
+                          if (fallbackProgressInterval) {
+                            clearTimeout(fallbackProgressInterval)
+                            fallbackProgressInterval = null
+                          }
+                          setSelectedFileSize(null)
+                          setUploadingFileSize(null)
+                          setUploadProgress(null)
+                          setIsProcessing(false)
+                          throw error
+                        }
                       }}
                       helperText={!currentLectureId ? "Please save the sub-lecture first, then upload the video file (MP4, MOV, etc. up to 2GB)" : "Upload a video file for this lecture (MP4, MOV, etc. up to 2GB)"}
                       disabled={!currentLectureId || saving}
@@ -1004,6 +1272,35 @@ export default function LectureEditPage() {
         confirmText="Delete"
         variant="destructive"
       />
+
+      <ConfirmationDialog
+        isOpen={showDeleteVideoDialog}
+        onClose={() => {
+          setShowDeleteVideoDialog(false)
+        }}
+        onConfirm={handleDeleteVideo}
+        title="Delete Video"
+        description="Are you sure you want to delete this video? This will remove the video from Azure storage and cannot be undone."
+        confirmText="Delete Video"
+        variant="destructive"
+      />
+
+      {/* Unsaved Changes Bubble */}
+      {hasUnsavedChanges && (
+        <div className="fixed bottom-4 right-4 bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50">
+          <span className="text-sm font-medium">You have unsaved changes</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSave}
+            disabled={saving || !formData.title.trim()}
+            className="text-white hover:bg-amber-600 h-auto py-1"
+          >
+            {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+            Save Now
+          </Button>
+        </div>
+      )}
     </>
   )
 }

@@ -31,6 +31,9 @@ public class LectureService {
     @Autowired
     private LectureContentRepository lectureContentRepository;
     
+    @Autowired
+    private MediaUploadService mediaUploadService;
+    
     public LectureDTO createLecture(String sectionId, String title, String description, 
                                    Lecture.ContentType contentType) {
         return createLecture(sectionId, title, description, contentType, null);
@@ -138,6 +141,46 @@ public class LectureService {
         Lecture lecture = lectureRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + id));
         
+        // Load all lecture content to clean up Azure storage files
+        List<LectureContent> contents = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(id, clientId);
+        
+        // Delete all Azure storage files before deleting the lecture
+        for (LectureContent content : contents) {
+            // Delete video URL
+            if (content.getVideoUrl() != null) {
+                mediaUploadService.deleteMedia(content.getVideoUrl());
+            }
+            // Delete file URL
+            if (content.getFileUrl() != null) {
+                mediaUploadService.deleteMedia(content.getFileUrl());
+            }
+            // Delete transcript URL
+            if (content.getTranscriptUrl() != null) {
+                mediaUploadService.deleteMedia(content.getTranscriptUrl());
+            }
+            // Delete thumbnail URL
+            if (content.getThumbnailUrl() != null) {
+                mediaUploadService.deleteMedia(content.getThumbnailUrl());
+            }
+            // Delete subtitle URLs (JSON array)
+            if (content.getSubtitleUrls() != null) {
+                try {
+                    com.fasterxml.jackson.databind.JsonNode subtitleUrls = content.getSubtitleUrls();
+                    if (subtitleUrls.isArray()) {
+                        for (com.fasterxml.jackson.databind.JsonNode subtitleUrl : subtitleUrls) {
+                            if (subtitleUrl.isTextual() && subtitleUrl.asText() != null) {
+                                mediaUploadService.deleteMedia(subtitleUrl.asText());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // Log error but continue with deletion
+                    System.err.println("Failed to delete subtitle URLs for content " + content.getId() + ": " + e.getMessage());
+                }
+            }
+        }
+        
+        // Delete the lecture (JPA cascade will delete LectureContent records)
         lectureRepository.delete(lecture);
     }
     

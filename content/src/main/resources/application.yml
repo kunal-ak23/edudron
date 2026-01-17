@@ -9,11 +9,26 @@ spring:
       max-request-size: 2GB
       # Enable file uploads
       enabled: true
-      # Use disk-based storage for files larger than 1MB to prevent heap space issues
-      # Files smaller than this threshold are kept in memory, larger files are written to disk
-      file-size-threshold: 1MB
+      # CRITICAL: Set to 0 to force ALL file uploads to disk immediately (no memory buffering)
+      # This prevents OOM errors for large files (700MB+). Without this, Spring Boot would buffer
+      # files in memory up to the threshold, which could cause container memory issues.
+      # 
+      # IMPORTANT: Even with this setting, Spring Boot's multipart parser may still use a small
+      # buffer for parsing multipart boundaries, but the actual file content is written to disk
+      # as it arrives, not buffered in memory. The getInputStream() then streams from disk.
+      #
+      # Memory usage: Only small parsing buffers (~KB), NOT the entire file size
+      #
+      # PROGRESS TRACKING: With this setting, XMLHttpRequest progress events fire during
+      # client-to-Spring Boot upload. This is sufficient for UI - users see progress as the
+      # file uploads from their browser to the server. Server-to-Azure streaming happens
+      # after client upload completes, so no additional progress needed.
+      file-size-threshold: 0
       # Location for temporary file storage (uses system temp directory if not specified)
       location: ${java.io.tmpdir}
+      # Delay multipart parsing until accessed - helps with memory for large uploads
+      # When true, multipart parsing is deferred until the request is accessed, allowing streaming
+      resolve-lazily: true
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:edudron}?sslmode=${DB_SSLMODE:prefer}
     username: ${DB_USERNAME:edudron}
@@ -67,6 +82,13 @@ server:
   # Increase connection timeout for large file uploads (30 minutes = 1800000ms)
   # This ensures 500MB+ video uploads don't timeout on the server side
   connection-timeout: 1800000
+  # Configure servlet container settings for large uploads
+  tomcat:
+    max-swallow-size: 2GB  # Allow large request bodies (for error handling)
+    # Note: The key setting is file-size-threshold: 0 above, which forces Spring Boot
+    # to write all files to disk immediately. This prevents memory buffering.
+    # Tomcat itself may use small buffers for request parsing, but file content
+    # goes directly to disk via Spring Boot's multipart resolver.
 
 # JWT Configuration (must match Identity service)
 jwt:

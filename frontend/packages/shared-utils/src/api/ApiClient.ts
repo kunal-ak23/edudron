@@ -189,7 +189,7 @@ export class ApiClient {
     return { data: responseData } as ApiResponse<T>
   }
 
-  async postForm<T = any>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  async postForm<T = any>(url: string, formData: FormData, config?: AxiosRequestConfig & { onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void }): Promise<ApiResponse<T>> {
     const response: AxiosResponse<any> = await this.client.post(url, formData, {
       ...config,
       // Use config timeout if provided, otherwise use default (30000ms)
@@ -198,6 +198,28 @@ export class ApiClient {
         ...config?.headers,
         'Content-Type': 'multipart/form-data',
       },
+      // Ensure progress tracking works for large files
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      onUploadProgress: config?.onUploadProgress ? (progressEvent) => {
+        // Ensure we always have valid progress values
+        const loaded: number = progressEvent.loaded || 0
+        
+        // Handle undefined total - ensure we always have a number
+        // If total is undefined or 0, use loaded as fallback (shows progress but not percentage)
+        const totalValue = progressEvent.total
+        const total: number = (typeof totalValue === 'number' && totalValue > 0)
+          ? totalValue
+          : loaded // Fallback to loaded if total is not available
+        
+        // Call the progress callback with normalized values (both are guaranteed to be numbers)
+        if (config?.onUploadProgress) {
+          config.onUploadProgress({
+            loaded,
+            total
+          } as { loaded: number; total: number })
+        }
+      } : undefined,
     })
     const responseData = response.data
     
@@ -243,6 +265,14 @@ export class ApiClient {
 
   setBaseURL(baseURL: string) {
     this.client.defaults.baseURL = baseURL
+  }
+
+  getBaseURL(): string {
+    return this.client.defaults.baseURL || ''
+  }
+
+  getToken(): string | null {
+    return this.tokenManager.getToken()
   }
 
   setToken(token: string) {

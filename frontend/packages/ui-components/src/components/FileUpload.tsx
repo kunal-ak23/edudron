@@ -32,7 +32,10 @@ export default function FileUpload({
 }: FileUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
-  const [preview, setPreview] = useState<string | null>(value || null)
+  // Only show preview for images, not for videos or other file types
+  const [preview, setPreview] = useState<string | null>(
+    value && value.startsWith('data:image') ? value : null
+  )
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -66,13 +69,16 @@ export default function FileUpload({
       }
     }
 
-    // Show preview for images
+    // Show preview only for images
     if (file.type.startsWith('image/')) {
       const reader = new FileReader()
       reader.onloadend = () => {
         setPreview(reader.result as string)
       }
       reader.readAsDataURL(file)
+    } else {
+      // Don't show preview for non-image files (videos, documents, etc.)
+      setPreview(null)
     }
 
     // Upload file if onUpload function is provided
@@ -80,7 +86,10 @@ export default function FileUpload({
       setUploading(true)
       try {
         const url = await onUpload(file)
-        setPreview(url)
+        // Only set preview for images
+        if (file.type.startsWith('image/')) {
+          setPreview(url)
+        }
         onChange?.(url)
       } catch (err: any) {
         const errorMsg = `Upload failed: ${err.message || 'Unknown error'}`
@@ -106,6 +115,15 @@ export default function FileUpload({
     }
   }
 
+  // Update preview when value changes (only for images)
+  React.useEffect(() => {
+    if (value && value.startsWith('data:image')) {
+      setPreview(value)
+    } else if (!value) {
+      setPreview(null)
+    }
+  }, [value])
+
   const handleClick = () => {
     if (!disabled && !uploading) {
       fileInputRef.current?.click()
@@ -120,34 +138,15 @@ export default function FileUpload({
       </label>
 
       <div className="space-y-2">
-        {/* Preview */}
-        {preview && (
+        {/* Preview - only for images */}
+        {preview && preview.startsWith('data:image') && (
           <div className="relative inline-block">
-            {preview.startsWith('data:') || preview.startsWith('http') ? (
-              <div className="relative">
-                {preview.startsWith('data:image') || preview.startsWith('http') ? (
-                  <img
-                    src={preview}
-                    alt="Preview"
-                    className="h-32 w-32 object-cover rounded-lg border border-gray-300"
-                  />
-                ) : (
-                  <div className="h-32 w-32 bg-gray-100 rounded-lg border border-gray-300 flex items-center justify-center">
-                    <svg
-                      className="w-8 h-8 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                      />
-                    </svg>
-                  </div>
-                )}
+            <div className="relative">
+              <img
+                src={preview}
+                alt="Preview"
+                className="h-32 w-32 object-cover rounded-lg border border-gray-300"
+              />
                 {!disabled && (
                   <button
                     type="button"
@@ -170,7 +169,6 @@ export default function FileUpload({
                   </button>
                 )}
               </div>
-            ) : null}
           </div>
         )}
 

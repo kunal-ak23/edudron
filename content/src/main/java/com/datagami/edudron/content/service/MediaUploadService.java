@@ -4,7 +4,6 @@ import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.models.BlobHttpHeaders;
-import com.azure.storage.blob.models.ParallelTransferOptions;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.content.constants.MediaFolderConstants;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +11,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -202,37 +200,23 @@ public class MediaUploadService {
         BlobHttpHeaders headers = new BlobHttpHeaders()
                 .setContentType(contentType);
 
-        // For large video files, use file-based upload to avoid memory issues
-        // Write to temp file first, then upload from file (streams from disk)
-        File tempFile = null;
-        try {
-            // Create temp file
-            tempFile = File.createTempFile("upload-", ".tmp");
-            file.transferTo(tempFile);
-            
-            // Configure parallel transfer options for large files
-            // Use 4MB block size and up to 4 parallel transfers for better performance
-            ParallelTransferOptions parallelTransferOptions = new ParallelTransferOptions()
-                    .setBlockSizeLong(4L * 1024 * 1024) // 4MB blocks
-                    .setMaxConcurrency(4); // 4 parallel uploads
-            
-            // Upload from file - this streams from disk, not memory
-            // Method signature: uploadFromFile(path, parallelTransferOptions, headers, metadata, accessTier, requestConditions, timeout)
-            blobClient.uploadFromFile(
-                    tempFile.getAbsolutePath(), 
-                    parallelTransferOptions, 
-                    headers, 
-                    null, // metadata
-                    null, // accessTier
-                    null, // requestConditions
-                    null  // timeout
-            );
-        } finally {
-            // Clean up temp file
-            if (tempFile != null && tempFile.exists()) {
-                tempFile.delete();
-            }
-        }
+        // CRITICAL MEMORY SAFETY: With file-size-threshold: 0 in application.yml, Spring Boot
+        // writes ALL files to disk immediately as they arrive, NOT in memory.
+        //
+        // This means:
+        // - 700MB file → Written to disk in chunks as received, NOT buffered in memory
+        // - getInputStream() streams from the disk file, not memory
+        // - Memory usage: Only small buffers (~KB) for parsing/streaming, NOT 700MB
+        // - Prevents OOM errors in Azure containers with limited memory (0.5GB)
+        //
+        // Flow: Client uploads → Spring Boot writes to disk → getInputStream() → Azure (streams from disk)
+        // 
+        // Note: Spring Boot's multipart parser uses minimal memory for boundary parsing,
+        // but the actual file content goes directly to disk, not memory.
+        blobClient.upload(file.getInputStream(), file.getSize(), true);
+        
+        // Set headers after upload
+        blobClient.setHttpHeaders(headers);
 
         // Return public URL
         if (!baseUrl.isEmpty()) {

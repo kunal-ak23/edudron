@@ -129,21 +129,177 @@ export class LecturesApi {
   }
 
   // Media upload methods
-  async uploadVideo(lectureId: string, file: File): Promise<LectureContent> {
-    const formData = new FormData()
-    formData.append('file', file)
-    
-    // Calculate timeout based on file size: 1 minute per 50MB, minimum 5 minutes, maximum 30 minutes
-    // This ensures large video uploads (e.g., 500MB) don't timeout
-    const fileSizeMB = file.size / (1024 * 1024)
-    const timeoutMs = Math.min(Math.max(fileSizeMB * 60000, 300000), 1800000) // 5-30 minutes
-    
-    const response = await this.apiClient.postForm<LectureContent>(
-      `/content/api/lectures/${lectureId}/media/video`,
-      formData,
-      { timeout: timeoutMs } // Override default 30s timeout for large video uploads
-    )
-    return response.data
+  async uploadVideo(lectureId: string, file: File, onProgress?: (progress: { loaded: number; total: number }) => void): Promise<LectureContent> {
+    // Use XMLHttpRequest for better progress tracking on large files
+    return new Promise((resolve, reject) => {
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      // Calculate timeout based on file size: 1 minute per 50MB, minimum 5 minutes, maximum 30 minutes
+      const fileSizeMB = file.size / (1024 * 1024)
+      const timeoutMs = Math.min(Math.max(fileSizeMB * 60000, 300000), 1800000) // 5-30 minutes
+      
+      const xhr = new XMLHttpRequest()
+      const baseURL = this.apiClient.getBaseURL()
+      const url = `${baseURL}/content/api/lectures/${lectureId}/media/video`
+      
+      console.log('[uploadVideo] Starting upload:', {
+        url,
+        fileSize: file.size,
+        fileName: file.name,
+        hasProgressCallback: !!onProgress
+      })
+      
+      // Set up progress tracking - XMLHttpRequest provides more reliable progress events
+      // Track if we've received any progress events
+      let progressEventCount = 0
+      let lastProgressUpdate = 0
+      
+      xhr.upload.addEventListener('progress', (e) => {
+        progressEventCount++
+        const now = Date.now()
+        const timeSinceLastUpdate = now - lastProgressUpdate
+        
+        console.log(`[uploadVideo] Progress event #${progressEventCount} fired:`, {
+          loaded: e.loaded,
+          total: e.total,
+          lengthComputable: e.lengthComputable,
+          percentage: e.lengthComputable ? ((e.loaded / e.total) * 100).toFixed(2) + '%' : 'N/A',
+          timeSinceLastUpdate: timeSinceLastUpdate + 'ms',
+          hasProgressCallback: !!onProgress
+        })
+        
+        lastProgressUpdate = now
+        
+        if (onProgress) {
+          if (e.lengthComputable && e.total > 0) {
+            // Use actual progress if available
+            const progressData = {
+              loaded: e.loaded,
+              total: e.total
+            }
+            console.log('[uploadVideo] Calling onProgress (lengthComputable):', progressData)
+            onProgress(progressData)
+          } else if (e.loaded > 0) {
+            // Fallback: use loaded bytes with file size as total
+            const progressData = {
+              loaded: e.loaded,
+              total: file.size
+            }
+            console.log('[uploadVideo] Calling onProgress (fallback):', progressData)
+            onProgress(progressData)
+          } else {
+            console.log('[uploadVideo] Progress event but loaded is 0, skipping callback')
+          }
+        } else {
+          console.log('[uploadVideo] Progress event but no callback provided')
+        }
+      }, false)
+      
+      // Log a warning if no progress events fire within 3 seconds
+      const progressCheckTimeout = setTimeout(() => {
+        if (progressEventCount === 0) {
+          console.warn('[uploadVideo] WARNING: No progress events received after 3 seconds. This may indicate:')
+          console.warn('[uploadVideo] 1. Browser not firing progress events')
+          console.warn('[uploadVideo] 2. Server buffering entire request before processing')
+          console.warn('[uploadVideo] 3. Network issues preventing progress tracking')
+        } else {
+          console.log(`[uploadVideo] Progress events are working - received ${progressEventCount} events so far`)
+        }
+      }, 3000)
+      
+      // Handle completion
+      xhr.addEventListener('load', () => {
+        clearTimeout(progressCheckTimeout)
+        console.log('[uploadVideo] XHR load event fired, status:', xhr.status)
+        console.log(`[uploadVideo] Total progress events received: ${progressEventCount}`)
+        if (xhr.status >= 200 && xhr.status < 300) {
+          console.log('[uploadVideo] Upload completed successfully')
+          try {
+            const response = JSON.parse(xhr.responseText)
+            // Handle both ApiResponse format and direct response
+            const data = response.data || response
+            // Call progress callback one last time with 100% if provided
+            if (onProgress) {
+              console.log('[uploadVideo] Calling onProgress with 100% completion')
+              onProgress({
+                loaded: file.size,
+                total: file.size
+              })
+            }
+            resolve(data)
+          } catch (error) {
+            console.error('[uploadVideo] Failed to parse response:', error)
+            reject(new Error('Failed to parse response'))
+          }
+        } else {
+          console.error('[uploadVideo] Upload failed with status:', xhr.status)
+          try {
+            const errorResponse = JSON.parse(xhr.responseText)
+            reject(new Error(errorResponse.message || `Upload failed with status ${xhr.status}`))
+          } catch {
+            reject(new Error(`Upload failed with status ${xhr.status}`))
+          }
+        }
+      }, false)
+      
+      // Handle errors
+      xhr.addEventListener('error', () => {
+        clearTimeout(progressCheckTimeout)
+        console.error('[uploadVideo] Upload error occurred. Total progress events received:', progressEventCount)
+        reject(new Error('Upload failed - network error'))
+      }, false)
+      
+      xhr.addEventListener('abort', () => {
+        clearTimeout(progressCheckTimeout)
+        console.warn('[uploadVideo] Upload aborted. Total progress events received:', progressEventCount)
+        reject(new Error('Upload aborted'))
+      }, false)
+      
+      // Set timeout
+      xhr.timeout = timeoutMs
+      xhr.addEventListener('timeout', () => {
+        clearTimeout(progressCheckTimeout)
+        console.error('[uploadVideo] Upload timeout. Total progress events received:', progressEventCount)
+        reject(new Error('Upload timeout'))
+      }, false)
+      
+      // Set up request
+      xhr.open('POST', url, true)
+      console.log('[uploadVideo] XHR opened, setting headers')
+      
+      // Get auth token and set headers
+      const token = this.apiClient.getToken()
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+        console.log('[uploadVideo] Authorization header set')
+      } else {
+        console.warn('[uploadVideo] No auth token available')
+      }
+      
+      // Get tenant ID from localStorage (matching ApiClient behavior)
+      if (typeof window !== 'undefined') {
+        const tenantId = localStorage.getItem('clientId') || 
+                        localStorage.getItem('selectedTenantId') || 
+                        localStorage.getItem('tenant_id')
+        if (tenantId && tenantId !== 'PENDING_TENANT_SELECTION' && 
+            tenantId !== 'SYSTEM' && tenantId !== 'null' && tenantId !== '') {
+          xhr.setRequestHeader('X-Client-Id', tenantId)
+          console.log('[uploadVideo] X-Client-Id header set:', tenantId)
+        }
+      }
+      
+      // Send request
+      console.log('[uploadVideo] Sending request...', {
+        fileSize: file.size,
+        fileName: file.name,
+        url: url,
+        fileSizeMB: (file.size / (1024 * 1024)).toFixed(2)
+      })
+      xhr.send(formData)
+      console.log('[uploadVideo] Request sent, waiting for progress events...')
+      console.log('[uploadVideo] XMLHttpRequest upload progress listener attached:', !!xhr.upload.onprogress)
+    })
   }
 
   async uploadAudio(lectureId: string, file: File): Promise<LectureContent> {

@@ -231,12 +231,34 @@ public class LectureMediaService {
         LectureContent content = lectureContentRepository.findByIdAndClientId(contentId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Content not found: " + contentId));
         
-        // Delete from Azure Storage
+        // Delete from Azure Storage - handle all URL fields
         if (content.getVideoUrl() != null) {
             mediaUploadService.deleteMedia(content.getVideoUrl());
         }
         if (content.getFileUrl() != null) {
             mediaUploadService.deleteMedia(content.getFileUrl());
+        }
+        if (content.getTranscriptUrl() != null) {
+            mediaUploadService.deleteMedia(content.getTranscriptUrl());
+        }
+        if (content.getThumbnailUrl() != null) {
+            mediaUploadService.deleteMedia(content.getThumbnailUrl());
+        }
+        // Delete subtitle URLs (JSON array)
+        if (content.getSubtitleUrls() != null) {
+            try {
+                com.fasterxml.jackson.databind.JsonNode subtitleUrls = content.getSubtitleUrls();
+                if (subtitleUrls.isArray()) {
+                    for (com.fasterxml.jackson.databind.JsonNode subtitleUrl : subtitleUrls) {
+                        if (subtitleUrl.isTextual() && subtitleUrl.asText() != null) {
+                            mediaUploadService.deleteMedia(subtitleUrl.asText());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Log error but continue with deletion
+                System.err.println("Failed to delete subtitle URLs for content " + contentId + ": " + e.getMessage());
+            }
         }
         
         // Delete from database
