@@ -1,0 +1,291 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import { ProtectedRoute, Button } from '@kunal-ak23/edudron-ui-components'
+import { StudentLayout } from '@/components/StudentLayout'
+import { getApiClient } from '@/lib/api'
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
+
+interface TestResult {
+  id: string
+  sessionId: string
+  primaryField: string
+  secondaryFields: string[]
+  fieldScores: Record<string, number>
+  recommendations: Array<{
+    field: string
+    reason: string
+    nextSteps: string
+  }>
+  testSummary: string
+  createdAt: string
+}
+
+export default function PsychometricTestResultsPage() {
+  const params = useParams()
+  const router = useRouter()
+  const sessionId = params.sessionId as string
+  const [result, setResult] = useState<TestResult | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const apiClient = getApiClient()
+
+  useEffect(() => {
+    if (sessionId) {
+      loadResults()
+    }
+  }, [sessionId])
+
+  const loadResults = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await apiClient.get(`/api/psychometric-test/results/${sessionId}`)
+
+      console.log('Load results response:', response)
+      console.log('Response type:', typeof response)
+      console.log('Response keys:', Object.keys(response || {}))
+
+      // Handle different response structures - ApiClient might return data directly or wrapped
+      let resultData: any = null
+      let status: number | undefined = undefined
+
+      // Check if response has a 'data' property (wrapped response)
+      if (response && typeof response === 'object' && 'data' in response) {
+        resultData = (response as any).data
+        status = (response as any).status
+      } 
+      // Check if response has status property (axios-like response)
+      else if (response && typeof response === 'object' && 'status' in response) {
+        resultData = (response as any).data || response
+        status = (response as any).status
+      }
+      // Otherwise, assume response is the data directly
+      else {
+        resultData = response
+        status = 200 // Assume success if no status provided
+      }
+
+      console.log('Extracted result data:', resultData)
+      console.log('Extracted status:', status)
+
+      // Check if we have valid result data (has id property)
+      if (resultData && resultData.id) {
+        // Parse JSON fields
+        const fieldScores: Record<string, number> = {}
+        if (resultData.fieldScores) {
+          Object.keys(resultData.fieldScores).forEach(key => {
+            fieldScores[key] = resultData.fieldScores[key]
+          })
+        }
+
+        const secondaryFields: string[] = []
+        if (resultData.secondaryFields && Array.isArray(resultData.secondaryFields)) {
+          resultData.secondaryFields.forEach((field: any) => {
+            if (typeof field === 'string') {
+              secondaryFields.push(field)
+            }
+          })
+        }
+
+        const recommendations: Array<{ field: string; reason: string; nextSteps: string }> = []
+        if (resultData.recommendations && Array.isArray(resultData.recommendations)) {
+          resultData.recommendations.forEach((rec: any) => {
+            recommendations.push({
+              field: rec.field || '',
+              reason: rec.reason || '',
+              nextSteps: rec.nextSteps || ''
+            })
+          })
+        }
+
+        console.log('Setting result with data:', {
+          id: resultData.id,
+          sessionId: resultData.sessionId,
+          primaryField: resultData.primaryField,
+          secondaryFields,
+          fieldScores,
+          recommendations,
+          testSummary: resultData.testSummary
+        })
+
+        setResult({
+          id: resultData.id,
+          sessionId: resultData.sessionId,
+          primaryField: resultData.primaryField || '',
+          secondaryFields,
+          fieldScores,
+          recommendations,
+          testSummary: resultData.testSummary || '',
+          createdAt: resultData.createdAt
+        })
+      } else {
+        console.warn('Invalid response structure. Status:', status, 'Data:', resultData)
+        if (status === 404) {
+          setError('Test results not found.')
+        } else {
+          setError('Failed to load test results.')
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to load results:', err)
+      console.error('Error response:', err.response)
+      console.error('Error data:', err.response?.data)
+      if (err.response?.status === 404) {
+        setError('Test results not found.')
+      } else {
+        setError('Failed to load test results. Please try again.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <StudentLayout>
+          <div className="flex items-center justify-center min-h-screen">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading results...</p>
+            </div>
+          </div>
+        </StudentLayout>
+      </ProtectedRoute>
+    )
+  }
+
+  if (error || !result) {
+    return (
+      <ProtectedRoute>
+        <StudentLayout>
+          <div className="container mx-auto px-4 py-8">
+            <div className="max-w-2xl mx-auto bg-white rounded-lg shadow-md p-8 text-center">
+              <h1 className="text-2xl font-bold text-gray-900 mb-4">Test Results</h1>
+              <p className="text-gray-600 mb-6">{error || 'Results not found.'}</p>
+              <Button onClick={() => router.push('/psychometric-test')}>Back to Test</Button>
+            </div>
+          </div>
+        </StudentLayout>
+      </ProtectedRoute>
+    )
+  }
+
+  // Sort field scores by value
+  const sortedFields = Object.entries(result.fieldScores)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10) // Top 10 fields
+
+  return (
+    <ProtectedRoute>
+      <StudentLayout>
+        <div className="container mx-auto px-4 py-8">
+          <div className="max-w-4xl mx-auto">
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Your Test Results</h1>
+              <p className="text-gray-600">
+                Based on your responses, here are your career and field inclinations.
+              </p>
+            </div>
+
+            {/* Primary Field */}
+            {result.primaryField && (
+              <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-lg p-6 mb-6 border border-primary-200">
+                <h2 className="text-xl font-semibold text-primary-900 mb-2">Primary Field</h2>
+                <p className="text-2xl font-bold text-primary-700">{result.primaryField}</p>
+                {result.fieldScores[result.primaryField] && (
+                  <p className="text-sm text-primary-600 mt-2">
+                    Confidence Score: {(result.fieldScores[result.primaryField] * 100).toFixed(1)}%
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Secondary Fields */}
+            {result.secondaryFields.length > 0 && (
+              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Secondary Fields</h2>
+                <div className="flex flex-wrap gap-2">
+                  {result.secondaryFields.map((field, index) => (
+                    <span
+                      key={index}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-full text-sm font-medium"
+                    >
+                      {field}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Field Scores Chart */}
+            {sortedFields.length > 0 && (
+              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Field Scores</h2>
+                <div className="space-y-3">
+                  {sortedFields.map(([field, score]) => (
+                    <div key={field}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-sm font-medium text-gray-700">{field}</span>
+                        <span className="text-sm text-gray-600">{(score * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-primary-600 h-2 rounded-full transition-all"
+                          style={{ width: `${score * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recommendations */}
+            {result.recommendations.length > 0 && (
+              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Recommendations</h2>
+                <div className="space-y-4">
+                  {result.recommendations.map((rec, index) => (
+                    <div key={index} className="border-l-4 border-primary-500 pl-4">
+                      <h3 className="font-semibold text-gray-900 mb-1">{rec.field}</h3>
+                      <p className="text-sm text-gray-600 mb-2">{rec.reason}</p>
+                      <p className="text-sm text-gray-700">
+                        <strong>Next Steps:</strong> {rec.nextSteps}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Test Summary */}
+            {result.testSummary && (
+              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Summary</h2>
+                <p className="text-gray-700 whitespace-pre-wrap">{result.testSummary}</p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-center space-x-4">
+              <Button onClick={() => router.push('/psychometric-test')} variant="outline">
+                Take Test Again
+              </Button>
+              <Button onClick={() => router.push('/')}>
+                Go Home
+              </Button>
+            </div>
+          </div>
+        </div>
+      </StudentLayout>
+    </ProtectedRoute>
+  )
+}

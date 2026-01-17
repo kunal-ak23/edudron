@@ -1,0 +1,21 @@
+databaseChangeLog:
+  # Fix student_id type from UUID to VARCHAR(26) to match ULID format used in the system
+  - changeSet:
+      id: content-0014-psychometric-test-fix-student-id-sessions
+      author: edudron
+      changes:
+        - modifyDataType:
+            tableName: psychometric_test_sessions
+            schemaName: content
+            columnName: student_id
+            newDataType: varchar(26)
+  
+  - changeSet:
+      id: content-0015-psychometric-test-fix-student-id-results
+      author: edudron
+      changes:
+        - modifyDataType:
+            tableName: psychometric_test_results
+            schemaName: content
+            columnName: student_id
+            newDataType: varchar(26)
