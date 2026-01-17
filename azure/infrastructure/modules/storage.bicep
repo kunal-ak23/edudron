@@ -29,6 +29,20 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-01-01' = {
   parent: storageAccount
   name: 'default'
+  properties: {
+    defaultServiceVersion: '2021-04-10' // Required for proper HTTP range request support (Accept-Ranges header)
+    cors: {
+      corsRules: [
+        {
+          allowedOrigins: ['*'] // Configure specific origins in production
+          allowedMethods: ['GET', 'HEAD', 'OPTIONS']
+          allowedHeaders: ['*']
+          exposedHeaders: ['Accept-Ranges', 'Content-Range', 'Content-Length', 'ETag']
+          maxAgeInSeconds: 3600
+        }
+      ]
+    }
+  }
 }
 
 resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' = {

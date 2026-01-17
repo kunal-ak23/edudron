@@ -42,7 +42,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
     const videoElement = document.createElement('video-js')
     videoElement.className = 'video-js vjs-big-play-centered vjs-fluid'
     videoElement.setAttribute('playsinline', 'true')
-    videoElement.setAttribute('crossorigin', 'anonymous') // ✅ REQUIRED
+    videoElement.setAttribute('crossorigin', 'anonymous')
     videoElement.setAttribute('data-setup', '{}')
     videoRef.current.appendChild(videoElement)
 
@@ -51,7 +51,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       autoplay,
       responsive: true,
       fluid: true,
-      preload: 'auto', // ✅ better seeking behavior
+      preload: 'auto',
       playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
       html5: {
         vhs: {
@@ -68,6 +68,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           type: 'video/mp4'
         }
       ],
+      techOrder: ['html5'],
       controlBar: {
         children: showAllControls
           ? [
@@ -108,7 +109,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
     playerRef.current = player
 
-    // 🔐 Force crossorigin on the real HTMLVideoElement (important)
+    // Set crossorigin on the HTMLVideoElement for CORS requests
     player.ready(() => {
       const tech = player.tech(true)
       const el = tech?.el() as HTMLVideoElement | undefined
@@ -121,27 +122,14 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
       }
     })
 
-    // Debug logging (unchanged)
-    const debugSeeking = () => {
-      const seekable = player.seekable()
-      console.log(`[${logPrefix}]`, {
-        duration: player.duration(),
-        currentTime: player.currentTime(),
-        seekableRanges: seekable.length,
-        seekableStart: seekable.length ? seekable.start(0) : 'N/A',
-        seekableEnd: seekable.length
-          ? seekable.end(seekable.length - 1)
-          : 'N/A',
-        readyState: player.readyState()
-      })
-    }
-
-    player.on('loadedmetadata', debugSeeking)
-    player.on('seeking', debugSeeking)
-    player.on('seeked', debugSeeking)
 
     player.on('error', () => {
-      console.error(`[${logPrefix}] Video.js error`, player.error())
+      const error = player.error()
+      console.error(`[${logPrefix}] Video.js error:`, error)
+      if (error) {
+        console.error(`[${logPrefix}] Error code:`, error.code)
+        console.error(`[${logPrefix}] Error message:`, error.message)
+      }
     })
 
     return () => {

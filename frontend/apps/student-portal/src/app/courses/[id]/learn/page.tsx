@@ -1163,7 +1163,8 @@ export default function LearnPage() {
                     const videoContent = selectedLecture.contents?.find((c: any) => 
                       c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
                     )
-                    const videoUrl = videoContent?.videoUrl || videoContent?.fileUrl || selectedLecture.contentUrl
+                    // Prefer fileUrl over videoUrl since fileUrl points to storage account with CORS configured
+                    const videoUrl = videoContent?.fileUrl || videoContent?.videoUrl || selectedLecture.contentUrl
                     
                     return videoUrl ? (
                       <div className="w-full flex items-center justify-center p-4" style={{ maxHeight: '80vh', minHeight: '400px', width: '100%' }}>
