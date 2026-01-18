@@ -43,6 +43,16 @@ public class UserController {
         List<UserDTO> users = userService.getUsersByRole(role);
         return ResponseEntity.ok(users);
     }
+
+    @GetMapping("/role/{role}/count")
+    @Operation(summary = "Count users by role", description = "Get user count by role. Defaults to counting only active users.")
+    public ResponseEntity<Long> countUsersByRole(
+            @PathVariable String role,
+            @RequestParam(name = "active", defaultValue = "true") boolean activeOnly
+    ) {
+        long count = userService.countUsersByRole(role, activeOnly);
+        return ResponseEntity.ok(count);
+    }
     
     @PostMapping
     @Operation(summary = "Create user", description = "Create a new user. SYSTEM_ADMIN can only be created by existing SYSTEM_ADMIN users. Non-SYSTEM_ADMIN users must have at least one institute assigned.")

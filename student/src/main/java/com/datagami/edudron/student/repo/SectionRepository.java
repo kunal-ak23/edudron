@@ -18,6 +18,10 @@ public interface SectionRepository extends JpaRepository<Section, String> {
     List<Section> findByClientIdAndClassIdAndIsActive(UUID clientId, String classId, Boolean isActive);
     
     List<Section> findByClientId(UUID clientId);
+
+    long countByClientId(UUID clientId);
+
+    long countByClientIdAndIsActive(UUID clientId, Boolean isActive);
     
     Optional<Section> findByIdAndClientId(String id, UUID clientId);
     

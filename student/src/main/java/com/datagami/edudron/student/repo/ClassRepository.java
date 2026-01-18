@@ -20,6 +20,9 @@ public interface ClassRepository extends JpaRepository<Class, String> {
     List<Class> findByClientId(UUID clientId);
     
     List<Class> findByClientIdAndIsActive(UUID clientId, Boolean isActive);
+
+    long countByClientId(UUID clientId);
+    long countByClientIdAndIsActive(UUID clientId, Boolean isActive);
     
     Optional<Class> findByIdAndClientId(String id, UUID clientId);
     

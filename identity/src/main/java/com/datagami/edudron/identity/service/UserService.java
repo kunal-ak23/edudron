@@ -118,6 +118,30 @@ public class UserService {
             .map(this::toDTO)
             .collect(Collectors.toList());
     }
+
+    @Transactional(readOnly = true)
+    public long countUsersByRole(String roleStr, boolean activeOnly) {
+        String clientIdStr = TenantContext.getClientId();
+
+        User.Role role;
+        try {
+            role = User.Role.valueOf(roleStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid role: " + roleStr);
+        }
+
+        boolean isSystemContext = (clientIdStr == null || "SYSTEM".equals(clientIdStr) || "PENDING_TENANT_SELECTION".equals(clientIdStr));
+        if (isSystemContext) {
+            return activeOnly
+                ? userRepository.countByRoleAndActiveTrue(role)
+                : userRepository.countByRole(role);
+        }
+
+        UUID clientId = UUID.fromString(clientIdStr);
+        return activeOnly
+            ? userRepository.countByClientIdAndRoleAndActiveTrue(clientId, role)
+            : userRepository.countByClientIdAndRole(clientId, role);
+    }
     
     @Transactional
     public UserDTO createUser(CreateUserRequest request) {

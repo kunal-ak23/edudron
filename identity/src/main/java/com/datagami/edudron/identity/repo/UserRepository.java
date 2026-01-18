@@ -30,5 +30,11 @@ public interface UserRepository extends JpaRepository<User, String> {
     // Find users by tenant and role
     List<User> findByClientIdAndRole(UUID clientId, User.Role role);
     List<User> findByClientIdAndRoleAndActiveTrue(UUID clientId, User.Role role);
+
+    // Counts (used for dashboards / stats)
+    long countByClientIdAndRole(UUID clientId, User.Role role);
+    long countByClientIdAndRoleAndActiveTrue(UUID clientId, User.Role role);
+    long countByRole(User.Role role);
+    long countByRoleAndActiveTrue(User.Role role);
 }
 

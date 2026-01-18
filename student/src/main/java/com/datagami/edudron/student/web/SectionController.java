@@ -53,6 +53,15 @@ public class SectionController {
         return ResponseEntity.ok(section);
     }
 
+    @GetMapping("/sections/count")
+    @Operation(summary = "Count sections", description = "Get section count for current tenant. Defaults to counting only active sections.")
+    public ResponseEntity<Long> countSections(
+            @RequestParam(name = "active", defaultValue = "true") boolean activeOnly
+    ) {
+        long count = sectionService.countSections(activeOnly);
+        return ResponseEntity.ok(count);
+    }
+
     @PutMapping("/sections/{id}")
     @Operation(summary = "Update section", description = "Update an existing section")
     public ResponseEntity<SectionDTO> updateSection(

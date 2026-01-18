@@ -19,11 +19,48 @@ import {
   Loader2,
   LogOut
 } from 'lucide-react'
-import { coursesApi, enrollmentsApi } from '@/lib/api'
+import { apiClient, coursesApi, enrollmentsApi } from '@/lib/api'
 import type { Course, Batch } from '@kunal-ak23/edudron-shared-utils'
 
 // Force dynamic rendering - disable static generation
 export const dynamic = 'force-dynamic'
+
+type ActivityDotColor = 'blue' | 'green' | 'purple' | 'orange'
+interface ActivityItem {
+  id: string
+  dotColor: ActivityDotColor
+  title: string
+  subtitle: string
+  timestampMs: number
+}
+
+function safeDateMs(dateStr?: string): number {
+  if (!dateStr) return 0
+  const ms = new Date(dateStr).getTime()
+  return Number.isFinite(ms) ? ms : 0
+}
+
+function timeAgo(dateStr?: string): string {
+  const ms = safeDateMs(dateStr)
+  if (!ms) return '—'
+  const diffMs = Date.now() - ms
+  const diffMins = Math.floor(diffMs / 60000)
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`
+  const diffHours = Math.floor(diffMins / 60)
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`
+  const diffDays = Math.floor(diffHours / 24)
+  return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`
+}
+
+function computeSeatUtilization(batches: Batch[]): number | null {
+  const withCapacity = batches.filter((b) => typeof b.capacity === 'number' && (b.capacity ?? 0) > 0)
+  if (withCapacity.length === 0) return null
+  const totalCapacity = withCapacity.reduce((sum, b) => sum + (b.capacity || 0), 0)
+  if (totalCapacity <= 0) return null
+  const totalEnrolled = withCapacity.reduce((sum, b) => sum + (b.enrolledCount || 0), 0)
+  return Math.max(0, Math.min(100, (totalEnrolled / totalCapacity) * 100))
+}
 
 export default function DashboardPage() {
   const [mounted, setMounted] = useState(false)
@@ -31,6 +68,9 @@ export default function DashboardPage() {
   const { user: authUser, isAuthenticated } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
   const [batches, setBatches] = useState<Batch[]>([])
+  const [activeClassCount, setActiveClassCount] = useState<number | null>(null)
+  const [activeSectionCount, setActiveSectionCount] = useState<number | null>(null)
+  const [studentCount, setStudentCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
 
@@ -46,19 +86,54 @@ export default function DashboardPage() {
   }, [mounted])
 
   const loadData = async () => {
+    setLoading(true)
     try {
       const userStr = localStorage.getItem('user')
       if (userStr) {
         setUser(JSON.parse(userStr))
       }
 
-      const [coursesData, batchesData] = await Promise.all([
+      const results = await Promise.allSettled([
         coursesApi.listCourses(),
-        enrollmentsApi.listBatches()
+        enrollmentsApi.listBatches(),
+        apiClient.get<number>('/idp/users/role/STUDENT/count?active=true'),
+        apiClient.get<number>('/api/classes/count?active=true'),
+        apiClient.get<number>('/api/sections/count?active=true'),
       ])
+
+      const coursesData = results[0].status === 'fulfilled' ? results[0].value : []
+      const batchesData = results[1].status === 'fulfilled' ? results[1].value : []
+
+      // Count endpoint returns a number
+      let resolvedStudentCount: number | null = null
+      if (results[2].status === 'fulfilled') {
+        const raw = results[2].value?.data
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+          resolvedStudentCount = raw
+        }
+      }
+
+      let resolvedActiveClassCount: number | null = null
+      if (results[3].status === 'fulfilled') {
+        const raw = results[3].value?.data
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+          resolvedActiveClassCount = raw
+        }
+      }
+
+      let resolvedActiveSectionCount: number | null = null
+      if (results[4].status === 'fulfilled') {
+        const raw = results[4].value?.data
+        if (typeof raw === 'number' && Number.isFinite(raw)) {
+          resolvedActiveSectionCount = raw
+        }
+      }
 
       setCourses(coursesData)
       setBatches(batchesData)
+      setStudentCount(resolvedStudentCount)
+      setActiveClassCount(resolvedActiveClassCount)
+      setActiveSectionCount(resolvedActiveSectionCount)
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
     } finally {
@@ -95,8 +170,56 @@ export default function DashboardPage() {
 
   const publishedCourses = courses.filter(c => c.isPublished)
   const draftCourses = courses.filter(c => !c.isPublished)
+  // "Batches" in the org's terminology maps to "Sections" in the backend.
+  // Keep batches list for now (legacy), but prefer section count for correctness.
   const activeBatches = batches.filter(b => b.isActive)
-  const totalStudents = batches.reduce((sum, batch) => sum + (batch.enrolledCount || 0), 0)
+  const totalBatches = activeSectionCount ?? batches.length
+  const totalStudentsFromBatches = batches.reduce((sum, batch) => sum + (batch.enrolledCount || 0), 0)
+  const totalStudents = studentCount ?? totalStudentsFromBatches
+  const seatUtilization = computeSeatUtilization(batches)
+
+  const recentCourses = [...courses]
+    .sort((a, b) => safeDateMs(b.updatedAt || b.createdAt) - safeDateMs(a.updatedAt || a.createdAt))
+    .slice(0, 5)
+
+  const recentActivity: ActivityItem[] = (() => {
+    const items: ActivityItem[] = []
+
+    for (const c of courses) {
+      items.push({
+        id: `course-created:${c.id}`,
+        dotColor: 'blue',
+        title: `Course created: ${c.title}`,
+        subtitle: timeAgo(c.createdAt),
+        timestampMs: safeDateMs(c.createdAt),
+      })
+
+      if (c.isPublished) {
+        items.push({
+          id: `course-published:${c.id}`,
+          dotColor: 'purple',
+          title: `Course published: ${c.title}`,
+          subtitle: timeAgo(c.updatedAt),
+          timestampMs: safeDateMs(c.updatedAt),
+        })
+      }
+    }
+
+    for (const b of batches) {
+      items.push({
+        id: `batch-created:${b.id}`,
+        dotColor: 'green',
+        title: `Batch created: ${b.name}`,
+        subtitle: timeAgo(b.createdAt),
+        timestampMs: safeDateMs(b.createdAt),
+      })
+    }
+
+    return items
+      .filter(i => i.timestampMs > 0)
+      .sort((a, b) => b.timestampMs - a.timestampMs)
+      .slice(0, 5)
+  })()
 
   if (!mounted) {
     return (
@@ -108,9 +231,21 @@ export default function DashboardPage() {
 
   return (
     <div>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            Welcome back{user?.name || authUser?.name ? `, ${user?.name || authUser?.name}` : ''}.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleLogout}>
+          <LogOut className="w-4 h-4 mr-2" />
+          Logout
+        </Button>
+      </div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-3">
             <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white border-0">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
@@ -127,11 +262,22 @@ export default function DashboardPage() {
             <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white border-0">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-green-100">Active Batches</h3>
+                  <h3 className="text-sm font-medium text-green-100">Batches</h3>
                   <Users className="w-6 h-6 text-green-200" />
                 </div>
-                <p className="text-3xl font-bold">{loading ? '...' : activeBatches.length}</p>
-                <p className="text-sm text-green-100 mt-1">Currently running</p>
+                <p className="text-3xl font-bold">{loading ? '...' : totalBatches}</p>
+                <p className="text-sm text-green-100 mt-1">{activeBatches.length} active</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white border-0">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-indigo-100">Classes</h3>
+                  <Users className="w-6 h-6 text-indigo-200" />
+                </div>
+                <p className="text-3xl font-bold">{loading ? '...' : activeClassCount ?? '—'}</p>
+                <p className="text-sm text-indigo-100 mt-1">Active in tenant</p>
               </CardContent>
             </Card>
 
@@ -142,18 +288,22 @@ export default function DashboardPage() {
                   <GraduationCap className="w-6 h-6 text-purple-200" />
                 </div>
                 <p className="text-3xl font-bold">{loading ? '...' : totalStudents.toLocaleString()}</p>
-                <p className="text-sm text-purple-100 mt-1">Enrolled across all batches</p>
+                <p className="text-sm text-purple-100 mt-1">
+                  {studentCount !== null ? 'Students in tenant' : 'Enrolled across all batches'}
+                </p>
               </CardContent>
             </Card>
 
             <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white border-0">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-orange-100">Completion Rate</h3>
+                  <h3 className="text-sm font-medium text-orange-100">Seat Utilization</h3>
                   <BarChart3 className="w-6 h-6 text-orange-200" />
                 </div>
-                <p className="text-3xl font-bold">-</p>
-                <p className="text-sm text-orange-100 mt-1">Average course completion</p>
+                <p className="text-3xl font-bold">
+                  {loading ? '...' : seatUtilization === null ? '—' : `${Math.round(seatUtilization)}%`}
+                </p>
+                <p className="text-sm text-orange-100 mt-1">Across batches with capacity set</p>
               </CardContent>
             </Card>
           </div>
@@ -195,7 +345,7 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {courses.slice(0, 5).map((course) => (
+                    {recentCourses.map((course) => (
                       <div
                         key={course.id}
                         className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
@@ -298,29 +448,41 @@ export default function DashboardPage() {
                   <CardTitle>Recent Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3 text-sm">
-                    <div className="flex items-start space-x-3">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-                      <div className="flex-1">
-                        <p>New course created</p>
-                        <p className="text-muted-foreground text-xs">2 hours ago</p>
-                      </div>
+                  {loading ? (
+                    <div className="space-y-3 text-sm">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-start space-x-3 animate-pulse">
+                          <div className="w-2 h-2 bg-gray-200 rounded-full mt-2"></div>
+                          <div className="flex-1">
+                            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                            <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex items-start space-x-3">
-                      <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-                      <div className="flex-1">
-                        <p>Batch enrollment completed</p>
-                        <p className="text-muted-foreground text-xs">5 hours ago</p>
-                      </div>
+                  ) : recentActivity.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No recent activity found yet.</p>
+                  ) : (
+                    <div className="space-y-3 text-sm">
+                      {recentActivity.map((item) => (
+                        <div key={item.id} className="flex items-start space-x-3">
+                          <div
+                            className={[
+                              'w-2 h-2 rounded-full mt-2',
+                              item.dotColor === 'blue' ? 'bg-blue-500' : '',
+                              item.dotColor === 'green' ? 'bg-green-500' : '',
+                              item.dotColor === 'purple' ? 'bg-purple-500' : '',
+                              item.dotColor === 'orange' ? 'bg-orange-500' : '',
+                            ].join(' ')}
+                          />
+                          <div className="flex-1">
+                            <p>{item.title}</p>
+                            <p className="text-muted-foreground text-xs">{item.subtitle}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex items-start space-x-3">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full mt-2"></div>
-                      <div className="flex-1">
-                        <p>Course published</p>
-                        <p className="text-muted-foreground text-xs">1 day ago</p>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             </div>

@@ -52,6 +52,15 @@ public class ClassController {
         return ResponseEntity.ok(classDTO);
     }
 
+    @GetMapping("/classes/count")
+    @Operation(summary = "Count classes", description = "Get class count for current tenant. Defaults to counting only active classes.")
+    public ResponseEntity<Long> countClasses(
+            @RequestParam(name = "active", defaultValue = "true") boolean activeOnly
+    ) {
+        long count = classService.countClasses(activeOnly);
+        return ResponseEntity.ok(count);
+    }
+
     @PutMapping("/classes/{id}")
     @Operation(summary = "Update class", description = "Update an existing class")
     public ResponseEntity<ClassDTO> updateClass(

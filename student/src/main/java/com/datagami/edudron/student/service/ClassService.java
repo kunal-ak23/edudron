@@ -86,7 +86,7 @@ public class ClassService {
         UUID clientId = UUID.fromString(clientIdStr);
         
         // Validate institute belongs to client
-        Institute institute = instituteRepository.findByIdAndClientId(instituteId, clientId)
+        instituteRepository.findByIdAndClientId(instituteId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Institute not found: " + instituteId));
         
         List<Class> classes = classRepository.findByInstituteId(instituteId);
@@ -103,7 +103,7 @@ public class ClassService {
         UUID clientId = UUID.fromString(clientIdStr);
         
         // Validate institute belongs to client
-        Institute institute = instituteRepository.findByIdAndClientId(instituteId, clientId)
+        instituteRepository.findByIdAndClientId(instituteId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Institute not found: " + instituteId));
         
         List<Class> classes = classRepository.findByInstituteIdAndIsActive(instituteId, true);
@@ -165,6 +165,19 @@ public class ClassService {
         
         classEntity.setIsActive(false);
         classRepository.save(classEntity);
+    }
+
+    @Transactional(readOnly = true)
+    public long countClasses(boolean activeOnly) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        return activeOnly
+            ? classRepository.countByClientIdAndIsActive(clientId, true)
+            : classRepository.countByClientId(clientId);
     }
     
     private ClassDTO toDTO(Class classEntity) {

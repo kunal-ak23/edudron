@@ -89,7 +89,7 @@ public class SectionService {
         UUID clientId = UUID.fromString(clientIdStr);
         
         // Validate class belongs to client
-        Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
+        classRepository.findByIdAndClientId(classId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
         
         List<Section> sections = sectionRepository.findByClientIdAndClassId(clientId, classId);
@@ -106,7 +106,7 @@ public class SectionService {
         UUID clientId = UUID.fromString(clientIdStr);
         
         // Validate class belongs to client
-        Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
+        classRepository.findByIdAndClientId(classId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
         
         List<Section> sections = sectionRepository.findByClientIdAndClassIdAndIsActive(clientId, classId, true);
@@ -158,6 +158,19 @@ public class SectionService {
         
         section.setIsActive(false);
         sectionRepository.save(section);
+    }
+
+    @Transactional(readOnly = true)
+    public long countSections(boolean activeOnly) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        return activeOnly
+            ? sectionRepository.countByClientIdAndIsActive(clientId, true)
+            : sectionRepository.countByClientId(clientId);
     }
     
     public SectionProgressDTO getSectionProgress(String sectionId) {
