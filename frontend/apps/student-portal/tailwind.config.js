@@ -5,6 +5,9 @@ module.exports = {
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
     '../../packages/ui-components/src/**/*.{js,ts,jsx,tsx}',
+    // When deployed, student-portal may consume the published package instead of the workspace source.
+    // If Tailwind doesn't scan the installed package, unique utilities (e.g. pl-10/pr-3) get purged in prod.
+    './node_modules/@kunal-ak23/edudron-ui-components/**/*.{js,ts,jsx,tsx,mjs,cjs}',
   ],
   theme: {
     extend: {
