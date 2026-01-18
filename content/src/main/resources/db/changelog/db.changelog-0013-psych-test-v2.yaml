@@ -1,0 +1,363 @@
+databaseChangeLog:
+  # ==========================================================
+  # Psych Test v2 (DB-driven, versioned, auditable, adaptive)
+  # ==========================================================
+
+  # -------------------------
+  # Extend curated courses
+  # -------------------------
+  - changeSet:
+      id: content-0016-courses-add-curation-tags
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: courses
+            schemaName: content
+            columns:
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: stream_tags, type: "text[]" }
+              - column: { name: riasec_tags, type: "text[]" }
+              - column: { name: skill_tags, type: "text[]" }
+
+        # GIN indexes for tag arrays (Liquibase createIndex doesn't support GIN cleanly)
+        - sql:
+            sql: |
+              create index if not exists idx_content_courses_is_published_active
+              on content.courses (client_id, is_published, is_active);
+
+              create index if not exists idx_content_courses_stream_tags_gin
+              on content.courses using gin (stream_tags);
+
+              create index if not exists idx_content_courses_riasec_tags_gin
+              on content.courses using gin (riasec_tags);
+
+              create index if not exists idx_content_courses_skill_tags_gin
+              on content.courses using gin (skill_tags);
+
+  # -------------------------
+  # Core question bank tables
+  # -------------------------
+  - changeSet:
+      id: content-0017-psych-test-question
+      author: edudron
+      changes:
+        - createTable:
+            tableName: psych_test_question
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: prompt, type: text, constraints: { nullable: false } }
+              - column: { name: domain_tags, type: "text[]" }
+              - column: { name: reverse_scored, type: boolean, defaultValueBoolean: false }
+              - column: { name: grade_band, type: varchar(20) }
+              - column: { name: weight, type: "numeric(6,2)", defaultValueNumeric: 1.0 }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: bank_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: metadata_json, type: jsonb }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: psych_test_question
+            schemaName: content
+            indexName: idx_content_psych_test_question_active
+            columns:
+              - column: { name: is_active }
+              - column: { name: bank_version }
+        - sql:
+            sql: |
+              create index if not exists idx_content_psych_test_question_domain_tags_gin
+              on content.psych_test_question using gin (domain_tags);
+
+  - changeSet:
+      id: content-0018-psych-test-option
+      author: edudron
+      changes:
+        - createTable:
+            tableName: psych_test_option
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: question_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: label, type: text, constraints: { nullable: false } }
+              - column: { name: value, type: integer, constraints: { nullable: false } }
+              - column: { name: domain_tags, type: "text[]" }
+              - column: { name: metadata_json, type: jsonb }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: psych_test_option
+            baseTableSchemaName: content
+            baseColumnNames: question_id
+            referencedTableName: psych_test_question
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_psych_test_option_question
+        - createIndex:
+            tableName: psych_test_option
+            schemaName: content
+            indexName: idx_content_psych_test_option_question
+            columns:
+              - column: { name: question_id }
+        - sql:
+            sql: |
+              create index if not exists idx_content_psych_test_option_domain_tags_gin
+              on content.psych_test_option using gin (domain_tags);
+
+  # -------------------------
+  # Session / answers / result
+  # -------------------------
+  - changeSet:
+      id: content-0019-psych-test-session
+      author: edudron
+      changes:
+        - createTable:
+            tableName: psych_test_session
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: user_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: status, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: started_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: completed_at, type: timestamptz }
+              - column: { name: test_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: bank_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: scoring_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: prompt_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: grade, type: integer }
+              - column: { name: locale, type: varchar(10), defaultValue: "en" }
+              - column: { name: current_question_index, type: integer, defaultValueNumeric: 0 }
+              - column: { name: max_questions, type: integer, defaultValueNumeric: 30 }
+              - column: { name: metadata_json, type: jsonb }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: psych_test_session
+            schemaName: content
+            indexName: idx_content_psych_test_session_client_user_status
+            columns:
+              - column: { name: client_id }
+              - column: { name: user_id }
+              - column: { name: status }
+
+  - changeSet:
+      id: content-0020-psych-test-answer
+      author: edudron
+      changes:
+        - createTable:
+            tableName: psych_test_answer
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: session_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: question_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: answer_json, type: jsonb, constraints: { nullable: false } }
+              - column: { name: answered_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: time_spent_ms, type: integer }
+        - addForeignKeyConstraint:
+            baseTableName: psych_test_answer
+            baseTableSchemaName: content
+            baseColumnNames: session_id
+            referencedTableName: psych_test_session
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_psych_test_answer_session
+        - addForeignKeyConstraint:
+            baseTableName: psych_test_answer
+            baseTableSchemaName: content
+            baseColumnNames: question_id
+            referencedTableName: psych_test_question
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_psych_test_answer_question
+        - addUniqueConstraint:
+            tableName: psych_test_answer
+            schemaName: content
+            columnNames: session_id, question_id
+            constraintName: uk_psych_test_answer_session_question
+        - createIndex:
+            tableName: psych_test_answer
+            schemaName: content
+            indexName: idx_content_psych_test_answer_session
+            columns:
+              - column: { name: session_id }
+
+  - changeSet:
+      id: content-0021-psych-test-result
+      author: edudron
+      changes:
+        - createTable:
+            tableName: psych_test_result
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: session_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: overall_confidence, type: varchar(10), constraints: { nullable: false } }
+              - column: { name: domain_scores_json, type: jsonb, constraints: { nullable: false } }
+              - column: { name: top_domains_json, type: jsonb, constraints: { nullable: false } }
+              - column: { name: stream_suggestion, type: text }
+              - column: { name: career_fields_json, type: jsonb }
+              - column: { name: recommended_courses_json, type: jsonb }
+              - column: { name: report_text, type: text }
+              - column: { name: test_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: bank_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: scoring_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: prompt_version, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - addForeignKeyConstraint:
+            baseTableName: psych_test_result
+            baseTableSchemaName: content
+            baseColumnNames: session_id
+            referencedTableName: psych_test_session
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_psych_test_result_session
+        - addUniqueConstraint:
+            tableName: psych_test_result
+            schemaName: content
+            columnNames: session_id
+            constraintName: uk_psych_test_result_session
+
+  # -------------------------
+  # Seed question bank + some dev courses
+  # -------------------------
+  - changeSet:
+      id: content-0022-psych-test-seed-bank-v1
+      author: edudron
+      changes:
+        - sql:
+            splitStatements: true
+            stripComments: true
+            sql: |
+              -- Seed bank version
+              -- RIASEC codes: R, I, A, S, E, C
+              -- Question types: LIKERT, SCENARIO_MCQ, OPEN_ENDED
+
+              -- Likert questions (5 per domain)
+              insert into content.psych_test_question (id, type, prompt, domain_tags, reverse_scored, grade_band, weight, is_active, bank_version, metadata_json)
+              values
+                ('PTQ_R_001','LIKERT','I enjoy hands-on tasks like fixing or building things.', array['R'], false, '8-12', 1.00, true, 'v1', '{"indicator":"hands_on"}'::jsonb),
+                ('PTQ_R_002','LIKERT','I like working with tools, machines, or practical materials.', array['R'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_R_003','LIKERT','I prefer learning by doing rather than only reading or watching.', array['R'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_R_004','LIKERT','I enjoy outdoor activities and practical projects.', array['R'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_R_005','LIKERT','I feel comfortable using equipment or working in a workshop/lab setup.', array['R'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+
+                ('PTQ_I_001','LIKERT','I enjoy solving puzzles and figuring out why something happens.', array['I'], false, '8-12', 1.00, true, 'v1', '{"indicator":"logic"}'::jsonb),
+                ('PTQ_I_002','LIKERT','I like learning how things work by asking questions.', array['I'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_I_003','LIKERT','I enjoy investigating problems until I find an answer.', array['I'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_I_004','LIKERT','I like working with numbers, patterns, or data.', array['I'], false, '8-12', 1.00, true, 'v1', '{"indicator":"math"}'::jsonb),
+                ('PTQ_I_005','LIKERT','I enjoy science topics and discovery-based learning.', array['I'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+
+                ('PTQ_A_001','LIKERT','I enjoy creative activities like drawing, music, writing, or design.', array['A'], false, '8-12', 1.00, true, 'v1', '{"indicator":"expression"}'::jsonb),
+                ('PTQ_A_002','LIKERT','I like coming up with original ideas or stories.', array['A'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_A_003','LIKERT','I enjoy expressing myself in my own unique style.', array['A'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_A_004','LIKERT','I prefer tasks that allow imagination and flexibility.', array['A'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_A_005','LIKERT','I enjoy exploring art, media, or creative tools.', array['A'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+
+                ('PTQ_S_001','LIKERT','I enjoy helping others learn or solve problems.', array['S'], false, '8-12', 1.00, true, 'v1', '{"indicator":"teamwork"}'::jsonb),
+                ('PTQ_S_002','LIKERT','I like working with people and building good relationships.', array['S'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_S_003','LIKERT','I feel motivated when I can support someone.', array['S'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_S_004','LIKERT','I enjoy explaining things in a clear, friendly way.', array['S'], false, '8-12', 1.00, true, 'v1', '{"indicator":"communication"}'::jsonb),
+                ('PTQ_S_005','LIKERT','I prefer team activities over working alone.', array['S'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+
+                ('PTQ_E_001','LIKERT','I enjoy leading a group or taking initiative.', array['E'], false, '8-12', 1.00, true, 'v1', '{"indicator":"leadership"}'::jsonb),
+                ('PTQ_E_002','LIKERT','I like persuading others or presenting my ideas.', array['E'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_E_003','LIKERT','I enjoy planning goals and making things happen.', array['E'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_E_004','LIKERT','I am interested in business, entrepreneurship, or marketing.', array['E'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_E_005','LIKERT','I feel energized when I’m responsible for outcomes.', array['E'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+
+                ('PTQ_C_001','LIKERT','I like organizing tasks and following a clear plan.', array['C'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_C_002','LIKERT','I prefer structured work with clear rules.', array['C'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_C_003','LIKERT','I enjoy keeping records or tracking details accurately.', array['C'], false, '8-12', 1.00, true, 'v1', '{"indicator":"attention_to_detail"}'::jsonb),
+                ('PTQ_C_004','LIKERT','I feel comfortable with routines and step-by-step processes.', array['C'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb),
+                ('PTQ_C_005','LIKERT','I like checking my work carefully for correctness.', array['C'], false, '8-12', 1.00, true, 'v1', '{}'::jsonb);
+
+              -- Standard Likert options for all Likert questions (labels mapped to -2..+2)
+              -- (We store these per-question so the frontend can render from DB without hardcoding.)
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json)
+              select
+                ('PTO_' || q.id || '_SA')::varchar(26), q.id, 'Strongly Agree', 2, null, '{}'::jsonb
+              from content.psych_test_question q where q.type='LIKERT' and q.bank_version='v1';
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json)
+              select
+                ('PTO_' || q.id || '_A')::varchar(26), q.id, 'Agree', 1, null, '{}'::jsonb
+              from content.psych_test_question q where q.type='LIKERT' and q.bank_version='v1';
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json)
+              select
+                ('PTO_' || q.id || '_N')::varchar(26), q.id, 'Not Sure', 0, null, '{}'::jsonb
+              from content.psych_test_question q where q.type='LIKERT' and q.bank_version='v1';
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json)
+              select
+                ('PTO_' || q.id || '_D')::varchar(26), q.id, 'Disagree', -1, null, '{}'::jsonb
+              from content.psych_test_question q where q.type='LIKERT' and q.bank_version='v1';
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json)
+              select
+                ('PTO_' || q.id || '_SD')::varchar(26), q.id, 'Strongly Disagree', -2, null, '{}'::jsonb
+              from content.psych_test_question q where q.type='LIKERT' and q.bank_version='v1';
+
+              -- Scenario MCQs (6 total)
+              insert into content.psych_test_question (id, type, prompt, domain_tags, reverse_scored, grade_band, weight, is_active, bank_version, metadata_json)
+              values
+                ('PTQ_SC_001','SCENARIO_MCQ','You have to choose a weekend activity. What sounds most fun?', null, false, '8-12', 1.00, true, 'v1', '{"secondary":true}'::jsonb),
+                ('PTQ_SC_002','SCENARIO_MCQ','In a group project, what role do you naturally take?', null, false, '8-12', 1.00, true, 'v1', '{"secondary":true}'::jsonb),
+                ('PTQ_SC_003','SCENARIO_MCQ','A new app/game is glitching. What do you do first?', null, false, '8-12', 1.00, true, 'v1', '{"secondary":true}'::jsonb),
+                ('PTQ_SC_004','SCENARIO_MCQ','Which school task do you prefer?', null, false, '8-12', 1.00, true, 'v1', '{"secondary":true}'::jsonb),
+                ('PTQ_SC_005','SCENARIO_MCQ','You’re planning a small event. What do you focus on most?', null, false, '8-12', 1.00, true, 'v1', '{"secondary":true}'::jsonb),
+                ('PTQ_SC_006','SCENARIO_MCQ','Pick the option that feels most like you.', null, false, '8-12', 1.00, true, 'v1', '{"secondary":true}'::jsonb);
+
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json) values
+                ('PTO_SC001_A','PTQ_SC_001','Build something or fix something at home', 2, array['R'], '{}'::jsonb),
+                ('PTO_SC001_B','PTQ_SC_001','Do a mini experiment / figure out why something works', 2, array['I'], '{}'::jsonb),
+                ('PTO_SC001_C','PTQ_SC_001','Create art/music/content', 2, array['A'], '{}'::jsonb),
+                ('PTO_SC001_D','PTQ_SC_001','Help someone or volunteer', 2, array['S'], '{}'::jsonb),
+                ('PTO_SC001_E','PTQ_SC_001','Plan a small selling/marketing idea', 2, array['E'], '{}'::jsonb),
+                ('PTO_SC001_F','PTQ_SC_001','Organize your room/notes and make a checklist', 2, array['C'], '{}'::jsonb);
+
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json) values
+                ('PTO_SC002_A','PTQ_SC_002','I coordinate and keep the group on track', 2, array['E','C'], '{}'::jsonb),
+                ('PTO_SC002_B','PTQ_SC_002','I do the research and problem-solving', 2, array['I'], '{}'::jsonb),
+                ('PTO_SC002_C','PTQ_SC_002','I design/creatively present the output', 2, array['A'], '{}'::jsonb),
+                ('PTO_SC002_D','PTQ_SC_002','I support teammates and manage communication', 2, array['S'], '{}'::jsonb);
+
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json) values
+                ('PTO_SC003_A','PTQ_SC_003','Test it step-by-step until I find the cause', 2, array['I','C'], '{}'::jsonb),
+                ('PTO_SC003_B','PTQ_SC_003','Ask people what they experienced and summarize', 2, array['S'], '{}'::jsonb),
+                ('PTO_SC003_C','PTQ_SC_003','Try creative workarounds and new ideas', 2, array['A'], '{}'::jsonb),
+                ('PTO_SC003_D','PTQ_SC_003','Take ownership and push for a fast fix', 2, array['E'], '{}'::jsonb);
+
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json) values
+                ('PTO_SC004_A','PTQ_SC_004','Lab/practical activity', 2, array['R'], '{}'::jsonb),
+                ('PTO_SC004_B','PTQ_SC_004','Research and analysis assignment', 2, array['I'], '{}'::jsonb),
+                ('PTO_SC004_C','PTQ_SC_004','Creative writing/design assignment', 2, array['A'], '{}'::jsonb),
+                ('PTO_SC004_D','PTQ_SC_004','Peer mentoring/presentation', 2, array['S'], '{}'::jsonb);
+
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json) values
+                ('PTO_SC005_A','PTQ_SC_005','Create a clear plan, budget, and checklist', 2, array['C'], '{}'::jsonb),
+                ('PTO_SC005_B','PTQ_SC_005','Promote it and get people excited', 2, array['E'], '{}'::jsonb),
+                ('PTO_SC005_C','PTQ_SC_005','Make it look/feel creative and memorable', 2, array['A'], '{}'::jsonb),
+                ('PTO_SC005_D','PTQ_SC_005','Make sure everyone feels included and supported', 2, array['S'], '{}'::jsonb);
+
+              insert into content.psych_test_option (id, question_id, label, value, domain_tags, metadata_json) values
+                ('PTO_SC006_A','PTQ_SC_006','I like clear steps and structure', 2, array['C'], '{}'::jsonb),
+                ('PTO_SC006_B','PTQ_SC_006','I like leading and influencing', 2, array['E'], '{}'::jsonb),
+                ('PTO_SC006_C','PTQ_SC_006','I like creativity and self-expression', 2, array['A'], '{}'::jsonb),
+                ('PTO_SC006_D','PTQ_SC_006','I like hands-on practical work', 2, array['R'], '{}'::jsonb),
+                ('PTO_SC006_E','PTQ_SC_006','I like figuring things out', 2, array['I'], '{}'::jsonb),
+                ('PTO_SC006_F','PTQ_SC_006','I like helping people', 2, array['S'], '{}'::jsonb);
+
+              -- One open-ended prompt (supporting evidence only)
+              insert into content.psych_test_question (id, type, prompt, domain_tags, reverse_scored, grade_band, weight, is_active, bank_version, metadata_json)
+              values
+                ('PTQ_OE_001','OPEN_ENDED','Tell me about a project or activity you enjoyed recently, and what you liked about it.', null, false, '8-12', 1.00, true, 'v1', '{"supporting_only":true}'::jsonb);
+
+              -- Dev-only curated courses (client_id all-zero UUID). Safe for local demos.
+              insert into content.courses (id, client_id, title, description, is_published, created_at, updated_at, is_active, stream_tags, riasec_tags, skill_tags, tags, difficulty_level, language, is_free)
+              values
+                ('PCOURSE_001','00000000-0000-0000-0000-000000000000','Intro to Robotics (Hands-on)','A practical starter course on building and controlling simple robots.', true, now(), now(), true, array['Science'], array['R'], array['hands_on'], array['robotics','hands-on'], 'BEGINNER', 'en', true),
+                ('PCOURSE_002','00000000-0000-0000-0000-000000000000','Logic & Problem Solving','Improve logical reasoning with puzzles and structured thinking.', true, now(), now(), true, array['Science'], array['I'], array['logic'], array['logic','problem-solving'], 'BEGINNER', 'en', true),
+                ('PCOURSE_003','00000000-0000-0000-0000-000000000000','Creative Design Basics','Learn fundamentals of design, creativity, and visual communication.', true, now(), now(), true, array['Arts'], array['A'], array['expression'], array['design','creative'], 'BEGINNER', 'en', true),
+                ('PCOURSE_004','00000000-0000-0000-0000-000000000000','Communication Skills','Build confidence in speaking, writing, and teamwork.', true, now(), now(), true, array['Arts','Commerce'], array['S'], array['communication','teamwork'], array['communication'], 'BEGINNER', 'en', true),
+                ('PCOURSE_005','00000000-0000-0000-0000-000000000000','Entrepreneurship Starter','Basics of business ideas, planning, and pitching.', true, now(), now(), true, array['Commerce'], array['E'], array['leadership'], array['business'], 'BEGINNER', 'en', true),
+                ('PCOURSE_006','00000000-0000-0000-0000-000000000000','Productivity & Organization','Learn planning, note-taking, and structured execution.', true, now(), now(), true, array['Commerce'], array['C'], array['attention_to_detail'], array['productivity'], 'BEGINNER', 'en', true)
+              on conflict (id) do nothing;
+

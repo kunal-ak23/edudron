@@ -1,0 +1,11 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0023-psych-test-v2-result-explanations
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: psych_test_result
+            schemaName: content
+            columns:
+              - column: { name: explanations_json, type: jsonb }
+
