@@ -780,11 +780,6 @@ export default function CourseEditPage() {
                                         setSelectedClassIds([...selectedClassIds, classItem.id])
                                       } else {
                                         setSelectedClassIds(selectedClassIds.filter(id => id !== classItem.id))
-                                        // Remove sections from this class when class is deselected
-                                        const classSections = sections.filter(s => s.classId === classItem.id)
-                                        setSelectedSectionIds(selectedSectionIds.filter(id => 
-                                          !classSections.some(cs => cs.id === id)
-                                        ))
                                       }
                                     }}
                                   />
@@ -806,9 +801,7 @@ export default function CourseEditPage() {
                           {sections.length === 0 ? (
                             <p className="text-sm text-gray-500">No sections available. Create sections first.</p>
                           ) : (
-                            sections
-                              .filter(s => selectedClassIds.length === 0 || selectedClassIds.includes(s.classId))
-                              .map((section) => {
+                            sections.map((section) => {
                                 const classItem = classes.find(c => c.id === section.classId)
                                 const institute = classItem ? institutes.find(i => i.id === classItem.instituteId) : null
                                 return (
@@ -816,7 +809,6 @@ export default function CourseEditPage() {
                                     <Checkbox
                                       id={`section-${section.id}`}
                                       checked={selectedSectionIds.includes(section.id)}
-                                      disabled={selectedClassIds.length > 0 && !selectedClassIds.includes(section.classId)}
                                       onCheckedChange={(checked) => {
                                         if (checked) {
                                           setSelectedSectionIds([...selectedSectionIds, section.id])
@@ -835,11 +827,11 @@ export default function CourseEditPage() {
                                     </Label>
                                   </div>
                                 )
-                              })
+                              })}
                           )}
                         </div>
                         <p className="text-xs text-gray-500">
-                          Sections are filtered by selected classes. Select classes first to see their sections.
+                          Classes and sections are independent. You can assign a course to a section without assigning it to the full class.
                         </p>
                       </div>
                     </div>
