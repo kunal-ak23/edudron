@@ -6,6 +6,17 @@ import { Button, Input, PasswordInput } from '@kunal-ak23/edudron-ui-components'
 import { authService } from '@/lib/auth'
 import type { LoginCredentials, RegisterCredentials } from '@kunal-ak23/edudron-shared-utils'
 
+function WelcomeIllustration({ className }: { className?: string }) {
+  return (
+    <img
+      src="/login-rafiki.svg"
+      alt=""
+      aria-hidden="true"
+      className={className ?? 'w-full'}
+    />
+  )
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [isLogin, setIsLogin] = useState(true)
@@ -68,77 +79,147 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-primary-100">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-lg border border-primary-100">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-primary-600">
-            EduDron
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            {isLogin ? 'Sign in to your account' : 'Create a new account'}
-          </p>
-        </div>
-        <form
-          className="mt-8 space-y-6"
-          onSubmit={isLogin ? handleLogin : handleRegister}
-        >
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-primary-50 via-white to-primary-100">
+      <div className="flex-1 flex items-center justify-center px-4 py-10 sm:px-6 lg:px-10">
+        <div className="w-full max-w-6xl">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            {/* Left illustration panel (desktop) */}
+            <div className="hidden lg:block">
+              <div className="text-2xl font-extrabold tracking-tight text-gray-900">
+                EduDron
+              </div>
+
+              <div className="max-w-xl">
+                <WelcomeIllustration className="w-full max-w-[520px]" />
+              </div>
+
+              <div className="mt-10">
+                <h1 className="text-5xl font-extrabold tracking-tight text-gray-900">
+                  Welcome!
+                </h1>
+              </div>
             </div>
-          )}
-          <div className="space-y-4">
-            {!isLogin && (
-              <Input
-                label="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoComplete="name"
-              />
-            )}
-            <Input
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-            <PasswordInput
-              label="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete={isLogin ? 'current-password' : 'new-password'}
-            />
+
+            {/* Right form panel */}
+            <div className="flex justify-center lg:justify-end">
+              <div className="w-full max-w-md rounded-2xl bg-white shadow-lg border border-primary-100 p-8 sm:p-10">
+                {/* Mobile header */}
+                <div className="lg:hidden flex items-center justify-center mb-8 text-2xl font-extrabold tracking-tight text-gray-900">
+                  EduDron
+                </div>
+
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    {isLogin ? 'Sign In' : 'Sign Up'}
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    {isLogin ? 'to access Account' : 'to create your Account'}
+                  </p>
+                </div>
+
+                <form
+                  className="mt-8 space-y-6"
+                  onSubmit={isLogin ? handleLogin : handleRegister}
+                >
+                  {error && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
+                      {error}
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    {!isLogin && (
+                      <div>
+                        <label htmlFor="name" className="sr-only">
+                          Full name
+                        </label>
+                        <Input
+                          id="name"
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          required
+                          autoComplete="name"
+                          placeholder="Full name"
+                          aria-label="Full name"
+                          className="rounded-xl py-3"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label htmlFor="email" className="sr-only">
+                        Email address
+                      </label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        autoComplete="email"
+                        placeholder="Email address"
+                        aria-label="Email address"
+                        className="rounded-xl py-3"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="password" className="sr-only">
+                        Password
+                      </label>
+                      <PasswordInput
+                        id="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        autoComplete={isLogin ? 'current-password' : 'new-password'}
+                        placeholder="Password"
+                        aria-label="Password"
+                        className="rounded-xl py-3"
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    className="w-full"
+                    loading={loading}
+                  >
+                    {isLogin ? 'Continue' : 'Create account'}
+                  </Button>
+
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsLogin(!isLogin)
+                        setError('')
+                      }}
+                      className="text-sm font-medium text-primary-700 hover:text-primary-800 transition-colors"
+                    >
+                      {isLogin
+                        ? "New in EduDron? Create an account"
+                        : 'Already have an account? Sign in'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           </div>
-          <div>
-            <Button 
-              type="submit" 
-              variant="primary"
-              className="w-full font-semibold" 
-              loading={loading}
-            >
-              {isLogin ? 'Sign in' : 'Sign up'}
-            </Button>
-          </div>
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setIsLogin(!isLogin)
-                setError('')
-              }}
-              className="text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
-            >
-              {isLogin
-                ? "Don't have an account? Sign up"
-                : 'Already have an account? Sign in'}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
+
+      <footer className="border-t border-primary-100 bg-white/70 backdrop-blur">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-10 py-3 flex items-center justify-between text-xs text-gray-600">
+          <div>© 2026 Datagami Technology Services Private Limited</div>
+          <div className="flex items-center gap-6">
+            <span>Privacy</span>
+            <span>Terms &amp; conditions</span>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
