@@ -77,6 +77,14 @@ export default function CourseDetailPage() {
         coursesApi.getChapters(courseId).catch(() => [])
       ])
       setCourse(courseData)
+      // Debug: verify what format we receive from the API (markdown vs HTML/rich text)
+      if (typeof window !== 'undefined') {
+        const description = (courseData as any)?.description
+        const looksLikeHtml = typeof description === 'string' && /<\/?[a-z][\s\S]*>/i.test(description)
+        console.log('[CourseDetailPage] course.description (raw):', description)
+        console.log('[CourseDetailPage] course.description length:', typeof description === 'string' ? description.length : null)
+        console.log('[CourseDetailPage] course.description looksLikeHtml:', looksLikeHtml)
+      }
       
       // Load sub-lectures for each section
       if (sectionsData && sectionsData.length > 0) {

@@ -2,7 +2,6 @@
 
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import rehypeRaw from 'rehype-raw'
 import rehypeSanitize from 'rehype-sanitize'
 
 interface MarkdownRendererProps {
@@ -10,10 +9,57 @@ interface MarkdownRendererProps {
   className?: string
 }
 
+const looksLikeHtml = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
+
+// Minimal HTML -> Markdown conversion for content produced by rich-text editors.
+// This is intentionally conservative (no scripts/styles) and targets common tags we store.
+const htmlToMarkdown = (html: string) => {
+  let md = html
+
+  // Normalize line breaks and remove empty paragraphs
+  md = md.replace(/\r\n/g, '\n')
+  md = md.replace(/<p>\s*<\/p>/gi, '')
+
+  // Flatten common "li > p" structure (prevents extra spacing)
+  md = md.replace(/<li>\s*<p>/gi, '<li>')
+  md = md.replace(/<\/p>\s*<\/li>/gi, '</li>')
+
+  // Links
+  md = md.replace(
+    /<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+    (_m, href, text) => `[${String(text).replace(/<[^>]+>/g, '').trim()}](${href})`
+  )
+
+  // Inline formatting
+  md = md.replace(/<(strong|b)>([\s\S]*?)<\/\1>/gi, '**$2**')
+  md = md.replace(/<(em|i)>([\s\S]*?)<\/\1>/gi, '*$2*')
+
+  // Structural tags
+  md = md.replace(/<br\s*\/?>/gi, '\n')
+  md = md.replace(/<\/p>/gi, '\n\n')
+  md = md.replace(/<p[^>]*>/gi, '')
+  md = md.replace(/<ul[^>]*>/gi, '\n')
+  md = md.replace(/<\/ul>/gi, '\n')
+  md = md.replace(/<ol[^>]*>/gi, '\n')
+  md = md.replace(/<\/ol>/gi, '\n')
+  md = md.replace(/<li[^>]*>/gi, '- ')
+  md = md.replace(/<\/li>/gi, '\n')
+
+  // Drop any remaining tags
+  md = md.replace(/<\/?[^>]+>/g, '')
+
+  // Clean up whitespace
+  md = md.replace(/[ \t]+\n/g, '\n')
+  md = md.replace(/\n{3,}/g, '\n\n')
+  return md.trim()
+}
+
 export function MarkdownRenderer({ content, className = '' }: MarkdownRendererProps) {
   if (!content) {
     return null
   }
+
+  const normalizedContent = looksLikeHtml(content) ? htmlToMarkdown(content) : content
 
   // Configure sanitize to allow links with target and rel attributes
   const sanitizeConfig = {
@@ -41,7 +87,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     <div className={`prose prose-lg max-w-none ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, [rehypeSanitize, sanitizeConfig]]}
+        rehypePlugins={[[rehypeSanitize, sanitizeConfig]]}
         components={{
           h1: ({ node, ...props }) => <h1 className="text-3xl font-bold mt-6 mb-4 text-gray-900" {...props} />,
           h2: ({ node, ...props }) => <h2 className="text-2xl font-bold mt-5 mb-3 text-gray-900" {...props} />,
@@ -84,7 +130,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
           hr: ({ node, ...props }) => <hr className="my-6 border-t border-gray-300" {...props} />,
         }}
       >
-        {content}
+        {normalizedContent}
       </ReactMarkdown>
     </div>
   )
