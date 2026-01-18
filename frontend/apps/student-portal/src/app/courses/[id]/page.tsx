@@ -562,7 +562,7 @@ export default function CourseDetailPage() {
                                 variant="outline"
                                 onClick={() => {
                                   if (enrolled) {
-                                    router.push(`/courses/${courseId}/learn`)
+                                    router.push(`/courses/${courseId}/learn?lectureId=${lecture.id}`)
                                   } else {
                                     handleEnrollClick()
                                   }

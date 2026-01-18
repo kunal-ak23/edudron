@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { ProtectedRoute, Button, VideoPlayer } from '@kunal-ak23/edudron-ui-components'
 import { coursesApi, enrollmentsApi, lecturesApi, feedbackApi, notesApi, issuesApi } from '@/lib/api'
 import type { Course, Section, Lecture, Progress, Feedback, Note, FeedbackType, IssueType, LectureContent } from '@kunal-ak23/edudron-shared-utils'
@@ -20,7 +20,9 @@ type TabType = 'transcript' | 'notes'
 export default function LearnPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const courseId = params.id as string
+  const requestedLectureId = searchParams.get('lectureId')
   const { user } = useAuth()
   const [course, setCourse] = useState<Course | null>(null)
   const [sections, setSections] = useState<any[]>([])
@@ -183,6 +185,15 @@ export default function LearnPage() {
     }
   }, [])
 
+  const findLectureById = (sectionsData: any[], lectureId: string): Lecture | null => {
+    if (!sectionsData || sectionsData.length === 0) return null
+    for (const section of sectionsData) {
+      const lecture = section?.lectures?.find((l: Lecture) => l.id === lectureId)
+      if (lecture) return lecture
+    }
+    return null
+  }
+
   const loadCourseData = useCallback(async () => {
     try {
       console.log('[LearnPage] Loading course data for courseId:', courseId)
@@ -276,6 +287,17 @@ export default function LearnPage() {
 
       // Restore position: Try from progress data first, then localStorage, then default to first section
       if (sectionsData && sectionsData.length > 0) {
+        // If the URL explicitly requests a lecture, always open that (do not override with saved progress)
+        if (requestedLectureId) {
+          const requestedLecture = findLectureById(sectionsData, requestedLectureId)
+          if (requestedLecture) {
+            console.log('[LearnPage] Opening requested lecture from URL:', requestedLecture.id)
+            setSelectedLecture(requestedLecture)
+            setSelectedSection(null)
+            return
+          }
+        }
+
         let restoredLecture: Lecture | null = null
         let restoredSection: Section | null = null
 
@@ -310,7 +332,7 @@ export default function LearnPage() {
     } finally {
       setLoading(false)
     }
-  }, [courseId, restorePositionFromStorage])
+  }, [courseId, restorePositionFromStorage, requestedLectureId])
 
   useEffect(() => {
     loadCourseData()
@@ -560,6 +582,8 @@ export default function LearnPage() {
   const handleLectureSelect = (lecture: Lecture) => {
     setSelectedLecture(lecture)
     setSelectedSection(null) // Clear module selection when selecting a lecture
+    // Keep URL in sync so direct opens don't get overridden by saved state
+    router.replace(`/courses/${courseId}/learn?lectureId=${lecture.id}`)
     // Position will be saved via useEffect hook
     // Notes will be loaded via useEffect hook when selectedLecture changes
     // Transcript will be loaded via useEffect hook when selectedLecture changes
@@ -691,6 +715,7 @@ export default function LearnPage() {
   const handleSectionSelect = (section: Section) => {
     setSelectedSection(section)
     setSelectedLecture(null) // Clear lecture selection when selecting a module
+    router.replace(`/courses/${courseId}/learn`)
   }
 
   const handleMarkComplete = async (lectureId: string, isCompleted: boolean) => {
