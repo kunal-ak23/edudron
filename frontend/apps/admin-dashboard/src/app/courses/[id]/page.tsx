@@ -827,7 +827,7 @@ export default function CourseEditPage() {
                                     </Label>
                                   </div>
                                 )
-                              })}
+                              })
                           )}
                         </div>
                         <p className="text-xs text-gray-500">
