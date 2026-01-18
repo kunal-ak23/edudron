@@ -22,6 +22,60 @@ import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
 
+// Utility function to convert HTML or markdown to plain text for list display
+function toPlainText(content: string): string {
+  if (!content) return ''
+  
+  let text = content
+  
+  // Remove script and style tags (HTML)
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+  
+  // Replace common HTML entities
+  text = text.replace(/&nbsp;/g, ' ')
+  text = text.replace(/&amp;/g, '&')
+  text = text.replace(/&lt;/g, '<')
+  text = text.replace(/&gt;/g, '>')
+  text = text.replace(/&quot;/g, '"')
+  text = text.replace(/&#39;/g, "'")
+  text = text.replace(/&apos;/g, "'")
+  
+  // Remove HTML tags
+  text = text.replace(/<[^>]+>/g, '')
+  
+  // Remove markdown syntax
+  // Headers (# ## ###)
+  text = text.replace(/^#{1,6}\s+/gm, '')
+  // Bold (**text** or __text__)
+  text = text.replace(/\*\*([^*]+)\*\*/g, '$1')
+  text = text.replace(/__([^_]+)__/g, '$1')
+  // Italic (*text* or _text_)
+  text = text.replace(/\*([^*]+)\*/g, '$1')
+  text = text.replace(/_([^_]+)_/g, '$1')
+  // Code (`code`)
+  text = text.replace(/`([^`]+)`/g, '$1')
+  // Links [text](url)
+  text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+  // Images ![alt](url)
+  text = text.replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+  // Lists (- or * or 1.)
+  text = text.replace(/^[\s]*[-*+]\s+/gm, '')
+  text = text.replace(/^[\s]*\d+\.\s+/gm, '')
+  // Blockquotes (>)
+  text = text.replace(/^>\s+/gm, '')
+  // Code blocks (```)
+  text = text.replace(/```[\s\S]*?```/g, '')
+  // Horizontal rules (--- or ***)
+  text = text.replace(/^[-*]{3,}$/gm, '')
+  
+  // Clean up whitespace
+  text = text.replace(/\s+/g, ' ')
+  text = text.trim()
+  
+  return text
+}
+
 export default function SectionEnrollPage() {
   const router = useRouter()
   const params = useParams()
@@ -226,7 +280,7 @@ export default function SectionEnrollPage() {
                         <p className="font-medium">{course.title}</p>
                         {course.description && (
                           <p className="text-sm text-gray-500 line-clamp-1">
-                            {course.description}
+                            {toPlainText(course.description)}
                           </p>
                         )}
                       </div>

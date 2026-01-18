@@ -24,12 +24,14 @@ import { extractErrorMessage } from '@/lib/error-utils'
 // Force dynamic rendering - disable static generation
 export const dynamic = 'force-dynamic'
 
-// Utility function to strip HTML tags and convert to plain text
-function stripHtmlTags(html: string): string {
-  if (!html) return ''
+// Utility function to convert HTML or markdown to plain text for list display
+function toPlainText(content: string): string {
+  if (!content) return ''
   
-  // Remove script and style tags
-  let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+  let text = content
+  
+  // Remove script and style tags (HTML)
+  text = text.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
   text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
   
   // Replace common HTML entities
@@ -43,6 +45,31 @@ function stripHtmlTags(html: string): string {
   
   // Remove HTML tags
   text = text.replace(/<[^>]+>/g, '')
+  
+  // Remove markdown syntax
+  // Headers (# ## ###)
+  text = text.replace(/^#{1,6}\s+/gm, '')
+  // Bold (**text** or __text__)
+  text = text.replace(/\*\*([^*]+)\*\*/g, '$1')
+  text = text.replace(/__([^_]+)__/g, '$1')
+  // Italic (*text* or _text_)
+  text = text.replace(/\*([^*]+)\*/g, '$1')
+  text = text.replace(/_([^_]+)_/g, '$1')
+  // Code (`code`)
+  text = text.replace(/`([^`]+)`/g, '$1')
+  // Links [text](url)
+  text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+  // Images ![alt](url)
+  text = text.replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+  // Lists (- or * or 1.)
+  text = text.replace(/^[\s]*[-*+]\s+/gm, '')
+  text = text.replace(/^[\s]*\d+\.\s+/gm, '')
+  // Blockquotes (>)
+  text = text.replace(/^>\s+/gm, '')
+  // Code blocks (```)
+  text = text.replace(/```[\s\S]*?```/g, '')
+  // Horizontal rules (--- or ***)
+  text = text.replace(/^[-*]{3,}$/gm, '')
   
   // Clean up whitespace
   text = text.replace(/\s+/g, ' ')
@@ -281,7 +308,7 @@ export default function CoursesPage() {
                         </div>
                         {course.description && (
                           <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-                            {stripHtmlTags(course.description)}
+                            {toPlainText(course.description)}
                           </p>
                         )}
                         <div className="flex items-center space-x-6 text-sm text-muted-foreground">

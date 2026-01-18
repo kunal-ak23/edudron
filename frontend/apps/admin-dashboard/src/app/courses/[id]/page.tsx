@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { RichTextEditor } from '@/components/RichTextEditor'
+import { SplitMarkdownEditor } from '@/components/SplitMarkdownEditor'
 import {
   Select,
   SelectContent,
@@ -218,20 +218,40 @@ export default function CourseEditPage() {
       }
       
       if (courseId === 'new') {
-        await coursesApi.createCourse(courseToSave)
+        const createdCourse = await coursesApi.createCourse(courseToSave)
         toast({
           title: 'Course created',
           description: 'The course has been created successfully.',
         })
+        // Redirect to the edit page of the newly created course
+        if (createdCourse?.id) {
+          router.push(`/courses/${createdCourse.id}`)
+        } else {
+          // If ID is not in response, reload courses list
+          router.push('/courses')
+        }
       } else {
-        await coursesApi.updateCourse(courseId, courseToSave)
+        const updatedCourse = await coursesApi.updateCourse(courseId, courseToSave)
         toast({
           title: 'Course updated',
           description: 'The course has been updated successfully.',
         })
+        // Reload the course data to reflect saved state
+        if (updatedCourse) {
+          setCourse(updatedCourse)
+          // Update initial course ref to reflect saved state
+          initialCourseRef.current = JSON.stringify({
+            ...updatedCourse,
+            assignedToClassIds: selectedClassIds,
+            assignedToSectionIds: selectedSectionIds
+          })
+        } else {
+          // If update doesn't return course, reload it
+          await loadCourse()
+        }
+        setHasUnsavedChanges(false)
+        // Stay on the current page - no redirect
       }
-      setHasUnsavedChanges(false)
-      router.push('/courses')
     } catch (error) {
       console.error('Failed to save course:', error)
       toast({
@@ -640,10 +660,10 @@ export default function CourseEditPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>Description</Label>
-                        <RichTextEditor
+                        <SplitMarkdownEditor
                           content={course?.description || ''}
                           onChange={(content) => setCourse({ ...course, description: content })}
-                          placeholder="Enter course description (supports rich text formatting)"
+                          placeholder="Enter course description (markdown supported)"
                         />
                       </div>
                     </div>
