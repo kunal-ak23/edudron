@@ -8,6 +8,7 @@ import com.datagami.edudron.content.psychtest.domain.PsychTestResult;
 import com.datagami.edudron.content.psychtest.domain.PsychTestSession;
 import com.datagami.edudron.content.psychtest.ai.PsychTestAiService;
 import com.datagami.edudron.content.psychtest.repo.PsychTestAnswerRepository;
+import com.datagami.edudron.content.psychtest.repo.PsychTestQuestionAskedRepository;
 import com.datagami.edudron.content.psychtest.repo.PsychTestOptionRepository;
 import com.datagami.edudron.content.psychtest.repo.PsychTestQuestionRepository;
 import com.datagami.edudron.content.psychtest.repo.PsychTestResultRepository;
@@ -25,6 +26,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +39,7 @@ public class SessionService {
     private final PsychTestOptionRepository optionRepository;
     private final PsychTestAnswerRepository answerRepository;
     private final PsychTestResultRepository resultRepository;
+    private final PsychTestQuestionAskedRepository askedRepository;
     private final ScoringService scoringService;
     private final AdaptiveQuestionSelector questionSelector;
     private final MappingService mappingService;
@@ -51,6 +55,7 @@ public class SessionService {
         PsychTestOptionRepository optionRepository,
         PsychTestAnswerRepository answerRepository,
         PsychTestResultRepository resultRepository,
+        PsychTestQuestionAskedRepository askedRepository,
         ScoringService scoringService,
         AdaptiveQuestionSelector questionSelector,
         MappingService mappingService,
@@ -65,6 +70,7 @@ public class SessionService {
         this.optionRepository = optionRepository;
         this.answerRepository = answerRepository;
         this.resultRepository = resultRepository;
+        this.askedRepository = askedRepository;
         this.scoringService = scoringService;
         this.questionSelector = questionSelector;
         this.mappingService = mappingService;
@@ -118,7 +124,9 @@ public class SessionService {
         List<Option> options,
         int currentQuestionNumber,
         int totalQuestions,
-        boolean canStopEarly
+        boolean canStopEarly,
+        String personalizationSource,
+        String askedId
     ) {}
 
     public record Option(
@@ -126,7 +134,7 @@ public class SessionService {
         String label
     ) {}
 
-    public NextQuestion getNextQuestion(String sessionId, String userId) {
+    public NextQuestion getNextQuestion(String sessionId, String userId, String userName) {
         PsychTestSession s = getSession(sessionId, userId);
         if (s.getStatus() != PsychTestSession.Status.IN_PROGRESS) {
             throw new IllegalStateException("Session is not in progress");
@@ -135,6 +143,29 @@ public class SessionService {
         List<PsychTestAnswer> answers = answerRepository.findBySessionIdOrdered(sessionId);
         List<PsychTestQuestion> active = questionRepository.findActiveByBankVersion(s.getBankVersion());
         ScoringService.ScoringSnapshot snapshot = scoringService.computeSnapshot(s, answers);
+
+        int questionNumber = answers.size() + 1;
+        Optional<com.datagami.edudron.content.psychtest.domain.PsychTestQuestionAsked> previouslyAsked = askedRepository
+            .findBySessionIdAndClientIdAndQuestionNumber(sessionId, s.getClientId(), questionNumber);
+
+        // If we already asked this question number before (refresh/double click/retry), serve exactly what was stored.
+        if (previouslyAsked.isPresent()) {
+            com.datagami.edudron.content.psychtest.domain.PsychTestQuestionAsked a = previouslyAsked.get();
+            PsychTestQuestion askedQuestion = a.getQuestion();
+            List<Option> options = parseRenderedOptions(a.getRenderedOptionsJson());
+            return new NextQuestion(
+                s.getId(),
+                askedQuestion != null ? askedQuestion.getId() : null,
+                askedQuestion != null && askedQuestion.getType() != null ? askedQuestion.getType().name() : null,
+                a.getRenderedPrompt(),
+                options,
+                questionNumber,
+                s.getMaxQuestions() != null ? s.getMaxQuestions() : 30,
+                false,
+                a.getPersonalizationSource(),
+                a.getId()
+            );
+        }
 
         AdaptiveQuestionSelector.Selection sel = questionSelector.selectNextQuestion(s, answers, active, snapshot, psychTestAiService.isConfigured());
         if (sel.question() == null) {
@@ -146,7 +177,9 @@ public class SessionService {
                 List.of(),
                 answers.size(),
                 s.getMaxQuestions() != null ? s.getMaxQuestions() : 30,
-                true
+                true,
+                "RAW",
+                null
             );
         }
 
@@ -168,19 +201,50 @@ public class SessionService {
             }
         }
 
-        List<Option> options = optionRepository.findByQuestionId(chosen.getId()).stream()
-            .map(o -> new Option(o.getId(), o.getLabel()))
-            .toList();
+        List<com.datagami.edudron.content.psychtest.domain.PsychTestOption> rawOptions = optionRepository.findByQuestionId(chosen.getId());
+        RenderedQuestion rendered = renderQuestion(questionNumber, s, chosen, rawOptions, answers, snapshot, userName);
+
+        // persist what we actually served (idempotent under retries)
+        String askedId = UlidGenerator.nextUlid();
+        String renderedOptionsJsonStr;
+        String personalizationJsonStr;
+        try {
+            renderedOptionsJsonStr = objectMapper.writeValueAsString(rendered.options());
+            personalizationJsonStr = rendered.meta() != null ? objectMapper.writeValueAsString(rendered.meta()) : "{}";
+        } catch (Exception e) {
+            renderedOptionsJsonStr = "[]";
+            personalizationJsonStr = "{}";
+        }
+
+        int inserted = askedRepository.insertIfAbsent(
+            askedId,
+            sessionId,
+            chosen.getId(),
+            questionNumber,
+            rendered.prompt(),
+            renderedOptionsJsonStr,
+            rendered.source(),
+            personalizationJsonStr
+        );
+        if (inserted == 0) {
+            askedId = askedRepository.findBySessionIdAndClientIdAndQuestionNumber(sessionId, s.getClientId(), questionNumber)
+                .map(com.datagami.edudron.content.psychtest.domain.PsychTestQuestionAsked::getId)
+                .orElse(askedId);
+        }
+
+        List<Option> options = rendered.options().stream().map(o -> new Option((String) o.get("id"), (String) o.get("label"))).toList();
 
         return new NextQuestion(
             s.getId(),
             chosen.getId(),
             chosen.getType().name(),
-            chosen.getPrompt(),
+            rendered.prompt(),
             options,
-            answers.size() + 1,
+            questionNumber,
             s.getMaxQuestions() != null ? s.getMaxQuestions() : 30,
-            sel.earlyStopRecommended()
+            sel.earlyStopRecommended(),
+            rendered.source(),
+            askedId
         );
     }
 
@@ -236,6 +300,205 @@ public class SessionService {
         s.setMetadataJson(meta);
         s.setCurrentQuestionIndex(answers.size());
         sessionRepository.save(s);
+    }
+
+    private record RenderedQuestion(String prompt, List<Map<String, Object>> options, String source, com.fasterxml.jackson.databind.JsonNode meta) {}
+
+    private RenderedQuestion renderQuestion(
+        int questionNumber,
+        PsychTestSession session,
+        PsychTestQuestion q,
+        List<com.datagami.edudron.content.psychtest.domain.PsychTestOption> options,
+        List<PsychTestAnswer> priorAnswers,
+        ScoringService.ScoringSnapshot snapshot,
+        String userName
+    ) {
+        String firstName = extractFirstName(userName);
+
+        // build previous-answer context (best-effort)
+        String prevSummary = null;
+        if (priorAnswers != null && !priorAnswers.isEmpty()) {
+            PsychTestAnswer last = priorAnswers.get(priorAnswers.size() - 1);
+            String prevPrompt = last.getQuestion() != null ? last.getQuestion().getPrompt() : null;
+            JsonNode aj = last.getAnswerJson();
+            String selectedOptionId = (aj != null && aj.hasNonNull("selectedOptionId")) ? aj.get("selectedOptionId").asText() : null;
+            String openText = (aj != null && aj.hasNonNull("text")) ? aj.get("text").asText() : null;
+            String selLabel = null;
+            if (selectedOptionId != null) {
+                try {
+                    selLabel = optionRepository.findById(selectedOptionId).map(com.datagami.edudron.content.psychtest.domain.PsychTestOption::getLabel).orElse(null);
+                } catch (Exception ignored) {}
+            }
+            String snippet = openText != null && !openText.isBlank()
+                ? truncate(openText, 70)
+                : (selLabel != null ? selLabel : null);
+            if (prevPrompt != null && snippet != null) {
+                prevSummary = "Earlier you shared: \"" + truncate(prevPrompt, 60) + "\" → " + "\"" + snippet + "\".";
+            }
+        }
+
+        String basePrompt = q.getPrompt();
+        String prompt = basePrompt;
+
+        List<Map<String, Object>> renderedOptions = new java.util.ArrayList<>();
+        for (com.datagami.edudron.content.psychtest.domain.PsychTestOption o : options) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", o.getId());
+            m.put("label", o.getLabel());
+            m.put("value", o.getValue());
+            renderedOptions.add(m);
+        }
+
+        ObjectNode meta = objectMapper.createObjectNode();
+        meta.put("basePrompt", basePrompt);
+        if (firstName != null) meta.put("firstName", firstName);
+        if (prevSummary != null) meta.put("previousAnswerSummary", prevSummary);
+        meta.put("questionType", q.getType().name());
+
+        String source = "RAW";
+
+        // Deterministic personalization baseline (no AI)
+        if (firstName != null && !firstName.isBlank()) {
+            prompt = firstName + ", " + prompt;
+            source = "TEMPLATE";
+        }
+        boolean usePrev = shouldUsePreviousAnswerReference(session, questionNumber) && prevSummary != null;
+        if (usePrev) {
+            prompt = (firstName != null ? firstName + ", " : "")
+                + "thinking back to what you shared earlier, " + basePrompt;
+            meta.put("usedPreviousAnswer", true);
+            meta.put("previousAnswerSummaryUsed", prevSummary);
+            source = "TEMPLATE";
+
+            // Persist the throttle state on session so it stays balanced.
+            ObjectNode sessionMeta = (session.getMetadataJson() != null && session.getMetadataJson().isObject())
+                ? (ObjectNode) session.getMetadataJson()
+                : objectMapper.createObjectNode();
+            sessionMeta.put("lastPrevRefQuestionNumber", questionNumber);
+            session.setMetadataJson(sessionMeta);
+            sessionRepository.save(session);
+        }
+
+        // Deterministic option personalization (LIKERT)
+        if (q.getType() == PsychTestQuestion.Type.LIKERT) {
+            for (Map<String, Object> o : renderedOptions) {
+                Integer v = (o.get("value") instanceof Number n) ? n.intValue() : null;
+                o.put("label", friendlyLikertLabel(v));
+            }
+        }
+
+        // AI enhancement (rewrite prompt + option labels) if configured.
+        if (psychTestAiService.isConfigured()) {
+            List<Map<String, Object>> optsForAi = renderedOptions.stream().map(o -> {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("option_id", o.get("id"));
+                m.put("base_label", o.get("label"));
+                m.put("value", o.get("value"));
+                return m;
+            }).toList();
+
+            Map<String, Object> ctx = new HashMap<>();
+            if (firstName != null) ctx.put("first_name", firstName);
+            if (usePrev && prevSummary != null) ctx.put("previous_answer_summary", prevSummary);
+            ctx.put("top_domains", snapshot != null ? snapshot.topDomains() : List.of());
+
+            PsychTestAiService.PersonalizedQuestion pq = psychTestAiService.personalizeQuestion(
+                q.getId(),
+                q.getType().name(),
+                basePrompt,
+                optsForAi,
+                ctx
+            );
+
+            if (pq != null && pq.prompt() != null && !pq.prompt().isBlank()) {
+                prompt = pq.prompt();
+                source = "AI";
+
+                // For LIKERT, keep our neutral deterministic labels (avoid awkward "that's me" style).
+                // For other types, allow AI to rephrase option labels.
+                if (q.getType() != PsychTestQuestion.Type.LIKERT
+                    && pq.optionLabelsById() != null && !pq.optionLabelsById().isEmpty()) {
+                    Set<String> allowedOptionIds = renderedOptions.stream()
+                        .map(o -> (String) o.get("id"))
+                        .filter(v -> v != null && !v.isBlank())
+                        .collect(Collectors.toSet());
+                    for (Map<String, Object> o : renderedOptions) {
+                        String id = (String) o.get("id");
+                        String lbl = pq.optionLabelsById().get(id);
+                        if (allowedOptionIds.contains(id) && lbl != null && !lbl.isBlank()) {
+                            o.put("label", lbl);
+                        }
+                    }
+                }
+                meta.put("aiPersonalized", true);
+            }
+        }
+
+        // Final safety: ensure prompt not null/blank
+        if (prompt == null || prompt.isBlank()) prompt = basePrompt;
+
+        // Only return id+label to client; value is for AI context only.
+        List<Map<String, Object>> clientOptions = renderedOptions.stream().map(o -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", o.get("id"));
+            m.put("label", o.get("label"));
+            return m;
+        }).toList();
+
+        return new RenderedQuestion(prompt, clientOptions, source, meta);
+    }
+
+    private static String extractFirstName(String userName) {
+        if (userName == null) return null;
+        String t = userName.trim();
+        if (t.isBlank()) return null;
+        int sp = t.indexOf(' ');
+        return (sp > 0) ? t.substring(0, sp).trim() : t;
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return null;
+        String t = s.trim().replaceAll("\\s+", " ");
+        if (t.length() <= max) return t;
+        return t.substring(0, Math.max(0, max - 1)) + "…";
+    }
+
+    private static String friendlyLikertLabel(Integer value) {
+        if (value == null) return "Not sure";
+        return switch (value) {
+            case 2 -> "Definitely";
+            case 1 -> "Mostly";
+            case 0 -> "Not sure";
+            case -1 -> "Not really";
+            case -2 -> "Not at all";
+            default -> "Not sure";
+        };
+    }
+
+    private boolean shouldUsePreviousAnswerReference(PsychTestSession session, int questionNumber) {
+        // Balanced rule: at most once every 3 questions and never on the first 2 questions.
+        if (questionNumber < 3) return false;
+
+        JsonNode m = session != null ? session.getMetadataJson() : null;
+        int last = 0;
+        if (m != null && m.hasNonNull("lastPrevRefQuestionNumber")) {
+            last = m.get("lastPrevRefQuestionNumber").asInt(0);
+        }
+        if (last > 0 && (questionNumber - last) < 3) return false;
+
+        // Also only do it every 3rd question to avoid overuse.
+        return (questionNumber % 3) == 0;
+    }
+
+    private List<Option> parseRenderedOptions(JsonNode renderedOptionsJson) {
+        if (renderedOptionsJson == null || !renderedOptionsJson.isArray()) return List.of();
+        List<Option> out = new java.util.ArrayList<>();
+        for (JsonNode n : renderedOptionsJson) {
+            String id = n.path("id").asText(null);
+            String label = n.path("label").asText(null);
+            if (id != null && label != null) out.add(new Option(id, label));
+        }
+        return out;
     }
 
     public PsychTestResult complete(String sessionId, String userId) {

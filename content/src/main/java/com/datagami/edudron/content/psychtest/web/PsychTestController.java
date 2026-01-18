@@ -95,13 +95,14 @@ public class PsychTestController {
     @PostMapping("/sessions")
     @Operation(summary = "Start/resume a psych test session")
     public ResponseEntity<StartSessionResponse> start(@RequestBody(required = false) @Valid StartSessionRequest request) {
-        String userId = requireUserId();
+        UserProfile user = requireUserProfile();
+        String userId = user.id();
         Integer grade = request != null ? request.grade() : null;
         String locale = request != null ? request.locale() : null;
         Integer maxQuestions = request != null ? request.maxQuestions() : null;
 
         PsychTestSession session = sessionService.startOrResume(userId, grade, locale, maxQuestions);
-        SessionService.NextQuestion first = sessionService.getNextQuestion(session.getId(), userId);
+        SessionService.NextQuestion first = sessionService.getNextQuestion(session.getId(), userId, user.name());
         return ResponseEntity.status(HttpStatus.CREATED).body(new StartSessionResponse(session.getId(), first));
     }
 
@@ -127,8 +128,8 @@ public class PsychTestController {
     @GetMapping("/sessions/{id}/next-question")
     @Operation(summary = "Fetch next question")
     public ResponseEntity<SessionService.NextQuestion> nextQuestion(@PathVariable("id") String id) {
-        String userId = requireUserId();
-        return ResponseEntity.ok(sessionService.getNextQuestion(id, userId));
+        UserProfile user = requireUserProfile();
+        return ResponseEntity.ok(sessionService.getNextQuestion(id, user.id(), user.name()));
     }
 
     public record SubmitAnswerRequest(
@@ -223,6 +224,12 @@ public class PsychTestController {
     }
 
     private String requireUserId() {
+        return requireUserProfile().id();
+    }
+
+    private record UserProfile(String id, String name) {}
+
+    private UserProfile requireUserProfile() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getName() == null || authentication.getName().isBlank()) {
             throw new IllegalStateException("Unauthorized");
@@ -241,7 +248,8 @@ public class PsychTestController {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object id = response.getBody().get("id");
                 if (id != null && !id.toString().isBlank()) {
-                    return id.toString();
+                    Object name = response.getBody().get("name");
+                    return new UserProfile(id.toString(), name != null ? name.toString() : null);
                 }
             }
         } catch (Exception ignored) {

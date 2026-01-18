@@ -9,6 +9,7 @@ import com.datagami.edudron.content.psychtest.domain.PsychTestQuestion;
 import com.datagami.edudron.content.psychtest.domain.PsychTestResult;
 import com.datagami.edudron.content.psychtest.domain.PsychTestSession;
 import com.datagami.edudron.content.psychtest.repo.PsychTestAnswerRepository;
+import com.datagami.edudron.content.psychtest.repo.PsychTestQuestionAskedRepository;
 import com.datagami.edudron.content.psychtest.repo.PsychTestOptionRepository;
 import com.datagami.edudron.content.psychtest.repo.PsychTestQuestionRepository;
 import com.datagami.edudron.content.psychtest.repo.PsychTestResultRepository;
@@ -23,7 +24,6 @@ import com.datagami.edudron.content.psychtest.service.ScoringService;
 import com.datagami.edudron.content.psychtest.service.SessionService;
 import com.datagami.edudron.content.repo.CourseRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +61,7 @@ class SessionFlowIntegrationTest {
         PsychTestOptionRepository optionRepo = Mockito.mock(PsychTestOptionRepository.class);
         PsychTestAnswerRepository answerRepo = Mockito.mock(PsychTestAnswerRepository.class);
         PsychTestResultRepository resultRepo = Mockito.mock(PsychTestResultRepository.class);
+        PsychTestQuestionAskedRepository askedRepo = Mockito.mock(PsychTestQuestionAskedRepository.class);
         CourseRepository courseRepo = Mockito.mock(CourseRepository.class);
 
         // Minimal question bank: one LIKERT in A domain
@@ -90,6 +91,9 @@ class SessionFlowIntegrationTest {
             storedAnswers.add(a);
             return a;
         });
+        Mockito.when(askedRepo.findBySessionIdAndClientIdAndQuestionNumber(Mockito.eq("S1"), Mockito.eq(clientId), Mockito.anyInt()))
+            .thenReturn(Optional.empty());
+        Mockito.when(askedRepo.save(Mockito.any())).thenAnswer(inv -> inv.getArgument(0));
 
         PsychTestSession session = new PsychTestSession();
         session.setId("S1");
@@ -133,6 +137,7 @@ class SessionFlowIntegrationTest {
             optionRepo,
             answerRepo,
             resultRepo,
+            askedRepo,
             scoringService,
             selector,
             mappingService,
@@ -147,7 +152,7 @@ class SessionFlowIntegrationTest {
         assertNotNull(started);
 
         // Next question
-        SessionService.NextQuestion next = svc.getNextQuestion("S1", session.getUserId());
+        SessionService.NextQuestion next = svc.getNextQuestion("S1", session.getUserId(), "Test User");
         assertNotNull(next);
         assertNotNull(next.questionId());
 

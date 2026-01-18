@@ -1,0 +1,52 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0024-psych-test-v2-asked-questions
+      author: edudron
+      changes:
+        - createTable:
+            tableName: psych_test_question_asked
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: session_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: question_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: question_number, type: integer, constraints: { nullable: false } }
+              - column: { name: asked_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: rendered_prompt, type: text, constraints: { nullable: false } }
+              - column: { name: rendered_options_json, type: jsonb }
+              - column: { name: personalization_source, type: varchar(20), defaultValue: "RAW" }
+              - column: { name: personalization_json, type: jsonb }
+        - addForeignKeyConstraint:
+            baseTableName: psych_test_question_asked
+            baseTableSchemaName: content
+            baseColumnNames: session_id
+            referencedTableName: psych_test_session
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_psych_test_question_asked_session
+        - addForeignKeyConstraint:
+            baseTableName: psych_test_question_asked
+            baseTableSchemaName: content
+            baseColumnNames: question_id
+            referencedTableName: psych_test_question
+            referencedTableSchemaName: content
+            referencedColumnNames: id
+            constraintName: fk_psych_test_question_asked_question
+        - addUniqueConstraint:
+            tableName: psych_test_question_asked
+            schemaName: content
+            columnNames: session_id, question_number
+            constraintName: uk_psych_test_question_asked_session_number
+        - createIndex:
+            tableName: psych_test_question_asked
+            schemaName: content
+            indexName: idx_content_psych_test_question_asked_session
+            columns:
+              - column: { name: session_id }
+        - createIndex:
+            tableName: psych_test_question_asked
+            schemaName: content
+            indexName: idx_content_psych_test_question_asked_question
+            columns:
+              - column: { name: question_id }
+

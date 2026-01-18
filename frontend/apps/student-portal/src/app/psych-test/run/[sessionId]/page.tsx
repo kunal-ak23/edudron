@@ -19,6 +19,8 @@ interface NextQuestion {
   currentQuestionNumber: number
   totalQuestions: number
   canStopEarly: boolean
+  personalizationSource?: 'RAW' | 'TEMPLATE' | 'AI' | string
+  askedId?: string | null
 }
 
 const DISCLAIMER = 'This guidance is for educational and career planning purposes only. It is guidance, not diagnosis.'
@@ -33,6 +35,7 @@ export default function PsychTestRunnerPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedOptionId, setSelectedOptionId] = useState<string>('')
   const [text, setText] = useState<string>('')
+  const [thinkingMode, setThinkingMode] = useState<'ai' | 'saving' | 'finalizing' | null>(null)
 
   const progressPct = useMemo(() => {
     if (!q) return 0
@@ -42,6 +45,7 @@ export default function PsychTestRunnerPage() {
   const loadNext = async () => {
     try {
       setLoading(true)
+      setThinkingMode('ai')
       setError(null)
       const apiClient = getApiClient()
       const resp = await apiClient.get(`/api/psych-test/sessions/${sessionId}/next-question`)
@@ -54,6 +58,7 @@ export default function PsychTestRunnerPage() {
       setError('Failed to load next question.')
     } finally {
       setLoading(false)
+      setThinkingMode(null)
     }
   }
 
@@ -71,6 +76,7 @@ export default function PsychTestRunnerPage() {
 
     try {
       setLoading(true)
+      setThinkingMode('saving')
       setError(null)
       const apiClient = getApiClient()
       await apiClient.post(`/api/psych-test/sessions/${sessionId}/answers`, {
@@ -85,12 +91,14 @@ export default function PsychTestRunnerPage() {
       setError('Failed to submit answer.')
     } finally {
       setLoading(false)
+      setThinkingMode(null)
     }
   }
 
   const complete = async () => {
     try {
       setLoading(true)
+      setThinkingMode('finalizing')
       setError(null)
       const apiClient = getApiClient()
       await apiClient.post(`/api/psych-test/sessions/${sessionId}/complete`)
@@ -100,6 +108,7 @@ export default function PsychTestRunnerPage() {
       setError('Failed to complete the test.')
     } finally {
       setLoading(false)
+      setThinkingMode(null)
     }
   }
 
@@ -121,7 +130,19 @@ export default function PsychTestRunnerPage() {
 
             {!q ? (
               <div className="bg-white rounded-lg shadow-md p-8 text-center">
-                <div className="text-gray-600">{loading ? 'Loading…' : 'No question loaded.'}</div>
+                {loading ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                    </div>
+                    <div className="text-gray-700 font-medium">
+                      {thinkingMode === 'ai' ? 'AI assistant is thinking…' : 'Loading…'}
+                    </div>
+                    <div className="text-sm text-gray-500">Just a moment.</div>
+                  </div>
+                ) : (
+                  <div className="text-gray-600">No question loaded.</div>
+                )}
               </div>
             ) : q.questionId == null ? (
               <div className="bg-white rounded-lg shadow-md p-8">
@@ -145,7 +166,27 @@ export default function PsychTestRunnerPage() {
                   </div>
                 </div>
 
-                <div className="text-xl font-semibold text-gray-900 mb-4">{q.prompt}</div>
+                {loading && (
+                  <div className="mb-4 flex items-center gap-3 text-sm text-gray-600">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
+                    <div>
+                      {thinkingMode === 'ai'
+                        ? 'AI assistant is thinking…'
+                        : thinkingMode === 'saving'
+                          ? 'Saving…'
+                          : thinkingMode === 'finalizing'
+                            ? 'Finalizing…'
+                            : 'Loading…'}
+                    </div>
+                  </div>
+                )}
+
+                <div className="text-xl font-semibold text-gray-900 mb-2">{q.prompt}</div>
+                {q.personalizationSource && q.personalizationSource !== 'RAW' && (
+                  <div className="text-xs text-gray-500 mb-4">
+                    Personalized{q.personalizationSource === 'AI' ? ' with AI' : ''}.
+                  </div>
+                )}
 
                 {q.type !== 'OPEN_ENDED' && (
                   <div className="space-y-2 mb-6">

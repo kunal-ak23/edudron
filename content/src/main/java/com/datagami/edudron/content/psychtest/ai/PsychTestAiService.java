@@ -33,6 +33,8 @@ public class PsychTestAiService {
 
     public record AnswerMeaning(String questionId, String meaning) {}
 
+    public record PersonalizedQuestion(String prompt, Map<String, String> optionLabelsById) {}
+
     public AdaptivePick chooseNextQuestionId(
         List<String> eligibleQuestionIds,
         Set<String> answeredQuestionIds,
@@ -95,6 +97,88 @@ public class PsychTestAiService {
         }
 
         return parsed;
+    }
+
+    /**
+     * Personalize a question prompt + option labels without changing meaning.
+     * The output MUST keep the same option ids (labels can change).
+     */
+    public PersonalizedQuestion personalizeQuestion(
+        String questionId,
+        String questionType,
+        String basePrompt,
+        List<Map<String, Object>> options,
+        Map<String, Object> personalizationContext
+    ) {
+        if (!isConfigured()) return null;
+
+        String system = """
+            You are rewriting a psychometric question to feel more personal and conversational, without changing meaning.
+
+            GOAL:
+            - Personalize the prompt using the student's name (if provided) and optionally refer to their previous answer (if provided).
+            - Keep it short and clear.
+            - You MAY also rewrite option labels to be more natural, but MUST preserve each option's intent.
+
+            CRITICAL RULES:
+            - Do NOT change the scoring semantics.
+            - Do NOT change the number of options.
+            - Do NOT change option ids (you will be given option_id for each option).
+            - Do NOT invent new options.
+            - Do NOT infer sensitive traits (gender, caste, religion, diagnosis, mental health labels).
+            - Avoid stereotypes.
+            - Return JSON only. No markdown, no extra text.
+
+            Output schema:
+            {
+              "prompt": "string",
+              "options": [
+                { "option_id": "string", "label": "string" }
+              ]
+            }
+            """;
+
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("question_id", questionId);
+        input.put("question_type", questionType);
+        input.put("base_prompt", basePrompt);
+        input.put("options", options);
+        input.put("personalization_context", personalizationContext);
+
+        String user;
+        try {
+            user = objectMapper.writeValueAsString(input);
+        } catch (Exception e) {
+            return null;
+        }
+
+        String raw;
+        try {
+            raw = foundryAIService.callOpenAI(system, user);
+        } catch (Exception e) {
+            logger.warn("Question personalization AI call failed: {}", e.getMessage());
+            return null;
+        }
+
+        try {
+            String json = extractJsonObject(raw);
+            JsonNode root = objectMapper.readTree(json);
+            String prompt = root.path("prompt").asText(null);
+            JsonNode opts = root.path("options");
+            if (prompt == null || prompt.isBlank() || !opts.isArray()) return null;
+
+            Map<String, String> labels = new LinkedHashMap<>();
+            for (JsonNode o : opts) {
+                String id = o.path("option_id").asText(null);
+                String label = o.path("label").asText(null);
+                if (id == null || id.isBlank() || label == null || label.isBlank()) continue;
+                labels.put(id, label);
+            }
+            return new PersonalizedQuestion(prompt, labels);
+        } catch (Exception e) {
+            logger.warn("Failed to parse question personalization JSON: {}", e.getMessage());
+            return null;
+        }
     }
 
     public String generateNarrativeReportJson(
