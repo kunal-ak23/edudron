@@ -330,7 +330,7 @@ export default function CourseIndexPage() {
                   <Input
                     type="file"
                     onChange={(e) => setUploadForm({...uploadForm, file: e.target.files?.[0] || null})}
-                    accept={uploadType === 'REFERENCE_CONTENT' ? '.pdf,.doc,.docx,.txt' : '.pdf,.doc,.docx,.txt'}
+                    accept={uploadType === 'REFERENCE_CONTENT' ? '.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls' : '.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls'}
                   />
                 </div>
               </div>
