@@ -87,9 +87,6 @@ export default function ExamDetailPage() {
         // Response is wrapped in { data: {...} }
         data = (response as any).data
       }
-      console.log('Loaded exam response:', response)
-      console.log('Loaded exam data:', data)
-      console.log('Questions count:', (data as any)?.questions?.length || 0)
       setExam(data as unknown as Exam)
     } catch (error) {
       console.error('Failed to load exam:', error)
@@ -134,9 +131,6 @@ export default function ExamDetailPage() {
         // Response is wrapped in { data: {...} }
         updated = (response as any).data
       }
-      console.log('Schedule response:', response)
-      console.log('Updated exam:', updated)
-      console.log('Updated exam questions count:', (updated as any)?.questions?.length || 0)
       setExam(updated as unknown as Exam)
       setShowScheduleDialog(false)
       const examStatus = (updated as any)?.status || 'DRAFT'
@@ -240,11 +234,6 @@ export default function ExamDetailPage() {
 
   // Ensure questions is always an array
   const questions = Array.isArray(exam.questions) ? exam.questions : []
-
-  // Debug: Log exam data to console
-  console.log('Rendering exam:', exam)
-  console.log('Questions:', questions)
-  console.log('Questions length:', questions.length)
 
   return (
     <div className="space-y-3">
@@ -779,10 +768,6 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
                         // Fetch full submission details including answersJson
                         const response = await apiClient.get<any>(`/api/exams/${examId}/submissions/${submission.id}`)
                         const fullSubmission = (response as any)?.data || response
-                        console.log('Loaded full submission:', fullSubmission)
-                        console.log('Has answersJson:', !!fullSubmission?.answersJson)
-                        console.log('AnswersJson:', fullSubmission?.answersJson)
-                        console.log('Questions count:', questions.length)
                         setSelectedSubmission(fullSubmission)
                         setShowReviewDialog(true)
                       } catch (error) {
@@ -892,12 +877,6 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
               </div>
               
               {(() => {
-                console.log('Rendering dialog - selectedSubmission:', selectedSubmission)
-                console.log('Has answersJson:', !!selectedSubmission?.answersJson)
-                console.log('AnswersJson type:', typeof selectedSubmission?.answersJson)
-                console.log('AnswersJson value:', selectedSubmission?.answersJson)
-                console.log('Questions length:', questions.length)
-                
                 // Parse answersJson if it's a string, otherwise use as-is
                 let answersJson = selectedSubmission?.answersJson
                 if (typeof answersJson === 'string') {

@@ -38,25 +38,11 @@ export class TenantsApi {
   constructor(private apiClient: ApiClient) {}
 
   async createTenant(request: CreateTenantRequest): Promise<Tenant> {
-    console.log('[TenantsApi.createTenant] Starting with request:', request)
     const response = await this.apiClient.post<Tenant>('/api/tenant', request)
-    console.log('[TenantsApi.createTenant] Raw response from apiClient.post:', response)
-    console.log('[TenantsApi.createTenant] Response type:', typeof response)
-    console.log('[TenantsApi.createTenant] Response is array?:', Array.isArray(response))
-    console.log('[TenantsApi.createTenant] Response keys:', response && typeof response === 'object' ? Object.keys(response) : 'N/A')
-    console.log('[TenantsApi.createTenant] Response stringified:', JSON.stringify(response, null, 2))
     
     // Check if response has data property
     if (response && typeof response === 'object' && 'data' in response) {
-      console.log('[TenantsApi.createTenant] Response has data property')
-      console.log('[TenantsApi.createTenant] response.data:', response.data)
-      console.log('[TenantsApi.createTenant] response.data type:', typeof response.data)
-      console.log('[TenantsApi.createTenant] response.data keys:', response.data && typeof response.data === 'object' ? Object.keys(response.data) : 'N/A')
-      
       const tenant = response.data as Tenant
-      console.log('[TenantsApi.createTenant] Extracted tenant from response.data:', tenant)
-      console.log('[TenantsApi.createTenant] tenant.id:', tenant?.id)
-      console.log('[TenantsApi.createTenant] tenant.name:', tenant?.name)
       
       if (!tenant || !tenant.id || !tenant.name) {
         console.error('[TenantsApi.createTenant] Validation failed - tenant:', tenant)
@@ -70,9 +56,7 @@ export class TenantsApi {
     
     // Check if response itself is the tenant object
     if (response && typeof response === 'object' && 'id' in response && 'name' in response) {
-      console.log('[TenantsApi.createTenant] Response is tenant object directly')
       const tenant = response as any as Tenant
-      console.log('[TenantsApi.createTenant] Using response as tenant:', tenant)
       
       if (!tenant || !tenant.id || !tenant.name) {
         console.error('[TenantsApi.createTenant] Validation failed - tenant:', tenant)
@@ -97,7 +81,6 @@ export class TenantsApi {
       
       // Check if response is already an array (most likely case)
       if (Array.isArray(response)) {
-        console.log('[TenantsApi.listTenants] ✓ Response is array, returning directly. Length:', response.length)
         return response
       }
       
@@ -106,9 +89,7 @@ export class TenantsApi {
         const responseAny = response as any
         if ('data' in responseAny) {
           const data = responseAny.data
-          console.log('[TenantsApi.listTenants] Found data property:', data)
           if (Array.isArray(data)) {
-            console.log('[TenantsApi.listTenants] ✓ response.data is array, returning it. Length:', data.length)
             return data
           }
         }

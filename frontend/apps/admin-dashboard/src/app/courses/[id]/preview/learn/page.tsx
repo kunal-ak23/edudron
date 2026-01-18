@@ -41,7 +41,6 @@ export default function CourseLearnPreviewPage() {
             const subLectures = await lecturesApi.getSubLecturesByLecture(courseId, section.id)
             return { ...section, lectures: subLectures }
           } catch (error) {
-            console.warn(`Failed to load sub-lectures for section ${section.id}:`, error)
             return { ...section, lectures: [] }
           }
         })

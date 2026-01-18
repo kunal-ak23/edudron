@@ -43,7 +43,6 @@ export async function fetchHighlights(
       return notes.map((note: any) => convertLegacyNoteToHighlight(note))
     }
   } catch (e) {
-    console.warn('Failed to fetch highlights from notes API:', e)
   }
 
   return []
@@ -84,7 +83,6 @@ export async function createHighlight(
       return convertLegacyNoteToHighlight(note)
     }
   } catch (e) {
-    console.warn('Failed to create highlight via notes API:', e)
   }
 
   // Fallback: return mock
@@ -133,7 +131,6 @@ export async function updateHighlight(
       return convertLegacyNoteToHighlight(note)
     }
   } catch (e) {
-    console.warn('Failed to update highlight via notes API:', e)
   }
 
   throw new Error('Failed to update highlight')
@@ -156,7 +153,6 @@ export async function deleteHighlight(highlightId: string): Promise<void> {
       throw new Error('Failed to delete highlight')
     }
   } catch (e) {
-    console.warn('Failed to delete highlight via notes API:', e)
     throw e
   }
 }

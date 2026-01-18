@@ -121,7 +121,6 @@ public class StudentExamController {
             accessibleCourseIds.addAll(submissionCourseIds);
             
             if (accessibleCourseIds.isEmpty()) {
-                logger.debug("Student {} has no enrolled courses, returning empty exam list", studentId);
                 return ResponseEntity.ok(new ArrayList<>());
             }
             
@@ -187,7 +186,6 @@ public class StudentExamController {
                             exams.add(examResponse.getBody());
                         }
                     } catch (Exception e) {
-                        logger.debug("Failed to fetch completed exam {}: {}", examId, e.getMessage());
                     }
                 }
             }
@@ -216,14 +214,10 @@ public class StudentExamController {
                         }
                         return false;
                     } catch (Exception e) {
-                        logger.debug("Error filtering exam", e);
                         return false;
                     }
                 })
                 .collect(Collectors.toList());
-            
-            logger.debug("Returning {} unique exams for student {} (from {} total exams)", 
-                filteredExams.size(), studentId, exams.size());
             
             return ResponseEntity.ok(filteredExams);
         } catch (Exception e) {

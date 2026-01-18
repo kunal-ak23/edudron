@@ -73,7 +73,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     logger.info("JWT validated for /api/institutes: username={}, role={}, tenantId={}, X-Request-Id={}", 
                             username, role, tenantId, requestId);
                 } else {
-                    logger.debug("JWT validated - username: " + username + ", role: " + role + ", tenantId: " + tenantId);
                 }
                 
                 // Set tenant context from token or header
@@ -98,7 +97,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             logger.info("Tenant context set from X-Client-Id header for /api/institutes: tenantId={}, X-Request-Id={}", 
                                     tenantHeader, requestId);
                         } else {
-                            logger.debug("Using tenant from X-Client-Id header: " + tenantHeader);
                         }
                     } else if (isPlaceholderTenant) {
                         // Log warning if we have placeholder but no header
@@ -124,7 +122,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         logger.info("Authentication set for /api/institutes: username={}, role={}, X-Request-Id={}", 
                                 username, role, requestId);
                     } else {
-                        logger.debug("Authentication set for user: " + username);
                     }
                 } else {
                     if (isInstitutesEndpoint) {

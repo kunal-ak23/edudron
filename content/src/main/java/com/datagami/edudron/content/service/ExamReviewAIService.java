@@ -76,8 +76,6 @@ public class ExamReviewAIService {
             JsonNode jsonNode = objectMapper.readTree(jsonResponse);
             
             double similarityScore = jsonNode.get("similarityScore").asDouble();
-            logger.debug("Semantic similarity score: {} for student answer length: {}, tentative answer length: {}", 
-                similarityScore, studentAnswer.length(), tentativeAnswer.length());
             
             return Math.max(0.0, Math.min(100.0, similarityScore)); // Clamp between 0 and 100
             

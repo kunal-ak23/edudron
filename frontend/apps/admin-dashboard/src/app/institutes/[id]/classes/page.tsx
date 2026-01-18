@@ -34,13 +34,10 @@ export default function InstituteClassesPage() {
     try {
       setLoading(true)
       setError(null)
-      console.log('Loading data for institute:', instituteId)
       const [instituteData, classesData] = await Promise.all([
         institutesApi.getInstitute(instituteId),
         classesApi.listClassesByInstitute(instituteId)
       ])
-      console.log('Loaded institute:', instituteData)
-      console.log('Loaded classes:', classesData)
       setInstitute(instituteData)
       setClasses(classesData || [])
     } catch (err: any) {

@@ -35,7 +35,6 @@ export function DynamicHead() {
             faviconUrl = branding.faviconUrl
           }
         } catch (error) {
-          console.warn('[DynamicHead] Failed to load tenant info:', error)
         }
       }
 

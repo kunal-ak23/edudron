@@ -48,7 +48,6 @@ export default function TenantBrandingPage() {
         setBranding({ ...currentBranding, clientId: tenantId })
       } catch (err: any) {
         // If branding doesn't exist, use defaults
-        console.log('No branding found, using defaults')
         setBranding(prev => ({ ...prev, clientId: tenantId }))
       } finally {
         // Restore original tenant context if it existed

@@ -55,10 +55,6 @@ export default function PsychometricTestPage() {
       // For now, we'll always start a new session. In future, we can check for existing sessions.
       const response = await apiClient.post('/api/psychometric-test/start', {})
       
-      console.log('Start test response:', response)
-      console.log('Response type:', typeof response)
-      console.log('Response keys:', Object.keys(response || {}))
-      
       // Handle different response structures - ApiClient might return data directly or wrapped
       let sessionData: any = null
       let status: number | undefined = undefined
@@ -79,17 +75,12 @@ export default function PsychometricTestPage() {
         status = 200 // Assume success if no status provided
       }
       
-      console.log('Extracted session data:', sessionData)
-      console.log('Extracted status:', status)
-      
       // Check if we have valid session data (has id property)
       if (sessionData && sessionData.id) {
-        console.log('Setting session with data:', sessionData)
         setSession(sessionData)
       } else if (status === 403) {
         setError('Psychometric test is not available for your account.')
       } else {
-        console.warn('Invalid response structure. Status:', status, 'Data:', sessionData)
         setError('Failed to start test. Please try again.')
       }
     } catch (err: any) {
@@ -118,10 +109,6 @@ export default function PsychometricTestPage() {
         { answer: message }
       )
 
-      console.log('Submit answer response:', response)
-      console.log('Response type:', typeof response)
-      console.log('Response keys:', Object.keys(response || {}))
-
       // Handle different response structures - ApiClient might return data directly or wrapped
       let sessionData: any = null
       let status: number | undefined = undefined
@@ -142,15 +129,10 @@ export default function PsychometricTestPage() {
         status = 200 // Assume success if no status provided
       }
 
-      console.log('Extracted session data:', sessionData)
-      console.log('Extracted status:', status)
-
       // Check if we have valid session data (has id property)
       if (sessionData && sessionData.id) {
-        console.log('Setting session with data:', sessionData)
         setSession(sessionData)
       } else {
-        console.warn('Invalid response structure. Status:', status, 'Data:', sessionData)
         setError('Failed to submit answer. Please try again.')
       }
     } catch (err: any) {
@@ -176,8 +158,6 @@ export default function PsychometricTestPage() {
 
       const response = await apiClient.post(`/api/psychometric-test/${session.id}/complete`)
 
-      console.log('Complete test response:', response)
-
       // Handle different response structures
       let status: number | undefined = undefined
       
@@ -187,13 +167,10 @@ export default function PsychometricTestPage() {
         status = 200 // Assume success if no status provided
       }
 
-      console.log('Extracted status:', status)
-
       if (status === 200) {
         // Redirect to results page
         router.push(`/psychometric-test/results/${session.id}`)
       } else {
-        console.warn('Unexpected status:', status)
         setError('Failed to complete test. Please try again.')
       }
     } catch (err: any) {

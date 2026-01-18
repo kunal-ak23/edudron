@@ -24,7 +24,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           applyTenantBranding(branding.primaryColor)
         }
       } catch (error) {
-        console.warn('[ThemeProvider] Failed to load tenant branding, using defaults:', error)
       }
     }
 

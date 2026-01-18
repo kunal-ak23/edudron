@@ -31,14 +31,12 @@ export function TenantSelector() {
 
   const handleTenantSelect = async (tenant: Tenant) => {
     try {
-      console.log('[TenantSelector] Selecting tenant:', tenant.id, tenant.name)
       await selectTenant(tenant.id)
       
       // Verify tenant ID was stored
       const storedTenantId = localStorage.getItem('tenant_id') || 
                             localStorage.getItem('clientId') || 
                             localStorage.getItem('selectedTenantId')
-      console.log('[TenantSelector] Tenant ID stored in localStorage:', storedTenantId)
       
       setSelectedTenant(tenant)
       setIsOpen(false)
@@ -75,13 +73,11 @@ export function TenantSelector() {
             setSelectedTenant(found)
           } else {
             // Tenant ID exists but not found in list - clear it
-            console.warn('[TenantSelector] Tenant ID not found in tenants list:', currentTenantId)
             setSelectedTenant(null)
           }
         } else if (allTenants && allTenants.length > 0) {
           // No valid tenant selected - auto-select first tenant if only one exists
           if (allTenants.length === 1) {
-            console.log('[TenantSelector] Auto-selecting single tenant:', allTenants[0].name)
             // Auto-select without reload to avoid infinite loop
             selectTenant(allTenants[0].id).then(() => {
               setSelectedTenant(allTenants[0])

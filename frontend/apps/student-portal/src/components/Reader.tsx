@@ -260,7 +260,6 @@ export function Reader({
       // Get offsets
       const offsets = rangeToOffsets(selectionRef.current, textIndex)
       if (!offsets) {
-        console.warn('Failed to get offsets from range')
         return
       }
 

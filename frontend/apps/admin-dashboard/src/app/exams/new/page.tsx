@@ -144,9 +144,6 @@ export default function NewExamPage() {
       // Handle response - apiClient might return data directly or wrapped
       const exam = (response as any)?.data || response
       
-      console.log('Exam creation response:', response)
-      console.log('Extracted exam:', exam)
-      
       if (!exam || !exam.id) {
         console.error('Invalid exam response:', { response, exam })
         throw new Error(`Failed to get exam ID from response. Response: ${JSON.stringify(response)}`)

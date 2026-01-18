@@ -37,66 +37,42 @@ export class LecturesApi {
   }
 
   async createSubLecture(courseId: string, lectureId: string, request: CreateLectureRequest): Promise<Lecture> {
-    try {
-      console.log('[lecturesApi.createSubLecture] Starting...')
-      // Use the section-based endpoint: /api/sections/{sectionId}/lectures
-      const response = await this.apiClient.post<Lecture>(
-        `/content/api/sections/${lectureId}/lectures`,
-        {
-          title: request.title,
-          description: request.description,
-          contentType: request.contentType || 'TEXT'
-        }
-      )
-      
-      console.log('[lecturesApi.createSubLecture] Response received:', response)
-      console.log('[lecturesApi.createSubLecture] Response type:', typeof response)
-      console.log('[lecturesApi.createSubLecture] Response keys:', response && typeof response === 'object' ? Object.keys(response) : 'N/A')
-      console.log('[lecturesApi.createSubLecture] Has id?', response && typeof response === 'object' && 'id' in response)
-      console.log('[lecturesApi.createSubLecture] Has data?', response && typeof response === 'object' && 'data' in response)
-      
-      // The backend returns the lecture DTO directly: {"id":"...","title":"...",...}
-      // ApiClient.post returns axios response.data, which is the lecture object directly
-      // But TypeScript types it as ApiResponse<Lecture> = { data: Lecture }
-      // At runtime, response IS the lecture object (not wrapped)
-      
-      let lecture: Lecture | null = null
-      
-      // Check if response itself is the lecture (has 'id' property)
-      if (response && typeof response === 'object' && 'id' in response && !Array.isArray(response)) {
-        console.log('[lecturesApi.createSubLecture] Response is lecture directly')
-        lecture = response as unknown as Lecture
+    // Use the section-based endpoint: /api/sections/{sectionId}/lectures
+    const response = await this.apiClient.post<Lecture>(
+      `/content/api/sections/${lectureId}/lectures`,
+      {
+        title: request.title,
+        description: request.description,
+        contentType: request.contentType || 'TEXT'
       }
-      // Check if response has a 'data' property (wrapped in ApiResponse format)
-      else if (response && typeof response === 'object' && 'data' in response) {
-        const data = (response as any).data
-        console.log('[lecturesApi.createSubLecture] Response has data property:', data)
-        if (data && typeof data === 'object' && 'id' in data) {
-          console.log('[lecturesApi.createSubLecture] Found lecture in response.data')
-          lecture = data as Lecture
-        }
-      }
-      
-      console.log('[lecturesApi.createSubLecture] Extracted lecture:', lecture)
-      
-      if (!lecture) {
-        console.error('[lecturesApi.createSubLecture] Failed to extract lecture. Response:', JSON.stringify(response, null, 2))
-        throw new Error(`Invalid response from server: lecture object not found. Response: ${JSON.stringify(response)}`)
-      }
-      
-      if (!lecture.id) {
-        console.error('[lecturesApi.createSubLecture] Lecture missing id. Lecture:', JSON.stringify(lecture, null, 2))
-        throw new Error(`Invalid response from server: lecture object missing 'id' property. Response: ${JSON.stringify(response)}`)
-      }
-      
-      console.log('[lecturesApi.createSubLecture] Returning lecture with id:', lecture.id)
-      return lecture
-    } catch (error: any) {
-      console.error('[lecturesApi.createSubLecture] Error creating sub-lecture:', error)
-      console.error('[lecturesApi.createSubLecture] Error message:', error?.message)
-      console.error('[lecturesApi.createSubLecture] Error stack:', error?.stack)
-      throw error
+    )
+
+    // The backend returns the lecture DTO directly: {"id":"...","title":"...",...}
+    // ApiClient.post returns axios response.data, which is the lecture object directly,
+    // but TS types it as ApiResponse<Lecture> = { data: Lecture }.
+    let lecture: Lecture | null = null
+
+    // Check if response itself is the lecture (has 'id' property)
+    if (response && typeof response === 'object' && 'id' in response && !Array.isArray(response)) {
+      lecture = response as unknown as Lecture
     }
+    // Check if response has a 'data' property (wrapped in ApiResponse format)
+    else if (response && typeof response === 'object' && 'data' in response) {
+      const data = (response as any).data
+      if (data && typeof data === 'object' && 'id' in data) {
+        lecture = data as Lecture
+      }
+    }
+
+    if (!lecture) {
+      throw new Error(`Invalid response from server: lecture object not found. Response: ${JSON.stringify(response)}`)
+    }
+
+    if (!lecture.id) {
+      throw new Error(`Invalid response from server: lecture object missing 'id' property. Response: ${JSON.stringify(response)}`)
+    }
+
+    return lecture
   }
 
   async updateSubLecture(courseId: string, lectureId: string, subLectureId: string, request: UpdateLectureRequest): Promise<Lecture> {
@@ -142,86 +118,29 @@ export class LecturesApi {
       const xhr = new XMLHttpRequest()
       const baseURL = this.apiClient.getBaseURL()
       const url = `${baseURL}/content/api/lectures/${lectureId}/media/video`
-      
-      console.log('[uploadVideo] Starting upload:', {
-        url,
-        fileSize: file.size,
-        fileName: file.name,
-        hasProgressCallback: !!onProgress
-      })
-      
+
       // Set up progress tracking - XMLHttpRequest provides more reliable progress events
-      // Track if we've received any progress events
-      let progressEventCount = 0
-      let lastProgressUpdate = 0
-      
       xhr.upload.addEventListener('progress', (e) => {
-        progressEventCount++
-        const now = Date.now()
-        const timeSinceLastUpdate = now - lastProgressUpdate
-        
-        console.log(`[uploadVideo] Progress event #${progressEventCount} fired:`, {
-          loaded: e.loaded,
-          total: e.total,
-          lengthComputable: e.lengthComputable,
-          percentage: e.lengthComputable ? ((e.loaded / e.total) * 100).toFixed(2) + '%' : 'N/A',
-          timeSinceLastUpdate: timeSinceLastUpdate + 'ms',
-          hasProgressCallback: !!onProgress
-        })
-        
-        lastProgressUpdate = now
-        
         if (onProgress) {
           if (e.lengthComputable && e.total > 0) {
             // Use actual progress if available
-            const progressData = {
-              loaded: e.loaded,
-              total: e.total
-            }
-            console.log('[uploadVideo] Calling onProgress (lengthComputable):', progressData)
-            onProgress(progressData)
+            onProgress({ loaded: e.loaded, total: e.total })
           } else if (e.loaded > 0) {
             // Fallback: use loaded bytes with file size as total
-            const progressData = {
-              loaded: e.loaded,
-              total: file.size
-            }
-            console.log('[uploadVideo] Calling onProgress (fallback):', progressData)
-            onProgress(progressData)
-          } else {
-            console.log('[uploadVideo] Progress event but loaded is 0, skipping callback')
+            onProgress({ loaded: e.loaded, total: file.size })
           }
-        } else {
-          console.log('[uploadVideo] Progress event but no callback provided')
         }
       }, false)
       
-      // Log a warning if no progress events fire within 3 seconds
-      const progressCheckTimeout = setTimeout(() => {
-        if (progressEventCount === 0) {
-          console.warn('[uploadVideo] WARNING: No progress events received after 3 seconds. This may indicate:')
-          console.warn('[uploadVideo] 1. Browser not firing progress events')
-          console.warn('[uploadVideo] 2. Server buffering entire request before processing')
-          console.warn('[uploadVideo] 3. Network issues preventing progress tracking')
-        } else {
-          console.log(`[uploadVideo] Progress events are working - received ${progressEventCount} events so far`)
-        }
-      }, 3000)
-      
       // Handle completion
       xhr.addEventListener('load', () => {
-        clearTimeout(progressCheckTimeout)
-        console.log('[uploadVideo] XHR load event fired, status:', xhr.status)
-        console.log(`[uploadVideo] Total progress events received: ${progressEventCount}`)
         if (xhr.status >= 200 && xhr.status < 300) {
-          console.log('[uploadVideo] Upload completed successfully')
           try {
             const response = JSON.parse(xhr.responseText)
             // Handle both ApiResponse format and direct response
             const data = response.data || response
             // Call progress callback one last time with 100% if provided
             if (onProgress) {
-              console.log('[uploadVideo] Calling onProgress with 100% completion')
               onProgress({
                 loaded: file.size,
                 total: file.size
@@ -229,11 +148,9 @@ export class LecturesApi {
             }
             resolve(data)
           } catch (error) {
-            console.error('[uploadVideo] Failed to parse response:', error)
             reject(new Error('Failed to parse response'))
           }
         } else {
-          console.error('[uploadVideo] Upload failed with status:', xhr.status)
           try {
             const errorResponse = JSON.parse(xhr.responseText)
             reject(new Error(errorResponse.message || `Upload failed with status ${xhr.status}`))
@@ -245,36 +162,26 @@ export class LecturesApi {
       
       // Handle errors
       xhr.addEventListener('error', () => {
-        clearTimeout(progressCheckTimeout)
-        console.error('[uploadVideo] Upload error occurred. Total progress events received:', progressEventCount)
         reject(new Error('Upload failed - network error'))
       }, false)
       
       xhr.addEventListener('abort', () => {
-        clearTimeout(progressCheckTimeout)
-        console.warn('[uploadVideo] Upload aborted. Total progress events received:', progressEventCount)
         reject(new Error('Upload aborted'))
       }, false)
       
       // Set timeout
       xhr.timeout = timeoutMs
       xhr.addEventListener('timeout', () => {
-        clearTimeout(progressCheckTimeout)
-        console.error('[uploadVideo] Upload timeout. Total progress events received:', progressEventCount)
         reject(new Error('Upload timeout'))
       }, false)
       
       // Set up request
       xhr.open('POST', url, true)
-      console.log('[uploadVideo] XHR opened, setting headers')
       
       // Get auth token and set headers
       const token = this.apiClient.getToken()
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`)
-        console.log('[uploadVideo] Authorization header set')
-      } else {
-        console.warn('[uploadVideo] No auth token available')
       }
       
       // Get tenant ID from localStorage (matching ApiClient behavior)
@@ -285,20 +192,11 @@ export class LecturesApi {
         if (tenantId && tenantId !== 'PENDING_TENANT_SELECTION' && 
             tenantId !== 'SYSTEM' && tenantId !== 'null' && tenantId !== '') {
           xhr.setRequestHeader('X-Client-Id', tenantId)
-          console.log('[uploadVideo] X-Client-Id header set:', tenantId)
         }
       }
       
       // Send request
-      console.log('[uploadVideo] Sending request...', {
-        fileSize: file.size,
-        fileName: file.name,
-        url: url,
-        fileSizeMB: (file.size / (1024 * 1024)).toFixed(2)
-      })
       xhr.send(formData)
-      console.log('[uploadVideo] Request sent, waiting for progress events...')
-      console.log('[uploadVideo] XMLHttpRequest upload progress listener attached:', !!xhr.upload.onprogress)
     })
   }
 

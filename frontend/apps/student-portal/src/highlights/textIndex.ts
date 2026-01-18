@@ -305,7 +305,6 @@ export function offsetsToRange(
     range.setEnd(endNode, endOffset)
     return range
   } catch (e) {
-    console.warn('Failed to create range from offsets:', e)
     return null
   }
 }

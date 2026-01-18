@@ -214,9 +214,6 @@ public class ExamService {
             exam.getQuestions().size(); // Force initialization
         }
         
-        logger.debug("Retrieved exam {} with {} questions", examId, 
-            exam.getQuestions() != null ? exam.getQuestions().size() : 0);
-        
         return exam;
     }
     
@@ -257,7 +254,6 @@ public class ExamService {
             if (newStatus != null && newStatus != exam.getStatus()) {
                 exam.setStatus(newStatus);
                 assessmentRepository.save(exam);
-                logger.debug("Updated exam {} status from {} to {}", exam.getId(), exam.getStatus(), newStatus);
             }
         }
     }

@@ -35,7 +35,6 @@ export default function ExamsPage() {
       }
       
       const data = await apiClient.get<Exam[]>('/api/student/exams')
-      console.log('Exams API response:', data)
       
       // Ensure data is an array - handle cases where API might return wrapped response or null
       let examsData: Exam[] = []
@@ -47,17 +46,13 @@ export default function ExamsPage() {
           examsData = data.data
         } else if (data && Object.keys(data).length > 0) {
           // If it's an object but not an array, try to extract array from it
-          console.warn('Unexpected API response format, attempting to parse:', data)
           examsData = []
         } else {
           examsData = []
         }
       } else {
-        console.warn('Unexpected API response format:', data)
         examsData = []
       }
-      
-      console.log('Processed exams data:', examsData, 'Count:', examsData.length)
       
       // Deduplicate exams by ID to prevent duplicates
       const uniqueExams = examsData.reduce((acc, exam) => {
@@ -66,8 +61,6 @@ export default function ExamsPage() {
         }
         return acc
       }, [] as Exam[])
-      
-      console.log('Unique exams:', uniqueExams, 'Count:', uniqueExams.length)
       setExams(uniqueExams)
       setIsInitialLoad(false)
     } catch (error: any) {
@@ -78,7 +71,6 @@ export default function ExamsPage() {
     } finally {
       // Always set loading to false, even if there was an error
       setLoading(false)
-      console.log('Loading state set to false')
     }
   }
 
@@ -89,7 +81,6 @@ export default function ExamsPage() {
     // Safety timeout to prevent infinite loading
     loadingTimeout = setTimeout(() => {
       if (mounted) {
-        console.warn('Loading timeout - forcing loading state to false')
         setLoading(false)
         setIsInitialLoad(false)
       }

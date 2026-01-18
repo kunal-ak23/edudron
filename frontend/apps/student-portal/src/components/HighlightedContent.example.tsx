@@ -95,7 +95,6 @@ export function ExampleHTMLContent() {
  */
 export function ExampleWithCustomHandler() {
   const handleHighlightClick = (highlightId: string) => {
-    console.log('Highlight clicked:', highlightId)
     // Do something custom, e.g., show a modal, navigate, etc.
   }
 

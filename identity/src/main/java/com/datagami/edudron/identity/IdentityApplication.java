@@ -40,17 +40,14 @@ public class IdentityApplication {
                     String key = entry.getKey();
                     String value = entry.getValue();
                     if (value == null || value.isEmpty()) {
-                        logger.debug("Skipping {} (empty value)", key);
                         continue;
                     }
                     // Set as system property if not already set
                     if (System.getProperty(key) == null) {
                         System.setProperty(key, value);
                         loadedCount++;
-                        logger.debug("Set system property from .env: {} = {}", key, maskSensitiveValue(key, value));
                     } else {
                         skippedCount++;
-                        logger.debug("Skipped {} (already set as system property)", key);
                     }
                 }
                 logger.info("✅ Loaded {} environment variables from .env file ({} set, {} already existed)", 

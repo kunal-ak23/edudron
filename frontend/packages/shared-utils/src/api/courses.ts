@@ -124,36 +124,22 @@ export class CoursesApi {
   constructor(private apiClient: ApiClient) {}
 
   async listCourses(params?: { status?: string; instructorId?: string }): Promise<Course[]> {
-    console.log('[CoursesApi.listCourses] Starting request with params:', params)
     const response = await this.apiClient.get<any>('/content/courses', { params })
-    console.log('[CoursesApi.listCourses] Raw response:', response)
-    console.log('[CoursesApi.listCourses] Response data:', response.data)
-    console.log('[CoursesApi.listCourses] Response data type:', typeof response.data)
-    console.log('[CoursesApi.listCourses] Response data is array?:', Array.isArray(response.data))
     
     // Handle Spring Data Page response structure: {content: [...], totalElements: ...}
     if (response.data && response.data.content && Array.isArray(response.data.content)) {
-      console.log('[CoursesApi.listCourses] Found content array, length:', response.data.content.length)
-      console.log('[CoursesApi.listCourses] Content:', response.data.content)
       return response.data.content
     }
     // Fallback: if response is already an array, return it
     if (Array.isArray(response.data)) {
-      console.log('[CoursesApi.listCourses] Response.data is already an array, length:', response.data.length)
       return response.data
     }
-    console.warn('[CoursesApi.listCourses] No valid course data found in response. Returning empty array.')
-    console.warn('[CoursesApi.listCourses] Response structure:', JSON.stringify(response.data, null, 2))
     return []
   }
 
   async getCourse(id: string): Promise<Course> {
     try {
-      console.log('[CoursesApi.getCourse] Fetching course with id:', id)
       const response = await this.apiClient.get<Course>(`/content/courses/${id}`)
-      console.log('[CoursesApi.getCourse] Full response object:', response)
-      console.log('[CoursesApi.getCourse] Response.data:', response.data)
-      console.log('[CoursesApi.getCourse] Response.data type:', typeof response.data)
       
       // ApiClient.get wraps responses in { data: ... } format
       // So response.data should be the Course object
@@ -161,37 +147,24 @@ export class CoursesApi {
       
       // Handle potential double-wrapping (if backend also wraps)
       if (course && typeof course === 'object' && 'data' in course && !('id' in course) && !('title' in course)) {
-        console.log('[CoursesApi.getCourse] Detected double-wrapping, unwrapping...')
         course = (course as any).data
       }
       
-      console.log('[CoursesApi.getCourse] Final course object:', course)
-      console.log('[CoursesApi.getCourse] Course keys:', course && typeof course === 'object' ? Object.keys(course) : 'N/A')
-      
       if (!course) {
-        console.error('[CoursesApi.getCourse] Course data is null or undefined after parsing')
         throw new Error('Course not found')
       }
       
       // Validate it's a Course object
       if (typeof course !== 'object') {
-        console.error('[CoursesApi.getCourse] Course data is not an object:', typeof course)
         throw new Error('Invalid course data received: not an object')
       }
       
       if (!('id' in course) || !('title' in course)) {
-        console.error('[CoursesApi.getCourse] Invalid course data structure - missing id or title:', course)
         throw new Error('Invalid course data received: missing required fields')
       }
       
-      console.log('[CoursesApi.getCourse] Successfully parsed course:', { id: course.id, title: course.title })
       return course as Course
     } catch (error: any) {
-      console.error('[CoursesApi.getCourse] Error fetching course:', error)
-      console.error('[CoursesApi.getCourse] Error response:', error.response)
-      console.error('[CoursesApi.getCourse] Error status:', error.response?.status)
-      console.error('[CoursesApi.getCourse] Error data:', error.response?.data)
-      console.error('[CoursesApi.getCourse] Error message:', error.message)
       // Re-throw to let the caller handle it
       throw error
     }

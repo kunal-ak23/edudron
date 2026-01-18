@@ -133,15 +133,6 @@ export default function LectureEditPage() {
         setFormData(formDataValue)
         const { allItems, textItems, updatedFormData } = await loadTextContents(subLectureId, formDataValue)
         await loadAttachments(subLectureId)
-        
-        // Don't set initial refs here - let useEffect handle it after state stabilizes
-        console.log('[EditPage] Loaded sub-lecture data:', {
-          formDataValue,
-          updatedFormData,
-          wasFormDataUpdated: !!updatedFormData,
-          allItems,
-          textItems
-        })
       } else {
         // Load main lecture
         const data = await lecturesApi.getLecture(courseId, lectureId)
@@ -158,15 +149,6 @@ export default function LectureEditPage() {
         setFormData(formDataValue)
         const { allItems, textItems, updatedFormData } = await loadTextContents(lectureId, formDataValue)
         await loadAttachments(lectureId)
-        
-        // Don't set initial refs here - let useEffect handle it after state stabilizes
-        console.log('[EditPage] Loaded main lecture data:', {
-          formDataValue,
-          updatedFormData,
-          wasFormDataUpdated: !!updatedFormData,
-          allItems,
-          textItems
-        })
       }
     } catch (error) {
       console.error('Failed to load lecture:', error)
@@ -212,18 +194,14 @@ export default function LectureEditPage() {
 
   const loadAttachments = async (lectureId: string) => {
     try {
-      console.log('[EditPage] Loading attachments for lectureId:', lectureId)
       const media = await lecturesApi.getLectureMedia(lectureId)
-      console.log('[EditPage] All media items:', media)
       // Filter out TEXT and VIDEO content types - only show attachments (PDF, IMAGE, AUDIO, etc.)
       const attachmentItems = media.filter((content: LectureContent) => 
         content.contentType !== 'TEXT' && content.contentType !== 'VIDEO'
       )
-      console.log('[EditPage] Filtered attachment items:', attachmentItems)
       setAttachments(attachmentItems)
-      console.log('[EditPage] Attachments state updated, count:', attachmentItems.length)
     } catch (error) {
-      console.error('[EditPage] Failed to load attachments:', error)
+      console.error('Failed to load attachments:', error)
       setAttachments([])
     }
   }
@@ -238,45 +216,27 @@ export default function LectureEditPage() {
         })
       } else if (isNewSubLecture) {
         // Create new sub-lecture
-        console.log('[EditPage] Creating new sub-lecture with data:', {
-          title: formData.title,
-          description: formData.description,
-          contentType: formData.contentType,
-          durationSeconds: formData.durationSeconds
-        })
-        
         let savedLecture: Lecture | undefined
         try {
-          console.log('[EditPage] Calling lecturesApi.createSubLecture...')
           savedLecture = await lecturesApi.createSubLecture(courseId, lectureId, {
             title: formData.title,
             description: formData.description,
             contentType: formData.contentType,
             durationSeconds: formData.durationSeconds
           })
-          console.log('[EditPage] createSubLecture returned:', savedLecture)
-          console.log('[EditPage] savedLecture type:', typeof savedLecture)
-          console.log('[EditPage] savedLecture is undefined?', savedLecture === undefined)
-          console.log('[EditPage] savedLecture is null?', savedLecture === null)
         } catch (error: any) {
-          console.error('[EditPage] Failed to create sub-lecture - error caught:', error)
-          console.error('[EditPage] Error message:', error?.message)
-          console.error('[EditPage] Error stack:', error?.stack)
           throw new Error(`Failed to create sub-lecture: ${error.message || 'Unknown error'}`)
         }
         
         // Ensure savedLecture is defined and has an id
         if (!savedLecture) {
-          console.error('[EditPage] savedLecture is undefined or null after creation')
           throw new Error('Failed to create sub-lecture: No lecture object returned from server')
         }
         
         if (!savedLecture.id) {
-          console.error('[EditPage] savedLecture missing id property:', savedLecture)
           throw new Error('Failed to create sub-lecture: Invalid response from server - missing id')
         }
         
-        console.log('[EditPage] Setting currentLectureId to:', savedLecture.id)
         // Set currentLectureId immediately so FileUpload is enabled
         setCurrentLectureId(savedLecture.id)
         setLecture(savedLecture)
@@ -317,28 +277,20 @@ export default function LectureEditPage() {
         
         // Save all text content items (only TEXT type, not VIDEO)
         // Double-check: filter out any non-TEXT items and ensure they have IDs
-        console.log('[EditPage] Saving text contents. Total items:', textContents.length)
         const textOnlyContents = textContents.filter(content => {
           const isText = content?.contentType === 'TEXT'
           const hasId = !!content?.id
-          if (!isText && hasId) {
-            console.warn(`[EditPage] Skipping non-TEXT content item ${content.id} with type ${content?.contentType}`)
-          }
           return isText && hasId
         })
-        console.log('[EditPage] Filtered to TEXT items:', textOnlyContents.length)
         
         for (const content of textOnlyContents) {
           try {
             // Triple-check before making the API call
             if (content.contentType !== 'TEXT') {
-              console.error(`[EditPage] Attempted to update non-TEXT content ${content.id} with type ${content.contentType}`)
               continue
             }
-            console.log(`[EditPage] Updating text content ${content.id}`)
             await lecturesApi.updateTextContent(content.id, content.textContent || '', content.title || '')
           } catch (error) {
-            console.error(`[EditPage] Failed to update text content ${content.id}:`, error)
             // Continue with other content items even if one fails
           }
         }
@@ -369,12 +321,9 @@ export default function LectureEditPage() {
   }
 
   const handleAttachmentUpload = async (files: File[]) => {
-    console.log('[EditPage] handleAttachmentUpload called - files:', files.length, 'currentLectureId:', currentLectureId)
     try {
       if (currentLectureId) {
-        console.log('[EditPage] Uploading attachments to lecture:', currentLectureId)
         await lecturesApi.uploadAttachments(currentLectureId, files)
-        console.log('[EditPage] Upload successful, refreshing list')
         toast({
           title: 'Attachments uploaded',
           description: `${files.length} file(s) uploaded successfully.`,
@@ -383,26 +332,21 @@ export default function LectureEditPage() {
         await loadAttachments(currentLectureId)
         return []
       } else {
-        console.warn('[EditPage] Cannot upload - currentLectureId is null')
         throw new Error('Please save the lecture first, then upload attachments')
       }
     } catch (error: any) {
-      console.error('[EditPage] Upload failed:', error)
       throw new Error(error.message || 'Failed to upload attachments')
     }
   }
 
   const handleDeleteAttachment = async (contentId: string) => {
-    console.log('[EditPage] handleDeleteAttachment called - contentId:', contentId)
     try {
       await lecturesApi.deleteMedia(contentId)
-      console.log('[EditPage] Delete successful, updating state')
       setAttachments(attachments.filter(a => a.id !== contentId))
       toast({
         title: 'Attachment deleted',
       })
     } catch (error) {
-      console.error('[EditPage] Delete failed:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to delete attachment',
@@ -434,7 +378,6 @@ export default function LectureEditPage() {
         description: 'The video has been removed from Azure storage and the lecture.',
       })
     } catch (error) {
-      console.error('[EditPage] Delete video failed:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to delete video',
@@ -468,37 +411,13 @@ export default function LectureEditPage() {
       const serializedTextContents = JSON.stringify(textContents)
       initialDataRef.current = serializedFormData
       initialTextContentsRef.current = serializedTextContents
-      console.log('[EditPage] Set initial refs (useEffect):', {
-        formData,
-        textContents,
-        serializedFormDataLength: serializedFormData.length,
-        serializedTextContentsLength: serializedTextContents.length,
-        serializedFormData: serializedFormData.substring(0, 200)
-      })
     }
   }, [formData, textContents, loading])
-
-  // Track upload progress changes
-  useEffect(() => {
-    if (uploadProgress) {
-      console.log('[EditPage] uploadProgress state changed:', {
-        loaded: uploadProgress.loaded,
-        total: uploadProgress.total,
-        percentage: ((uploadProgress.loaded / uploadProgress.total) * 100).toFixed(2) + '%',
-        loadedFormatted: formatFileSize(uploadProgress.loaded),
-        totalFormatted: formatFileSize(uploadProgress.total)
-      })
-    }
-  }, [uploadProgress])
 
   // Track unsaved changes
   useEffect(() => {
     // Only check for changes if initial state has been set
     if (!initialDataRef.current || !initialTextContentsRef.current) {
-      console.log('[EditPage] Unsaved changes check skipped - initial refs not set:', {
-        hasInitialData: !!initialDataRef.current,
-        hasInitialTextContents: !!initialTextContentsRef.current
-      })
       setHasUnsavedChanges(false)
       return
     }
@@ -508,23 +427,6 @@ export default function LectureEditPage() {
     
     const hasFormChanges = currentData !== initialDataRef.current
     const hasContentChanges = currentTextContents !== initialTextContentsRef.current
-    
-    console.log('[EditPage] Unsaved changes check:', {
-      currentData: currentData,
-      initialData: initialDataRef.current,
-      currentDataLength: currentData.length,
-      initialDataLength: initialDataRef.current.length,
-      hasFormChanges,
-      currentTextContents: currentTextContents.substring(0, 200),
-      initialTextContents: initialTextContentsRef.current.substring(0, 200),
-      currentTextContentsLength: currentTextContents.length,
-      initialTextContentsLength: initialTextContentsRef.current.length,
-      hasContentChanges,
-      textContentsCount: textContents.length,
-      willSetUnsaved: hasFormChanges || hasContentChanges,
-      formDataKeys: Object.keys(formData),
-      formDataValues: formData
-    })
     
     if (hasFormChanges || hasContentChanges) {
       setHasUnsavedChanges(true)
@@ -649,7 +551,6 @@ export default function LectureEditPage() {
                         // For existing sub-lectures, create on server
                         try {
                           const newContent = await lecturesApi.createTextContent(currentLectureId, '', 'New Content Section')
-                          console.log('[EditPage] Created new content:', newContent)
                           if (newContent && newContent.id) {
                             setTextContents([...textContents, newContent])
                             toast({
@@ -657,11 +558,9 @@ export default function LectureEditPage() {
                               description: 'You can now edit the content.',
                             })
                           } else {
-                            console.error('[EditPage] Invalid response from createTextContent:', newContent)
                             throw new Error('Invalid response from server: content section was not created properly')
                           }
                         } catch (error) {
-                          console.error('[EditPage] Failed to create content section:', error)
                           toast({
                             variant: 'destructive',
                             title: 'Failed to create content section',
@@ -706,7 +605,6 @@ export default function LectureEditPage() {
                             onChange={(e) => {
                               // Only update if this is a TEXT content item
                               if (content.contentType !== 'TEXT') {
-                                console.warn(`Attempted to update title for non-TEXT content ${content.id} with type ${content.contentType}`)
                                 return
                               }
                               const newTitle = e.target.value
@@ -727,7 +625,6 @@ export default function LectureEditPage() {
                               onChange={(newContent) => {
                                 // Only update if this is a TEXT content item
                                 if (content.contentType !== 'TEXT') {
-                                  console.warn(`Attempted to update textContent for non-TEXT content ${content.id} with type ${content.contentType}`)
                                   return
                                 }
                                 const updatedContents = textContents.map(c =>
@@ -872,12 +769,6 @@ export default function LectureEditPage() {
                         setSelectedFileSize(file.size)
                         setUploadingFileSize(file.size)
                         setUploadProgress({ loaded: 0, total: file.size })
-                        console.log('[EditPage] Starting video upload:', {
-                          fileSize: file.size,
-                          fileName: file.name,
-                          currentLectureId,
-                          fileSizeMB: (file.size / (1024 * 1024)).toFixed(2) + ' MB'
-                        })
                         
                         // NOTE: Spring Boot's multipart resolver buffers the entire request before processing,
                         // so XMLHttpRequest progress events may not fire until buffering completes.
@@ -892,12 +783,6 @@ export default function LectureEditPage() {
                         const mbSize = file.size / (1024 * 1024)
                         const estimatedSecondsPerMB = 3 // Conservative estimate: 3 seconds per MB
                         const estimatedTotalTime = Math.max(30000, mbSize * estimatedSecondsPerMB * 1000) // Min 30 seconds
-                        
-                        console.log('[EditPage] Starting upload with time-based progress estimation:', {
-                          fileSizeMB: mbSize.toFixed(2),
-                          estimatedTimeSeconds: (estimatedTotalTime / 1000).toFixed(0),
-                          note: 'Spring Boot buffers request before processing, so using time-based estimation'
-                        })
                         
                         // Start fallback progress that gradually increases based on elapsed time
                         // This provides visual feedback during the buffering phase
@@ -933,11 +818,6 @@ export default function LectureEditPage() {
                             currentLectureId, 
                             file,
                             (progress) => {
-                              console.log('[EditPage] Real progress event received:', {
-                                loaded: progress.loaded,
-                                total: progress.total,
-                                percentage: ((progress.loaded / progress.total) * 100).toFixed(2) + '%'
-                              })
                               // Mark that real progress has started (XMLHttpRequest events are firing)
                               realProgressStarted = true
                               // Clear fallback interval when real progress starts
@@ -949,14 +829,12 @@ export default function LectureEditPage() {
                               // Check if client upload is complete (100%) - switch to processing phase
                               const isComplete = progress.loaded >= progress.total
                               if (isComplete && !isProcessing) {
-                                console.log('[EditPage] Client upload complete, switching to processing phase')
                                 setIsProcessing(true)
                               }
                               
                               setUploadProgress(progress)
                             }
                           )
-                          console.log('[EditPage] Upload completed, content received:', content)
                           uploadCompleted = true
                           // Clear fallback timeout on completion
                           if (fallbackProgressInterval) {
@@ -964,7 +842,6 @@ export default function LectureEditPage() {
                             fallbackProgressInterval = null
                           }
                           // Set to 100% on completion - ensure user sees completion
-                          console.log('[EditPage] Setting progress to 100% - upload complete')
                           setUploadProgress({ loaded: file.size, total: file.size })
                           setIsProcessing(false) // Processing complete
                           // Show 100% for a moment before clearing

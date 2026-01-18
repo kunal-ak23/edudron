@@ -73,7 +73,6 @@ public class FoundryAIService {
         }
         
         logger.info("Parsing course requirements from prompt (length: {} chars)", prompt != null ? prompt.length() : 0);
-        logger.debug("Prompt content: {}", prompt);
         
         String systemPrompt = """
             You are an expert course designer. Extract course requirements from the user's prompt and return a JSON object with the following structure:
@@ -103,7 +102,6 @@ public class FoundryAIService {
             // Extract JSON from response (handles conversational text)
             String jsonResponse = extractJsonFromResponse(response);
             
-            logger.debug("Parsing JSON response: {}", jsonResponse);
             JsonNode jsonNode = objectMapper.readTree(jsonResponse);
             CourseRequirements requirements = objectMapper.treeToValue(jsonNode, CourseRequirements.class);
             logger.info("Successfully parsed course requirements: title={}, modules={}, lecturesPerModule={}", 
@@ -592,10 +590,6 @@ public class FoundryAIService {
             throw new IllegalArgumentException("Response is null or empty");
         }
         
-        // Log the raw response for debugging
-        logger.debug("Raw AI response (first 500 chars): {}", 
-            response.length() > 500 ? response.substring(0, 500) + "..." : response);
-        
         // Step 1: Remove markdown code blocks
         response = response.trim();
         if (response.startsWith("```json")) {
@@ -653,13 +647,11 @@ public class FoundryAIService {
             logger.warn("Could not find matching closing bracket. Attempting to extract JSON from position {}", jsonStart);
             // Try to extract from jsonStart to end, or use the whole response
             String extracted = response.substring(jsonStart).trim();
-            logger.debug("Extracted JSON (partial): {}", extracted.length() > 500 ? extracted.substring(0, 500) + "..." : extracted);
             return extracted;
         }
         
         // Step 4: Extract the JSON portion
         String extracted = response.substring(jsonStart, jsonEnd).trim();
-        logger.debug("Extracted JSON (length: {} chars)", extracted.length());
         
         return extracted;
     }
@@ -678,42 +670,20 @@ public class FoundryAIService {
         // Some newer models (GPT-5.x, o1 series) only support default temperature (1.0)
         // Don't set temperature to avoid 400 errors - let API use default
         // If you need temperature control, it will be set in the retry logic if needed
-        logger.debug("Not setting temperature (using API default) to support newer models that only allow default value");
         
         // For newer models (GPT-5.x, o1 series), they require maxCompletionTokens instead of maxTokens
         // The Azure SDK 1.0.0-beta.8 may not have setMaxCompletionTokens method yet
         // Try to set it via reflection, otherwise don't set any token limit (let API use defaults)
-        boolean tokenLimitSet = false;
         try {
             // Try to use maxCompletionTokens for newer models via reflection
             java.lang.reflect.Method setMaxCompletionTokens = options.getClass().getMethod("setMaxCompletionTokens", Integer.class);
             setMaxCompletionTokens.invoke(options, 4000);
-            tokenLimitSet = true;
-            logger.debug("Using maxCompletionTokens (newer model format)");
         } catch (NoSuchMethodException e) {
             // Method doesn't exist in this SDK version
             // Don't set maxTokens to avoid 400 errors with newer models
             // The API will use default token limits
-            logger.debug("SDK doesn't support maxCompletionTokens method. Not setting token limit (API will use defaults).");
-            logger.debug("This prevents 400 errors with newer models that require max_completion_tokens.");
         } catch (Exception e) {
             logger.warn("Could not set maxCompletionTokens via reflection: {}", e.getMessage());
-        }
-        
-        logger.debug("Preparing OpenAI API call:");
-        logger.debug("  - Deployment: {}", deploymentName);
-        logger.debug("  - Messages count: {}", messages.size());
-        logger.debug("  - Temperature: Not set (using API default)");
-        if (tokenLimitSet) {
-            try {
-                java.lang.reflect.Method getMaxCompletionTokens = options.getClass().getMethod("getMaxCompletionTokens");
-                Integer maxCompletionTokens = (Integer) getMaxCompletionTokens.invoke(options);
-                logger.debug("  - Max completion tokens: {}", maxCompletionTokens);
-            } catch (Exception e) {
-                logger.debug("  - Max completion tokens: 4000 (set via reflection)");
-            }
-        } else {
-            logger.debug("  - Token limit: Not set (using API defaults)");
         }
         
         int maxRetries = 3;
@@ -786,7 +756,6 @@ public class FoundryAIService {
                         try {
                             java.lang.reflect.Method setMaxCompletionTokens = newOptions.getClass().getMethod("setMaxCompletionTokens", Integer.class);
                             setMaxCompletionTokens.invoke(newOptions, 4000);
-                            logger.debug("Set maxCompletionTokens for retry");
                         } catch (Exception ne) {
                             // Ignore - token limit not critical
                         }

@@ -30,7 +30,6 @@ export function getFontSize(): number {
 
     return fontSize
   } catch (error) {
-    console.warn('[FontSize] Error reading from localStorage:', error)
     return DEFAULT_FONT_SIZE
   }
 }
@@ -51,7 +50,6 @@ export function setFontSize(value: number): void {
     // Update CSS variable immediately
     document.documentElement.style.setProperty('--app-scale', clampedValue.toString())
   } catch (error) {
-    console.warn('[FontSize] Error saving to localStorage:', error)
   }
 }
 

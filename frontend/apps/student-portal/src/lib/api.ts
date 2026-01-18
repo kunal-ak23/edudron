@@ -7,7 +7,6 @@ let apiClientInstance: ApiClient | null = null
 
 export function getApiClient(): ApiClient {
   if (!apiClientInstance) {
-    console.log('[lib/api] Creating new ApiClient instance')
     apiClientInstance = new ApiClient(GATEWAY_URL)
   }
   return apiClientInstance

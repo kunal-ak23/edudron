@@ -52,7 +52,6 @@ export default function StudentsPage() {
         setStudents(students)
       } catch (roleError) {
         // Fallback to filtering all users if role endpoint doesn't work
-        console.warn('Role-specific endpoint failed, falling back to all users:', roleError)
         try {
           const allUsersResponse = await apiClient.get<Student[]>('/idp/users')
           const allUsers = allUsersResponse.data || []

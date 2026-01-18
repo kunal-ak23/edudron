@@ -75,7 +75,6 @@ export class TenantFeaturesApi {
       return response.data === true
     } catch (error) {
       // Default to false if call fails
-      console.warn('Failed to fetch student self-enrollment feature, defaulting to false:', error)
       return false
     }
   }

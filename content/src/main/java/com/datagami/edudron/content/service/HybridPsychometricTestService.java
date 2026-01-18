@@ -334,7 +334,6 @@ public class HybridPsychometricTestService {
                 
                 // For forced-choice questions, verify the personalized text aligns with options
                 if (question.getType() == Question.QuestionType.FORCED_CHOICE) {
-                    logger.debug("Forced-choice question personalized. Options remain: {}", question.getOptions());
                 }
                 
                 return personalized;

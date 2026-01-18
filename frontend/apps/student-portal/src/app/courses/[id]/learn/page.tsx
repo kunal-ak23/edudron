@@ -141,7 +141,6 @@ export default function LearnPage() {
         }
       }
     } catch (error) {
-      console.warn('[LearnPage] Error restoring position from localStorage:', error)
     }
     return { lecture: null, section: null }
   }, [courseId])
@@ -155,25 +154,16 @@ export default function LearnPage() {
         localStorage.removeItem(getStorageKey(courseId))
       }
     } catch (error) {
-      console.warn('[LearnPage] Error saving position to localStorage:', error)
     }
   }, [courseId])
 
   // Load feedback and notes for a lecture
   const loadFeedbackAndNotes = useCallback(async (lectureId: string) => {
     try {
-      console.log('[LearnPage] Loading feedback and notes for lecture:', lectureId)
       const [feedback, lectureNotes] = await Promise.all([
-        feedbackApi.getFeedback(lectureId).catch((err) => {
-          console.warn('[LearnPage] Failed to load feedback:', err)
-          return null
-        }),
-        notesApi.getNotesByLecture(lectureId).catch((err) => {
-          console.warn('[LearnPage] Failed to load notes:', err)
-          return []
-        })
+        feedbackApi.getFeedback(lectureId).catch(() => null),
+        notesApi.getNotesByLecture(lectureId).catch(() => [])
       ])
-      console.log('[LearnPage] Loaded notes:', lectureNotes.length, lectureNotes)
       setCurrentFeedback(feedback)
       // Merge with existing notes, replacing notes for this lecture
       setNotes(prevNotes => {
@@ -181,7 +171,6 @@ export default function LearnPage() {
         return [...otherNotes, ...lectureNotes]
       })
     } catch (error) {
-      console.error('[LearnPage] Failed to load feedback and notes:', error)
     }
   }, [])
 
@@ -196,22 +185,18 @@ export default function LearnPage() {
 
   const loadCourseData = useCallback(async () => {
     try {
-      console.log('[LearnPage] Loading course data for courseId:', courseId)
       setLoading(true)
       
       let courseData: Course | null = null
       try {
         courseData = await coursesApi.getCourse(courseId)
-        console.log('[LearnPage] Course loaded successfully:', courseData ? { id: courseData.id, title: courseData.title } : 'null')
       } catch (error: any) {
-        console.error('[LearnPage] Failed to load course:', error)
         setCourse(null)
         setLoading(false)
         return
       }
       
       if (!courseData) {
-        console.error('[LearnPage] Course data is null after successful API call')
         setCourse(null)
         setLoading(false)
         return
@@ -224,55 +209,34 @@ export default function LearnPage() {
       let lectureProgressData: any[] = []
       
       try {
-        const fetchedSections = await coursesApi.getChapters(courseId).catch((error) => {
-          console.warn('[LearnPage] Failed to load chapters:', error)
-          return []
-        })
+        const fetchedSections = await coursesApi.getChapters(courseId).catch(() => [])
         sectionsData = await Promise.all(
           fetchedSections.map(async (section: any) => {
             try {
               const subLectures = await lecturesApi.getSubLecturesByLecture(courseId, section.id)
               return { ...section, lectures: subLectures }
             } catch (error) {
-              console.warn(`[LearnPage] Failed to load sub-lectures for section ${section.id}:`, error)
               return { ...section, lectures: [] }
             }
           })
         )
       } catch (error) {
-        console.warn('[LearnPage] Error loading chapters or sub-lectures:', error)
       }
       
       try {
-        progressData = await enrollmentsApi.getProgress(courseId).catch((error) => {
-          console.warn('[LearnPage] Failed to load progress:', error)
-          return null
-        })
+        progressData = await enrollmentsApi.getProgress(courseId).catch(() => null)
       } catch (error) {
-        console.warn('[LearnPage] Error loading progress:', error)
       }
       
       try {
         if (enrollmentsApi && typeof enrollmentsApi.getLectureProgress === 'function') {
-          lectureProgressData = await enrollmentsApi.getLectureProgress(courseId).catch((error) => {
-            console.warn('[LearnPage] Failed to load lecture progress:', error)
-            return []
-          })
+          lectureProgressData = await enrollmentsApi.getLectureProgress(courseId).catch(() => [])
         } else {
-          console.warn('[LearnPage] getLectureProgress method not available on enrollmentsApi')
           lectureProgressData = []
         }
       } catch (error) {
-        console.warn('[LearnPage] Error loading lecture progress:', error)
         lectureProgressData = []
       }
-      
-      console.log('[LearnPage] All data loaded:', {
-        course: { id: courseData.id, title: courseData.title },
-        sectionsCount: sectionsData?.length || 0,
-        hasProgress: !!progressData,
-        lectureProgressCount: lectureProgressData?.length || 0
-      })
       
       setSections(sectionsData as any)
       setProgress(progressData)
@@ -291,7 +255,6 @@ export default function LearnPage() {
         if (requestedLectureId) {
           const requestedLecture = findLectureById(sectionsData, requestedLectureId)
           if (requestedLecture) {
-            console.log('[LearnPage] Opening requested lecture from URL:', requestedLecture.id)
             setSelectedLecture(requestedLecture)
             setSelectedSection(null)
             return
@@ -313,21 +276,18 @@ export default function LearnPage() {
 
         if (restoredLecture) {
           // Restore the last accessed lecture
-          console.log('[LearnPage] Restoring last accessed lecture:', restoredLecture.id)
           setSelectedLecture(restoredLecture)
           setSelectedSection(null)
         } else {
           // Default to first section if no progress found
           const firstSection = sectionsData[0] as any
           if (firstSection.lectures && firstSection.lectures.length > 0) {
-            console.log('[LearnPage] No previous progress found, showing first module')
             setSelectedSection(firstSection)
             setSelectedLecture(null)
           }
         }
       }
     } catch (error) {
-      console.error('[LearnPage] Unexpected error loading course data:', error)
       setCourse(null)
     } finally {
       setLoading(false)
@@ -476,9 +436,7 @@ export default function LearnPage() {
       enrollmentsApi.updateProgress(courseId, {
         lectureId: selectedLecture.id,
         progressPercentage: completedLectures.has(selectedLecture.id) ? 100 : 0
-      }).catch((error) => {
-        console.warn('[LearnPage] Failed to update progress for last accessed position:', error)
-      })
+      }).catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLecture, courseId, savePositionToStorage])
@@ -494,7 +452,6 @@ export default function LearnPage() {
       )
       setAttachments(attachmentItems)
     } catch (error) {
-      console.error('[LearnPage] Failed to load attachments:', error)
       setAttachments([])
     } finally {
       setLoadingAttachments(false)
@@ -504,7 +461,6 @@ export default function LearnPage() {
   // Load feedback and notes whenever selectedLecture changes
   useEffect(() => {
     if (selectedLecture?.id) {
-      console.log('[LearnPage] selectedLecture changed, loading notes for:', selectedLecture.id)
       loadFeedbackAndNotes(selectedLecture.id)
       loadAttachments(selectedLecture.id)
     } else {
@@ -565,7 +521,6 @@ export default function LearnPage() {
             setLoadingTranscript(false)
           })
           .catch(err => {
-            console.error('Failed to load transcript:', err)
             setTranscriptText(null)
             setLoadingTranscript(false)
           })
@@ -619,7 +574,6 @@ export default function LearnPage() {
       })
       setCurrentFeedback(feedback)
     } catch (error) {
-      console.error('Failed to submit feedback:', error)
       throw error
     }
   }
@@ -636,7 +590,6 @@ export default function LearnPage() {
         description
       })
     } catch (error) {
-      console.error('Failed to report issue:', error)
       throw error
     }
   }
@@ -657,7 +610,6 @@ export default function LearnPage() {
       // Reload all notes for this lecture to ensure we have the latest data
       await loadFeedbackAndNotes(selectedLecture.id)
     } catch (error) {
-      console.error('Failed to save note:', error)
       throw error
     }
   }
@@ -680,7 +632,6 @@ export default function LearnPage() {
       // Reload notes to ensure consistency
       await loadFeedbackAndNotes(selectedLecture.id)
     } catch (error) {
-      console.error('Failed to update note:', error)
       throw error
     }
   }
@@ -693,7 +644,6 @@ export default function LearnPage() {
       // Reload notes to ensure consistency
       await loadFeedbackAndNotes(selectedLecture.id)
     } catch (error) {
-      console.error('Failed to delete note:', error)
       throw error
     }
   }
@@ -743,7 +693,6 @@ export default function LearnPage() {
       try {
         updatedProgress = await enrollmentsApi.getProgress(courseId).catch(() => null)
       } catch (error) {
-        console.warn('[LearnPage] Error reloading progress:', error)
       }
       
       try {
@@ -751,7 +700,6 @@ export default function LearnPage() {
           updatedLectureProgress = await enrollmentsApi.getLectureProgress(courseId).catch(() => [])
         }
       } catch (error) {
-        console.warn('[LearnPage] Error reloading lecture progress:', error)
       }
       
       setProgress(updatedProgress)
@@ -764,7 +712,6 @@ export default function LearnPage() {
       })
       setCompletedLectures(completed)
     } catch (error) {
-      console.error('Failed to update lecture completion:', error)
       // Revert to previous state on error
       const reverted = new Set(completedLectures)
       if (isCompleted) {

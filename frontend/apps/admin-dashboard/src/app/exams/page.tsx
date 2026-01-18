@@ -33,9 +33,6 @@ export default function ExamsPage() {
     try {
       setLoading(true)
       const response = await apiClient.get<Exam[]>('/api/exams')
-      console.log('Exams API response:', response)
-      console.log('Response type:', typeof response)
-      console.log('Is array:', Array.isArray(response))
       
       // Handle different response formats
       let examsData: Exam[] = []
@@ -50,7 +47,6 @@ export default function ExamsPage() {
         } else if (response !== null && response !== undefined) {
           // If response is an object but not an array, try to extract array from common properties
           const keys = Object.keys(response)
-          console.log('Response keys:', keys)
           for (const key of keys) {
             if (Array.isArray((response as any)[key])) {
               examsData = (response as any)[key]
@@ -68,8 +64,6 @@ export default function ExamsPage() {
         createdAt: exam.createdAt || new Date().toISOString()
       }))
       
-      console.log('Processed exams data:', examsData)
-      console.log('Exams count:', examsData.length)
       setExams(examsData)
     } catch (error) {
       console.error('Failed to load exams:', error)

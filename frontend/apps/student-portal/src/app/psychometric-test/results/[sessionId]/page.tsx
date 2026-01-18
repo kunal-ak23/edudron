@@ -49,10 +49,6 @@ export default function PsychometricTestResultsPage() {
 
       const response = await apiClient.get(`/api/psychometric-test/results/${sessionId}`)
 
-      console.log('Load results response:', response)
-      console.log('Response type:', typeof response)
-      console.log('Response keys:', Object.keys(response || {}))
-
       // Handle different response structures - ApiClient might return data directly or wrapped
       let resultData: any = null
       let status: number | undefined = undefined
@@ -72,9 +68,6 @@ export default function PsychometricTestResultsPage() {
         resultData = response
         status = 200 // Assume success if no status provided
       }
-
-      console.log('Extracted result data:', resultData)
-      console.log('Extracted status:', status)
 
       // Check if we have valid result data (has id property)
       if (resultData && resultData.id) {
@@ -106,16 +99,6 @@ export default function PsychometricTestResultsPage() {
           })
         }
 
-        console.log('Setting result with data:', {
-          id: resultData.id,
-          sessionId: resultData.sessionId,
-          primaryField: resultData.primaryField,
-          secondaryFields,
-          fieldScores,
-          recommendations,
-          testSummary: resultData.testSummary
-        })
-
         setResult({
           id: resultData.id,
           sessionId: resultData.sessionId,
@@ -127,7 +110,6 @@ export default function PsychometricTestResultsPage() {
           createdAt: resultData.createdAt
         })
       } else {
-        console.warn('Invalid response structure. Status:', status, 'Data:', resultData)
         if (status === 404) {
           setError('Test results not found.')
         } else {

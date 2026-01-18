@@ -120,7 +120,6 @@ export function clearRenderedHighlights(root: Node): void {
         parent.normalize()
       } catch (e) {
         // Node might have already been removed
-        console.warn('Failed to clear highlight, node may have been removed:', e)
       }
     }
   })
@@ -387,7 +386,6 @@ export function renderHighlights(
       } catch (e) {
         // If replaceChild fails, the node might have already been replaced
         // This can happen if multiple highlights affect the same area
-        console.warn('Failed to replace text node, it may have already been modified:', e)
       }
     }
   })

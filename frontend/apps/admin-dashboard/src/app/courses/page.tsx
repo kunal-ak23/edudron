@@ -91,37 +91,11 @@ export default function CoursesPage() {
 
   const loadCourses = useCallback(async () => {
     try {
-      console.log('[CoursesPage] Starting to load courses...')
-      console.log('[CoursesPage] coursesApi:', coursesApi)
-      console.log('[CoursesPage] coursesApi.listCourses:', coursesApi.listCourses)
-      
-      // Make the API call and log the raw response
-      console.log('[CoursesPage] Calling coursesApi.listCourses()...')
       const data = await coursesApi.listCourses()
-      
-      console.log('[CoursesPage] ✅ API call completed')
-      console.log('[CoursesPage] Received data from API:', data)
-      console.log('[CoursesPage] Data type:', typeof data)
-      console.log('[CoursesPage] Is array?:', Array.isArray(data))
-      console.log('[CoursesPage] Data length:', Array.isArray(data) ? data.length : 'N/A')
-      console.log('[CoursesPage] Full data:', JSON.stringify(data, null, 2))
-      
-      if (!Array.isArray(data)) {
-        console.error('[CoursesPage] ❌ Data is not an array! Type:', typeof data, 'Value:', data)
-      }
       
       setCourses(data)
       setFilteredCourses(data)
-      console.log('[CoursesPage] ✅ State updated - courses:', data.length, 'filteredCourses:', data.length)
     } catch (error) {
-      console.error('[CoursesPage] ❌ Failed to load courses:', error)
-      console.error('[CoursesPage] Error type:', error?.constructor?.name)
-      console.error('[CoursesPage] Error details:', {
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        response: (error as any)?.response?.data,
-        fullError: error
-      })
       toast({
         variant: 'destructive',
         title: 'Failed to load courses',
@@ -129,40 +103,29 @@ export default function CoursesPage() {
       })
     } finally {
       setLoading(false)
-      console.log('[CoursesPage] Loading finished')
     }
   }, [toast])
 
   const filterCourses = useCallback(() => {
-    console.log('[CoursesPage.filterCourses] Starting filter - courses:', courses.length)
     let filtered = [...courses]
-    console.log('[CoursesPage.filterCourses] Initial filtered count:', filtered.length)
 
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      console.log('[CoursesPage.filterCourses] Applying search filter:', query)
       filtered = filtered.filter(
         (course) =>
           course.title.toLowerCase().includes(query) ||
           course.description?.toLowerCase().includes(query)
       )
-      console.log('[CoursesPage.filterCourses] After search filter:', filtered.length)
     }
 
     // Status filter
     if (statusFilter === 'published') {
-      console.log('[CoursesPage.filterCourses] Applying published filter')
       filtered = filtered.filter((course) => course.isPublished)
-      console.log('[CoursesPage.filterCourses] After published filter:', filtered.length)
     } else if (statusFilter === 'draft') {
-      console.log('[CoursesPage.filterCourses] Applying draft filter')
       filtered = filtered.filter((course) => !course.isPublished)
-      console.log('[CoursesPage.filterCourses] After draft filter:', filtered.length)
     }
 
-    console.log('[CoursesPage.filterCourses] Final filtered count:', filtered.length)
-    console.log('[CoursesPage.filterCourses] Filtered courses:', filtered.map(c => ({ id: c.id, title: c.title, isPublished: c.isPublished })))
     setFilteredCourses(filtered)
   }, [courses, searchQuery, statusFilter])
 
@@ -171,7 +134,6 @@ export default function CoursesPage() {
   }, [loadCourses])
 
   useEffect(() => {
-    console.log('[CoursesPage] Filtering courses - courses:', courses.length, 'searchQuery:', searchQuery, 'statusFilter:', statusFilter)
     filterCourses()
   }, [courses, searchQuery, statusFilter, filterCourses])
 
@@ -194,7 +156,6 @@ export default function CoursesPage() {
       setShowDeleteDialog(false)
       setCourseToDelete(null)
     } catch (error) {
-      console.error('Failed to delete course:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to delete course',

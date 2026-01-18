@@ -58,7 +58,6 @@ export default function CourseDetailPage() {
           const enabled = await tenantFeaturesApi.isStudentSelfEnrollmentEnabled()
           setSelfEnrollmentEnabled(enabled)
         } catch (error) {
-          console.error('Failed to check self-enrollment feature:', error)
           // Default to false if check fails
           setSelfEnrollmentEnabled(false)
         }
@@ -77,14 +76,6 @@ export default function CourseDetailPage() {
         coursesApi.getChapters(courseId).catch(() => [])
       ])
       setCourse(courseData)
-      // Debug: verify what format we receive from the API (markdown vs HTML/rich text)
-      if (typeof window !== 'undefined') {
-        const description = (courseData as any)?.description
-        const looksLikeHtml = typeof description === 'string' && /<\/?[a-z][\s\S]*>/i.test(description)
-        console.log('[CourseDetailPage] course.description (raw):', description)
-        console.log('[CourseDetailPage] course.description length:', typeof description === 'string' ? description.length : null)
-        console.log('[CourseDetailPage] course.description looksLikeHtml:', looksLikeHtml)
-      }
       
       // Load sub-lectures for each section
       if (sectionsData && sectionsData.length > 0) {
@@ -94,7 +85,6 @@ export default function CourseDetailPage() {
               const lectures = await lecturesApi.getSubLecturesByLecture(courseId, section.id)
               return { ...section, lectures }
             } catch (error) {
-              console.warn(`Failed to load sub-lectures for section ${section.id}:`, error)
               return { ...section, lectures: [] }
             }
           })
@@ -116,7 +106,6 @@ export default function CourseDetailPage() {
           // Check enrollment status first
           isEnrolled = await enrollmentsApi.checkEnrollment(courseId)
         } catch (error: any) {
-          console.warn('Failed to check enrollment status:', error)
           // If check fails, assume not enrolled
           isEnrolled = false
         }
@@ -142,7 +131,6 @@ export default function CourseDetailPage() {
             setCompletedLectures(completed)
           }
         } catch (error) {
-          console.warn('Failed to load lecture progress:', error)
           setCompletedLectures(new Set())
         }
       } else {
@@ -150,7 +138,6 @@ export default function CourseDetailPage() {
         setCompletedLectures(new Set())
       }
     } catch (error) {
-      console.error('Failed to load course:', error)
     } finally {
       setLoading(false)
     }
@@ -193,7 +180,6 @@ export default function CourseDetailPage() {
       }
       
       // Show error - you may want to add toast here if available
-      console.error('Failed to enroll:', errorMessage)
     }
   }
 

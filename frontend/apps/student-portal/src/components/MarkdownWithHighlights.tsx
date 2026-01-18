@@ -690,7 +690,6 @@ export function MarkdownWithHighlights({
               parent.normalize()
             } catch (e) {
               // Node may have already been removed
-              console.warn('[MarkdownWithHighlights] Failed to remove highlight:', e)
             }
           }
         })
@@ -760,7 +759,6 @@ export function MarkdownWithHighlights({
                 return // Skip this highlight - it's not a good match
               }
             } catch (e) {
-              console.warn('[MarkdownWithHighlights] Failed to create range:', e)
               return
             }
           } else {
@@ -780,7 +778,6 @@ export function MarkdownWithHighlights({
                 return // Skip this highlight - it's not a good match
               }
             } catch (e) {
-              console.warn('[MarkdownWithHighlights] Failed to create multi-node range:', e)
               return
             }
           }
@@ -801,7 +798,6 @@ export function MarkdownWithHighlights({
 
           // Validate range is still valid before manipulating
           if (!range.startContainer.parentNode || !range.endContainer.parentNode) {
-            console.warn('[MarkdownWithHighlights] Range containers are no longer in DOM')
             return
           }
 
@@ -809,7 +805,6 @@ export function MarkdownWithHighlights({
           try {
             range.toString() // This will throw if range is invalid
           } catch (e) {
-            console.warn('[MarkdownWithHighlights] Range is invalid:', e)
             return
           }
 
@@ -850,7 +845,6 @@ export function MarkdownWithHighlights({
               }
               
               if (textNodes.length === 0) {
-                console.warn('[MarkdownWithHighlights] No text nodes found in range')
                 return
               }
               
@@ -913,7 +907,6 @@ export function MarkdownWithHighlights({
                     continue // Invalid offsets
                   }
                 } catch (e) {
-                  console.warn('[MarkdownWithHighlights] Error calculating offsets for text node:', e)
                   continue
                 }
                 const text = textNode.textContent || ''
@@ -950,12 +943,10 @@ export function MarkdownWithHighlights({
                 
                 // Verify node is still in the DOM and has a valid parent
                 if (!node.parentNode) {
-                  console.warn('[MarkdownWithHighlights] Node has no parent, skipping')
                   continue
                 }
                 
                 if (!node.isConnected) {
-                  console.warn('[MarkdownWithHighlights] Node not connected, skipping')
                   continue
                 }
                 
@@ -963,13 +954,11 @@ export function MarkdownWithHighlights({
                 
                 // Double-check parent still contains this node
                 if (!parent.contains(node)) {
-                  console.warn('[MarkdownWithHighlights] Node no longer in parent, skipping')
                   continue
                 }
                 
                 // Verify parent is still in the document
                 if (!parent.isConnected) {
-                  console.warn('[MarkdownWithHighlights] Parent not connected, skipping')
                   continue
                 }
                 
@@ -977,7 +966,6 @@ export function MarkdownWithHighlights({
                   parent.replaceChild(fragment, node)
                 } catch (e) {
                   // If replaceChild fails, the node might have been removed by React
-                  console.warn('[MarkdownWithHighlights] Failed to replace text node (may have been removed by React):', e)
                   // Continue with next replacement instead of breaking
                   continue
                 }
@@ -998,7 +986,6 @@ export function MarkdownWithHighlights({
               }, 0)
             }
           } catch (e) {
-            console.warn('[MarkdownWithHighlights] Failed to apply highlight for note:', note.id, e)
             return
           }
 

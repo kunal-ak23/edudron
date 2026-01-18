@@ -101,10 +101,6 @@ public class VideoProcessingService {
                 throw new IOException("ffmpeg did not produce a valid output file");
             }
 
-            System.out.println("Video processed successfully: " + inputFile.getName() + 
-                             " -> " + outputFile.getName() + 
-                             " (Size: " + formatFileSize(outputFile.length()) + ")");
-
             return outputFile;
 
         } catch (Exception e) {
@@ -135,13 +131,4 @@ public class VideoProcessingService {
         }
     }
 
-    /**
-     * Format file size for logging.
-     */
-    private String formatFileSize(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        if (bytes < 1024 * 1024) return (bytes / 1024) + " KB";
-        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)) + " MB";
-        return (bytes / (1024L * 1024 * 1024)) + " GB";
-    }
 }

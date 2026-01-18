@@ -46,10 +46,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 username = jwtUtil.extractUsername(jwt);
             } catch (ExpiredJwtException e) {
-                if (logger.isDebugEnabled()) {
-                    logger.debug("JWT token expired for request to " + request.getRequestURI() + 
-                        ": expired at " + e.getClaims().getExpiration());
-                }
                 tokenExpired = true;
             } catch (JwtException | IllegalArgumentException e) {
                 logger.warn("JWT token validation failed for request to " + request.getRequestURI() + 
@@ -82,14 +78,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     String tenantFromToken = jwtUtil.extractTenantId(jwt);
                     if (tenantFromToken != null && !tenantFromToken.isBlank()) {
                         TenantContext.setClientId(tenantFromToken);
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("Set tenant context from JWT token: " + tenantFromToken);
-                        }
                     }
                 } catch (Exception e) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("Could not extract tenant from JWT token: " + e.getMessage());
-                    }
                 }
             }
 

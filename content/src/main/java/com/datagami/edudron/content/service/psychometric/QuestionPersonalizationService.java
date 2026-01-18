@@ -138,7 +138,6 @@ public class QuestionPersonalizationService {
         
         try {
             logger.info("🤖 Calling AI to personalize question: '{}'", originalText);
-            logger.debug("Context sent to AI: {}", context.toString());
             
             String personalized = foundryAIService.callOpenAI(systemPrompt, context.toString());
             logger.info("🤖 AI response received, length: {}", personalized != null ? personalized.length() : 0);
@@ -171,7 +170,6 @@ public class QuestionPersonalizationService {
         
         // Fallback: at least remove research words and make conversational
         String fallback = removeResearchWords(originalText);
-        logger.debug("Using fallback personalization: {} -> {}", originalText, fallback);
         return fallback;
     }
     

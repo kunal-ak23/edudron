@@ -52,7 +52,6 @@ export function StudentLayout({ children }: StudentLayoutProps) {
           setTenantLogo(null)
         }
       } catch (error) {
-        console.warn('[StudentLayout] Failed to load tenant info:', error)
         setTenantName('EduDron')
         setTenantLogo(null)
       }
