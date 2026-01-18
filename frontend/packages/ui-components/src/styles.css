@@ -1,0 +1,8 @@
+/* Precompiled Tailwind styles for this component library.
+ *
+ * We intentionally omit `@tailwind base` to avoid shipping a second preflight/reset
+ * into consuming apps. Apps can still override component styles via their own CSS.
+ */
+@tailwind components;
+@tailwind utilities;
+

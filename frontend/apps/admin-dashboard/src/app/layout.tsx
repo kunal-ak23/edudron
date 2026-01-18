@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import '@kunal-ak23/edudron-ui-components/styles.css'
 import './globals.css'
 import { Providers } from './providers'
 import { ConditionalLayout } from '@/components/ConditionalLayout'
