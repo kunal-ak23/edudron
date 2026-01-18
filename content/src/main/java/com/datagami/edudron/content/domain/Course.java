@@ -24,6 +24,10 @@ public class Course {
     @Column(nullable = false)
     private Boolean isPublished = false;
 
+    // Curation (for recommendations)
+    @Column(nullable = false)
+    private Boolean isActive = true;
+
     // Metadata
     private String thumbnailUrl;
     private String previewVideoUrl;
@@ -39,6 +43,12 @@ public class Course {
     private String categoryId;
     @Column(columnDefinition = "text[]")
     private List<String> tags = new ArrayList<>();
+    @Column(name = "stream_tags", columnDefinition = "text[]")
+    private List<String> streamTags = new ArrayList<>();
+    @Column(name = "riasec_tags", columnDefinition = "text[]")
+    private List<String> riasecTags = new ArrayList<>();
+    @Column(name = "skill_tags", columnDefinition = "text[]")
+    private List<String> skillTags = new ArrayList<>();
     @Column(length = 20)
     private String difficultyLevel;
     @Column(length = 10)
@@ -122,6 +132,9 @@ public class Course {
         }
     }
 
+    public Boolean getIsActive() { return isActive; }
+    public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
     public String getThumbnailUrl() { return thumbnailUrl; }
     public void setThumbnailUrl(String thumbnailUrl) { this.thumbnailUrl = thumbnailUrl; }
 
@@ -142,6 +155,15 @@ public class Course {
 
     public List<String> getTags() { return tags; }
     public void setTags(List<String> tags) { this.tags = tags; }
+
+    public List<String> getStreamTags() { return streamTags; }
+    public void setStreamTags(List<String> streamTags) { this.streamTags = streamTags; }
+
+    public List<String> getRiasecTags() { return riasecTags; }
+    public void setRiasecTags(List<String> riasecTags) { this.riasecTags = riasecTags; }
+
+    public List<String> getSkillTags() { return skillTags; }
+    public void setSkillTags(List<String> skillTags) { this.skillTags = skillTags; }
 
     public String getDifficultyLevel() { return difficultyLevel; }
     public void setDifficultyLevel(String difficultyLevel) { this.difficultyLevel = difficultyLevel; }

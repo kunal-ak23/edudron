@@ -65,6 +65,10 @@ public class FoundryAIService {
             logger.warn("⚠️  If you get 404 errors, verify the deployment name '{}' exists in Azure AI Studio", deploymentName);
         }
     }
+
+    public boolean isConfigured() {
+        return client != null;
+    }
     
     public CourseRequirements parseCourseRequirements(String prompt) {
         if (client == null) {

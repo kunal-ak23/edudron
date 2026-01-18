@@ -60,6 +60,29 @@ public interface CourseRepository extends JpaRepository<Course, String> {
            "AND c.is_published = true " +
            "AND :classId = ANY(c.assigned_to_class_ids)", nativeQuery = true)
     List<Course> findPublishedCoursesByClassId(@Param("clientId") UUID clientId, @Param("classId") String classId);
+
+    // Curated recommendations (psych test v2)
+    @Query(value = "SELECT * FROM content.courses c WHERE c.client_id = :clientId " +
+            "AND c.is_published = true AND COALESCE(c.is_active, true) = true " +
+            "AND (:streamTag IS NULL OR :streamTag = ANY(COALESCE(c.stream_tags, '{}'))) " +
+            "AND (:riasecTag IS NULL OR :riasecTag = ANY(COALESCE(c.riasec_tags, '{}'))) " +
+            "ORDER BY c.updated_at DESC LIMIT :limit", nativeQuery = true)
+    List<Course> findCuratedByStreamAndRiasec(
+            @Param("clientId") UUID clientId,
+            @Param("streamTag") String streamTag,
+            @Param("riasecTag") String riasecTag,
+            @Param("limit") int limit
+    );
+
+    @Query(value = "SELECT * FROM content.courses c WHERE c.client_id = :clientId " +
+            "AND c.is_published = true AND COALESCE(c.is_active, true) = true " +
+            "AND (:skillTag IS NULL OR :skillTag = ANY(COALESCE(c.skill_tags, '{}'))) " +
+            "ORDER BY c.updated_at DESC LIMIT :limit", nativeQuery = true)
+    List<Course> findCuratedBySkill(
+            @Param("clientId") UUID clientId,
+            @Param("skillTag") String skillTag,
+            @Param("limit") int limit
+    );
     
     // Count by tenant
     long countByClientId(UUID clientId);
