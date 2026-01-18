@@ -17,30 +17,39 @@ async function addEmailWatermarkToPdf(pdfBytes: Uint8Array, email: string) {
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
-  const text = email.trim().slice(0, 200);
+  // Prevent PDF viewers from auto-linking as `mailto:` using ASCII-only text
+  // (Helvetica in pdf-lib is WinAnsi and cannot encode zero-width chars).
+  const text = email
+    .trim()
+    .slice(0, 200)
+    .replace(/@/g, " [at] ")
+    .replace(/\./g, " [dot] ");
 
   for (const page of pdfDoc.getPages()) {
     const { width, height } = page.getSize();
-    const fontSize = Math.max(14, Math.min(width, height) / 18);
+    // Smaller font, more repetition
+    const fontSize = Math.min(12, Math.max(8, Math.min(width, height) / 70));
     const textWidth = font.widthOfTextAtSize(text, fontSize);
 
-    // Tile the watermark across the entire page (diagonal)
-    const stepX = Math.max(120, textWidth + 140);
-    const stepY = Math.max(120, fontSize * 4);
-    const angle = degrees(-35);
+    // Dense tiling across the entire page, with two angles to survive cropping
+    const stepX = Math.max(60, textWidth + 24);
+    const stepY = Math.max(38, fontSize * 2.6);
+    const angles = [degrees(-35), degrees(35)];
 
-    for (let y = -height; y < height * 2; y += stepY) {
-      const rowOffset = (Math.floor(y / stepY) % 2) * (stepX / 2);
-      for (let x = -width; x < width * 2; x += stepX) {
-        page.drawText(text, {
-          x: x + rowOffset,
-          y,
-          size: fontSize,
-          font,
-          color: rgb(0.55, 0.55, 0.55),
-          rotate: angle,
-          opacity: 0.12,
-        });
+    for (const angle of angles) {
+      for (let y = -height; y < height * 2; y += stepY) {
+        const rowOffset = (Math.floor(y / stepY) % 2) * (stepX / 2);
+        for (let x = -width; x < width * 2; x += stepX) {
+          page.drawText(text, {
+            x: x + rowOffset,
+            y,
+            size: fontSize,
+            font,
+            color: rgb(0.5, 0.5, 0.5),
+            rotate: angle,
+            opacity: 0.12,
+          });
+        }
       }
     }
   }
