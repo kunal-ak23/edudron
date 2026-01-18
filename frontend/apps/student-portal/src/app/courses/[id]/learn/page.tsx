@@ -63,6 +63,28 @@ export default function LearnPage() {
   // Helper function to get localStorage key for course position
   const getStorageKey = (courseId: string) => `course_position_${courseId}`
 
+  // Extract blob path from either a full Azure blob URL or a blob path
+  const extractBlobName = (fileUrl?: string): string | null => {
+    if (!fileUrl) return null
+    try {
+      const url = new URL(fileUrl)
+      const parts = url.pathname.split('/').filter(Boolean)
+      // Azure blob URLs: /<container>/<blobPath>
+      if (parts.length >= 2) return parts.slice(1).join('/')
+      return parts[0] ?? null
+    } catch {
+      return fileUrl.replace(/^\/+/, '') || null
+    }
+  }
+
+  const buildWatermarkedPdfUrl = (fileUrl?: string) => {
+    const blob = extractBlobName(fileUrl)
+    const email = (user as any)?.email as string | undefined
+    if (!blob || !email) return null
+    const params = new URLSearchParams({ blob, email })
+    return `/api/pdf?${params.toString()}`
+  }
+
   // Helper function to find last accessed lecture from progress data
   const findLastAccessedLecture = (lectureProgressData: any[], sectionsData: any[]): Lecture | null => {
     if (!lectureProgressData || lectureProgressData.length === 0 || !sectionsData || sectionsData.length === 0) {
@@ -1146,9 +1168,9 @@ export default function LearnPage() {
                                     <div
                                       key={attachment.id}
                                       onClick={() => {
-                                        if (fileUrl) {
-                                          window.open(fileUrl, '_blank', 'noopener,noreferrer')
-                                        }
+                                        if (!fileUrl) return
+                                        const watermarkedUrl = isPDF ? buildWatermarkedPdfUrl(fileUrl) : null
+                                        window.open(watermarkedUrl || fileUrl, '_blank', 'noopener,noreferrer')
                                       }}
                                       className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors"
                                     >
@@ -1414,9 +1436,9 @@ export default function LearnPage() {
                                       <div
                                         key={attachment.id}
                                         onClick={() => {
-                                          if (fileUrl) {
-                                            window.open(fileUrl, '_blank', 'noopener,noreferrer')
-                                          }
+                                          if (!fileUrl) return
+                                          const watermarkedUrl = isPDF ? buildWatermarkedPdfUrl(fileUrl) : null
+                                          window.open(watermarkedUrl || fileUrl, '_blank', 'noopener,noreferrer')
                                         }}
                                         className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors"
                                       >
