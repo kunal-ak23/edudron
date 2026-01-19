@@ -12,7 +12,7 @@ function WelcomeIllustration({ className }: { className?: string }) {
       src="/login-rafiki.svg"
       alt=""
       aria-hidden="true"
-      className={className ?? 'w-full'}
+      className={className ?? 'w-full h-auto'}
     />
   )
 }
@@ -84,12 +84,12 @@ export default function LoginPage() {
         <div className="w-full max-w-6xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             {/* Left illustration panel (desktop) */}
-            <div className="hidden lg:block">
+            <div className="hidden lg:flex flex-col items-center text-center">
               <div className="text-2xl font-extrabold tracking-tight text-gray-900">
                 EduDron
               </div>
 
-              <div className="max-w-xl">
+              <div className="mt-6 w-full max-w-xl flex justify-center">
                 <WelcomeIllustration className="w-full max-w-[520px]" />
               </div>
 
