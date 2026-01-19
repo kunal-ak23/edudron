@@ -380,12 +380,9 @@ public class SessionService {
             sessionRepository.save(session);
         }
 
-        // Deterministic option personalization (LIKERT)
+        // Deterministic option labels baseline (LIKERT): ensures stable scale even if AI fails.
         if (q.getType() == PsychTestQuestion.Type.LIKERT) {
-            for (Map<String, Object> o : renderedOptions) {
-                Integer v = (o.get("value") instanceof Number n) ? n.intValue() : null;
-                o.put("label", friendlyLikertLabel(v));
-            }
+            applyLikertScaleLabels(renderedOptions);
         }
 
         // AI enhancement (rewrite prompt + option labels) if configured.
@@ -415,20 +412,32 @@ public class SessionService {
                 prompt = pq.prompt();
                 source = "AI";
 
-                // For LIKERT, keep our neutral deterministic labels (avoid awkward "that's me" style).
-                // For other types, allow AI to rephrase option labels.
-                if (q.getType() != PsychTestQuestion.Type.LIKERT
-                    && pq.optionLabelsById() != null && !pq.optionLabelsById().isEmpty()) {
+                // Allow AI to rephrase option labels for all types (including LIKERT),
+                // but only if it returns valid labels for existing option ids.
+                if (pq.optionLabelsById() != null && !pq.optionLabelsById().isEmpty()) {
                     Set<String> allowedOptionIds = renderedOptions.stream()
                         .map(o -> (String) o.get("id"))
                         .filter(v -> v != null && !v.isBlank())
                         .collect(Collectors.toSet());
+
+                    int applied = 0;
                     for (Map<String, Object> o : renderedOptions) {
                         String id = (String) o.get("id");
                         String lbl = pq.optionLabelsById().get(id);
-                        if (allowedOptionIds.contains(id) && lbl != null && !lbl.isBlank()) {
-                            o.put("label", lbl);
-                        }
+                        if (!allowedOptionIds.contains(id)) continue;
+                        if (lbl == null) continue;
+                        String cleaned = lbl.trim().replaceAll("\\s+", " ");
+                        if (cleaned.isBlank()) continue;
+                        if (cleaned.length() > 140) cleaned = cleaned.substring(0, 140);
+                        o.put("label", cleaned);
+                        applied++;
+                    }
+
+                    // If AI returned too few labels, fall back to deterministic baseline for LIKERT.
+                    if (q.getType() == PsychTestQuestion.Type.LIKERT && applied < Math.max(2, allowedOptionIds.size() / 2)) {
+                        applyLikertScaleLabels(renderedOptions);
+                    } else if (applied > 0) {
+                        meta.put("aiOptionsRewritten", true);
                     }
                 }
                 meta.put("aiPersonalized", true);
@@ -464,16 +473,37 @@ public class SessionService {
         return t.substring(0, Math.max(0, max - 1)) + "…";
     }
 
-    private static String friendlyLikertLabel(Integer value) {
-        if (value == null) return "Not sure";
-        return switch (value) {
-            case 2 -> "Definitely";
-            case 1 -> "Mostly";
-            case 0 -> "Not sure";
-            case -1 -> "Not really";
-            case -2 -> "Not at all";
-            default -> "Not sure";
-        };
+    private static void applyLikertScaleLabels(List<Map<String, Object>> renderedOptions) {
+        if (renderedOptions == null || renderedOptions.isEmpty()) return;
+
+        // Sort by numeric value descending so the highest value maps to strongest agreement.
+        List<Map<String, Object>> sorted = renderedOptions.stream()
+            .sorted((a, b) -> {
+                Integer av = (a.get("value") instanceof Number n) ? n.intValue() : 0;
+                Integer bv = (b.get("value") instanceof Number n) ? n.intValue() : 0;
+                return bv.compareTo(av);
+            })
+            .toList();
+
+        int n = sorted.size();
+        List<String> scale = (n == 7)
+            ? List.of("Strongly agree", "Agree", "Slightly agree", "Neutral", "Slightly disagree", "Disagree", "Strongly disagree")
+            : (n == 5)
+                ? List.of("Definitely", "Mostly", "Not sure", "Not really", "Not at all")
+                : null;
+
+        if (scale == null) {
+            // Fallback: keep existing labels.
+            return;
+        }
+
+        for (int i = 0; i < sorted.size(); i++) {
+            Map<String, Object> o = sorted.get(i);
+            String lbl = (i < scale.size()) ? scale.get(i) : (String) o.get("label");
+            if (lbl != null && !lbl.isBlank()) {
+                o.put("label", lbl);
+            }
+        }
     }
 
     private boolean shouldUsePreviousAnswerReference(PsychTestSession session, int questionNumber) {

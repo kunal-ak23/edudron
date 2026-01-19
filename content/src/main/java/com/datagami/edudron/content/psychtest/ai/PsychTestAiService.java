@@ -120,6 +120,12 @@ public class PsychTestAiService {
             - Keep it short and clear.
             - You MAY also rewrite option labels to be more natural, but MUST preserve each option's intent.
 
+            SPECIAL INSTRUCTIONS FOR LIKERT:
+            - If question_type is "LIKERT", option labels MUST stay as an ordered agreement scale (5-point or 7-point).
+            - Use the provided "value" to preserve direction (higher value = stronger agreement / stronger presence).
+            - Make each label feel tied to the prompt (e.g., "Mostly — I prefer tasks that allow imagination and flexibility").
+            - Keep each label concise (<= 90 chars), and do NOT add extra options.
+
             CRITICAL RULES:
             - Do NOT change the scoring semantics.
             - Do NOT change the number of options.
