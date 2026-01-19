@@ -143,9 +143,9 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                 </button>
                 {psychometricTestEnabled && (
                   <button
-                    onClick={() => router.push('/psychometric-test')}
+                    onClick={() => router.push('/psych-test')}
                     className={`font-medium transition-colors ${
-                      pathname?.startsWith('/psychometric-test')
+                      pathname?.startsWith('/psych-test')
                         ? 'text-primary-600'
                         : 'text-gray-700 hover:text-primary-600'
                     }`}
