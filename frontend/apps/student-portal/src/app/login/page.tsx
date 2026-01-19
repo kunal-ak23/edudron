@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, PasswordInput } from '@kunal-ak23/edudron-ui-components'
 import { authService } from '@/lib/auth'
-import type { LoginCredentials, RegisterCredentials } from '@kunal-ak23/edudron-shared-utils'
+import type { LoginCredentials } from '@kunal-ak23/edudron-shared-utils'
 
 function WelcomeIllustration({ className }: { className?: string }) {
   return (
@@ -19,10 +19,8 @@ function WelcomeIllustration({ className }: { className?: string }) {
 
 export default function LoginPage() {
   const router = useRouter()
-  const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -49,29 +47,6 @@ export default function LoginPage() {
     } catch (err: any) {
       // Show user-friendly error message
       const errorMessage = err.message || 'Login failed. Please try again.'
-      setError(errorMessage)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    try {
-      const credentials: RegisterCredentials = {
-        name,
-        email,
-        password,
-        role: 'STUDENT'
-      }
-      await authService.register(credentials)
-      router.push('/courses')
-    } catch (err: any) {
-      // Show user-friendly error message
-      const errorMessage = err.message || 'Registration failed. Please try again.'
       setError(errorMessage)
     } finally {
       setLoading(false)
@@ -109,17 +84,15 @@ export default function LoginPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    {isLogin ? 'Sign In' : 'Sign Up'}
-                  </h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>
                   <p className="text-sm text-gray-600">
-                    {isLogin ? 'to access Account' : 'to create your Account'}
+                    to access Account
                   </p>
                 </div>
 
                 <form
                   className="mt-8 space-y-6"
-                  onSubmit={isLogin ? handleLogin : handleRegister}
+                  onSubmit={handleLogin}
                 >
                   {error && (
                     <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
@@ -128,24 +101,6 @@ export default function LoginPage() {
                   )}
 
                   <div className="space-y-4">
-                    {!isLogin && (
-                      <div>
-                        <label htmlFor="name" className="sr-only">
-                          Full name
-                        </label>
-                        <Input
-                          id="name"
-                          value={name}
-                          onChange={(e) => setName(e.target.value)}
-                          required
-                          autoComplete="name"
-                          placeholder="Full name"
-                          aria-label="Full name"
-                          className="rounded-xl py-3"
-                        />
-                      </div>
-                    )}
-
                     <div>
                       <label htmlFor="email" className="sr-only">
                         Email address
@@ -172,7 +127,7 @@ export default function LoginPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
-                        autoComplete={isLogin ? 'current-password' : 'new-password'}
+                        autoComplete="current-password"
                         placeholder="Password"
                         aria-label="Password"
                         className="rounded-xl py-3"
@@ -187,23 +142,8 @@ export default function LoginPage() {
                     className="w-full"
                     loading={loading}
                   >
-                    {isLogin ? 'Continue' : 'Create account'}
+                    Continue
                   </Button>
-
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsLogin(!isLogin)
-                        setError('')
-                      }}
-                      className="text-sm font-medium text-primary-700 hover:text-primary-800 transition-colors"
-                    >
-                      {isLogin
-                        ? "New in EduDron? Create an account"
-                        : 'Already have an account? Sign in'}
-                    </button>
-                  </div>
                 </form>
               </div>
             </div>
