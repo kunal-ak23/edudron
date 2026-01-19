@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ProtectedRoute, Button } from '@kunal-ak23/edudron-ui-components'
 import { StudentLayout } from '@/components/StudentLayout'
@@ -60,6 +60,8 @@ export default function PsychTestResultsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ResultResponse | null>(null)
+  const [isPolling, setIsPolling] = useState(false)
+  const retryTimerRef = useRef<number | null>(null)
 
   const parsedReport = useMemo(() => {
     if (!result?.reportText) return null
@@ -80,22 +82,69 @@ export default function PsychTestResultsPage() {
   }, [result?.topDomains])
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true)
-        setError(null)
-        const apiClient = getApiClient()
-        const resp = await apiClient.get(`/api/psych-test/sessions/${sessionId}/result`)
-        const data = (resp && typeof resp === 'object' && 'data' in (resp as any)) ? (resp as any).data : resp
-        setResult(data)
-      } catch (e: any) {
-        console.error(e)
-        setError('Failed to load results.')
-      } finally {
-        setLoading(false)
+    let cancelled = false
+
+    const clearRetry = () => {
+      if (retryTimerRef.current != null) {
+        window.clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = null
       }
     }
-    if (sessionId) load()
+
+    const isResultNotReadyError = (e: any) => {
+      const status = e?.response?.status
+      const message =
+        e?.response?.data?.message ||
+        e?.response?.data?.error ||
+        e?.message ||
+        ''
+
+      // Depending on backend exception mapping, "Result not found" may surface as 400/404.
+      if (status === 404) return true
+      if (status === 400 && String(message).toLowerCase().includes('result')) return true
+      return false
+    }
+
+    const load = async (attempt: number) => {
+      try {
+        if (attempt === 0) {
+          setLoading(true)
+          setError(null)
+          setIsPolling(false)
+        }
+        const apiClient = getApiClient()
+        const resp = await apiClient.get(`/api/psych-test/sessions/${sessionId}/result`, { timeout: 60000 })
+        const data = (resp && typeof resp === 'object' && 'data' in (resp as any)) ? (resp as any).data : resp
+        if (!cancelled) {
+          setResult(data)
+          setIsPolling(false)
+        }
+      } catch (e: any) {
+        console.error(e)
+        if (cancelled) return
+
+        // If results are still being generated, poll briefly instead of failing.
+        const maxAttempts = 20 // ~60s at 3s intervals
+        if (isResultNotReadyError(e) && attempt < maxAttempts) {
+          setIsPolling(true)
+          clearRetry()
+          retryTimerRef.current = window.setTimeout(() => {
+            load(attempt + 1)
+          }, 3000)
+          return
+        }
+
+        setError(isResultNotReadyError(e) ? 'Results are taking longer than usual. Please try again.' : 'Failed to load results.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    if (sessionId) load(0)
+    return () => {
+      cancelled = true
+      clearRetry()
+    }
   }, [sessionId])
 
   return (
@@ -112,10 +161,23 @@ export default function PsychTestResultsPage() {
               <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-600">Loading…</div>
             )}
 
+            {!loading && isPolling && (
+              <div className="bg-white rounded-lg shadow-md p-8 text-center">
+                <div className="flex items-center justify-center gap-3 text-gray-700">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600" />
+                  <div className="font-medium">Generating your results…</div>
+                </div>
+                <div className="text-sm text-gray-500 mt-2">This can take up to a minute.</div>
+              </div>
+            )}
+
             {!loading && (error || !result) && (
               <div className="bg-white rounded-lg shadow-md p-8 text-center">
                 <div className="text-gray-700 mb-4">{error || 'Results not found.'}</div>
-                <Button onClick={() => router.push('/psych-test')}>Back</Button>
+                <div className="flex justify-center gap-3">
+                  <Button variant="outline" onClick={() => router.push('/psych-test')}>Back</Button>
+                  <Button onClick={() => router.push('/psych-test/results')}>Past Results</Button>
+                </div>
               </div>
             )}
 
@@ -320,6 +382,7 @@ export default function PsychTestResultsPage() {
                 )}
 
                 <div className="flex justify-center gap-3">
+                  <Button variant="outline" onClick={() => router.push('/psych-test/results')}>Past Results</Button>
                   <Button variant="outline" onClick={() => router.push('/psych-test')}>Take Again</Button>
                   <Button onClick={() => router.push('/')}>Go Home</Button>
                 </div>

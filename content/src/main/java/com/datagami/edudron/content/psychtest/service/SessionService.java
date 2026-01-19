@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.Optional;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -696,6 +697,12 @@ public class SessionService {
         }
         return resultRepository.findBySessionIdAndClientId(sessionId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Result not found"));
+    }
+
+    public List<PsychTestResult> listRecentResults(String userId, int limit) {
+        UUID clientId = requireClientId();
+        int safeLimit = Math.max(1, Math.min(100, limit));
+        return resultRepository.findRecentResultsForUser(clientId, userId, PageRequest.of(0, safeLimit));
     }
 
     private String inferWeakestIndicatorTagFromQuestions(List<PsychTestAnswer> answers) {

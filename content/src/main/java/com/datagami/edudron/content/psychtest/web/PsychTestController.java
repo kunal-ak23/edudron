@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -220,6 +221,33 @@ public class PsychTestController {
         out.put("domainNarratives", domainNarratives);
         out.put("suggestions", suggestions);
         out.put("createdAt", r.getCreatedAt());
+        return ResponseEntity.ok(out);
+    }
+
+    @GetMapping("/results")
+    @Operation(summary = "List recent completed psych test results for current user")
+    public ResponseEntity<List<Map<String, Object>>> listResults(
+        @RequestParam(name = "limit", required = false, defaultValue = "20") @Min(1) @Max(100) Integer limit
+    ) {
+        String userId = requireUserId();
+        List<PsychTestResult> results = sessionService.listRecentResults(userId, limit != null ? limit : 20);
+
+        List<Map<String, Object>> out = results.stream().map(r -> {
+            PsychTestSession s = r.getSession();
+            List<String> topDomains = new ArrayList<>();
+            if (r.getTopDomainsJson() != null && r.getTopDomainsJson().isArray()) {
+                r.getTopDomainsJson().forEach(n -> topDomains.add(n.asText()));
+            }
+            return Map.<String, Object>of(
+                "sessionId", s != null ? s.getId() : null,
+                "completedAt", s != null ? s.getCompletedAt() : null,
+                "overallConfidence", r.getOverallConfidence(),
+                "topDomains", topDomains,
+                "streamSuggestion", r.getStreamSuggestion(),
+                "createdAt", r.getCreatedAt()
+            );
+        }).toList();
+
         return ResponseEntity.ok(out);
     }
 

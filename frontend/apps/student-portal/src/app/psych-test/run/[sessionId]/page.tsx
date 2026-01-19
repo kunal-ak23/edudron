@@ -101,10 +101,27 @@ export default function PsychTestRunnerPage() {
       setThinkingMode('finalizing')
       setError(null)
       const apiClient = getApiClient()
-      await apiClient.post(`/api/psych-test/sessions/${sessionId}/complete`)
+      // Completing can take longer because it may generate narratives/explanations.
+      await apiClient.post(
+        `/api/psych-test/sessions/${sessionId}/complete`,
+        undefined,
+        { timeout: 120000 }
+      )
       router.push(`/psych-test/results/${sessionId}`)
     } catch (e: any) {
       console.error(e)
+      // If completion took longer than the HTTP timeout, it may still succeed server-side.
+      // Redirect to results page and let it poll until ready.
+      const status = e?.response?.status
+      const code = e?.code
+      const msg = String(e?.message || '')
+      const isTimeout = code === 'ECONNABORTED' || msg.toLowerCase().includes('timeout')
+      if (isTimeout || status === 504) {
+        setError('Finalizing is taking longer than usual. Redirecting to results…')
+        router.push(`/psych-test/results/${sessionId}`)
+        return
+      }
+
       setError('Failed to complete the test.')
     } finally {
       setLoading(false)
