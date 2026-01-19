@@ -161,7 +161,7 @@ export default function PsychTestRunnerPage() {
     // Strict sequential: show option 1, then only show the next after the previous finishes typing.
     setVisibleOptionCount(1)
     setTypedOptionCount(0)
-  }, [displayQ?.questionId, displayQ?.type, promptDone, prefersReducedMotion])
+  }, [displayQ?.questionId, displayQ?.type, displayQ?.options?.length, promptDone, prefersReducedMotion])
 
   // When an option finishes typing, reveal the next option.
   useEffect(() => {
@@ -173,7 +173,7 @@ export default function PsychTestRunnerPage() {
     const total = displayQ.options?.length ?? 0
     const nextVisible = Math.min(total, typedOptionCount + 1)
     if (nextVisible > visibleOptionCount) setVisibleOptionCount(nextVisible)
-  }, [displayQ?.questionId, displayQ?.type, prefersReducedMotion, promptDone, typedOptionCount, visibleOptionCount])
+  }, [displayQ?.questionId, displayQ?.type, displayQ?.options?.length, prefersReducedMotion, promptDone, typedOptionCount, visibleOptionCount])
 
   const disableInputs = loading || contentStage === 'exiting'
   // Allow interaction once prompt is done (and textarea is visible for open-ended).

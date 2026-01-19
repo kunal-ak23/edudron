@@ -3,6 +3,8 @@ import { BlobServiceClient } from "@azure/storage-blob";
 import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
 
 export const runtime = "nodejs"; // important: Azure SDK needs Node runtime (not Edge)
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 function getBlobServiceClient() {
   // Prefer Managed Identity in production if possible; simplest shown is connection string:

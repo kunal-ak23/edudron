@@ -16,10 +16,9 @@ export function usePrefersReducedMotion() {
       mq.addEventListener('change', update)
       return () => mq.removeEventListener('change', update)
     }
-    // eslint-disable-next-line deprecation/deprecation
-    mq.addListener(update)
-    // eslint-disable-next-line deprecation/deprecation
-    return () => mq.removeListener(update)
+    // Legacy Safari/old browsers
+    ;(mq as any).addListener?.(update)
+    return () => (mq as any).removeListener?.(update)
   }, [])
 
   return prefersReducedMotion
