@@ -141,38 +141,34 @@ public class FoundryAIService {
             throw new IllegalStateException("Azure OpenAI is not configured");
         }
         
-        // Check if the description contains PDF content with module structure
+        // Check if the description contains a user-provided outline (modules + lectures).
+        // If the user provided an explicit outline, we should preserve the per-module lecture counts
+        // instead of applying any "average lectures per module" guidance.
         String description = requirements.getDescription();
-        boolean hasPdfStructure = description != null && (
-            description.contains("Module") || 
-            description.contains("Hours") || 
-            description.contains("hours") ||
-            description.contains("–") || // En dash used in "Module 1: Title – 6 Hours"
-            description.contains("-") // Hyphen alternative
-        );
+        boolean hasMultipleLines = description != null && (description.contains("\n") || description.contains("\r"));
+        boolean hasModuleLikeHeadings = description != null && description.matches("(?is).*\\b(module|week|chapter|unit)\\s*(\\d+|[ivxlcdm]+)\\b.*");
+        boolean hasUserProvidedOutline = hasMultipleLines && hasModuleLikeHeadings;
         
         String systemPrompt;
-        if (hasPdfStructure) {
-            // Enhanced prompt for PDF-based course structures
+        if (hasUserProvidedOutline) {
+            // Prompt for user-provided outline: preserve module-by-module lecture counts exactly.
             systemPrompt = """
-                You are an expert course designer. Generate a course structure based on the information provided.
+                You are an expert course designer. The user may have provided an explicit module-by-module lecture outline.
                 
                 CRITICAL REQUIREMENTS:
-                1. If the user provides module/lesson structure, use it as a guide but you MUST still generate a complete course structure
-                2. Extract time durations (in hours) if mentioned and convert them to seconds
-                   - 1 hour = 3600 seconds
-                   - If a module shows "6 Hours", that's 21600 seconds total for that module
-                   - Distribute the module time across its lessons proportionally
-                3. If individual lesson times are specified, use those and convert to seconds
-                4. If only module times are specified, divide the module time evenly across its lessons
-                5. EVERY lecture MUST have a durationSeconds field - this is MANDATORY
-                6. If the structure is incomplete or unclear, use your expertise to create a reasonable course structure based on the course title and description
+                1. If the user provides an outline (modules + lecture titles under each module), you MUST preserve it:
+                   - Do NOT change the number of modules
+                   - Do NOT move lecture titles between modules
+                   - Do NOT normalize counts (do NOT make every module have the same number of lectures)
+                   - Do NOT add/remove lectures unless the outline is clearly incomplete
+                2. EVERY lecture MUST have a durationSeconds field - this is MANDATORY
+                   - If durations are provided (e.g., "6 hours", "30 min"), convert to seconds
+                   - If no durations are provided, estimate based on complexity (minimum 900 seconds = 15 minutes)
                 
                 Return a JSON array where each section (module) has:
                 {
                     "title": "Module title (use provided title if available, otherwise generate appropriate title)",
                     "description": "Section description",
-                    "moduleDurationHours": <hours for this module if specified>,
                     "lectures": [
                         {
                             "title": "Lecture title (use provided title if available, otherwise generate appropriate title)",
@@ -182,18 +178,8 @@ public class FoundryAIService {
                     ]
                 }
                 
-                TIME CONVERSION RULES:
-                - If document says "Module X: Title – 6 Hours", extract 6 hours = 21600 seconds
-                - Distribute 21600 seconds across all lessons in that module
-                - If module has 4 lessons: ~5400 seconds (90 minutes) per lesson
-                - If module has 2 lessons: ~10800 seconds (180 minutes) per lesson
-                - Always ensure total lesson durations approximately match module duration
-                - If no time is specified, estimate based on content complexity (minimum 900 seconds = 15 minutes)
-                
                 IMPORTANT: 
-                - Generate a complete course structure even if the provided information is incomplete
                 - Use provided titles when available, but generate appropriate titles when they're missing
-                - Include ALL modules and lessons - if structure is incomplete, create a logical course structure
                 - EVERY lecture MUST have durationSeconds - never omit this field
                 - You MUST return valid JSON - do not ask for more information, just generate the best structure you can
                 
@@ -201,6 +187,7 @@ public class FoundryAIService {
                 """;
         } else {
             // Standard prompt for general course generation
+            int targetTotalLectures = requirements.getNumberOfModules() * requirements.getLecturesPerModule();
             systemPrompt = """
                 You are an expert course designer. Generate a course structure with sections (modules) and lectures.
                 Return a JSON array where each section has:
@@ -231,10 +218,16 @@ public class FoundryAIService {
                 - Standard lecture with concepts and examples: 900-1800 seconds (15-30 minutes)
                 - Comprehensive deep-dive lecture: 2400-3600 seconds (40-60 minutes)
                 
-                Generate %d sections with approximately %d lectures each.
+                Generate %d sections.
+                
+                IMPORTANT: Treat %d as an AVERAGE target, not a fixed requirement.
+                - Vary the number of lectures per section based on topic complexity.
+                - Each section should have 2 to 8 lectures.
+                - Ensure NOT all sections have the same number of lectures.
+                - Keep the total number of lectures across the full course roughly around %d.
                 
                 CRITICAL: Return ONLY valid JSON array. Do NOT include any explanatory text, greetings, or conversational language before or after the JSON. Start your response directly with '[' and end with ']'.
-                """.formatted(requirements.getNumberOfModules(), requirements.getLecturesPerModule());
+                """.formatted(requirements.getNumberOfModules(), requirements.getLecturesPerModule(), targetTotalLectures);
         }
         
         String userPrompt = "Course: " + requirements.getTitle() + "\nDescription: " + requirements.getDescription();
@@ -247,12 +240,13 @@ public class FoundryAIService {
             try {
                 jsonResponse = extractJsonFromResponse(response);
             } catch (IllegalArgumentException e) {
-                // If PDF prompt failed (AI asked for more info), fall back to standard prompt
-                if (hasPdfStructure) {
-                    logger.warn("PDF structure prompt failed, falling back to standard prompt. Error: {}", e.getMessage());
+                // If outline prompt failed (AI asked for more info), fall back to standard prompt
+                if (hasUserProvidedOutline) {
+                    logger.warn("Outline-based prompt failed, falling back to standard prompt. Error: {}", e.getMessage());
                     logger.warn("AI response was: {}", response.length() > 200 ? response.substring(0, 200) + "..." : response);
                     
                     // Use standard prompt as fallback
+                    int fallbackTargetTotalLectures = requirements.getNumberOfModules() * requirements.getLecturesPerModule();
                     String fallbackPrompt = """
                         You are an expert course designer. Generate a course structure with sections (modules) and lectures.
                         Return a JSON array where each section has:
@@ -283,10 +277,16 @@ public class FoundryAIService {
                         - Standard lecture with concepts and examples: 900-1800 seconds (15-30 minutes)
                         - Comprehensive deep-dive lecture: 2400-3600 seconds (40-60 minutes)
                         
-                        Generate %d sections with approximately %d lectures each.
+                        Generate %d sections.
+                        
+                        IMPORTANT: Treat %d as an AVERAGE target, not a fixed requirement.
+                        - Vary the number of lectures per section based on topic complexity.
+                        - Each section should have 2 to 8 lectures.
+                        - Ensure NOT all sections have the same number of lectures.
+                        - Keep the total number of lectures across the full course roughly around %d.
                         
                         CRITICAL: Return ONLY valid JSON array. Do NOT include any explanatory text, greetings, or conversational language before or after the JSON. Start your response directly with '[' and end with ']'.
-                        """.formatted(requirements.getNumberOfModules(), requirements.getLecturesPerModule());
+                        """.formatted(requirements.getNumberOfModules(), requirements.getLecturesPerModule(), fallbackTargetTotalLectures);
                     
                     // Retry with standard prompt
                     response = callOpenAI(fallbackPrompt, userPrompt);
