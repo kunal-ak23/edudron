@@ -8,12 +8,14 @@ import { StudentLayout } from '@/components/StudentLayout'
 import type { Course, Enrollment } from '@kunal-ak23/edudron-shared-utils'
 import { TenantFeaturesApi } from '@kunal-ak23/edudron-shared-utils'
 import { getApiClient } from '@/lib/api'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
 
 export default function CoursesPage() {
   const router = useRouter()
+  const { needsTenantSelection, tenantId } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
@@ -30,7 +32,20 @@ export default function CoursesPage() {
   // Initialize tenant features API
   const tenantFeaturesApi = new TenantFeaturesApi(getApiClient())
 
+  useEffect(() => {
+    if (needsTenantSelection) {
+      console.info('[StudentPortal][Courses] redirecting to /select-tenant', { tenantId })
+      router.replace('/select-tenant')
+    }
+  }, [needsTenantSelection, router, tenantId])
+
   const loadData = useCallback(async () => {
+    if (needsTenantSelection) {
+      // Avoid firing tenant-scoped API calls until a tenant is selected
+      setLoading(false)
+      return
+    }
+
     try {
       const userStr = localStorage.getItem('user')
       let currentUser = null
@@ -61,7 +76,11 @@ export default function CoursesPage() {
         const enrollmentsResponse = await enrollmentsApi.listEnrollments()
         enrollmentsData = Array.isArray(enrollmentsResponse) ? enrollmentsResponse : []
       } catch (error) {
-        console.error('❌ Enrollments API call failed:', error)
+        console.error('❌ Enrollments API call failed:', {
+          message: (error as any)?.message,
+          status: (error as any)?.response?.status,
+          data: (error as any)?.response?.data,
+        })
         enrollmentsData = []
       }
       
@@ -100,14 +119,20 @@ export default function CoursesPage() {
       setCourses(visibleCourses)
       setFilteredCourses(visibleCourses)
     } catch (error) {
-      console.error('Failed to load courses:', error)
+      console.error('Failed to load courses:', {
+        message: (error as any)?.message,
+        status: (error as any)?.response?.status,
+        data: (error as any)?.response?.data,
+      })
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [needsTenantSelection])
 
   useEffect(() => {
-    loadData()
+    if (!needsTenantSelection) {
+      loadData()
+    }
   }, [loadData])
 
   const filterCourses = useCallback(() => {

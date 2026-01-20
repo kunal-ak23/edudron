@@ -150,11 +150,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, baseUrl = 
       setIsLoading(true)
       await authService.selectTenant(selectedTenantId)
       
-      // Update user with tenant ID
-      if (user) {
-        const updatedUser = { ...user, tenantId: selectedTenantId }
-        setUser(updatedUser)
-        localStorage.setItem('user', JSON.stringify(updatedUser))
+      // Reload user from localStorage (AuthService.selectTenant refreshes /idp/users/me)
+      try {
+        const userStr = localStorage.getItem('user')
+        if (userStr) {
+          const updatedUser = JSON.parse(userStr)
+          setUser(updatedUser)
+        } else if (user) {
+          const updatedUser = { ...user, tenantId: selectedTenantId }
+          setUser(updatedUser)
+          localStorage.setItem('user', JSON.stringify(updatedUser))
+        }
+      } catch (e) {
+        if (user) {
+          const updatedUser = { ...user, tenantId: selectedTenantId }
+          setUser(updatedUser)
+          localStorage.setItem('user', JSON.stringify(updatedUser))
+        }
       }
       
       // Store tenant ID in all possible keys for compatibility
@@ -166,6 +178,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, baseUrl = 
       
       setTenantId(selectedTenantId)
       setNeedsTenantSelection(false)
+      setAvailableTenants(null)
+      localStorage.removeItem('available_tenants')
     } catch (error) {
       throw error
     } finally {

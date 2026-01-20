@@ -88,7 +88,12 @@ export class ApiClient {
                 tenantId !== 'null' && 
                 tenantId !== '') {
               config.headers['X-Client-Id'] = tenantId
+              console.info('[ApiClient] set X-Client-Id', { url: config.url, tenantId })
+            } else {
+              console.warn('[ApiClient] skipping X-Client-Id (placeholder/invalid)', { url: config.url, tenantId })
             }
+          } else {
+            console.warn('[ApiClient] no tenantId found in localStorage', { url: config.url })
           }
         }
         

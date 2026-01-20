@@ -8,6 +8,7 @@ import { Clock, Calendar, CheckCircle, Loader2 } from 'lucide-react'
 import { StudentLayout } from '@/components/StudentLayout'
 import { ProtectedRoute } from '@kunal-ak23/edudron-ui-components'
 import { apiClient } from '@/lib/api'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 
 interface Exam {
   id: string
@@ -24,6 +25,7 @@ export const dynamic = 'force-dynamic'
 
 export default function ExamsPage() {
   const router = useRouter()
+  const { needsTenantSelection } = useAuth()
   const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(true)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
@@ -75,6 +77,13 @@ export default function ExamsPage() {
   }
 
   useEffect(() => {
+    if (needsTenantSelection) {
+      router.replace('/select-tenant')
+      setLoading(false)
+      setIsInitialLoad(false)
+      return
+    }
+
     let mounted = true
     let loadingTimeout: NodeJS.Timeout | null = null
     

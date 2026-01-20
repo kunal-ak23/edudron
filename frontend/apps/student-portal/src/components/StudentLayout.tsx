@@ -13,7 +13,7 @@ interface StudentLayoutProps {
 export function StudentLayout({ children }: StudentLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, logout, tenantId } = useAuth()
+  const { user, logout, tenantId, needsTenantSelection } = useAuth()
   const [tenantName, setTenantName] = useState<string>('EduDron')
   const [tenantLogo, setTenantLogo] = useState<string | null>(null)
   const [logoError, setLogoError] = useState(false)
@@ -60,12 +60,25 @@ export function StudentLayout({ children }: StudentLayoutProps) {
     loadTenantInfo()
   }, [tenantId])
 
+  // Force tenant selection before accessing tenant-scoped pages
+  useEffect(() => {
+    if (!user) return
+    if (!needsTenantSelection) return
+
+    // Allow login + tenant selection pages without redirect loops
+    if (pathname === '/login' || pathname === '/select-tenant') return
+
+    // If password reset is required, we still need a tenant selected to call /me,
+    // so tenant selection takes precedence.
+    router.push('/select-tenant')
+  }, [needsTenantSelection, pathname, router, user])
+
   // Check if password reset is required (except on profile page)
   useEffect(() => {
-    if (user?.passwordResetRequired && typeof window !== 'undefined' && pathname !== '/profile') {
+    if (!needsTenantSelection && user?.passwordResetRequired && typeof window !== 'undefined' && pathname !== '/profile') {
       router.push('/profile')
     }
-  }, [user, pathname, router])
+  }, [needsTenantSelection, user, pathname, router])
 
   const handleLogout = async () => {
     try {
@@ -80,7 +93,7 @@ export function StudentLayout({ children }: StudentLayoutProps) {
   }
 
   // Don't show header on login page
-  if (pathname === '/login') {
+  if (pathname === '/login' || pathname === '/select-tenant') {
     return <>{children}</>
   }
 

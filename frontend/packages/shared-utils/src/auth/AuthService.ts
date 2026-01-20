@@ -33,6 +33,9 @@ export class AuthService {
           if (authData.refreshToken) {
             localStorage.setItem('refresh_token', authData.refreshToken)
           }
+          if (authData.availableTenants) {
+            localStorage.setItem('available_tenants', JSON.stringify(authData.availableTenants))
+          }
           if (authData.user) {
             localStorage.setItem('user', JSON.stringify(authData.user))
             if (authData.user.tenantId) {
@@ -191,6 +194,7 @@ export class AuthService {
       localStorage.setItem('tenant_id', tenantId)
       localStorage.setItem('clientId', tenantId)
       localStorage.setItem('selectedTenantId', tenantId)
+      localStorage.removeItem('available_tenants')
       
       // Update user object with tenant ID
       const userStr = localStorage.getItem('user')
@@ -205,9 +209,19 @@ export class AuthService {
       }
     }
     
-    // Note: In a full implementation, you might want to call a backend endpoint
-    // to refresh the token with the new tenant context. For now, we'll rely on
-    // the X-Client-Id header being set from localStorage.
+    // Refresh user info under the selected tenant (keeps flags like passwordResetRequired accurate)
+    try {
+      const meResponse = await this.apiClient.get<any>('/idp/users/me')
+      const me = (meResponse as any)?.data ?? meResponse
+      if (typeof window !== 'undefined' && me && typeof me === 'object') {
+        const existingUserStr = localStorage.getItem('user')
+        const existingUser = existingUserStr ? JSON.parse(existingUserStr) : {}
+        const mergedUser = { ...existingUser, ...me, tenantId }
+        localStorage.setItem('user', JSON.stringify(mergedUser))
+      }
+    } catch (e) {
+      // If /me fails, continue; tenant header will still scope subsequent API calls.
+    }
   }
 }
 

@@ -30,7 +30,7 @@ interface UserProfile {
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user: authUser } = useAuth()
+  const { user: authUser, needsTenantSelection } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [changingPassword, setChangingPassword] = useState(false)
@@ -43,6 +43,11 @@ export default function ProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('')
 
   useEffect(() => {
+    if (needsTenantSelection) {
+      router.replace('/select-tenant')
+      setLoading(false)
+      return
+    }
     loadProfile()
   }, [])
 

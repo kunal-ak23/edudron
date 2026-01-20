@@ -5,15 +5,22 @@ import { useRouter } from 'next/navigation'
 import { ProtectedRoute, Button } from '@kunal-ak23/edudron-ui-components'
 import { StudentLayout } from '@/components/StudentLayout'
 import { getApiClient } from '@/lib/api'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 
 export const dynamic = 'force-dynamic'
 
 export default function PsychTestStartPage() {
   const router = useRouter()
+  const { needsTenantSelection } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (needsTenantSelection) {
+      router.replace('/select-tenant')
+      setLoading(false)
+      return
+    }
     startOrResume()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

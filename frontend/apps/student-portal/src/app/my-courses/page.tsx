@@ -6,12 +6,14 @@ import { ProtectedRoute, CourseCard, Card } from '@kunal-ak23/edudron-ui-compone
 import { enrollmentsApi, coursesApi } from '@/lib/api'
 import { StudentLayout } from '@/components/StudentLayout'
 import type { Enrollment, Course, Progress } from '@kunal-ak23/edudron-shared-utils'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
 
 export default function MyCoursesPage() {
   const router = useRouter()
+  const { needsTenantSelection } = useAuth()
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [courses, setCourses] = useState<Record<string, Course>>({})
   const [progressData, setProgressData] = useState<Record<string, Progress>>({})
@@ -19,6 +21,11 @@ export default function MyCoursesPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'in-progress' | 'completed'>('all')
 
   useEffect(() => {
+    if (needsTenantSelection) {
+      router.replace('/select-tenant')
+      setLoading(false)
+      return
+    }
     loadEnrollments()
   }, [])
 

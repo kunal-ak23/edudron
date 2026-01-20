@@ -10,16 +10,23 @@ import com.datagami.edudron.identity.repo.UserRepository;
 import com.datagami.edudron.identity.repo.ClientRepository;
 import com.datagami.edudron.identity.security.JwtUtil;
 import io.jsonwebtoken.Claims;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     @Autowired
     private UserRepository userRepository;
@@ -92,18 +99,78 @@ public class AuthService {
             throw new RuntimeException("Invalid credentials");
         }
         
-        // Find the user with matching password
-        User user = null;
+        // Find all users with matching password (same email can exist across tenants)
+        List<User> matchingUsers = new ArrayList<>();
         for (User u : users) {
             if (passwordEncoder.matches(request.password(), u.getPassword())) {
-                user = u;
-                break;
+                matchingUsers.add(u);
             }
         }
-        
-        if (user == null) {
+
+        if (matchingUsers.isEmpty()) {
             throw new RuntimeException("Invalid credentials");
         }
+
+        // If the same credentials match multiple tenants, require tenant selection
+        if (matchingUsers.size() > 1) {
+            log.info("Multi-tenant login detected: email={}, matches={}", request.email(), matchingUsers.size());
+            // If roles differ across matched accounts, fail safely (ambiguous permissions)
+            String role = matchingUsers.get(0).getRole().name();
+            for (User u : matchingUsers) {
+                if (u.getRole() == null || !role.equals(u.getRole().name())) {
+                    throw new RuntimeException("Multiple accounts found with different roles. Please contact support.");
+                }
+            }
+
+            Set<UUID> clientIds = new HashSet<>();
+            for (User u : matchingUsers) {
+                if (u.getClientId() != null) {
+                    clientIds.add(u.getClientId());
+                }
+            }
+            log.info("Multi-tenant login candidate clientIds: email={}, clientIds={}", request.email(), clientIds);
+
+            List<AuthResponse.TenantInfo> tenants = clientIds.stream()
+                    .map(clientId -> clientRepository.findById(clientId).orElse(null))
+                    .filter(client -> client != null)
+                    .map(client -> new AuthResponse.TenantInfo(
+                            client.getId().toString(),
+                            client.getName(),
+                            client.getSlug(),
+                            client.getIsActive()
+                    ))
+                    .toList();
+            log.info("Multi-tenant login available tenants: email={}, tenantsCount={}", request.email(), tenants.size());
+
+            // Issue placeholder-tenant tokens; services will rely on X-Client-Id after selection
+            String tenantId = "PENDING_TENANT_SELECTION";
+            User representativeUser = matchingUsers.get(0);
+            String token = jwtUtil.generateToken(representativeUser.getEmail(), tenantId, role);
+            String refreshToken = jwtUtil.generateRefreshToken(representativeUser.getEmail(), tenantId, role);
+
+            return new AuthResponse(
+                    token,
+                    refreshToken,
+                    "Bearer",
+                    86400L, // 24 hours
+                    new AuthResponse.UserInfo(
+                            representativeUser.getId(),
+                            representativeUser.getEmail(),
+                            representativeUser.getName(),
+                            role,
+                            tenantId,
+                            "Select Tenant",
+                            "select-tenant",
+                            representativeUser.getCreatedAt(),
+                            null
+                    ),
+                    true,
+                    tenants
+            );
+        }
+
+        // Single-tenant match: proceed as before
+        User user = matchingUsers.get(0);
         
         // Set the tenant context based on the user's tenant
         if (user.getClientId() != null) {

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, PasswordInput } from '@kunal-ak23/edudron-ui-components'
-import { authService } from '@/lib/auth'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import type { LoginCredentials } from '@kunal-ak23/edudron-shared-utils'
 
 function WelcomeIllustration({ className }: { className?: string }) {
@@ -19,6 +19,7 @@ function WelcomeIllustration({ className }: { className?: string }) {
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -31,15 +32,23 @@ export default function LoginPage() {
 
     try {
       const credentials: LoginCredentials = { email, password }
-      const response = await authService.login(credentials)
+      const response = await login(credentials)
+
+      console.info('[StudentPortal][Login] response:', {
+        needsTenantSelection: response?.needsTenantSelection,
+        availableTenantsCount: Array.isArray((response as any)?.availableTenants) ? (response as any).availableTenants.length : null,
+        tenantId: response?.user?.tenantId,
+        role: response?.user?.role,
+      })
 
       // Check if password reset is required - redirect to profile page
-      if (response.user?.passwordResetRequired) {
+      if (response.user?.passwordResetRequired && !response.needsTenantSelection) {
         router.push('/profile')
         return
       }
 
-      if (response.needsTenantSelection && response.availableTenants) {
+      // IMPORTANT: do not require availableTenants to be truthy (empty array is valid)
+      if (response.needsTenantSelection) {
         router.push('/select-tenant')
       } else {
         router.push('/courses')
