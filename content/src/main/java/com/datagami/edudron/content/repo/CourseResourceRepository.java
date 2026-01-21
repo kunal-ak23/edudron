@@ -13,6 +13,8 @@ public interface CourseResourceRepository extends JpaRepository<CourseResource, 
     
     List<CourseResource> findByCourseIdAndClientId(String courseId, UUID clientId);
     
+    Optional<CourseResource> findFirstByCourseIdAndClientIdAndResourceType(String courseId, UUID clientId, CourseResource.ResourceType resourceType);
+    
     Optional<CourseResource> findByIdAndClientId(String id, UUID clientId);
     
     void deleteByCourseIdAndClientId(String courseId, UUID clientId);

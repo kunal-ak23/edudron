@@ -190,9 +190,8 @@ export class CoursesApi {
   }
 
   async unpublishCourse(id: string): Promise<Course> {
-    // Unpublish by updating isPublished to false
-    const course = await this.getCourse(id)
-    return await this.updateCourse(id, { ...course, isPublished: false })
+    const response = await this.apiClient.post<Course>(`/content/courses/${id}/unpublish`, {})
+    return response.data
   }
 
   async getChapters(courseId: string): Promise<Chapter[]> {

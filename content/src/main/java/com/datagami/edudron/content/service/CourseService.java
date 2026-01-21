@@ -516,6 +516,26 @@ public class CourseService {
         
         return toDTO(saved);
     }
+
+    public CourseDTO unpublishCourse(String id) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Course course = courseRepository.findByIdAndClientId(id, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
+
+        course.setIsPublished(false);
+        // Clear publishedAt so UI can treat it as draft again
+        course.setPublishedAt(null);
+
+        Course saved = courseRepository.save(course);
+        log.info("Course {} unpublished. Current published status: {}", id, saved.getIsPublished());
+
+        return toDTO(saved);
+    }
     
     /**
      * Get all published courses assigned to a specific section.

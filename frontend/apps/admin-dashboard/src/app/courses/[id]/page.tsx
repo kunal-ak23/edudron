@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Loader2, Save, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles } from 'lucide-react'
+import { ArrowLeft, Loader2, Save, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles, Download } from 'lucide-react'
 import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi, apiClient } from '@/lib/api'
 import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -66,6 +66,8 @@ export default function CourseEditPage() {
   const [lectureToDelete, setLectureToDelete] = useState<{ sectionId: string; lectureId?: string; title: string } | null>(null)
   const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false)
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
+  const [generatingCourseBookPdf, setGeneratingCourseBookPdf] = useState(false)
+  const [downloadingCourseBookPdf, setDownloadingCourseBookPdf] = useState(false)
 
   // Separate effect for beforeunload warning
   useEffect(() => {
@@ -579,6 +581,97 @@ export default function CourseEditPage() {
     router.push(`/courses/${courseId}/preview`)
   }
 
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  const extractAxiosBlobError = async (error: any): Promise<string | null> => {
+    const data = error?.response?.data
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+      try {
+        const text = await data.text()
+        try {
+          const parsed = JSON.parse(text)
+          if (parsed?.error && typeof parsed.error === 'string') return parsed.error
+          if (parsed?.message && typeof parsed.message === 'string') return parsed.message
+        } catch {
+          // Not JSON, return raw text if useful
+        }
+        if (text && text.trim()) return text.trim()
+      } catch {
+        // ignore
+      }
+    }
+    return null
+  }
+
+  const handleGenerateCourseBookPdf = async () => {
+    if (!courseId || courseId === 'new') return
+    setGeneratingCourseBookPdf(true)
+    try {
+      const response = await apiClient.post<Blob>(
+        `/content/courses/${courseId}/book.pdf/regenerate`,
+        undefined,
+        { responseType: 'blob' as any }
+      )
+      const blob = response.data as any as Blob
+      downloadBlob(blob, `course-book-${courseId}.pdf`)
+      toast({
+        title: 'Course book PDF generated',
+        description: 'The course book PDF has been generated and saved. Download started.',
+      })
+    } catch (error) {
+      console.error('Failed to generate course book PDF:', error)
+      const blobMessage = await extractAxiosBlobError(error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to generate course book PDF',
+        description: blobMessage || extractErrorMessage(error),
+      })
+    } finally {
+      setGeneratingCourseBookPdf(false)
+    }
+  }
+
+  const handleDownloadCourseBookPdf = async () => {
+    if (!courseId || courseId === 'new') return
+    setDownloadingCourseBookPdf(true)
+    try {
+      const response = await apiClient.get<Blob>(
+        `/content/courses/${courseId}/book.pdf`,
+        { responseType: 'blob' as any }
+      )
+      const blob = response.data as any as Blob
+      downloadBlob(blob, `course-book-${courseId}.pdf`)
+    } catch (error) {
+      console.error('Failed to download course book PDF:', error)
+      const status = (error as any)?.response?.status
+      if (status === 404) {
+        toast({
+          variant: 'destructive',
+          title: 'Course book PDF not generated yet',
+          description: 'Click “Generate/Regenerate PDF” first, then download.',
+        })
+        return
+      }
+      const blobMessage = await extractAxiosBlobError(error)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to download course book PDF',
+        description: blobMessage || extractErrorMessage(error),
+      })
+    } finally {
+      setDownloadingCourseBookPdf(false)
+    }
+  }
+
   const getClassDisplayName = (classId: string) => {
     const classItem = classes.find(c => c.id === classId)
     if (!classItem) return classId
@@ -1059,7 +1152,7 @@ export default function CourseEditPage() {
                   {courseId !== 'new' && (
                     <div className="border-t pt-6">
                       <h2 className="text-lg font-semibold mb-4">Course Actions</h2>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-wrap">
                         <Badge variant={course?.isPublished ? 'default' : 'secondary'} className="text-sm">
                           {course?.isPublished ? 'Published' : 'Draft'}
                         </Badge>
@@ -1070,6 +1163,24 @@ export default function CourseEditPage() {
                           >
                             <Eye className="h-4 w-4 mr-2" />
                             Preview as Student
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={handleDownloadCourseBookPdf}
+                            disabled={downloadingCourseBookPdf || generatingCourseBookPdf}
+                          >
+                            {(downloadingCourseBookPdf || generatingCourseBookPdf) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            <Download className="h-4 w-4 mr-2" />
+                            Download Course Book PDF
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={handleGenerateCourseBookPdf}
+                            disabled={generatingCourseBookPdf || downloadingCourseBookPdf}
+                          >
+                            {(generatingCourseBookPdf || downloadingCourseBookPdf) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            <BookOpen className="h-4 w-4 mr-2" />
+                            Generate/Regenerate PDF
                           </Button>
                           {course?.isPublished ? (
                             <Button

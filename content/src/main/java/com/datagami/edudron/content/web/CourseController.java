@@ -4,7 +4,6 @@ import com.datagami.edudron.content.dto.CourseDTO;
 import com.datagami.edudron.content.dto.CreateCourseRequest;
 import com.datagami.edudron.content.dto.GenerateCourseRequest;
 import com.datagami.edudron.content.dto.SectionDTO;
-import com.datagami.edudron.content.service.CourseGenerationService;
 import com.datagami.edudron.content.service.CourseService;
 import com.datagami.edudron.content.service.SectionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,9 +34,6 @@ public class CourseController {
 
     @Autowired
     private CourseService courseService;
-    
-    @Autowired
-    private CourseGenerationService courseGenerationService;
     
     @Autowired
     private SectionService sectionService;
@@ -101,6 +97,13 @@ public class CourseController {
     @Operation(summary = "Publish course", description = "Publish a course and calculate statistics")
     public ResponseEntity<CourseDTO> publishCourse(@PathVariable String id) {
         CourseDTO course = courseService.publishCourse(id);
+        return ResponseEntity.ok(course);
+    }
+
+    @PostMapping("/{id}/unpublish")
+    @Operation(summary = "Unpublish course", description = "Unpublish a course (set isPublished=false)")
+    public ResponseEntity<CourseDTO> unpublishCourse(@PathVariable String id) {
+        CourseDTO course = courseService.unpublishCourse(id);
         return ResponseEntity.ok(course);
     }
 

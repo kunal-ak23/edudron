@@ -12,8 +12,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.UUID;
@@ -288,6 +290,72 @@ public class MediaUploadService {
             // Log error but don't throw exception to avoid breaking the main operation
             System.err.println("Failed to delete media: " + mediaUrl + ", Error: " + e.getMessage());
         }
+    }
+
+    /**
+     * Upload raw bytes to a deterministic blob path. Intended for server-generated files (e.g., PDFs).
+     *
+     * @param bytes The bytes to upload
+     * @param blobPath The blob path within the container (e.g., tenantId/course-books/<courseId>/course-book.pdf)
+     * @param contentType Optional content-type (e.g., application/pdf)
+     * @return Public URL (base-url based if configured, else Azure blob URL)
+     */
+    public String uploadBytesToPath(byte[] bytes, String blobPath, String contentType) {
+        if (blobServiceClient == null) {
+            throw new IllegalStateException("Azure Storage is not configured");
+        }
+        if (bytes == null || bytes.length == 0) {
+            throw new IllegalArgumentException("Bytes are empty");
+        }
+        if (blobPath == null || blobPath.isBlank()) {
+            throw new IllegalArgumentException("Blob path is required");
+        }
+
+        BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
+        if (!containerClient.exists()) {
+            containerClient.create();
+        }
+
+        BlobClient blobClient = containerClient.getBlobClient(blobPath);
+        try (InputStream is = new ByteArrayInputStream(bytes)) {
+            blobClient.upload(is, bytes.length, true);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to upload bytes to Azure Blob: " + e.getMessage(), e);
+        }
+
+        if (contentType != null && !contentType.isBlank()) {
+            BlobHttpHeaders headers = new BlobHttpHeaders().setContentType(contentType);
+            blobClient.setHttpHeaders(headers);
+        }
+
+        if (!baseUrl.isEmpty()) {
+            return String.format("%s/%s/%s", baseUrl, containerName, blobPath);
+        }
+        return blobClient.getBlobUrl();
+    }
+
+    /**
+     * Open a streaming download for a previously-uploaded blob URL.
+     * Caller is responsible for closing the returned stream.
+     */
+    public InputStream openDownloadStreamByUrl(String mediaUrl) {
+        BlobClient client = getBlobClientFromUrl(mediaUrl);
+        return client.openInputStream();
+    }
+
+    /**
+     * Resolve a blob client from a full URL created by this service.
+     */
+    public BlobClient getBlobClientFromUrl(String mediaUrl) {
+        if (blobServiceClient == null) {
+            throw new IllegalStateException("Azure Storage is not configured");
+        }
+        String blobName = extractBlobNameFromUrl(mediaUrl);
+        if (blobName == null || blobName.isBlank()) {
+            throw new IllegalArgumentException("Could not extract blob name from URL");
+        }
+        BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
+        return containerClient.getBlobClient(blobName);
     }
 
     /**
