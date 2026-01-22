@@ -1,11 +1,15 @@
 package com.datagami.edudron.student.repo;
 
 import com.datagami.edudron.student.domain.LectureViewSession;
+import com.datagami.edudron.student.dto.LectureEngagementAggregateDTO;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -61,5 +65,127 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
     long countUniqueViewersByCourseId(
         @Param("clientId") UUID clientId,
         @Param("courseId") String courseId
+    );
+
+    /**
+     * Get aggregated engagement metrics for all lectures in a course.
+     * This performs aggregations at the database level instead of loading all sessions.
+     */
+    @Query("""
+        SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
+            s.lectureId,
+            COUNT(s),
+            COUNT(DISTINCT s.studentId),
+            AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                THEN CAST(s.durationSeconds AS double) ELSE NULL END),
+            SUM(CASE WHEN s.isCompletedInSession = true THEN 1L ELSE 0L END),
+            COUNT(s),
+            SUM(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                AND s.durationSeconds < :thresholdSeconds THEN 1L ELSE 0L END)
+        )
+        FROM LectureViewSession s
+        WHERE s.clientId = :clientId AND s.courseId = :courseId
+        GROUP BY s.lectureId
+        ORDER BY COUNT(s) DESC
+        """)
+    List<LectureEngagementAggregateDTO> getLectureEngagementAggregatesByCourse(
+        @Param("clientId") UUID clientId,
+        @Param("courseId") String courseId,
+        @Param("thresholdSeconds") Integer thresholdSeconds
+    );
+
+    /**
+     * Get aggregated engagement metrics for a specific lecture.
+     */
+    @Query("""
+        SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
+            s.lectureId,
+            COUNT(s),
+            COUNT(DISTINCT s.studentId),
+            AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                THEN CAST(s.durationSeconds AS double) ELSE NULL END),
+            SUM(CASE WHEN s.isCompletedInSession = true THEN 1L ELSE 0L END),
+            COUNT(s),
+            SUM(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                AND s.durationSeconds < :thresholdSeconds THEN 1L ELSE 0L END)
+        )
+        FROM LectureViewSession s
+        WHERE s.clientId = :clientId AND s.lectureId = :lectureId
+        GROUP BY s.lectureId
+        """)
+    LectureEngagementAggregateDTO getLectureEngagementAggregate(
+        @Param("clientId") UUID clientId,
+        @Param("lectureId") String lectureId,
+        @Param("thresholdSeconds") Integer thresholdSeconds
+    );
+
+    /**
+     * Get course-level aggregated metrics.
+     */
+    @Query("""
+        SELECT 
+            COUNT(s),
+            COUNT(DISTINCT s.studentId),
+            AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                THEN CAST(s.durationSeconds AS double) ELSE NULL END),
+            SUM(CASE WHEN s.isCompletedInSession = true THEN 1L ELSE 0L END)
+        FROM LectureViewSession s
+        WHERE s.clientId = :clientId AND s.courseId = :courseId
+        """)
+    Object[] getCourseAggregates(
+        @Param("clientId") UUID clientId,
+        @Param("courseId") String courseId
+    );
+
+    /**
+     * Get activity timeline data aggregated by day.
+     * Using CAST to DATE for PostgreSQL compatibility.
+     */
+    @Query(value = """
+        SELECT 
+            CAST(s.session_started_at AS DATE) as date,
+            COUNT(*) as sessionCount,
+            COUNT(DISTINCT s.student_id) as uniqueStudents
+        FROM student.lecture_view_sessions s
+        WHERE s.client_id = CAST(:clientId AS uuid) AND s.course_id = :courseId
+        GROUP BY CAST(s.session_started_at AS DATE)
+        ORDER BY CAST(s.session_started_at AS DATE) ASC
+        """, nativeQuery = true)
+    List<Object[]> getActivityTimelineByCourse(
+        @Param("clientId") UUID clientId,
+        @Param("courseId") String courseId
+    );
+
+    /**
+     * Get recent sessions with pagination (for lecture analytics).
+     */
+    @Query("SELECT s FROM LectureViewSession s WHERE s.clientId = :clientId AND s.lectureId = :lectureId " +
+           "ORDER BY s.sessionStartedAt DESC")
+    Page<LectureViewSession> findRecentSessionsByLectureId(
+        @Param("clientId") UUID clientId,
+        @Param("lectureId") String lectureId,
+        Pageable pageable
+    );
+    
+    /**
+     * Find sessions by client and lecture ID with pagination (for compatibility).
+     */
+    default Page<LectureViewSession> findByClientIdAndLectureId(UUID clientId, String lectureId, Pageable pageable) {
+        return findRecentSessionsByLectureId(clientId, lectureId, pageable);
+    }
+
+    /**
+     * Get first and last view timestamps for a lecture.
+     */
+    @Query("""
+        SELECT 
+            MIN(s.sessionStartedAt) as firstView,
+            MAX(s.sessionStartedAt) as lastView
+        FROM LectureViewSession s
+        WHERE s.clientId = :clientId AND s.lectureId = :lectureId
+        """)
+    Object[] getFirstAndLastView(
+        @Param("clientId") UUID clientId,
+        @Param("lectureId") String lectureId
     );
 }
