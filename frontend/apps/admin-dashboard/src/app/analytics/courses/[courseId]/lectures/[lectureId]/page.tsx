@@ -136,7 +136,7 @@ export default function LectureAnalyticsPage() {
                 <CheckCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{analytics.completionRate.toFixed(1)}%</div>
+                <div className="text-2xl font-bold">{(analytics.completionRate ?? 0).toFixed(1)}%</div>
                 <p className="text-xs text-muted-foreground">Completed sessions</p>
               </CardContent>
             </Card>
@@ -163,8 +163,8 @@ export default function LectureAnalyticsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  <Badge variant={analytics.skipRate > 50 ? 'destructive' : 'secondary'}>
-                    {analytics.skipRate.toFixed(1)}%
+                  <Badge variant={(analytics.skipRate ?? 0) > 50 ? 'destructive' : 'secondary'}>
+                    {(analytics.skipRate ?? 0).toFixed(1)}%
                   </Badge>
                 </div>
               </CardContent>

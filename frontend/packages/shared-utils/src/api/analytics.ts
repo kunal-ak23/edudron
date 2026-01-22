@@ -97,19 +97,64 @@ export class AnalyticsApi {
   constructor(private apiClient: ApiClient) {}
 
   async startLectureSession(lectureId: string, request: StartSessionRequest): Promise<LectureViewSession> {
-    const response = await this.apiClient.post<LectureViewSession>(
-      `/api/lectures/${lectureId}/sessions/start`,
-      request
-    )
-    return response.data
+    console.log('[AnalyticsApi] startLectureSession called:', {
+      lectureId,
+      courseId: request.courseId,
+      progressAtStart: request.progressAtStart,
+      url: `/api/lectures/${lectureId}/sessions/start`
+    })
+    try {
+      const response = await this.apiClient.post<LectureViewSession>(
+        `/api/lectures/${lectureId}/sessions/start`,
+        request
+      )
+      console.log('[AnalyticsApi] startLectureSession success:', {
+        sessionId: response.data?.id,
+        lectureId: response.data?.lectureId,
+        startedAt: response.data?.sessionStartedAt
+      })
+      return response.data
+    } catch (error) {
+      console.error('[AnalyticsApi] startLectureSession error:', {
+        lectureId,
+        courseId: request.courseId,
+        error: error instanceof Error ? error.message : String(error),
+        errorResponse: (error as any)?.response?.data
+      })
+      throw error
+    }
   }
 
   async endLectureSession(lectureId: string, sessionId: string, request: EndSessionRequest): Promise<LectureViewSession> {
-    const response = await this.apiClient.post<LectureViewSession>(
-      `/api/lectures/${lectureId}/sessions/${sessionId}/end`,
-      request
-    )
-    return response.data
+    console.log('[AnalyticsApi] endLectureSession called:', {
+      lectureId,
+      sessionId,
+      progressAtEnd: request.progressAtEnd,
+      isCompleted: request.isCompleted,
+      url: `/api/lectures/${lectureId}/sessions/${sessionId}/end`
+    })
+    try {
+      const response = await this.apiClient.post<LectureViewSession>(
+        `/api/lectures/${lectureId}/sessions/${sessionId}/end`,
+        request
+      )
+      console.log('[AnalyticsApi] endLectureSession success:', {
+        sessionId: response.data?.id,
+        lectureId: response.data?.lectureId,
+        duration: response.data?.durationSeconds,
+        endedAt: response.data?.sessionEndedAt
+      })
+      return response.data
+    } catch (error) {
+      console.error('[AnalyticsApi] endLectureSession error:', {
+        lectureId,
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+        errorResponse: (error as any)?.response?.data,
+        statusCode: (error as any)?.response?.status
+      })
+      throw error
+    }
   }
 
   async getLectureAnalytics(lectureId: string): Promise<LectureAnalytics> {

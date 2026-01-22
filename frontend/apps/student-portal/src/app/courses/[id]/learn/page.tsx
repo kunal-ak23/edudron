@@ -59,6 +59,19 @@ export default function LearnPage() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const sessionStartTimeRef = useRef<number | null>(null)
   const isTabVisibleRef = useRef<boolean>(true)
+  const previousLectureIdRef = useRef<string | null>(null)
+  const isEndingSessionRef = useRef<boolean>(false)
+  const activeSessionIdRef = useRef<string | null>(null)
+  const completedLecturesRef = useRef<Set<string>>(completedLectures)
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId
+  }, [activeSessionId])
+  
+  useEffect(() => {
+    completedLecturesRef.current = completedLectures
+  }, [completedLectures])
 
   // Refs for scrollable containers
   const mainContentRef = useRef<HTMLDivElement>(null)
@@ -188,13 +201,16 @@ export default function LearnPage() {
   }
 
   const loadCourseData = useCallback(async () => {
+    console.log('[Session Tracking] loadCourseData called:', { courseId })
     try {
       setLoading(true)
       
       let courseData: Course | null = null
       try {
         courseData = await coursesApi.getCourse(courseId)
+        console.log('[Session Tracking] Course loaded:', { courseId, courseTitle: courseData?.title })
       } catch (error: any) {
+        console.error('[Session Tracking] Failed to load course:', { courseId, error })
         setCourse(null)
         setLoading(false)
         return
@@ -432,74 +448,245 @@ export default function LearnPage() {
     }
   }, [])
 
-  // End previous session when lecture changes
+  // End previous session when lecture actually changes (not on every render)
   useEffect(() => {
-    const endPreviousSession = async () => {
-      if (activeSessionId && selectedLecture) {
-        try {
-          const progress = completedLectures.has(selectedLecture.id) ? 100 : 0
-          await analyticsApi.endLectureSession(selectedLecture.id, activeSessionId, {
-            progressAtEnd: progress,
-            isCompleted: completedLectures.has(selectedLecture.id)
-          })
-        } catch (error) {
-          console.error('Failed to end session:', error)
-        }
-        setActiveSessionId(null)
-        sessionStartTimeRef.current = null
-      }
-    }
+    const currentLectureId = selectedLecture?.id
+    const currentActiveSessionId = activeSessionIdRef.current
     
-    return () => {
-      endPreviousSession()
+    // Only end if:
+    // 1. We have an active session (from ref to avoid dependency issues)
+    // 2. We have a previous lecture ID (not the first time)
+    // 3. The lecture actually changed (different from previous)
+    // 4. We're not already in the process of ending a session
+    // 5. We're not currently updating completion (to avoid triggering when marking complete)
+    if (currentActiveSessionId && 
+        previousLectureIdRef.current && 
+        currentLectureId &&
+        previousLectureIdRef.current !== currentLectureId &&
+        !isEndingSessionRef.current &&
+        !isUpdatingCompletionRef.current) {
+      const lectureIdToEnd = previousLectureIdRef.current
+      const sessionIdToEnd = currentActiveSessionId
+      
+      console.log('[Session Tracking] Lecture changed, ending previous session:', {
+        sessionId: sessionIdToEnd,
+        previousLectureId: lectureIdToEnd,
+        newLectureId: currentLectureId,
+        courseId: courseId,
+        reason: 'lecture changed'
+      })
+      
+      isEndingSessionRef.current = true
+      
+      const endSession = async () => {
+        try {
+          // Get progress for the previous lecture (read from ref to get latest value)
+          const isCompleted = completedLecturesRef.current.has(lectureIdToEnd)
+          const progress = isCompleted ? 100 : 0
+          console.log('[Session Tracking] Calling endLectureSession API for previous lecture:', {
+            lectureId: lectureIdToEnd,
+            sessionId: sessionIdToEnd,
+            progressAtEnd: progress,
+            isCompleted
+          })
+          await analyticsApi.endLectureSession(lectureIdToEnd, sessionIdToEnd, {
+            progressAtEnd: progress,
+            isCompleted
+          })
+          console.log('[Session Tracking] Successfully ended previous session:', sessionIdToEnd)
+          
+          // Update previous lecture ID ONLY after successfully ending the session
+          previousLectureIdRef.current = currentLectureId
+        } catch (error) {
+          console.error('[Session Tracking] Failed to end previous session:', {
+            sessionId: sessionIdToEnd,
+            lectureId: lectureIdToEnd,
+            error: error
+          })
+          // Don't update previousLectureIdRef if ending failed
+        } finally {
+          isEndingSessionRef.current = false
+          // Clear session state only after ending
+          setActiveSessionId(null)
+          activeSessionIdRef.current = null
+          sessionStartTimeRef.current = null
+        }
+      }
+      
+      endSession()
+    } else if (currentLectureId && !previousLectureIdRef.current) {
+      // First time setting a lecture - just update the ref
+      previousLectureIdRef.current = currentLectureId
     }
-  }, [selectedLecture?.id, activeSessionId, completedLectures])
+    // Note: We don't update previousLectureIdRef here if the lecture hasn't changed
+    // It will be updated after the session is successfully ended
+  }, [selectedLecture?.id, courseId]) // Removed completedLectures and activeSessionId from dependencies
 
-  // Start new session when lecture is selected
+  // Start new session when lecture is selected (only if we don't already have an active session for this lecture)
   useEffect(() => {
     const startSession = async () => {
-      if (selectedLecture && !isUpdatingCompletionRef.current) {
+      const currentLectureId = selectedLecture?.id
+      const currentActiveSessionId = activeSessionIdRef.current
+      
+      console.log('[Session Tracking] Attempting to start session:', {
+        selectedLecture: currentLectureId,
+        courseId: courseId,
+        isUpdatingCompletion: isUpdatingCompletionRef.current,
+        hasSelectedLecture: !!selectedLecture,
+        currentActiveSessionId: currentActiveSessionId,
+        previousLectureId: previousLectureIdRef.current,
+        isEndingSession: isEndingSessionRef.current
+      })
+      
+      // Only start if:
+      // 1. We have a selected lecture
+      // 2. We're not updating completion
+      // 3. We're not currently ending a session
+      // 4. We don't already have an active session for this lecture (avoid duplicate starts)
+      if (selectedLecture && !isUpdatingCompletionRef.current && !isEndingSessionRef.current) {
+        // Check if we already have an active session for this lecture
+        if (currentActiveSessionId && previousLectureIdRef.current === currentLectureId) {
+          console.log('[Session Tracking] Session already active for this lecture, skipping start:', {
+            sessionId: currentActiveSessionId,
+            lectureId: currentLectureId
+          })
+          return
+        }
+        
         try {
-          const progress = completedLectures.has(selectedLecture.id) ? 100 : 0
-          const session = await analyticsApi.startLectureSession(selectedLecture.id, {
-            courseId,
-            lectureId: selectedLecture.id,
+          // Read from ref to get latest value
+          const progress = completedLecturesRef.current.has(currentLectureId) ? 100 : 0
+          console.log('[Session Tracking] Calling startLectureSession API:', {
+            lectureId: currentLectureId,
+            courseId: courseId,
             progressAtStart: progress
           })
+          const session = await analyticsApi.startLectureSession(currentLectureId, {
+            courseId,
+            lectureId: currentLectureId,
+            progressAtStart: progress
+          })
+          console.log('[Session Tracking] Successfully started session:', {
+            sessionId: session.id,
+            lectureId: currentLectureId,
+            startedAt: session.sessionStartedAt
+          })
           setActiveSessionId(session.id)
+          activeSessionIdRef.current = session.id
           sessionStartTimeRef.current = Date.now()
+          // Update previousLectureIdRef after successfully starting a session
+          // Only update if it's not already set to this lecture (to avoid duplicate updates)
+          // The "end previous session" effect will update it when switching lectures
+          if (currentLectureId && previousLectureIdRef.current !== currentLectureId) {
+            previousLectureIdRef.current = currentLectureId
+          }
         } catch (error) {
-          console.error('Failed to start session:', error)
+          console.error('[Session Tracking] Failed to start session:', {
+            lectureId: currentLectureId,
+            courseId: courseId,
+            error: error,
+            errorMessage: error instanceof Error ? error.message : String(error),
+            errorStack: error instanceof Error ? error.stack : undefined
+          })
         }
+      } else {
+        console.log('[Session Tracking] Skipping session start:', {
+          reason: !selectedLecture ? 'no selected lecture' : 
+                  isUpdatingCompletionRef.current ? 'isUpdatingCompletion is true' : 
+                  'isEndingSession is true',
+          selectedLecture: currentLectureId,
+          isUpdatingCompletion: isUpdatingCompletionRef.current,
+          isEndingSession: isEndingSessionRef.current
+        })
       }
     }
     
-    startSession()
-  }, [selectedLecture?.id, courseId, completedLectures])
+    // Small delay to ensure previous session cleanup completes first (if lecture changed)
+    const timeoutId = setTimeout(() => {
+      startSession()
+    }, 300)
+    
+    return () => clearTimeout(timeoutId)
+  }, [selectedLecture?.id, courseId]) // Removed activeSessionId and completedLectures to prevent re-triggering
 
-  // Handle page unload - end session
+  // Handle page unload - end session (using fetch with keepalive for reliability)
   useEffect(() => {
-    const handleBeforeUnload = async () => {
-      if (activeSessionId && selectedLecture) {
-        // Use sendBeacon for reliability on page unload
-        const progress = completedLectures.has(selectedLecture.id) ? 100 : 0
+    let hasUnloaded = false
+    
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Only process if we haven't already handled this unload
+      if (hasUnloaded) return
+      hasUnloaded = true
+      
+      const currentSessionId = activeSessionIdRef.current
+      const currentLectureId = previousLectureIdRef.current // Use previousLectureIdRef as it tracks the current lecture
+      
+      if (currentSessionId && currentLectureId && !isEndingSessionRef.current) {
+        console.log('[Session Tracking] Page unloading, ending session:', {
+          sessionId: currentSessionId,
+          lectureId: currentLectureId
+        })
+        
+        // Read completedLectures from ref at unload time (always has latest value)
+        const isCompleted = completedLecturesRef.current.has(currentLectureId)
+        const progress = isCompleted ? 100 : 0
+        
+        // Use fetch with keepalive for reliable unload tracking
         try {
-          await analyticsApi.endLectureSession(selectedLecture.id, activeSessionId, {
+          const data = JSON.stringify({
             progressAtEnd: progress,
-            isCompleted: completedLectures.has(selectedLecture.id)
+            isCompleted
+          })
+          const url = `${process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080'}/api/lectures/${currentLectureId}/sessions/${currentSessionId}/end`
+          
+          // Add auth token and tenant ID to the request
+          const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+          const tenantId = typeof window !== 'undefined' ? 
+            (localStorage.getItem('clientId') || localStorage.getItem('selectedTenantId') || localStorage.getItem('tenant_id')) : null
+          
+          fetch(url, {
+            method: 'POST',
+            body: data,
+            headers: { 
+              'Content-Type': 'application/json',
+              ...(token && { 'Authorization': `Bearer ${token}` }),
+              ...(tenantId && { 'X-Client-Id': tenantId })
+            },
+            keepalive: true
+          }).then(() => {
+            console.log('[Session Tracking] Sent session end via fetch keepalive on page unload')
+          }).catch(err => {
+            console.error('[Session Tracking] Failed to end session on unload:', err)
           })
         } catch (error) {
-          // Ignore errors on unload
+          console.error('[Session Tracking] Failed to end session on page unload:', error)
         }
+      } else {
+        console.log('[Session Tracking] Skipping session end on page unload:', {
+          hasSessionId: !!currentSessionId,
+          hasLectureId: !!currentLectureId,
+          isEndingSession: isEndingSessionRef.current
+        })
+      }
+    }
+    
+    // Also handle visibility change (tab switch, minimize) as a fallback
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Tab is now hidden - could be unload, but we'll let beforeunload handle it
+        // This is just for logging
+        console.log('[Session Tracking] Tab hidden')
       }
     }
     
     window.addEventListener('beforeunload', handleBeforeUnload)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      handleBeforeUnload()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [activeSessionId, selectedLecture?.id, completedLectures])
+  }, []) // No dependencies - this should only set up once
 
   // Handle tab visibility changes
   useEffect(() => {
@@ -620,6 +807,12 @@ export default function LearnPage() {
   }, [selectedLecture])
 
   const handleLectureSelect = (lecture: Lecture) => {
+    console.log('[Session Tracking] handleLectureSelect called:', {
+      lectureId: lecture.id,
+      lectureTitle: lecture.title,
+      previousLectureId: selectedLecture?.id,
+      activeSessionId: activeSessionId
+    })
     setSelectedLecture(lecture)
     setSelectedSection(null) // Clear module selection when selecting a lecture
     // Keep URL in sync so direct opens don't get overridden by saved state
@@ -772,17 +965,57 @@ export default function LearnPage() {
         progressPercentage: isCompleted ? 100 : 0
       })
 
-      // Update session if active
-      if (activeSessionId && selectedLecture?.id === lectureId) {
+      // Update session if active - end current session and start a new one with updated progress
+      const currentActiveSessionId = activeSessionIdRef.current
+      if (currentActiveSessionId && selectedLecture?.id === lectureId) {
+        console.log('[Session Tracking] Marking lecture complete, ending and restarting session:', {
+          sessionId: currentActiveSessionId,
+          lectureId: lectureId,
+          isCompleted: isCompleted
+        })
         try {
-          await analyticsApi.endLectureSession(lectureId, activeSessionId, {
+          // End current session
+          await analyticsApi.endLectureSession(lectureId, currentActiveSessionId, {
             progressAtEnd: isCompleted ? 100 : 0,
             isCompleted
           })
+          console.log('[Session Tracking] Successfully ended session on completion')
+          
+          // Start a new session with updated progress
+          const newSession = await analyticsApi.startLectureSession(lectureId, {
+            courseId,
+            lectureId: lectureId,
+            progressAtStart: isCompleted ? 100 : 0
+          })
+          console.log('[Session Tracking] Started new session after completion update:', {
+            sessionId: newSession.id,
+            lectureId: lectureId
+          })
+          setActiveSessionId(newSession.id)
+          activeSessionIdRef.current = newSession.id
+          // Update previousLectureIdRef to match current lecture after restarting session
+          previousLectureIdRef.current = lectureId
         } catch (error) {
-          console.error('Failed to update session on completion:', error)
+          console.error('[Session Tracking] Failed to update session on completion:', {
+            sessionId: currentActiveSessionId,
+            lectureId: lectureId,
+            error: error
+          })
         }
+      } else {
+        console.log('[Session Tracking] Not ending session on completion:', {
+          hasActiveSession: !!currentActiveSessionId,
+          activeSessionId: currentActiveSessionId,
+          selectedLectureId: selectedLecture?.id,
+          lectureId: lectureId,
+          matches: selectedLecture?.id === lectureId
+        })
       }
+      
+      // Reset flag after a short delay to allow state updates to complete
+      setTimeout(() => {
+        isUpdatingCompletionRef.current = false
+      }, 100)
 
       let updatedProgress = null
       let updatedLectureProgress: any[] = []

@@ -25,7 +25,8 @@ import {
   Database,
   CreditCard,
   Sparkles,
-  ClipboardList
+  ClipboardList,
+  BarChart3
 } from 'lucide-react'
 
 interface MenuItem {
@@ -114,6 +115,12 @@ const menuItems: MenuItem[] = [
     requiresTenant: true,
   },
   {
+    name: 'Analytics',
+    href: '/analytics',
+    icon: BarChart3,
+    requiresTenant: true,
+  },
+  {
     name: 'Payments',
     href: '/payments',
     icon: CreditCard,
@@ -171,6 +178,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
     if (path.startsWith('/courses')) return 'Courses'
     if (path.startsWith('/exams')) return 'Exams'
     if (path.startsWith('/enrollments')) return 'Enrollments'
+    if (path.startsWith('/analytics')) return 'Analytics'
     if (path.startsWith('/payments')) return 'Payments'
     if (path.startsWith('/settings')) return 'Settings'
     if (path === '/dashboard' || path === '/') return 'Dashboard'

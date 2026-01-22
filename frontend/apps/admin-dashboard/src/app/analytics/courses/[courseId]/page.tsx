@@ -198,10 +198,10 @@ export default function CourseAnalyticsPage() {
                           <TableCell>{lecture.totalViews}</TableCell>
                           <TableCell>{lecture.uniqueViewers}</TableCell>
                           <TableCell>{formatDuration(lecture.averageDurationSeconds)}</TableCell>
-                          <TableCell>{lecture.completionRate.toFixed(1)}%</TableCell>
+                          <TableCell>{(lecture.completionRate ?? 0).toFixed(1)}%</TableCell>
                           <TableCell>
-                            <Badge variant={lecture.skipRate > 50 ? 'destructive' : 'secondary'}>
-                              {lecture.skipRate.toFixed(1)}%
+                            <Badge variant={(lecture.skipRate ?? 0) > 50 ? 'destructive' : 'secondary'}>
+                              {(lecture.skipRate ?? 0).toFixed(1)}%
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -253,7 +253,7 @@ export default function CourseAnalyticsPage() {
                           <TableCell>{lecture.totalSessions}</TableCell>
                           <TableCell>{lecture.skippedSessions}</TableCell>
                           <TableCell>
-                            <Badge variant="destructive">{lecture.skipRate.toFixed(1)}%</Badge>
+                            <Badge variant="destructive">{(lecture.skipRate ?? 0).toFixed(1)}%</Badge>
                           </TableCell>
                           <TableCell>{formatDuration(lecture.averageDurationSeconds)}</TableCell>
                           <TableCell>

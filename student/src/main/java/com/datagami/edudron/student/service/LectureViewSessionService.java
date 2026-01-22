@@ -33,23 +33,34 @@ public class LectureViewSessionService {
     private EnrollmentRepository enrollmentRepository;
     
     public LectureViewSessionDTO startSession(String studentId, StartSessionRequest request) {
+        log.info("[Session Service] Starting session: studentId={}, courseId={}, lectureId={}, progressAtStart={}", 
+            studentId, request.getCourseId(), request.getLectureId(), request.getProgressAtStart());
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
+            log.error("[Session Service] Tenant context is not set for studentId={}", studentId);
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
+        log.debug("[Session Service] ClientId={}", clientId);
         
         // Verify enrollment
         List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(
             clientId, studentId, request.getCourseId());
+        log.debug("[Session Service] Found {} enrollments for studentId={}, courseId={}", 
+            enrollments.size(), studentId, request.getCourseId());
+        
         if (enrollments.isEmpty()) {
+            log.warn("[Session Service] Student {} is not enrolled in course {}", studentId, request.getCourseId());
             throw new IllegalArgumentException("Student is not enrolled in this course");
         }
         Enrollment enrollment = enrollments.get(0);
+        log.debug("[Session Service] Using enrollment: enrollmentId={}", enrollment.getId());
         
         // Create new session
         LectureViewSession session = new LectureViewSession();
-        session.setId(UlidGenerator.nextUlid());
+        String sessionId = UlidGenerator.nextUlid();
+        session.setId(sessionId);
         session.setClientId(clientId);
         session.setEnrollmentId(enrollment.getId());
         session.setStudentId(studentId);
@@ -58,18 +69,31 @@ public class LectureViewSessionService {
         session.setSessionStartedAt(java.time.OffsetDateTime.now());
         session.setProgressAtStart(request.getProgressAtStart() != null ? request.getProgressAtStart() : BigDecimal.ZERO);
         
+        log.info("[Session Service] Saving session: sessionId={}, studentId={}, lectureId={}, startedAt={}", 
+            sessionId, studentId, request.getLectureId(), session.getSessionStartedAt());
+        
         LectureViewSession saved = sessionRepository.save(session);
-        log.debug("Started lecture view session {} for student {} and lecture {}", 
-            saved.getId(), studentId, request.getLectureId());
+        log.info("[Session Service] Successfully started lecture view session: sessionId={}, studentId={}, lectureId={}, enrollmentId={}", 
+            saved.getId(), studentId, request.getLectureId(), enrollment.getId());
         
         return toDTO(saved);
     }
     
     public LectureViewSessionDTO endSession(String sessionId, EndSessionRequest request) {
-        LectureViewSession session = sessionRepository.findById(sessionId)
-            .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+        log.info("[Session Service] Ending session: sessionId={}, progressAtEnd={}, isCompleted={}", 
+            sessionId, request.getProgressAtEnd(), request.getIsCompleted());
         
-        session.setSessionEndedAt(java.time.OffsetDateTime.now());
+        LectureViewSession session = sessionRepository.findById(sessionId)
+            .orElseThrow(() -> {
+                log.error("[Session Service] Session not found: sessionId={}", sessionId);
+                return new IllegalArgumentException("Session not found: " + sessionId);
+            });
+        
+        log.debug("[Session Service] Found session: sessionId={}, lectureId={}, studentId={}, startedAt={}", 
+            sessionId, session.getLectureId(), session.getStudentId(), session.getSessionStartedAt());
+        
+        java.time.OffsetDateTime endTime = java.time.OffsetDateTime.now();
+        session.setSessionEndedAt(endTime);
         if (request.getProgressAtEnd() != null) {
             session.setProgressAtEnd(request.getProgressAtEnd());
         }
@@ -77,9 +101,12 @@ public class LectureViewSessionService {
             session.setIsCompletedInSession(request.getIsCompleted());
         }
         
+        log.info("[Session Service] Saving ended session: sessionId={}, endedAt={}, duration will be calculated", 
+            sessionId, endTime);
+        
         LectureViewSession saved = sessionRepository.save(session);
-        log.debug("Ended lecture view session {} with duration {} seconds", 
-            saved.getId(), saved.getDurationSeconds());
+        log.info("[Session Service] Successfully ended lecture view session: sessionId={}, lectureId={}, studentId={}, duration={}s, isCompleted={}", 
+            saved.getId(), saved.getLectureId(), saved.getStudentId(), saved.getDurationSeconds(), saved.getIsCompletedInSession());
         
         return toDTO(saved);
     }

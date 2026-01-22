@@ -260,6 +260,9 @@ public class AnalyticsService {
                 continue; // Skip if we don't have duration
             }
             
+            // Create final copy for use in lambda expressions
+            final int finalLectureDurationSeconds = lectureDurationSeconds;
+            
             List<LectureViewSession> completedSessions = sessions.stream()
                 .filter(s -> s.getSessionEndedAt() != null && s.getDurationSeconds() != null)
                 .collect(Collectors.toList());
@@ -269,15 +272,16 @@ public class AnalyticsService {
             }
             
             // Method 1: Duration threshold (< 10% of lecture duration)
-            int thresholdSeconds = (int) (lectureDurationSeconds * 0.1);
+            int thresholdSeconds = (int) (finalLectureDurationSeconds * 0.1);
             long shortDurationSessions = completedSessions.stream()
                 .filter(s -> s.getDurationSeconds() < thresholdSeconds)
                 .count();
             
             // Method 2: Quick completion (marked complete but < 5% duration)
+            int quickCompletionThreshold = (int) (finalLectureDurationSeconds * 0.05);
             long quickCompletionSessions = completedSessions.stream()
                 .filter(s -> s.getIsCompletedInSession() != null && s.getIsCompletedInSession())
-                .filter(s -> s.getDurationSeconds() < (lectureDurationSeconds * 0.05))
+                .filter(s -> s.getDurationSeconds() < quickCompletionThreshold)
                 .count();
             
             long totalSkipped = Math.max(shortDurationSessions, quickCompletionSessions);
@@ -292,7 +296,7 @@ public class AnalyticsService {
                     SkippedLectureDTO skippedDto = new SkippedLectureDTO();
                     skippedDto.setLectureId(lectureId);
                     skippedDto.setLectureTitle(lectureTitle);
-                    skippedDto.setLectureDurationSeconds(lectureDurationSeconds);
+                    skippedDto.setLectureDurationSeconds(finalLectureDurationSeconds);
                     skippedDto.setTotalSessions((long) completedSessions.size());
                     skippedDto.setSkippedSessions(totalSkipped);
                     skippedDto.setSkipRate(skipRate);
@@ -329,17 +333,25 @@ public class AnalyticsService {
             summary.setLectureId(lectureId);
             
             // Get lecture title
+            String lectureTitle = null;
             try {
                 String url = gatewayUrl + "/content/lectures/" + lectureId;
                 ResponseEntity<JsonNode> response = getRestTemplate().exchange(
                     url, HttpMethod.GET, null, JsonNode.class);
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                     JsonNode lecture = response.getBody();
-                    summary.setLectureTitle(lecture.has("title") ? lecture.get("title").asText() : lectureId);
+                    if (lecture.has("title")) {
+                        String title = lecture.get("title").asText();
+                        if (title != null && !title.trim().isEmpty() && !title.equals(lectureId)) {
+                            lectureTitle = title;
+                        }
+                    }
                 }
             } catch (Exception e) {
-                summary.setLectureTitle(lectureId);
+                log.debug("Failed to fetch lecture title for {}: {}", lectureId, e.getMessage());
             }
+            // Set title, or use a formatted version of the ID if title is not available
+            summary.setLectureTitle(lectureTitle != null ? lectureTitle : "Lecture " + lectureId.substring(0, Math.min(8, lectureId.length())));
             
             summary.setTotalViews((long) sessions.size());
             summary.setUniqueViewers(sessionRepository.countUniqueViewersByLectureId(clientId, lectureId));
@@ -364,6 +376,33 @@ public class AnalyticsService {
                     .divide(BigDecimal.valueOf(sessions.size()), 4, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100));
             summary.setCompletionRate(completionRate);
+            
+            // Calculate skip rate if we have lecture duration
+            try {
+                String url = gatewayUrl + "/content/lectures/" + lectureId;
+                ResponseEntity<JsonNode> response = getRestTemplate().exchange(
+                    url, HttpMethod.GET, null, JsonNode.class);
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    JsonNode lecture = response.getBody();
+                    if (lecture.has("durationSeconds")) {
+                        Integer lectureDurationSeconds = lecture.get("durationSeconds").asInt();
+                        if (lectureDurationSeconds != null && lectureDurationSeconds > 0) {
+                            int thresholdSeconds = (int) (lectureDurationSeconds * 0.1);
+                            long skipped = completedSessions.stream()
+                                .filter(s -> s.getDurationSeconds() < thresholdSeconds)
+                                .count();
+                            BigDecimal skipRate = completedSessions.isEmpty() ? BigDecimal.ZERO :
+                                BigDecimal.valueOf(skipped)
+                                    .divide(BigDecimal.valueOf(completedSessions.size()), 4, RoundingMode.HALF_UP)
+                                    .multiply(BigDecimal.valueOf(100));
+                            summary.setSkipRate(skipRate);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Failed to fetch lecture duration for skip rate calculation: {}", e.getMessage());
+                summary.setSkipRate(BigDecimal.ZERO);
+            }
             
             summaries.add(summary);
         }
