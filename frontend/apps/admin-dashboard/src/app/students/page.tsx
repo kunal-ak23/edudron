@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Plus, Search, Mail, Phone, User, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
-import { apiClient } from '@/lib/api'
+import { apiClient, institutesApi, classesApi, sectionsApi } from '@/lib/api'
+import type { Institute, Class, Section } from '@kunal-ak23/edudron-shared-utils'
 import Link from 'next/link'
 
 interface Student {
@@ -66,6 +67,8 @@ export default function StudentsPage() {
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const wasSearchFocusedRef = useRef(false)
   
   // Form state for adding student
   const [newStudent, setNewStudent] = useState({
@@ -74,7 +77,18 @@ export default function StudentsPage() {
     phone: '',
     password: '',
     autoGeneratePassword: true,
+    instituteId: '',
+    classId: '',
+    sectionId: '',
   })
+  
+  // State for institutes, classes, and sections
+  const [institutes, setInstitutes] = useState<Institute[]>([])
+  const [classes, setClasses] = useState<Class[]>([])
+  const [sections, setSections] = useState<Section[]>([])
+  const [loadingInstitutes, setLoadingInstitutes] = useState(false)
+  const [loadingClasses, setLoadingClasses] = useState(false)
+  const [loadingSections, setLoadingSections] = useState(false)
 
   const loadStudents = useCallback(async () => {
     try {
@@ -188,6 +202,36 @@ export default function StudentsPage() {
     return () => clearTimeout(timeoutId)
   }, [searchTerm])
 
+  // Track when search input has focus
+  useEffect(() => {
+    const handleFocus = () => {
+      wasSearchFocusedRef.current = true
+    }
+    const handleBlur = () => {
+      wasSearchFocusedRef.current = false
+    }
+    
+    const input = searchInputRef.current
+    if (input) {
+      input.addEventListener('focus', handleFocus)
+      input.addEventListener('blur', handleBlur)
+      return () => {
+        input.removeEventListener('focus', handleFocus)
+        input.removeEventListener('blur', handleBlur)
+      }
+    }
+  }, [])
+
+  // Restore focus after loading completes if user was typing
+  useEffect(() => {
+    if (!loading && wasSearchFocusedRef.current && searchInputRef.current) {
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(() => {
+        searchInputRef.current?.focus()
+      })
+    }
+  }, [loading])
+
   useEffect(() => {
     loadStudents()
   }, [currentPage, pageSize, debouncedSearchTerm, loadStudents])
@@ -213,6 +257,103 @@ export default function StudentsPage() {
     setCurrentPage(0)
   }, [searchTerm, pageSize])
 
+  // Load institutes and auto-select first one when dialog opens
+  useEffect(() => {
+    if (showAddDialog && user) {
+      const loadInstitutes = async () => {
+        try {
+          setLoadingInstitutes(true)
+          const allInstitutes = await institutesApi.listInstitutes()
+          setInstitutes(allInstitutes)
+          
+          // Auto-select first institute from user's instituteIds, or first available
+          if (user.instituteIds && user.instituteIds.length > 0) {
+            const userInstitute = allInstitutes.find(inst => user.instituteIds?.includes(inst.id))
+            if (userInstitute) {
+              setNewStudent(prev => ({ ...prev, instituteId: userInstitute.id }))
+            } else if (allInstitutes.length > 0) {
+              setNewStudent(prev => ({ ...prev, instituteId: allInstitutes[0].id }))
+            }
+          } else if (allInstitutes.length > 0) {
+            setNewStudent(prev => ({ ...prev, instituteId: allInstitutes[0].id }))
+          }
+        } catch (err) {
+          console.error('Failed to load institutes:', err)
+          toast({
+            variant: 'destructive',
+            title: 'Error',
+            description: 'Failed to load institutes',
+          })
+        } finally {
+          setLoadingInstitutes(false)
+        }
+      }
+      loadInstitutes()
+    } else if (!showAddDialog) {
+      // Reset form when dialog closes
+      setNewStudent({
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+        autoGeneratePassword: true,
+        instituteId: '',
+        classId: '',
+        sectionId: '',
+      })
+      setClasses([])
+      setSections([])
+    }
+  }, [showAddDialog, user, toast])
+
+  // Load classes when institute is selected
+  useEffect(() => {
+    if (newStudent.instituteId) {
+      const loadClasses = async () => {
+        try {
+          setLoadingClasses(true)
+          const instituteClasses = await classesApi.getActiveClassesByInstitute(newStudent.instituteId)
+          setClasses(instituteClasses)
+          // Reset class and section when institute changes
+          setNewStudent(prev => ({ ...prev, classId: '', sectionId: '' }))
+          setSections([])
+        } catch (err) {
+          console.error('Failed to load classes:', err)
+          setClasses([])
+        } finally {
+          setLoadingClasses(false)
+        }
+      }
+      loadClasses()
+    } else {
+      setClasses([])
+      setSections([])
+    }
+  }, [newStudent.instituteId])
+
+  // Load sections when class is selected
+  useEffect(() => {
+    if (newStudent.classId) {
+      const loadSections = async () => {
+        try {
+          setLoadingSections(true)
+          const classSections = await sectionsApi.getActiveSectionsByClass(newStudent.classId)
+          setSections(classSections)
+          // Reset section when class changes
+          setNewStudent(prev => ({ ...prev, sectionId: '' }))
+        } catch (err) {
+          console.error('Failed to load sections:', err)
+          setSections([])
+        } finally {
+          setLoadingSections(false)
+        }
+      }
+      loadSections()
+    } else {
+      setSections([])
+    }
+  }, [newStudent.classId])
+
   const handleAddStudent = async () => {
     if (!newStudent.name || !newStudent.email) {
       toast({
@@ -232,6 +373,15 @@ export default function StudentsPage() {
       return
     }
 
+    if (!newStudent.instituteId) {
+      toast({
+        variant: 'destructive',
+        title: 'Validation error',
+        description: 'Please select an institute',
+      })
+      return
+    }
+
     setCreating(true)
     try {
       const requestBody: any = {
@@ -240,6 +390,7 @@ export default function StudentsPage() {
         role: 'STUDENT',
         active: true,
         autoGeneratePassword: newStudent.autoGeneratePassword,
+        instituteIds: [newStudent.instituteId], // Required: at least one institute
       }
 
       if (newStudent.phone) {
@@ -250,11 +401,24 @@ export default function StudentsPage() {
         requestBody.password = newStudent.password
       }
 
-      await apiClient.post('/idp/users', requestBody)
+      const response = await apiClient.post('/idp/users', requestBody)
+      const createdUserId = response.data?.id || response.data?.data?.id
+      
+      if (!createdUserId) {
+        throw new Error('Failed to get student ID from response')
+      }
+      
+      // Note: Class and section assignment is typically done through enrollments
+      // For now, we'll just create the student with the institute
+      // The class/section can be assigned later through the enrollment flow
+      let successMessage = 'Student has been successfully created'
+      if (newStudent.classId || newStudent.sectionId) {
+        successMessage += '. Note: Class/section assignment should be done through enrollments.'
+      }
       
       toast({
         title: 'Student created',
-        description: 'Student has been successfully created',
+        description: successMessage,
       })
 
       // Reset form
@@ -264,6 +428,9 @@ export default function StudentsPage() {
         phone: '',
         password: '',
         autoGeneratePassword: true,
+        instituteId: '',
+        classId: '',
+        sectionId: '',
       })
       setShowAddDialog(false)
 
@@ -317,11 +484,11 @@ export default function StudentsPage() {
                 <div className="relative w-64">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
+                    ref={searchInputRef}
                     placeholder="Search students..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-8"
-                    disabled={loading}
                   />
                 </div>
               </div>
@@ -509,6 +676,63 @@ export default function StudentsPage() {
                 value={newStudent.phone}
                 onChange={(e) => setNewStudent({ ...newStudent, phone: e.target.value })}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="institute">Institute *</Label>
+              <Select
+                value={newStudent.instituteId}
+                onValueChange={(value) => setNewStudent({ ...newStudent, instituteId: value, classId: '', sectionId: '' })}
+                disabled={loadingInstitutes}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={loadingInstitutes ? "Loading..." : "Select institute"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {institutes.map((institute) => (
+                    <SelectItem key={institute.id} value={institute.id}>
+                      {institute.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="class">Class (Optional)</Label>
+              <Select
+                value={newStudent.classId}
+                onValueChange={(value) => setNewStudent({ ...newStudent, classId: value, sectionId: '' })}
+                disabled={!newStudent.instituteId || loadingClasses}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={!newStudent.instituteId ? "Select institute first" : loadingClasses ? "Loading..." : "Select class (optional)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {classes.map((classItem) => (
+                    <SelectItem key={classItem.id} value={classItem.id}>
+                      {classItem.name} {classItem.code ? `(${classItem.code})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="section">Section (Optional)</Label>
+              <Select
+                value={newStudent.sectionId}
+                onValueChange={(value) => setNewStudent({ ...newStudent, sectionId: value })}
+                disabled={!newStudent.classId || loadingSections}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={!newStudent.classId ? "Select class first" : loadingSections ? "Loading..." : "Select section (optional)"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {sections.map((section) => (
+                    <SelectItem key={section.id} value={section.id}>
+                      {section.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <div className="flex items-center space-x-2">
