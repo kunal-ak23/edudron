@@ -153,7 +153,7 @@ export default function DashboardPage() {
       return
     }
     
-    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']
+    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER', 'INSTRUCTOR']
     if (!allowedRoles.includes(authUser.role)) {
       router.push('/unauthorized')
     }
@@ -163,7 +163,7 @@ export default function DashboardPage() {
     return null
   }
 
-  const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']
+  const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER', 'INSTRUCTOR']
   if (!allowedRoles.includes(authUser.role)) {
     return null
   }

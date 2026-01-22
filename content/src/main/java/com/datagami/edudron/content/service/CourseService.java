@@ -91,6 +91,12 @@ public class CourseService {
     }
     
     public CourseDTO createCourse(CreateCourseRequest request) {
+        // INSTRUCTOR has view-only access - cannot create courses
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot create courses");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -195,6 +201,12 @@ public class CourseService {
     }
     
     public CourseDTO updateCourse(String id, CreateCourseRequest request) {
+        // INSTRUCTOR has view-only access - cannot update courses
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot update courses");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -465,6 +477,12 @@ public class CourseService {
     }
     
     public void deleteCourse(String id) {
+        // INSTRUCTOR has view-only access - cannot delete courses
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot delete courses");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -478,6 +496,12 @@ public class CourseService {
     }
     
     public CourseDTO publishCourse(String id) {
+        // INSTRUCTOR has view-only access - cannot publish courses
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot publish courses");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -542,6 +566,12 @@ public class CourseService {
     }
 
     public CourseDTO unpublishCourse(String id) {
+        // INSTRUCTOR has view-only access - cannot unpublish courses
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot unpublish courses");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");

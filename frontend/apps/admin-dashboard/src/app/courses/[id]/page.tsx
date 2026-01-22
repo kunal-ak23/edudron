@@ -41,9 +41,14 @@ export default function CourseEditPage() {
   const params = useParams()
   const courseId = params.id as string
   const { toast } = useToast()
+  const { user } = useAuth()
   const [course, setCourse] = useState<Partial<Course>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  
+  const isInstructor = user?.role === 'INSTRUCTOR'
+  const isSupportStaff = user?.role === 'SUPPORT_STAFF'
+  const canManageContent = !isInstructor && !isSupportStaff
   const [institutes, setInstitutes] = useState<Institute[]>([])
   const [classes, setClasses] = useState<Class[]>([])
   const [sections, setSections] = useState<Section[]>([])
@@ -713,12 +718,17 @@ export default function CourseEditPage() {
                   onClick={() => router.push('/courses')}
                   disabled={saving || publishing}
                 >
-                  Cancel
+                  Back
                 </Button>
-                <Button onClick={handleSave} disabled={saving || publishing}>
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {courseId === 'new' ? 'Create Course' : 'Save Changes'}
-                </Button>
+                {canManageContent && (
+                  <Button onClick={handleSave} disabled={saving || publishing}>
+                    {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {courseId === 'new' ? 'Create Course' : 'Save Changes'}
+                  </Button>
+                )}
+                {(isInstructor || isSupportStaff) && (
+                  <span className="text-sm text-muted-foreground">View-only access</span>
+                )}
               </div>
             </div>
           </div>
@@ -1193,39 +1203,48 @@ export default function CourseEditPage() {
                               Unpublish
                             </Button>
                           ) : (
-                            <Button
-                              onClick={handlePublish}
-                              disabled={publishing}
-                            >
-                              {publishing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                              <Globe className="h-4 w-4 mr-2" />
-                              Publish Course
-                            </Button>
+                            canManageContent && (
+                              <Button
+                                onClick={handlePublish}
+                                disabled={publishing}
+                              >
+                                {publishing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                <Globe className="h-4 w-4 mr-2" />
+                                Publish Course
+                              </Button>
+                            )
                           )}
                         </div>
                       </div>
-                      {!course?.isPublished && (
+                      {!course?.isPublished && canManageContent && (
                         <p className="text-sm text-gray-500 mt-2">
                           Publish the course to make it visible to students. You can preview it once published.
+                        </p>
+                      )}
+                      {(isInstructor || isSupportStaff) && (
+                        <p className="text-sm text-amber-600 mt-2">
+                          View-only mode: You cannot publish or modify this course.
                         </p>
                       )}
                     </div>
                   )}
 
                   {/* Actions */}
-                  <div className="border-t pt-6 flex justify-end space-x-4">
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push('/courses')}
-                      disabled={saving || publishing}
-                    >
-                      Cancel
-                    </Button>
-                    <Button onClick={handleSave} disabled={saving || publishing}>
-                      {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      {courseId === 'new' ? 'Create Course' : 'Save Changes'}
-                    </Button>
-                  </div>
+                  {canManageContent && (
+                    <div className="border-t pt-6 flex justify-end space-x-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push('/courses')}
+                        disabled={saving || publishing}
+                      >
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSave} disabled={saving || publishing}>
+                        {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        {courseId === 'new' ? 'Create Course' : 'Save Changes'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -1233,7 +1252,7 @@ export default function CourseEditPage() {
         </main>
 
         {/* Unsaved Changes Indicator */}
-        {hasUnsavedChanges && (
+        {hasUnsavedChanges && canManageContent && (
           <div className="fixed bottom-4 right-4 bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 z-50">
             <span className="text-sm font-medium">You have unsaved changes</span>
             <Button

@@ -49,7 +49,7 @@ public class User {
         CONTENT_MANAGER,     // Can manage course content within tenant
         
         // Tenant-level operational roles
-        INSTRUCTOR,          // Can create and manage courses, grade students
+        INSTRUCTOR,          // View-only access, can view student progress on dashboard
         STUDENT,             // Can enroll in courses and access content
         SUPPORT_STAFF        // Support staff with limited access
     }
@@ -126,7 +126,7 @@ public class User {
     
     public boolean canManageContent() {
         return this.role == Role.SYSTEM_ADMIN || this.role == Role.TENANT_ADMIN || 
-               this.role == Role.CONTENT_MANAGER || this.role == Role.INSTRUCTOR;
+               this.role == Role.CONTENT_MANAGER;
     }
     
     public boolean canManageUsers() {
@@ -142,6 +142,15 @@ public class User {
         return this.role == Role.STUDENT || this.role == Role.INSTRUCTOR || 
                this.role == Role.TENANT_ADMIN || this.role == Role.CONTENT_MANAGER ||
                this.role == Role.SYSTEM_ADMIN;
+    }
+    
+    public boolean canViewOnly() {
+        return this.role == Role.INSTRUCTOR || this.role == Role.SUPPORT_STAFF;
+    }
+    
+    public boolean canViewStudentProgress() {
+        return this.role == Role.SYSTEM_ADMIN || this.role == Role.TENANT_ADMIN || 
+               this.role == Role.INSTRUCTOR;
     }
 }
 

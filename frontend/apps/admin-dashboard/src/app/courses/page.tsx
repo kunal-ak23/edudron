@@ -81,6 +81,7 @@ function toPlainText(content: string): string {
 export default function CoursesPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
@@ -88,6 +89,10 @@ export default function CoursesPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all')
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [courseToDelete, setCourseToDelete] = useState<string | null>(null)
+  
+  const isInstructor = user?.role === 'INSTRUCTOR'
+  const isSupportStaff = user?.role === 'SUPPORT_STAFF'
+  const canManageContent = !isInstructor && !isSupportStaff
 
   const loadCourses = useCallback(async () => {
     try {
@@ -170,17 +175,26 @@ export default function CoursesPage() {
           {/* Page Header */}
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
-              <Button 
-                variant="outline"
-                onClick={() => router.push('/courses/generate')}
-              >
-                <Sparkles className="w-5 h-5 mr-2" />
-                Generate with AI
-              </Button>
-              <Button onClick={() => router.push('/courses/new')}>
-                <Plus className="w-5 h-5 mr-2" />
-                Create Course
-              </Button>
+              {canManageContent && (
+                <>
+                  <Button 
+                    variant="outline"
+                    onClick={() => router.push('/courses/generate')}
+                  >
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Generate with AI
+                  </Button>
+                  <Button onClick={() => router.push('/courses/new')}>
+                    <Plus className="w-5 h-5 mr-2" />
+                    Create Course
+                  </Button>
+                </>
+              )}
+              {(isInstructor || isSupportStaff) && (
+                <p className="text-sm text-muted-foreground">
+                  View-only access: You can view courses but cannot create or edit them
+                </p>
+              )}
             </div>
           </div>
 
@@ -240,14 +254,16 @@ export default function CoursesPage() {
                 <BookOpen className="mx-auto h-12 w-12 text-muted-foreground" />
                 <h3 className="mt-2 text-sm font-medium">No courses</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Get started by creating a new course.
+                  {canManageContent ? 'Get started by creating a new course.' : 'No courses available to view.'}
                 </p>
-                <div className="mt-6">
-                  <Button onClick={() => router.push('/courses/new')}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Course
-                  </Button>
-                </div>
+                {canManageContent && (
+                  <div className="mt-6">
+                    <Button onClick={() => router.push('/courses/new')}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Course
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -292,27 +308,34 @@ export default function CoursesPage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2 ml-4">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/courses/${course.id}`)
-                          }}
-                        >
-                          <Edit className="h-4 w-4 mr-1" />
-                          Edit
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={(e) => handleDeleteClick(course.id, e)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Delete
-                        </Button>
-                      </div>
+                      {canManageContent && (
+                        <div className="flex items-center space-x-2 ml-4">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              router.push(`/courses/${course.id}`)
+                            }}
+                          >
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={(e) => handleDeleteClick(course.id, e)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      )}
+                      {(isInstructor || isSupportStaff) && (
+                        <div className="ml-4">
+                          <span className="text-sm text-muted-foreground">View only</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
