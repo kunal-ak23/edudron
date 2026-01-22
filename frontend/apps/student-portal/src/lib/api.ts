@@ -1,4 +1,4 @@
-import { ApiClient, CoursesApi, EnrollmentsApi, PaymentsApi, LecturesApi, FeedbackApi, NotesApi, IssuesApi } from '@kunal-ak23/edudron-shared-utils'
+import { ApiClient, CoursesApi, EnrollmentsApi, PaymentsApi, LecturesApi, FeedbackApi, NotesApi, IssuesApi, AnalyticsApi } from '@kunal-ak23/edudron-shared-utils'
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080'
 
@@ -22,3 +22,4 @@ export const lecturesApi = new LecturesApi(apiClient)
 export const feedbackApi = new FeedbackApi(apiClient)
 export const notesApi = new NotesApi(apiClient)
 export const issuesApi = new IssuesApi(apiClient)
+export const analyticsApi = new AnalyticsApi(apiClient)

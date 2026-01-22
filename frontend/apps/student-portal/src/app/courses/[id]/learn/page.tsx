@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { ProtectedRoute, Button, VideoPlayer } from '@kunal-ak23/edudron-ui-components'
-import { coursesApi, enrollmentsApi, lecturesApi, feedbackApi, notesApi, issuesApi } from '@/lib/api'
+import { coursesApi, enrollmentsApi, lecturesApi, feedbackApi, notesApi, issuesApi, analyticsApi } from '@/lib/api'
 import type { Course, Section, Lecture, Progress, Feedback, Note, FeedbackType, IssueType, LectureContent } from '@kunal-ak23/edudron-shared-utils'
 import { MarkdownRenderer } from '@/components/MarkdownRenderer'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
@@ -55,6 +55,10 @@ export default function LearnPage() {
   const [attachments, setAttachments] = useState<LectureContent[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
   
+  // Session tracking state
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const sessionStartTimeRef = useRef<number | null>(null)
+  const isTabVisibleRef = useRef<boolean>(true)
 
   // Refs for scrollable containers
   const mainContentRef = useRef<HTMLDivElement>(null)
@@ -428,6 +432,87 @@ export default function LearnPage() {
     }
   }, [])
 
+  // End previous session when lecture changes
+  useEffect(() => {
+    const endPreviousSession = async () => {
+      if (activeSessionId && selectedLecture) {
+        try {
+          const progress = completedLectures.has(selectedLecture.id) ? 100 : 0
+          await analyticsApi.endLectureSession(selectedLecture.id, activeSessionId, {
+            progressAtEnd: progress,
+            isCompleted: completedLectures.has(selectedLecture.id)
+          })
+        } catch (error) {
+          console.error('Failed to end session:', error)
+        }
+        setActiveSessionId(null)
+        sessionStartTimeRef.current = null
+      }
+    }
+    
+    return () => {
+      endPreviousSession()
+    }
+  }, [selectedLecture?.id, activeSessionId, completedLectures])
+
+  // Start new session when lecture is selected
+  useEffect(() => {
+    const startSession = async () => {
+      if (selectedLecture && !isUpdatingCompletionRef.current) {
+        try {
+          const progress = completedLectures.has(selectedLecture.id) ? 100 : 0
+          const session = await analyticsApi.startLectureSession(selectedLecture.id, {
+            courseId,
+            lectureId: selectedLecture.id,
+            progressAtStart: progress
+          })
+          setActiveSessionId(session.id)
+          sessionStartTimeRef.current = Date.now()
+        } catch (error) {
+          console.error('Failed to start session:', error)
+        }
+      }
+    }
+    
+    startSession()
+  }, [selectedLecture?.id, courseId, completedLectures])
+
+  // Handle page unload - end session
+  useEffect(() => {
+    const handleBeforeUnload = async () => {
+      if (activeSessionId && selectedLecture) {
+        // Use sendBeacon for reliability on page unload
+        const progress = completedLectures.has(selectedLecture.id) ? 100 : 0
+        try {
+          await analyticsApi.endLectureSession(selectedLecture.id, activeSessionId, {
+            progressAtEnd: progress,
+            isCompleted: completedLectures.has(selectedLecture.id)
+          })
+        } catch (error) {
+          // Ignore errors on unload
+        }
+      }
+    }
+    
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      handleBeforeUnload()
+    }
+  }, [activeSessionId, selectedLecture?.id, completedLectures])
+
+  // Handle tab visibility changes
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      isTabVisibleRef.current = !document.hidden
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
+
   // Save position to localStorage when selectedLecture changes
   useEffect(() => {
     if (selectedLecture && !isUpdatingCompletionRef.current) {
@@ -686,6 +771,18 @@ export default function LearnPage() {
         isCompleted,
         progressPercentage: isCompleted ? 100 : 0
       })
+
+      // Update session if active
+      if (activeSessionId && selectedLecture?.id === lectureId) {
+        try {
+          await analyticsApi.endLectureSession(lectureId, activeSessionId, {
+            progressAtEnd: isCompleted ? 100 : 0,
+            isCompleted
+          })
+        } catch (error) {
+          console.error('Failed to update session on completion:', error)
+        }
+      }
 
       let updatedProgress = null
       let updatedLectureProgress: any[] = []

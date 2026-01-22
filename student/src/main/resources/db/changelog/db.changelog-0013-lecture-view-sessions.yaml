@@ -1,0 +1,66 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0013-lecture-view-sessions
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: lecture_view_sessions
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: lecture_view_sessions
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: enrollment_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: lecture_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: session_started_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: session_ended_at, type: timestamptz }
+              - column: { name: duration_seconds, type: integer, defaultValueNumeric: 0 }
+              - column:
+                  name: progress_at_start
+                  type: numeric(5,2)
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: progress_at_end
+                  type: numeric(5,2)
+                  defaultValueNumeric: 0
+              - column: { name: is_completed_in_session, type: boolean, defaultValueBoolean: false }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: lecture_view_sessions
+            schemaName: student
+            indexName: idx_lecture_view_sessions_client_student_lecture
+            columns:
+              - column: { name: client_id }
+              - column: { name: student_id }
+              - column: { name: lecture_id }
+        - createIndex:
+            tableName: lecture_view_sessions
+            schemaName: student
+            indexName: idx_lecture_view_sessions_client_course
+            columns:
+              - column: { name: client_id }
+              - column: { name: course_id }
+        - createIndex:
+            tableName: lecture_view_sessions
+            schemaName: student
+            indexName: idx_lecture_view_sessions_client_lecture
+            columns:
+              - column: { name: client_id }
+              - column: { name: lecture_id }
+        - createIndex:
+            tableName: lecture_view_sessions
+            schemaName: student
+            indexName: idx_lecture_view_sessions_started_at
+            columns:
+              - column: { name: session_started_at }

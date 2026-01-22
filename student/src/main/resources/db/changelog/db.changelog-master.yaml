@@ -23,4 +23,6 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0011-increase-enrollment-id-lengths.yaml
   - include:
       file: db/changelog/db.changelog-0012-exam-submission-fields.yaml
+  - include:
+      file: db/changelog/db.changelog-0013-lecture-view-sessions.yaml
 

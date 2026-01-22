@@ -29,6 +29,18 @@ export type { IssueReport, CreateIssueReportRequest, IssueType, IssueStatus } fr
 export { StudentsApi } from './api/students'
 export type { BulkStudentImportResult, StudentImportRowResult, BulkEnrollmentResult } from './api/students'
 export type { BulkEnrollmentResult as EnrollmentBulkEnrollmentResult } from './api/enrollments'
+export { AnalyticsApi } from './api/analytics'
+export type {
+  LectureViewSession,
+  LectureAnalytics,
+  CourseAnalytics,
+  StudentLectureEngagement,
+  LectureEngagementSummary,
+  SkippedLecture,
+  ActivityTimelinePoint,
+  StartSessionRequest,
+  EndSessionRequest
+} from './api/analytics'
 
 // Auth
 export { AuthService } from './auth/AuthService'
