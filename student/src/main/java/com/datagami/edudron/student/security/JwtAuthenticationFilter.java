@@ -118,6 +118,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     );
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+                    
+                    // Set user information as request attributes for event logging
+                    request.setAttribute("userId", username); // Using username as userId for now
+                    // Try to extract email from token if available
+                    try {
+                        String email = jwtUtil.extractClaim(token, claims -> {
+                            Object emailObj = claims.get("email");
+                            return emailObj != null ? emailObj.toString() : null;
+                        });
+                        if (email != null) {
+                            request.setAttribute("userEmail", email);
+                        }
+                    } catch (Exception e) {
+                        // Email not in token, that's okay
+                    }
+                    
                     if (isInstitutesEndpoint) {
                         logger.info("Authentication set for /api/institutes: username={}, role={}, X-Request-Id={}", 
                                 username, role, requestId);

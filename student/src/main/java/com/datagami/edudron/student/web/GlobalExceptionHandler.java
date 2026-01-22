@@ -1,16 +1,25 @@
 package com.datagami.edudron.student.web;
 
+import com.datagami.edudron.student.service.CommonEventService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.io.StringWriter;
+import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    
+    @Autowired
+    private CommonEventService eventService;
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
@@ -67,10 +76,53 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
+    public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex, HttpServletRequest request) {
         Map<String, Object> error = new HashMap<>();
         error.put("error", "An unexpected error occurred: " + ex.getMessage());
+        
+        // Log error to event service
+        logErrorToEventService(ex, request);
+        
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
+    }
+    
+    private void logErrorToEventService(Exception ex, HttpServletRequest request) {
+        try {
+            String traceId = getTraceId(request);
+            String userId = (String) request.getAttribute("userId");
+            String endpoint = request.getRequestURI();
+            String stackTrace = getStackTrace(ex);
+            
+            eventService.logError(
+                ex.getClass().getName(),
+                ex.getMessage(),
+                stackTrace,
+                endpoint,
+                userId,
+                traceId
+            );
+        } catch (Exception e) {
+            // Don't let event logging break error handling
+            // Error is already logged by the interceptor
+        }
+    }
+    
+    private String getTraceId(HttpServletRequest request) {
+        String traceId = (String) request.getAttribute("traceId");
+        if (traceId == null) {
+            traceId = MDC.get("traceId");
+        }
+        if (traceId == null) {
+            traceId = request.getHeader("X-Request-Id");
+        }
+        return traceId;
+    }
+    
+    private String getStackTrace(Exception ex) {
+        StringWriter sw = new StringWriter();
+        PrintWriter pw = new PrintWriter(sw);
+        ex.printStackTrace(pw);
+        return sw.toString();
     }
 }
 

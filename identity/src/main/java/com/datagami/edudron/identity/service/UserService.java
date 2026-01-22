@@ -19,6 +19,7 @@ import com.datagami.edudron.identity.dto.UpdateUserRequest;
 import com.datagami.edudron.identity.dto.UserDTO;
 import com.datagami.edudron.identity.repo.UserInstituteRepository;
 import com.datagami.edudron.identity.repo.UserRepository;
+import com.datagami.edudron.identity.service.CommonEventService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +38,7 @@ import jakarta.persistence.criteria.Predicate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -57,6 +59,9 @@ public class UserService {
     
     @Autowired
     private RestTemplate restTemplate;
+    
+    @Autowired
+    private CommonEventService eventService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -345,6 +350,20 @@ public class UserService {
         if (user == null) {
             throw new IllegalArgumentException("Failed to create user. Please try again.");
         }
+        
+        // Log user creation event
+        String currentUserId = currentUser != null ? currentUser.getId() : null;
+        String currentUserEmail = currentUser != null ? currentUser.getEmail() : null;
+        Map<String, Object> eventData = Map.of(
+            "userId", user.getId(),
+            "userEmail", user.getEmail() != null ? user.getEmail() : "",
+            "userName", user.getName() != null ? user.getName() : "",
+            "role", user.getRole() != null ? user.getRole().name() : "",
+            "isActive", user.getActive() != null ? user.getActive() : false,
+            "instituteIds", request.getInstituteIds() != null ? request.getInstituteIds() : List.of()
+        );
+        eventService.logUserAction("USER_CREATED", currentUserId, currentUserEmail, "/idp/users", eventData);
+        
         return toDTO(user);
     }
     
@@ -460,6 +479,21 @@ public class UserService {
         }
         
         user = userRepository.save(user);
+        
+        // Log user update event
+        String currentUserId = currentUser != null ? currentUser.getId() : null;
+        String currentUserEmail = currentUser != null ? currentUser.getEmail() : null;
+        Map<String, Object> eventData = Map.of(
+            "userId", user.getId(),
+            "userEmail", user.getEmail() != null ? user.getEmail() : "",
+            "userName", user.getName() != null ? user.getName() : "",
+            "oldRole", user.getRole() != null ? user.getRole().name() : "",
+            "newRole", newRole != null ? newRole.name() : "",
+            "isActive", user.getActive() != null ? user.getActive() : false,
+            "instituteIds", request.getInstituteIds() != null ? request.getInstituteIds() : List.of()
+        );
+        eventService.logUserAction("USER_UPDATED", currentUserId, currentUserEmail, "/idp/users/" + id, eventData);
+        
         return toDTO(user);
     }
     

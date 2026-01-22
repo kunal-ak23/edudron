@@ -1,0 +1,73 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0014-events
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: events
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: events
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: event_type, type: varchar(50), constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now(), constraints: { nullable: false } }
+              - column: { name: http_method, type: varchar(10) }
+              - column: { name: http_path, type: varchar(500) }
+              - column: { name: http_status, type: integer }
+              - column: { name: duration_ms, type: bigint }
+              - column: { name: user_id, type: varchar(26) }
+              - column: { name: user_email, type: varchar(100) }
+              - column: { name: trace_id, type: varchar(100) }
+              - column: { name: request_id, type: varchar(100) }
+              - column: { name: user_agent, type: varchar(500) }
+              - column: { name: ip_address, type: varchar(50) }
+              - column: { name: event_data, type: text }
+              - column: { name: error_message, type: text }
+              - column: { name: error_stack_trace, type: text }
+              - column: { name: service_name, type: varchar(50) }
+              - column: { name: endpoint, type: varchar(100) }
+        - createIndex:
+            tableName: events
+            schemaName: student
+            indexName: idx_events_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: events
+            schemaName: student
+            indexName: idx_events_event_type
+            columns:
+              - column: { name: event_type }
+        - createIndex:
+            tableName: events
+            schemaName: student
+            indexName: idx_events_created_at
+            columns:
+              - column: { name: created_at }
+        - createIndex:
+            tableName: events
+            schemaName: student
+            indexName: idx_events_user_id
+            columns:
+              - column: { name: user_id }
+        - createIndex:
+            tableName: events
+            schemaName: student
+            indexName: idx_events_trace_id
+            columns:
+              - column: { name: trace_id }
+        - createIndex:
+            tableName: events
+            schemaName: student
+            indexName: idx_events_client_type_created
+            columns:
+              - column: { name: client_id }
+              - column: { name: event_type }
+              - column: { name: created_at }

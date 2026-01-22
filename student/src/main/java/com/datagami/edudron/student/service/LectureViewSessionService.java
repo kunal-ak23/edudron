@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -31,6 +32,9 @@ public class LectureViewSessionService {
     
     @Autowired
     private EnrollmentRepository enrollmentRepository;
+    
+    @Autowired
+    private CommonEventService eventService;
     
     public LectureViewSessionDTO startSession(String studentId, StartSessionRequest request) {
         log.info("[Session Service] Starting session: studentId={}, courseId={}, lectureId={}, progressAtStart={}", 
@@ -135,6 +139,41 @@ public class LectureViewSessionService {
         LectureViewSession saved = sessionRepository.save(session);
         log.info("[Session Service] Successfully ended lecture view session: sessionId={}, lectureId={}, studentId={}, duration={}s, isCompleted={}", 
             saved.getId(), saved.getLectureId(), saved.getStudentId(), saved.getDurationSeconds(), saved.getIsCompletedInSession());
+        
+        // Log video watch progress event
+        int progressPercent = saved.getProgressAtEnd() != null ? saved.getProgressAtEnd().intValue() : 0;
+        int durationSeconds = saved.getDurationSeconds() != null ? saved.getDurationSeconds() : 0;
+        Map<String, Object> progressData = Map.of(
+            "sessionId", saved.getId(),
+            "enrollmentId", saved.getEnrollmentId(),
+            "progressAtStart", saved.getProgressAtStart() != null ? saved.getProgressAtStart().intValue() : 0,
+            "progressAtEnd", progressPercent,
+            "isCompleted", saved.getIsCompletedInSession() != null ? saved.getIsCompletedInSession() : false
+        );
+        eventService.logVideoWatchProgress(
+            saved.getStudentId(),
+            saved.getCourseId(),
+            saved.getLectureId(),
+            progressPercent,
+            (long) durationSeconds,
+            progressData
+        );
+        
+        // Log lecture completion event if completed
+        if (Boolean.TRUE.equals(saved.getIsCompletedInSession())) {
+            Map<String, Object> completionData = Map.of(
+                "sessionId", saved.getId(),
+                "enrollmentId", saved.getEnrollmentId(),
+                "totalSessions", 1 // Could be enhanced to count total sessions
+            );
+            eventService.logLectureCompletion(
+                saved.getStudentId(),
+                saved.getCourseId(),
+                saved.getLectureId(),
+                durationSeconds,
+                completionData
+            );
+        }
         
         return toDTO(saved);
     }

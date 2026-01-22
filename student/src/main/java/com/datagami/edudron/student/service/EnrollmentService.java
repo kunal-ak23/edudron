@@ -66,6 +66,9 @@ public class EnrollmentService {
     @Autowired
     private InstituteRepository instituteRepository;
     
+    @Autowired
+    private CommonEventService eventService;
+    
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
@@ -116,6 +119,40 @@ public class EnrollmentService {
                     return authorityStr.substring(5); // Remove "ROLE_" prefix
                 }
             }
+        }
+        return null;
+    }
+    
+    /**
+     * Get the current user's ID from the security context.
+     */
+    private String getCurrentUserId() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.getName() != null && 
+                !"anonymousUser".equals(authentication.getName())) {
+                return authentication.getName();
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Get the current user's email from the identity service.
+     */
+    private String getCurrentUserEmail() {
+        try {
+            String userId = getCurrentUserId();
+            if (userId == null) {
+                return null;
+            }
+            
+            UserDTO user = getUserFromIdentityService(userId);
+            return user != null ? user.getEmail() : null;
+        } catch (Exception e) {
+            log.debug("Could not determine user email: {}", e.getMessage());
         }
         return null;
     }
@@ -270,6 +307,19 @@ public class EnrollmentService {
         Enrollment saved = enrollmentRepository.save(enrollment);
         log.info("Created enrollment for student {} in course {} (classId={}, sectionId={}, enrollmentId={})", 
             studentId, request.getCourseId(), classId, sectionId, saved.getId());
+        
+        // Log enrollment event
+        String currentUserId = getCurrentUserId();
+        String currentUserEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = Map.of(
+            "enrollmentId", saved.getId(),
+            "studentId", studentId,
+            "courseId", request.getCourseId(),
+            "instituteId", instituteId != null ? instituteId : "",
+            "classId", classId != null ? classId : "",
+            "sectionId", sectionId != null ? sectionId : ""
+        );
+        eventService.logUserAction("COURSE_ENROLLED", currentUserId, currentUserEmail, "/api/courses/" + request.getCourseId() + "/enroll", eventData);
         
         // Automatically enroll student in all published courses assigned to this section/class
         // This happens after the main enrollment is created to ensure consistency
@@ -645,6 +695,19 @@ public class EnrollmentService {
         }
         Enrollment enrollment = enrollments.get(0); // Use first (most recent) enrollment if duplicates exist
         
+        // Log unenrollment event before deleting
+        String currentUserId = getCurrentUserId();
+        String currentUserEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = Map.of(
+            "enrollmentId", enrollment.getId(),
+            "studentId", studentId,
+            "courseId", courseId,
+            "instituteId", enrollment.getInstituteId() != null ? enrollment.getInstituteId() : "",
+            "classId", enrollment.getClassId() != null ? enrollment.getClassId() : "",
+            "sectionId", enrollment.getBatchId() != null ? enrollment.getBatchId() : ""
+        );
+        eventService.logUserAction("COURSE_UNENROLLED", currentUserId, currentUserEmail, "/api/courses/" + courseId + "/enroll", eventData);
+        
         enrollmentRepository.delete(enrollment);
     }
 
@@ -665,6 +728,19 @@ public class EnrollmentService {
         if (!enrollment.getClientId().equals(clientId)) {
             throw new IllegalArgumentException("Enrollment does not belong to current tenant");
         }
+        
+        // Log enrollment deletion event before deleting
+        String currentUserId = getCurrentUserId();
+        String currentUserEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = Map.of(
+            "enrollmentId", enrollment.getId(),
+            "studentId", enrollment.getStudentId(),
+            "courseId", enrollment.getCourseId(),
+            "instituteId", enrollment.getInstituteId() != null ? enrollment.getInstituteId() : "",
+            "classId", enrollment.getClassId() != null ? enrollment.getClassId() : "",
+            "sectionId", enrollment.getBatchId() != null ? enrollment.getBatchId() : ""
+        );
+        eventService.logUserAction("ENROLLMENT_DELETED", currentUserId, currentUserEmail, "/api/enrollments/" + enrollmentId, eventData);
         
         enrollmentRepository.delete(enrollment);
         log.info("Deleted enrollment {} for student {} in course {}", 

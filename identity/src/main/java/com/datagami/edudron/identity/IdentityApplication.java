@@ -5,8 +5,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 
 @SpringBootApplication
+@EntityScan(basePackages = {
+    "com.datagami.edudron.identity.domain",
+    "com.datagami.edudron.identity.entity",
+    "com.datagami.edudron.common.domain"
+})
 public class IdentityApplication {
     private static final Logger logger = LoggerFactory.getLogger(IdentityApplication.class);
 

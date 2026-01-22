@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -33,6 +34,9 @@ public class ExamSubmissionService {
     
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Autowired
+    private CommonEventService eventService;
     
     /**
      * Start an exam attempt - initialize with timer
@@ -172,6 +176,27 @@ public class ExamSubmissionService {
         
         AssessmentSubmission saved = submissionRepository.save(submission);
         logger.info("Submitted exam: {} for submission: {}", submission.getAssessmentId(), submissionId);
+        
+        // Log assessment submission event
+        Integer score = saved.getScore() != null ? saved.getScore().intValue() : null;
+        Integer maxScore = saved.getMaxScore() != null ? saved.getMaxScore().intValue() : null;
+        Boolean passed = saved.getIsPassed() != null ? saved.getIsPassed() : false;
+        Map<String, Object> submissionData = Map.of(
+            "submissionId", saved.getId(),
+            "enrollmentId", saved.getEnrollmentId(),
+            "timeRemainingSeconds", saved.getTimeRemainingSeconds() != null ? saved.getTimeRemainingSeconds() : 0,
+            "reviewStatus", saved.getReviewStatus() != null ? saved.getReviewStatus().name() : "PENDING"
+        );
+        eventService.logAssessmentSubmission(
+            saved.getStudentId(),
+            saved.getAssessmentId(),
+            saved.getCourseId(),
+            score,
+            maxScore,
+            passed,
+            submissionData
+        );
+        
         return saved;
     }
     

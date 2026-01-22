@@ -56,4 +56,8 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0006-password-reset.yaml
   - include:
       file: db/changelog/db.changelog-0007-tenant-features.yaml
+  - include:
+      file: db/changelog/db.changelog-0008-events.yaml
+  - include:
+      file: db/changelog/db.changelog-0009-common-events.yaml
 

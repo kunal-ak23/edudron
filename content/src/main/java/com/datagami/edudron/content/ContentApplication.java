@@ -5,12 +5,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableAsync
 @EnableScheduling
+@EntityScan(basePackages = {
+    "com.datagami.edudron.content.domain",
+    "com.datagami.edudron.content.psychtest.domain",
+    "com.datagami.edudron.common.domain"
+})
 public class ContentApplication {
     private static final Logger logger = LoggerFactory.getLogger(ContentApplication.class);
 

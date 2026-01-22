@@ -8,6 +8,7 @@ import com.datagami.edudron.content.dto.CourseDTO;
 import com.datagami.edudron.content.dto.CreateCourseRequest;
 import com.datagami.edudron.content.repo.CourseRepository;
 import com.datagami.edudron.content.repo.LectureRepository;
+import com.datagami.edudron.content.service.CommonEventService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +51,9 @@ public class CourseService {
     
     @Autowired
     private LectureRepository lectureRepository;
+    
+    @Autowired
+    private CommonEventService eventService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -128,6 +132,18 @@ public class CourseService {
         }
         
         Course saved = courseRepository.save(course);
+        
+        // Log course creation event
+        String userId = getCurrentUserId();
+        String userEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = Map.of(
+            "courseId", saved.getId(),
+            "courseTitle", saved.getTitle() != null ? saved.getTitle() : "",
+            "isPublished", saved.getIsPublished() != null ? saved.getIsPublished() : false,
+            "isFree", saved.getIsFree() != null ? saved.getIsFree() : false
+        );
+        eventService.logUserAction("COURSE_CREATED", userId, userEmail, "/api/content/courses", eventData);
+        
         return toDTO(saved);
     }
     
@@ -275,7 +291,23 @@ public class CourseService {
             }
         }
         
-        return courses.map(this::toDTO);
+        Page<CourseDTO> result = courses.map(this::toDTO);
+        
+        // Log search query event
+        String userId = getCurrentUserId();
+        Map<String, Object> searchData = new java.util.HashMap<>();
+        searchData.put("categoryId", categoryId != null ? categoryId : "");
+        searchData.put("difficultyLevel", difficultyLevel != null ? difficultyLevel : "");
+        searchData.put("language", language != null ? language : "");
+        searchData.put("isFree", isFree != null ? isFree : false);
+        searchData.put("isPublished", isPublished != null ? isPublished : false);
+        searchData.put("searchTerm", searchTerm != null ? searchTerm : "");
+        searchData.put("resultCount", result.getNumberOfElements());
+        searchData.put("totalResults", result.getTotalElements());
+        eventService.logSearchQuery(userId, searchTerm != null ? searchTerm : "", "COURSE", 
+            result.getNumberOfElements(), null, searchData);
+        
+        return result;
     }
     
     public CourseDTO updateCourse(String id, CreateCourseRequest request) {
@@ -334,6 +366,18 @@ public class CourseService {
         course.setAssignedToSectionIds(newSectionIds);
         
         Course saved = courseRepository.save(course);
+        
+        // Log course update event
+        String userId = getCurrentUserId();
+        String userEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = Map.of(
+            "courseId", saved.getId(),
+            "courseTitle", saved.getTitle() != null ? saved.getTitle() : "",
+            "isPublished", saved.getIsPublished() != null ? saved.getIsPublished() : false,
+            "hasClassAssignments", saved.getAssignedToClassIds() != null && !saved.getAssignedToClassIds().isEmpty(),
+            "hasSectionAssignments", saved.getAssignedToSectionIds() != null && !saved.getAssignedToSectionIds().isEmpty()
+        );
+        eventService.logUserAction("COURSE_EDITED", userId, userEmail, "/api/content/courses/" + id, eventData);
         
         // Automatically enroll students for newly assigned classes/sections
         // Only enroll if course is published
@@ -570,6 +614,16 @@ public class CourseService {
         Course course = courseRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
         
+        // Log course deletion event before deleting
+        String userId = getCurrentUserId();
+        String userEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = Map.of(
+            "courseId", course.getId(),
+            "courseTitle", course.getTitle() != null ? course.getTitle() : "",
+            "wasPublished", course.getIsPublished() != null ? course.getIsPublished() : false
+        );
+        eventService.logUserAction("COURSE_DELETED", userId, userEmail, "/api/content/courses/" + id, eventData);
+        
         courseRepository.delete(course);
     }
     
@@ -604,6 +658,18 @@ public class CourseService {
         
         log.info("Course {} published. Previous published status: {}, Current published status: {}", 
             id, wasPublished, saved.getIsPublished());
+        
+        // Log course publication event
+        String userId = getCurrentUserId();
+        String userEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = Map.of(
+            "courseId", saved.getId(),
+            "courseTitle", saved.getTitle() != null ? saved.getTitle() : "",
+            "wasPublished", wasPublished,
+            "totalLectures", saved.getTotalLecturesCount() != null ? saved.getTotalLecturesCount() : 0,
+            "totalDurationSeconds", saved.getTotalDurationSeconds() != null ? saved.getTotalDurationSeconds() : 0
+        );
+        eventService.logUserAction("COURSE_PUBLISHED", userId, userEmail, "/api/content/courses/" + id + "/publish", eventData);
         
         // If course was not previously published, enroll students for assigned classes/sections
         // IMPORTANT: Enrollment must happen AFTER transaction commits to avoid race condition
@@ -666,6 +732,16 @@ public class CourseService {
         Course saved = courseRepository.save(course);
         log.info("Course {} unpublished. Current published status: {}", id, saved.getIsPublished());
 
+        // Log course unpublish event
+        String userId = getCurrentUserId();
+        String userEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = Map.of(
+            "courseId", saved.getId(),
+            "courseTitle", saved.getTitle() != null ? saved.getTitle() : "",
+            "wasPublished", true
+        );
+        eventService.logUserAction("COURSE_UNPUBLISHED", userId, userEmail, "/api/content/courses/" + id + "/unpublish", eventData);
+
         return toDTO(saved);
     }
     
@@ -715,6 +791,58 @@ public class CourseService {
         return courses.stream()
             .map(this::toDTO)
             .collect(Collectors.toList());
+    }
+    
+    /**
+     * Get the current user's ID from the security context
+     * Returns null if unable to determine user ID
+     */
+    private String getCurrentUserId() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication != null && authentication.getName() != null && 
+                !"anonymousUser".equals(authentication.getName())) {
+                return authentication.getName();
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Get the current user's email from the identity service
+     * Returns null if unable to determine email
+     */
+    private String getCurrentUserEmail() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null || 
+                "anonymousUser".equals(authentication.getName())) {
+                return null;
+            }
+            
+            // Get user info from identity service
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object email = response.getBody().get("email");
+                return email != null ? email.toString() : null;
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user email: {}", e.getMessage());
+        }
+        return null;
     }
     
     /**

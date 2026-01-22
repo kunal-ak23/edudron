@@ -9,6 +9,10 @@ import com.datagami.edudron.identity.dto.RegisterRequest;
 import com.datagami.edudron.identity.repo.UserRepository;
 import com.datagami.edudron.identity.repo.ClientRepository;
 import com.datagami.edudron.identity.security.JwtUtil;
+import com.datagami.edudron.identity.service.CommonEventService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import io.jsonwebtoken.Claims;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +24,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -39,6 +44,9 @@ public class AuthService {
 
     @Autowired
     private JwtUtil jwtUtil;
+    
+    @Autowired
+    private CommonEventService eventService;
 
     public AuthResponse login(AuthRequest request) {
         // First try to find SYSTEM_ADMIN user (no tenant context required)
@@ -69,6 +77,17 @@ public class AuthService {
 
             // Generate tokens
             String tenantId = needsTenantSelection ? "PENDING_TENANT_SELECTION" : "SYSTEM";
+            
+            // Log login event (after variables are defined)
+            String sessionId = java.util.UUID.randomUUID().toString();
+            String ipAddress = getClientIpAddress();
+            String userAgent = getUserAgent();
+            Map<String, Object> loginData = Map.of(
+                "role", user.getRole().name(),
+                "tenantId", tenantId,
+                "needsTenantSelection", needsTenantSelection
+            );
+            eventService.logLogin(user.getId(), user.getEmail(), ipAddress, userAgent, sessionId, loginData);
             String token = jwtUtil.generateToken(user.getEmail(), tenantId, user.getRole().name());
             String refreshToken = jwtUtil.generateRefreshToken(user.getEmail(), tenantId, user.getRole().name());
 
@@ -200,6 +219,21 @@ public class AuthService {
             }
         }
 
+        // Update last login
+        user.setLastLoginAt(OffsetDateTime.now());
+        userRepository.save(user);
+        
+        // Log login event
+        String sessionId = java.util.UUID.randomUUID().toString();
+        String ipAddress = getClientIpAddress();
+        String userAgent = getUserAgent();
+        Map<String, Object> loginData = Map.of(
+            "role", user.getRole().name(),
+            "tenantId", tenantId,
+            "tenantName", tenantName
+        );
+        eventService.logLogin(user.getId(), user.getEmail(), ipAddress, userAgent, sessionId, loginData);
+        
         // Generate tokens
         String token = jwtUtil.generateToken(user.getEmail(), tenantId, user.getRole().name());
         String refreshToken = jwtUtil.generateRefreshToken(user.getEmail(), tenantId, user.getRole().name());
@@ -284,8 +318,8 @@ public class AuthService {
         if (user == null) {
             throw new RuntimeException("Failed to create user. Please try again.");
         }
-
-        // Generate tokens
+        
+        // Generate tokens (tenantId already defined above)
         String token = jwtUtil.generateToken(user.getEmail(), tenantId, user.getRole().name());
         String refreshToken = jwtUtil.generateRefreshToken(user.getEmail(), tenantId, user.getRole().name());
 
@@ -301,6 +335,14 @@ public class AuthService {
         } catch (Exception e) {
             // Log warning but continue
         }
+        
+        // Log registration event (after variables are defined)
+        Map<String, Object> registrationData = Map.of(
+            "role", user.getRole().name(),
+            "tenantId", tenantId,
+            "tenantName", tenantName
+        );
+        eventService.logUserAction("USER_REGISTERED", user.getId(), user.getEmail(), "/auth/register", registrationData);
 
         return new AuthResponse(
                 token,
@@ -373,8 +415,50 @@ public class AuthService {
                         user.getPasswordResetRequired() != null ? user.getPasswordResetRequired() : false
                 ),
                 false,
-                List.of()
+                List.of(                )
         );
+    }
+    
+    /**
+     * Get client IP address from request.
+     */
+    private String getClientIpAddress() {
+        try {
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                String ip = request.getHeader("X-Forwarded-For");
+                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                    ip = request.getHeader("X-Real-IP");
+                }
+                if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                    ip = request.getRemoteAddr();
+                }
+                if (ip != null && ip.contains(",")) {
+                    ip = ip.split(",")[0].trim();
+                }
+                return ip;
+            }
+        } catch (Exception e) {
+            log.debug("Could not get client IP address: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Get user agent from request.
+     */
+    private String getUserAgent() {
+        try {
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                return request.getHeader("User-Agent");
+            }
+        } catch (Exception e) {
+            log.debug("Could not get user agent: {}", e.getMessage());
+        }
+        return null;
     }
 }
 

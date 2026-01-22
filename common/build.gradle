@@ -8,6 +8,11 @@ dependencies {
     
     // Spring Web for RestTemplate interceptor
     implementation 'org.springframework:spring-web'
+    
+    // JPA for Event entity (compileOnly - services that use it will have JPA)
+    // Versions managed by Spring Boot BOM via root build.gradle
+    compileOnly 'jakarta.persistence:jakarta.persistence-api:3.1.0'
+    compileOnly 'org.springframework.data:spring-data-commons:3.2.5'
 }
 
 
