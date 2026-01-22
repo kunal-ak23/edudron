@@ -587,12 +587,16 @@ export default function LearnPage() {
         
         try {
           // Read from ref to get latest value
-          const progress = completedLecturesRef.current.has(currentLectureId) ? 100 : 0
+          const progress = currentLectureId && completedLecturesRef.current.has(currentLectureId) ? 100 : 0
           console.log('[Session Tracking] Calling startLectureSession API:', {
             lectureId: currentLectureId,
             courseId: courseId,
             progressAtStart: progress
           })
+          if (!currentLectureId) {
+            console.warn('[Session Tracking] Cannot start session: currentLectureId is undefined')
+            return
+          }
           const session = await analyticsApi.startLectureSession(currentLectureId, {
             courseId,
             lectureId: currentLectureId,

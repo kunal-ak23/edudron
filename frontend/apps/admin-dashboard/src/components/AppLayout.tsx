@@ -122,7 +122,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         )}
       >
         {/* Top Header - Sticky */}
-        <header className="sticky top-0 z-30 bg-card border-b shadow-sm bg-gradient-to-r from-primary/5 to-accent/5">
+        <header className="sticky top-0 z-50 bg-card border-b shadow-sm bg-gradient-to-r from-primary/5 to-accent/5">
           <div className="flex items-center justify-between px-4 py-2">
             <div className="flex items-center space-x-4">
               <SidebarToggle onToggle={toggleSidebar} />
