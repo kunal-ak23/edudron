@@ -41,6 +41,7 @@ import { extractErrorMessage } from '@/lib/error-utils'
 export default function EnrollmentsPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [courses, setCourses] = useState<Record<string, Course>>({})
   const [allCourses, setAllCourses] = useState<Course[]>([]) // All courses for filter dropdown
@@ -48,6 +49,16 @@ export default function EnrollmentsPage() {
   const [classes, setClasses] = useState<Class[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Only SYSTEM_ADMIN and TENANT_ADMIN can manage enrollments
+  useEffect(() => {
+    if (!user) return
+    
+    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
+    if (!allowedRoles.includes(user.role)) {
+      router.push('/unauthorized')
+    }
+  }, [user, router])
   const [tableLoading, setTableLoading] = useState(false) // Separate loading state for table only
   const [initialLoadDone, setInitialLoadDone] = useState(false)
   const [selectedCourseId, setSelectedCourseId] = useState<string>('all')

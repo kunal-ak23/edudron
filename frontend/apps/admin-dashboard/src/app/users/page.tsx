@@ -44,6 +44,7 @@ export default function UsersPage() {
   
   const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
   const isTenantAdmin = user?.role === 'TENANT_ADMIN'
+  const isContentManager = user?.role === 'CONTENT_MANAGER'
   const canManageUsers = isSystemAdmin || isTenantAdmin
 
   const loadUsers = useCallback(async () => {
@@ -118,12 +119,12 @@ export default function UsersPage() {
     }
   }
 
-  // Redirect if user cannot manage users
+  // CONTENT_MANAGER can view users (read-only), others who can't manage are redirected
   useEffect(() => {
-    if (user && !canManageUsers) {
+    if (user && !canManageUsers && !isContentManager) {
       router.push('/unauthorized')
     }
-  }, [user, canManageUsers, router])
+  }, [user, canManageUsers, isContentManager, router])
   
   return (
     <div>
@@ -134,6 +135,11 @@ export default function UsersPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add User
               </Button>
+            )}
+            {isContentManager && (
+              <p className="text-sm text-muted-foreground">
+                View-only access: You can view users but cannot create or edit them
+              </p>
             )}
           </div>
         </div>
@@ -221,6 +227,9 @@ export default function UsersPage() {
                             >
                               Edit
                             </Button>
+                          )}
+                          {isContentManager && (
+                            <span className="text-sm text-muted-foreground">View only</span>
                           )}
                         </TableCell>
                       </TableRow>

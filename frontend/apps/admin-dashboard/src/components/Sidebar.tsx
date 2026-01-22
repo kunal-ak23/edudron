@@ -152,20 +152,34 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
   
   // Filter menu items based on user role and tenant selection
   const filteredMenuItems = menuItems.filter(item => {
+    const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
+    const isTenantAdmin = user?.role === 'TENANT_ADMIN'
+    const isContentManager = user?.role === 'CONTENT_MANAGER'
+    const canManageUsers = isSystemAdmin || isTenantAdmin
+    
     // Show super admin only items only for SYSTEM_ADMIN users
-    if (item.superAdminOnly && user?.role !== 'SYSTEM_ADMIN') {
+    if (item.superAdminOnly && !isSystemAdmin) {
       return false
     }
     
     // Hide tenant management for non-SYSTEM_ADMIN users
-    if (item.href === '/tenants' && user?.role !== 'SYSTEM_ADMIN') {
+    if (item.href === '/tenants' && !isSystemAdmin) {
       return false
     }
     
     // Hide user management for users who cannot manage users
-    const canManageUsers = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
-    if (item.href === '/users' && !canManageUsers) {
+    // CONTENT_MANAGER can view users but not manage them, so we'll show the link but they'll be redirected
+    // Allow CONTENT_MANAGER to see users link (read-only access)
+    if (item.href === '/users' && !canManageUsers && !isContentManager) {
       return false
+    }
+    
+    // CONTENT_MANAGER restrictions: Hide student and enrollment management
+    if (isContentManager) {
+      if (item.href === '/students' || item.href === '/enrollments') {
+        return false
+      }
+      // CONTENT_MANAGER can access courses, analytics, settings, but not student management
     }
     
     // Show tenant-specific items only if user has a tenant selected
