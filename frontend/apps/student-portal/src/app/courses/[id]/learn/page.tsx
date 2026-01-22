@@ -470,6 +470,12 @@ export default function LearnPage() {
       const lectureIdToEnd = previousLectureIdRef.current
       const sessionIdToEnd = currentActiveSessionId
       
+      // Prevent duplicate end calls for the same session - check BEFORE setting flags
+      if (endingSessionsRef.current.has(sessionIdToEnd)) {
+        console.log('[Session Tracking] Session already being ended, skipping duplicate call:', sessionIdToEnd)
+        return
+      }
+      
       console.log('[Session Tracking] Lecture changed, ending previous session:', {
         sessionId: sessionIdToEnd,
         previousLectureId: lectureIdToEnd,
@@ -478,16 +484,11 @@ export default function LearnPage() {
         reason: 'lecture changed'
       })
       
+      // Mark as ending BEFORE async operation
       isEndingSessionRef.current = true
+      endingSessionsRef.current.add(sessionIdToEnd)
       
       const endSession = async () => {
-        // Prevent duplicate end calls for the same session
-        if (endingSessionsRef.current.has(sessionIdToEnd)) {
-          console.log('[Session Tracking] Session already being ended, skipping duplicate call:', sessionIdToEnd)
-          return
-        }
-        
-        endingSessionsRef.current.add(sessionIdToEnd)
         
         try {
           // Use the lecture ID that the session was actually started for (from the session itself)
@@ -561,10 +562,23 @@ export default function LearnPage() {
       // 2. We're not updating completion
       // 3. We're not currently ending a session
       // 4. We don't already have an active session for this lecture (avoid duplicate starts)
+      // 5. The current session is not in the process of being ended
       if (selectedLecture && !isUpdatingCompletionRef.current && !isEndingSessionRef.current) {
         // Check if we already have an active session for this lecture
-        if (currentActiveSessionId && previousLectureIdRef.current === currentLectureId) {
+        if (currentActiveSessionId && 
+            activeSessionLectureIdRef.current === currentLectureId &&
+            !endingSessionsRef.current.has(currentActiveSessionId)) {
           console.log('[Session Tracking] Session already active for this lecture, skipping start:', {
+            sessionId: currentActiveSessionId,
+            lectureId: currentLectureId,
+            sessionLectureId: activeSessionLectureIdRef.current
+          })
+          return
+        }
+        
+        // Don't start if we're ending a session for this lecture
+        if (currentActiveSessionId && endingSessionsRef.current.has(currentActiveSessionId)) {
+          console.log('[Session Tracking] Session is being ended, waiting before starting new one:', {
             sessionId: currentActiveSessionId,
             lectureId: currentLectureId
           })
@@ -621,9 +635,11 @@ export default function LearnPage() {
     }
     
     // Small delay to ensure previous session cleanup completes first (if lecture changed)
+    // Increase delay if we're ending a session to give it more time
+    const delay = isEndingSessionRef.current || (activeSessionIdRef.current && endingSessionsRef.current.has(activeSessionIdRef.current)) ? 500 : 300
     const timeoutId = setTimeout(() => {
       startSession()
-    }, 300)
+    }, delay)
     
     return () => clearTimeout(timeoutId)
   }, [selectedLecture?.id, courseId]) // Removed activeSessionId and completedLectures to prevent re-triggering

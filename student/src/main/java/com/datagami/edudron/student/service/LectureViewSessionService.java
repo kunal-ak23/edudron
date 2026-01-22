@@ -79,6 +79,7 @@ public class LectureViewSessionService {
         return toDTO(saved);
     }
     
+    @Transactional
     public LectureViewSessionDTO endSession(String sessionId, EndSessionRequest request) {
         log.info("[Session Service] Ending session: sessionId={}, progressAtEnd={}, isCompleted={}", 
             sessionId, request.getProgressAtEnd(), request.getIsCompleted());
@@ -89,8 +90,35 @@ public class LectureViewSessionService {
                 return new IllegalArgumentException("Session not found: " + sessionId);
             });
         
-        log.debug("[Session Service] Found session: sessionId={}, lectureId={}, studentId={}, startedAt={}", 
-            sessionId, session.getLectureId(), session.getStudentId(), session.getSessionStartedAt());
+        log.debug("[Session Service] Found session: sessionId={}, lectureId={}, studentId={}, startedAt={}, alreadyEnded={}", 
+            sessionId, session.getLectureId(), session.getStudentId(), session.getSessionStartedAt(), 
+            session.getSessionEndedAt() != null);
+        
+        // If session is already ended, return existing session (idempotent operation)
+        // But update progress/completion if provided and different
+        if (session.getSessionEndedAt() != null) {
+            log.warn("[Session Service] Session already ended, returning existing session: sessionId={}, endedAt={}", 
+                sessionId, session.getSessionEndedAt());
+            
+            boolean needsUpdate = false;
+            if (request.getProgressAtEnd() != null && 
+                (session.getProgressAtEnd() == null || !session.getProgressAtEnd().equals(request.getProgressAtEnd()))) {
+                session.setProgressAtEnd(request.getProgressAtEnd());
+                needsUpdate = true;
+            }
+            if (request.getIsCompleted() != null && 
+                (session.getIsCompletedInSession() == null || !session.getIsCompletedInSession().equals(request.getIsCompleted()))) {
+                session.setIsCompletedInSession(request.getIsCompleted());
+                needsUpdate = true;
+            }
+            
+            if (needsUpdate) {
+                log.info("[Session Service] Updating already-ended session with new progress/completion: sessionId={}", sessionId);
+                session = sessionRepository.save(session);
+            }
+            
+            return toDTO(session);
+        }
         
         java.time.OffsetDateTime endTime = java.time.OffsetDateTime.now();
         session.setSessionEndedAt(endTime);

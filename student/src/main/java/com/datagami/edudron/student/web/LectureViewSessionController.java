@@ -57,8 +57,16 @@ public class LectureViewSessionController {
         
         try {
             LectureViewSessionDTO session = sessionService.endSession(sessionId, request);
+            
+            // Validate that the lectureId in the path matches the session's lectureId
+            if (!lectureId.equals(session.getLectureId())) {
+                log.warn("[Session Controller] Lecture ID mismatch: path lectureId={}, session lectureId={}, sessionId={}", 
+                    lectureId, session.getLectureId(), sessionId);
+                // Still return the session, but log the warning
+            }
+            
             log.info("[Session Controller] Successfully ended session: sessionId={}, lectureId={}, duration={}s", 
-                sessionId, lectureId, session.getDurationSeconds());
+                sessionId, session.getLectureId(), session.getDurationSeconds());
             return ResponseEntity.ok(session);
         } catch (Exception e) {
             log.error("[Session Controller] Failed to end session: sessionId={}, lectureId={}, error={}", 

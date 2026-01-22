@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select'
 import {
   Dialog,
   DialogContent,
@@ -41,6 +42,7 @@ export default function EnrollmentsPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
+  const [allEnrollments, setAllEnrollments] = useState<Enrollment[]>([]) // Store all enrollments for client-side filtering
   const [filteredEnrollments, setFilteredEnrollments] = useState<Enrollment[]>([])
   const [courses, setCourses] = useState<Record<string, Course>>({})
   const [allCourses, setAllCourses] = useState<Course[]>([]) // All courses for filter dropdown
@@ -48,16 +50,22 @@ export default function EnrollmentsPage() {
   const [classes, setClasses] = useState<Class[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [loading, setLoading] = useState(true)
+  const [tableLoading, setTableLoading] = useState(false) // Separate loading state for table only
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
   const [selectedCourseId, setSelectedCourseId] = useState<string>('all')
   const [selectedInstituteId, setSelectedInstituteId] = useState<string>('all')
   const [selectedClassId, setSelectedClassId] = useState<string>('all')
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all')
   const [searchEmail, setSearchEmail] = useState<string>('')
+  const [debouncedSearchEmail, setDebouncedSearchEmail] = useState<string>('')
+  const [lastSearchedEmail, setLastSearchedEmail] = useState<string>('') // Track last searched value to prevent duplicate calls
   const [unenrollingId, setUnenrollingId] = useState<string | null>(null)
   const [showUnenrollDialog, setShowUnenrollDialog] = useState(false)
   const [enrollmentToUnenroll, setEnrollmentToUnenroll] = useState<Enrollment | null>(null)
   const [showAddEnrollmentDialog, setShowAddEnrollmentDialog] = useState(false)
   const [students, setStudents] = useState<Array<{ id: string; email: string; name?: string }>>([])
+  const [studentsLoading, setStudentsLoading] = useState(false)
+  const [studentsSearchQuery, setStudentsSearchQuery] = useState('')
   const [selectedStudentId, setSelectedStudentId] = useState<string>('')
   const [selectedEnrollCourseId, setSelectedEnrollCourseId] = useState<string>('')
   const [selectedEnrollInstituteId, setSelectedEnrollInstituteId] = useState<string>('')
@@ -69,16 +77,234 @@ export default function EnrollmentsPage() {
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
 
+  // Load students with pagination and server-side email filtering
+  // Passes email filter to API to avoid loading all pages
+  const loadStudents = useCallback(async (searchQuery: string = '', page: number = 0, size: number = 100) => {
+    try {
+      setStudentsLoading(true)
+      
+      // Build API URL with email filter if provided
+      let apiUrl = `/idp/users/role/STUDENT/paginated?page=${page}&size=${size}`
+      if (searchQuery.trim()) {
+        // Try email parameter first, fallback to search parameter
+        const encodedQuery = encodeURIComponent(searchQuery.trim())
+        apiUrl += `&email=${encodedQuery}`
+      }
+      
+      try {
+        const studentsResponse = await apiClient.get<{
+          content: Array<{ id: string; email: string; name?: string }>
+          totalElements: number
+          totalPages: number
+        }>(apiUrl)
+        
+        const loadedStudents = studentsResponse.data?.content || []
+        
+        // If backend doesn't support email filter, filter client-side on first page only
+        if (searchQuery.trim() && loadedStudents.length > 0) {
+          const query = searchQuery.toLowerCase().trim()
+          const filtered = loadedStudents.filter(s => {
+            const emailMatch = s.email?.toLowerCase().includes(query)
+            const nameMatch = s.name?.toLowerCase().includes(query)
+            return emailMatch || nameMatch
+          })
+          
+          // If filtering removed all results but we have a search query,
+          // the backend might not support email filtering - try with search parameter
+          if (filtered.length === 0 && loadedStudents.length > 0) {
+            try {
+              const searchUrl = `/idp/users/role/STUDENT/paginated?page=${page}&size=${size}&search=${encodeURIComponent(searchQuery.trim())}`
+              const searchResponse = await apiClient.get<{
+                content: Array<{ id: string; email: string; name?: string }>
+                totalElements: number
+                totalPages: number
+              }>(searchUrl)
+              setStudents(searchResponse.data?.content || [])
+              return
+            } catch (searchError) {
+              // Fall through to client-side filtering
+            }
+          }
+          
+          setStudents(filtered)
+        } else {
+          // No search query or backend filtered - use results as-is
+          setStudents(loadedStudents)
+        }
+      } catch (paginatedError) {
+        // Fallback to non-paginated endpoint if paginated doesn't exist
+        const studentsResponse = await apiClient.get<Array<{ id: string; email: string; name?: string }>>('/idp/users/role/STUDENT')
+        const allStudents = studentsResponse.data || []
+        
+        if (searchQuery.trim()) {
+          const query = searchQuery.toLowerCase().trim()
+          const filtered = allStudents.filter(s => {
+            const emailMatch = s.email?.toLowerCase().includes(query)
+            const nameMatch = s.name?.toLowerCase().includes(query)
+            return emailMatch || nameMatch
+          })
+          setStudents(filtered.slice(0, size))
+        } else {
+          setStudents(allStudents.slice(0, size))
+        }
+      }
+    } catch (err) {
+      console.error('Error loading students:', err)
+      // Continue without students - will show empty list
+    } finally {
+      setStudentsLoading(false)
+    }
+  }, [])
+
+  // Load only enrollments (for search/filter updates without reloading everything)
+  // Uses tableLoading instead of loading to avoid full page reload
+  // Accepts searchEmail as parameter to avoid dependency issues
+  const loadEnrollmentsOnly = useCallback(async (searchQuery: string = '') => {
+    try {
+      setTableLoading(true) // Only set table loading, not full page loading
+      
+      let enrollmentsResponse
+      const emailToSearch = searchQuery || debouncedSearchEmail
+      if (emailToSearch.trim()) {
+        // When searching, use the same student API as the enrollment modal
+        // Search for students by email using server-side filtering (single API call)
+        const queryToSearch = emailToSearch.trim()
+        let matchingStudentIds: string[] = []
+        
+        try {
+          // Use server-side email filter - only fetch first page with filter (same as dialog)
+          const emailParam = encodeURIComponent(queryToSearch)
+          
+          // Try email parameter first
+          let studentsResponse
+          try {
+            studentsResponse = await apiClient.get<{
+              content: Array<{ id: string; email: string; name?: string }>
+              totalElements: number
+              totalPages: number
+            }>(`/idp/users/role/STUDENT/paginated?page=0&size=100&email=${emailParam}`)
+          } catch (emailError) {
+            // If email parameter doesn't work, try search parameter
+            try {
+              studentsResponse = await apiClient.get<{
+                content: Array<{ id: string; email: string; name?: string }>
+                totalElements: number
+                totalPages: number
+              }>(`/idp/users/role/STUDENT/paginated?page=0&size=100&search=${emailParam}`)
+            } catch (searchError) {
+              // If backend doesn't support filtering, filter client-side on first page only
+              const fallbackResponse = await apiClient.get<{
+                content: Array<{ id: string; email: string; name?: string }>
+                totalElements: number
+                totalPages: number
+              }>(`/idp/users/role/STUDENT/paginated?page=0&size=100`)
+              const allStudents = fallbackResponse.data?.content || []
+              const query = queryToSearch.toLowerCase()
+              const filtered = allStudents.filter(s => {
+                const emailMatch = s.email?.toLowerCase().includes(query)
+                const nameMatch = s.name?.toLowerCase().includes(query)
+                return emailMatch || nameMatch
+              })
+              matchingStudentIds = filtered.map(s => s.id)
+              throw new Error('Using client-side filter') // Skip to enrollment loading
+            }
+          }
+          
+          // Get students from successful response
+          const students = studentsResponse.data?.content || []
+          matchingStudentIds = students.map(s => s.id)
+        } catch (studentSearchError: any) {
+          // If we already have matchingStudentIds from client-side filter, continue
+          if (studentSearchError.message !== 'Using client-side filter' && matchingStudentIds.length === 0) {
+            console.error('Error searching students:', studentSearchError)
+            // Fallback: continue with empty student IDs, will show no results
+          }
+        }
+        
+        // Filter enrollments by matching student IDs
+        // Use existing enrollments for client-side filtering (no API call needed)
+        let enrollmentsToFilter: Enrollment[] = []
+        
+        if (matchingStudentIds.length > 0) {
+          // Filter existing enrollments client-side (fast, no API call)
+          // If we don't have all enrollments cached, use what we have
+          const enrollmentsToSearch = allEnrollments.length > 0 ? allEnrollments : enrollments
+          enrollmentsToFilter = enrollmentsToSearch.filter(e => matchingStudentIds.includes(e.studentId))
+          
+          // No API call here - just filter cached enrollments client-side
+          // This matches the dialog behavior - only student search API call, filter client-side
+        }
+        
+        // Create a response-like object with filtered enrollments
+        enrollmentsResponse = {
+          content: enrollmentsToFilter,
+          totalElements: enrollmentsToFilter.length,
+          totalPages: 1,
+          number: 0,
+          size: enrollmentsToFilter.length,
+          first: true,
+          last: true
+        }
+      } else {
+        // Normal pagination - load single page
+        enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(currentPage, pageSize)
+      }
+      
+      setEnrollments(enrollmentsResponse.content)
+      setTotalElements(enrollmentsResponse.totalElements)
+      setTotalPages(enrollmentsResponse.totalPages)
+
+      // Load courses for current page (for display) - only reload course details, not all courses
+      const courseIds = Array.from(new Set(enrollmentsResponse.content.map(e => e.courseId)))
+      const coursePromises = courseIds.map(id => coursesApi.getCourse(id).catch(() => null))
+      const coursesData = await Promise.all(coursePromises)
+      const coursesMap: Record<string, Course> = {}
+      coursesData.forEach((course, index) => {
+        if (course) {
+          coursesMap[courseIds[index]] = course
+        }
+      })
+      // Merge with existing courses to avoid losing data
+      setCourses(prev => ({ ...prev, ...coursesMap }))
+    } catch (err: any) {
+      console.error('Error loading enrollments:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to load enrollments',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setTableLoading(false) // Only clear table loading
+    }
+  }, [currentPage, pageSize, toast]) // Removed debouncedSearchEmail from deps - passed as parameter instead
+
+  // Load all data (enrollments, courses, institutes, classes, sections) - only on initial load
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [enrollmentsResponse, institutesData, allCoursesData] = await Promise.all([
-        enrollmentsApi.listAllEnrollmentsPaginated(currentPage, pageSize),
+      
+      // Load enrollments - load more initially to enable client-side filtering
+      const enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(currentPage, pageSize)
+      
+      // Also load first 500 enrollments for client-side filtering when searching
+      let allEnrollmentsForFilter: Enrollment[] = []
+      if (currentPage === 0) {
+        try {
+          const allEnrollmentsPage = await enrollmentsApi.listAllEnrollmentsPaginated(0, 500)
+          allEnrollmentsForFilter = allEnrollmentsPage.content
+        } catch (err) {
+          // If loading all fails, just use current page
+          allEnrollmentsForFilter = enrollmentsResponse.content
+        }
+      }
+      
+      const [institutesData, allCoursesData] = await Promise.all([
         institutesApi.listInstitutes(),
         coursesApi.listCourses().catch(() => []) // Load all courses for filter
       ])
       
       setEnrollments(enrollmentsResponse.content)
+      setAllEnrollments(allEnrollmentsForFilter.length > 0 ? allEnrollmentsForFilter : enrollmentsResponse.content) // Store for client-side filtering
       setTotalElements(enrollmentsResponse.totalElements)
       setTotalPages(enrollmentsResponse.totalPages)
       setInstitutes(institutesData)
@@ -110,31 +336,9 @@ export default function EnrollmentsPage() {
       setClasses(allClasses)
       setSections(allSections)
 
-      // Load students for enrollment dropdown (using paginated endpoint to avoid loading all at once)
-      // Load first 100 students for the dropdown - if more are needed, we can add search functionality
-      try {
-        // Try paginated endpoint first
-        try {
-          const studentsResponse = await apiClient.get<{
-            content: Array<{ id: string; email: string; name?: string }>
-            totalElements: number
-            totalPages: number
-          }>('/idp/users/role/STUDENT/paginated?page=0&size=100')
-          setStudents(studentsResponse.data?.content || [])
-        } catch (paginatedError) {
-          // Fallback to non-paginated endpoint if paginated doesn't exist
-          const studentsResponse = await apiClient.get<Array<{ id: string; email: string; name?: string }>>('/idp/users/role/STUDENT')
-          // Limit to first 100 to avoid performance issues
-          const allStudents = studentsResponse.data || []
-          setStudents(allStudents.slice(0, 100))
-          if (allStudents.length > 100) {
-            console.warn(`Loaded ${allStudents.length} students, showing first 100 in dropdown. Consider using search.`)
-          }
-        }
-      } catch (err) {
-        console.error('Error loading students:', err)
-        // Continue without students - will show empty list
-      }
+      // Students are loaded only when enrollment dialog opens (see useEffect below)
+      // This avoids loading all students on page load
+      setInitialLoadDone(true)
     } catch (err: any) {
       console.error('Error loading data:', err)
       toast({
@@ -150,15 +354,9 @@ export default function EnrollmentsPage() {
   const filterEnrollments = useCallback(() => {
     let filtered = [...enrollments]
 
-    // Filter by email search (case-insensitive)
-    if (searchEmail.trim()) {
-      const searchLower = searchEmail.toLowerCase().trim()
-      filtered = filtered.filter(e => {
-        const email = e.studentEmail?.toLowerCase() || ''
-        const studentId = e.studentId?.toLowerCase() || ''
-        return email.includes(searchLower) || studentId.includes(searchLower)
-      })
-    }
+    // Note: Email search is now handled in loadData by searching students first
+    // This ensures both the enrollment search and student dropdown use the same API
+    // No additional filtering needed here for email search
 
     // Filter by course
     if (selectedCourseId && selectedCourseId !== 'all') {
@@ -176,15 +374,92 @@ export default function EnrollmentsPage() {
     }
 
     setFilteredEnrollments(filtered)
-  }, [enrollments, searchEmail, selectedCourseId, selectedInstituteId, selectedClassId, selectedSectionId])
+  }, [enrollments, debouncedSearchEmail, selectedCourseId, selectedInstituteId, selectedClassId, selectedSectionId])
 
+  // Initial load - load all data (enrollments, courses, institutes, etc.) only once
   useEffect(() => {
-    loadData()
-  }, [loadData, currentPage, pageSize])
+    if (!initialLoadDone) {
+      loadData()
+    }
+  }, [loadData, initialLoadDone])
+
+  // When pagination changes (not search), reload enrollments only
+  useEffect(() => {
+    // Only reload on pagination changes, not when searching
+    if (initialLoadDone && !debouncedSearchEmail.trim() && !searchEmail.trim()) {
+      // Only reload enrollments, not all data
+      loadEnrollmentsOnly('')
+    }
+  }, [currentPage, pageSize, initialLoadDone, debouncedSearchEmail, searchEmail, loadEnrollmentsOnly])
+
+  // When search changes, only reload enrollments (not all data) - debounced
+  // This mimics the dialog behavior - only updates table, no page reload
+  useEffect(() => {
+    // Skip if initial load hasn't completed
+    if (!initialLoadDone) return
+    
+    // Skip if search hasn't actually changed (prevents duplicate calls)
+    if (debouncedSearchEmail === lastSearchedEmail) return
+    
+    // Update last searched to prevent duplicate calls
+    setLastSearchedEmail(debouncedSearchEmail)
+    
+    // If searching or search was cleared, reload only enrollments
+    // Uses tableLoading instead of loading to avoid full page reload
+    // Pass the search query explicitly to avoid dependency issues
+    loadEnrollmentsOnly(debouncedSearchEmail)
+  }, [debouncedSearchEmail, loadEnrollmentsOnly, initialLoadDone, lastSearchedEmail])
 
   useEffect(() => {
     filterEnrollments()
   }, [filterEnrollments])
+
+  // Debounce search email for enrollment page search (same as dialog)
+  // This prevents API calls on every keystroke
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedSearchEmail(searchEmail)
+    }, 300) // 300ms debounce - same as dialog
+    
+    return () => clearTimeout(timeoutId)
+  }, [searchEmail])
+
+  // Load students when enrollment dialog opens (only first page - 100 students)
+  useEffect(() => {
+    if (showAddEnrollmentDialog && students.length === 0 && !studentsSearchQuery.trim()) {
+      loadStudents('', 0, 100)
+    }
+  }, [showAddEnrollmentDialog, loadStudents, students.length, studentsSearchQuery])
+
+  // Handle student search - updates search query state
+  const handleStudentSearch = useCallback((query: string) => {
+    setStudentsSearchQuery(query)
+  }, [])
+
+  // Debounced effect to search students by email when search query changes
+  useEffect(() => {
+    if (!showAddEnrollmentDialog) {
+      // Reset search query when dialog closes
+      setStudentsSearchQuery('')
+      return
+    }
+    
+    // Skip if this is the initial load (students.length === 0 and no search query)
+    if (students.length === 0 && !studentsSearchQuery.trim()) {
+      return
+    }
+    
+    // Debounce the search - wait 300ms after user stops typing
+    const timeoutId = setTimeout(() => {
+      const trimmedQuery = studentsSearchQuery.trim()
+      // Always use server-side filtering - pass search query to API
+      // This only loads one page with the filter applied, not all pages
+      loadStudents(trimmedQuery, 0, 100)
+    }, 300) // 300ms debounce - wait for user to stop typing
+    
+    return () => clearTimeout(timeoutId)
+  }, [studentsSearchQuery, showAddEnrollmentDialog, loadStudents, students.length])
+
 
   const getHierarchyPath = (enrollment: Enrollment) => {
     const parts: string[] = []
@@ -219,6 +494,7 @@ export default function EnrollmentsPage() {
     setSelectedClassId('all')
     setSelectedSectionId('all')
     setSearchEmail('')
+    setDebouncedSearchEmail('')
     setCurrentPage(0) // Reset to first page when clearing filters
   }
 
@@ -235,8 +511,8 @@ export default function EnrollmentsPage() {
       // Use the admin endpoint to delete enrollment by ID
       await enrollmentsApi.deleteEnrollment(enrollmentToUnenroll.id)
       
-      // Reload current page to refresh data
-      await loadData()
+      // Reload only enrollments to refresh table (not all data)
+      await loadEnrollmentsOnly(debouncedSearchEmail)
       
       toast({
         title: 'Success',
@@ -270,13 +546,13 @@ export default function EnrollmentsPage() {
     setEnrolling(true)
     try {
       const options: any = {}
-      if (selectedEnrollClassId && selectedEnrollClassId !== 'all') {
+      if (selectedEnrollClassId) {
         options.classId = selectedEnrollClassId
       }
-      if (selectedEnrollSectionId && selectedEnrollSectionId !== 'all') {
+      if (selectedEnrollSectionId) {
         options.sectionId = selectedEnrollSectionId
       }
-      if (selectedEnrollInstituteId && selectedEnrollInstituteId !== 'all') {
+      if (selectedEnrollInstituteId) {
         options.instituteId = selectedEnrollInstituteId
       }
 
@@ -295,8 +571,8 @@ export default function EnrollmentsPage() {
       setSelectedEnrollSectionId('')
       setShowAddEnrollmentDialog(false)
       
-      // Reload data to show new enrollment
-      await loadData()
+      // Reload only enrollments to show new enrollment (not all data)
+      await loadEnrollmentsOnly(debouncedSearchEmail)
     } catch (err: any) {
       console.error('Error enrolling student:', err)
       toast({
@@ -346,11 +622,12 @@ export default function EnrollmentsPage() {
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                     <Input
-                      placeholder="Search by email..."
+                      placeholder="Search by email or username..."
                       value={searchEmail}
                       onChange={(e) => {
                         setSearchEmail(e.target.value)
                         setCurrentPage(0) // Reset to first page when searching
+                        // The loadData will be triggered by the useEffect when searchEmail changes
                       }}
                       className="pl-8"
                     />
@@ -358,84 +635,85 @@ export default function EnrollmentsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>Course</Label>
-                  <Select 
-                    value={selectedCourseId} 
+                  <SearchableSelect
+                    options={[
+                      { value: 'all', label: 'All Courses' },
+                      ...allCourses
+                        .filter(c => c.isPublished && c.status !== 'ARCHIVED')
+                        .map(course => ({
+                          value: course.id,
+                          label: course.title,
+                          searchText: course.title.toLowerCase(),
+                        })),
+                    ]}
+                    value={selectedCourseId}
                     onValueChange={(value) => {
                       setSelectedCourseId(value)
                       setCurrentPage(0) // Reset to first page when filtering
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Courses" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Courses</SelectItem>
-                      {allCourses
-                        .filter(c => c.isPublished && c.status !== 'ARCHIVED')
-                        .map(course => (
-                          <SelectItem key={course.id} value={course.id}>
-                            {course.title}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="All Courses"
+                    emptyMessage="No courses found"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Institute</Label>
-                  <Select value={selectedInstituteId} onValueChange={(value) => {
-                    setSelectedInstituteId(value)
-                    setSelectedClassId('all')
-                    setSelectedSectionId('all')
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Institutes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Institutes</SelectItem>
-                      {institutes.map(inst => (
-                        <SelectItem key={inst.id} value={inst.id}>{inst.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    options={[
+                      { value: 'all', label: 'All Institutes' },
+                      ...institutes.map(inst => ({
+                        value: inst.id,
+                        label: inst.name,
+                        searchText: inst.name.toLowerCase(),
+                      })),
+                    ]}
+                    value={selectedInstituteId}
+                    onValueChange={(value) => {
+                      setSelectedInstituteId(value)
+                      setSelectedClassId('all')
+                      setSelectedSectionId('all')
+                    }}
+                    placeholder="All Institutes"
+                    emptyMessage="No institutes found"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Class</Label>
-                  <Select 
-                    value={selectedClassId} 
+                  <SearchableSelect
+                    options={[
+                      { value: 'all', label: 'All Classes' },
+                      ...getFilteredClasses().map(classItem => ({
+                        value: classItem.id,
+                        label: classItem.name,
+                        searchText: classItem.name.toLowerCase(),
+                      })),
+                    ]}
+                    value={selectedClassId}
                     onValueChange={(value) => {
                       setSelectedClassId(value)
                       setSelectedSectionId('all')
                     }}
+                    placeholder="All Classes"
+                    emptyMessage="No classes found"
                     disabled={!selectedInstituteId || selectedInstituteId === 'all'}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Classes" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Classes</SelectItem>
-                      {getFilteredClasses().map(classItem => (
-                        <SelectItem key={classItem.id} value={classItem.id}>{classItem.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Section</Label>
-                  <Select 
-                    value={selectedSectionId} 
+                  <SearchableSelect
+                    options={[
+                      { value: 'all', label: 'All Sections' },
+                      ...getFilteredSections().map(section => ({
+                        value: section.id,
+                        label: section.name,
+                        searchText: section.name.toLowerCase(),
+                      })),
+                    ]}
+                    value={selectedSectionId}
                     onValueChange={setSelectedSectionId}
+                    placeholder="All Sections"
+                    emptyMessage="No sections found"
                     disabled={!selectedClassId || selectedClassId === 'all'}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All Sections" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Sections</SelectItem>
-                      {getFilteredSections().map(section => (
-                        <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
                 <div className="flex items-end">
                   <Button 
@@ -464,7 +742,12 @@ export default function EnrollmentsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {filteredEnrollments.length === 0 ? (
+              {tableLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <span className="ml-2 text-sm text-gray-600">Loading enrollments...</span>
+                </div>
+              ) : filteredEnrollments.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="mx-auto h-12 w-12 text-gray-400" />
                   <h3 className="mt-2 text-sm font-semibold text-gray-900">No enrollments found</h3>
@@ -648,109 +931,109 @@ export default function EnrollmentsPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="student">Student *</Label>
-              <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a student" />
-                </SelectTrigger>
-                <SelectContent>
-                  {students.map((student) => (
-                    <SelectItem key={student.id} value={student.id}>
-                      {student.email} {student.name && `(${student.name})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={students.map((student) => ({
+                  value: student.id,
+                  label: student.name ? `${student.email} (${student.name})` : student.email,
+                  searchText: `${student.email} ${student.name || ''}`.toLowerCase(),
+                }))}
+                value={selectedStudentId}
+                onValueChange={setSelectedStudentId}
+                placeholder="Select a student"
+                emptyMessage="No students found"
+                onSearch={handleStudentSearch}
+                loading={studentsLoading}
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="course">Course *</Label>
-              <Select value={selectedEnrollCourseId} onValueChange={setSelectedEnrollCourseId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a course" />
-                </SelectTrigger>
-                <SelectContent>
-                  {allCourses
-                    .filter(c => c.isPublished && c.status !== 'ARCHIVED')
-                    .map((course) => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.title}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={allCourses
+                  .filter(c => c.isPublished && c.status !== 'ARCHIVED')
+                  .map((course) => ({
+                    value: course.id,
+                    label: course.title,
+                    searchText: course.title.toLowerCase(),
+                  }))}
+                value={selectedEnrollCourseId}
+                onValueChange={setSelectedEnrollCourseId}
+                placeholder="Select a course"
+                emptyMessage="No courses found"
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="institute">Institute (Optional)</Label>
-              <Select 
-                value={selectedEnrollInstituteId} 
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'None' },
+                  ...institutes.map((inst) => ({
+                    value: inst.id,
+                    label: inst.name,
+                    searchText: inst.name.toLowerCase(),
+                  })),
+                ]}
+                value={selectedEnrollInstituteId || ''}
                 onValueChange={(value) => {
                   setSelectedEnrollInstituteId(value)
-                  setSelectedEnrollClassId('all')
-                  setSelectedEnrollSectionId('all')
+                  setSelectedEnrollClassId('')
+                  setSelectedEnrollSectionId('')
                 }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select an institute" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">None</SelectItem>
-                  {institutes.map((inst) => (
-                    <SelectItem key={inst.id} value={inst.id}>{inst.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select an institute"
+                emptyMessage="No institutes found"
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="class">Class (Optional)</Label>
-              <Select 
-                value={selectedEnrollClassId} 
+              <SearchableSelect
+                options={(() => {
+                  const filtered = selectedEnrollInstituteId
+                    ? classes.filter(c => c.instituteId === selectedEnrollInstituteId)
+                    : classes
+                  return [
+                    { value: '', label: 'None' },
+                    ...filtered.map((classItem) => ({
+                      value: classItem.id,
+                      label: classItem.name,
+                      searchText: classItem.name.toLowerCase(),
+                    })),
+                  ]
+                })()}
+                value={selectedEnrollClassId || ''}
                 onValueChange={(value) => {
                   setSelectedEnrollClassId(value)
-                  setSelectedEnrollSectionId('all')
+                  setSelectedEnrollSectionId('')
                 }}
-                disabled={!selectedEnrollInstituteId || selectedEnrollInstituteId === 'all'}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a class" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">None</SelectItem>
-                  {(() => {
-                    const filtered = selectedEnrollInstituteId && selectedEnrollInstituteId !== 'all'
-                      ? classes.filter(c => c.instituteId === selectedEnrollInstituteId)
-                      : classes
-                    return filtered.map((classItem) => (
-                      <SelectItem key={classItem.id} value={classItem.id}>{classItem.name}</SelectItem>
-                    ))
-                  })()}
-                </SelectContent>
-              </Select>
+                placeholder="Select a class"
+                emptyMessage="No classes found"
+                disabled={!selectedEnrollInstituteId}
+              />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="section">Section (Optional)</Label>
-              <Select 
-                value={selectedEnrollSectionId} 
+              <SearchableSelect
+                options={(() => {
+                  const filtered = selectedEnrollClassId
+                    ? sections.filter(s => s.classId === selectedEnrollClassId)
+                    : sections
+                  return [
+                    { value: '', label: 'None' },
+                    ...filtered.map((section) => ({
+                      value: section.id,
+                      label: section.name,
+                      searchText: section.name.toLowerCase(),
+                    })),
+                  ]
+                })()}
+                value={selectedEnrollSectionId || ''}
                 onValueChange={setSelectedEnrollSectionId}
-                disabled={!selectedEnrollClassId || selectedEnrollClassId === 'all'}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a section" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">None</SelectItem>
-                  {(() => {
-                    const filtered = selectedEnrollClassId && selectedEnrollClassId !== 'all'
-                      ? sections.filter(s => s.classId === selectedEnrollClassId)
-                      : sections
-                    return filtered.map((section) => (
-                      <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>
-                    ))
-                  })()}
-                </SelectContent>
-              </Select>
+                placeholder="Select a section"
+                emptyMessage="No sections found"
+                disabled={!selectedEnrollClassId}
+              />
             </div>
           </div>
           <DialogFooter>
