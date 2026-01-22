@@ -65,6 +65,7 @@ export default function StudentsPage() {
   const [pageSize, setPageSize] = useState(20)
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   
   // Form state for adding student
   const [newStudent, setNewStudent] = useState({
@@ -79,12 +80,36 @@ export default function StudentsPage() {
     try {
       setLoading(true)
 
-      // Use paginated endpoint to avoid loading all students at once
+      // Build query parameters with filters
+      const params = new URLSearchParams()
+      params.append('page', currentPage.toString())
+      params.append('size', pageSize.toString())
+      
+      // Add search filter if provided (use debounced value from dependency)
+      const searchToUse = debouncedSearchTerm || searchTerm
+      if (searchToUse.trim()) {
+        params.append('search', searchToUse.trim())
+      }
+
+      console.log('[StudentsPage] Loading students with filters:', { 
+        page: currentPage, 
+        size: pageSize, 
+        search: searchToUse.trim() || null 
+      })
+
+      // Use paginated endpoint with backend filtering
       try {
         const response = await apiClient.get<PaginatedResponse<Student>>(
-          `/idp/users/role/STUDENT/paginated?page=${currentPage}&size=${pageSize}`
+          `/idp/users/role/STUDENT/paginated?${params.toString()}`
         )
         const paginatedData = response.data || { content: [], totalElements: 0, totalPages: 0, number: 0, size: pageSize, first: true, last: true }
+        
+        console.log('[StudentsPage] Received response:', {
+          contentLength: paginatedData.content?.length,
+          totalElements: paginatedData.totalElements,
+          totalPages: paginatedData.totalPages
+        })
+        
         setStudents(paginatedData.content || [])
         setTotalElements(paginatedData.totalElements || 0)
         setTotalPages(paginatedData.totalPages || 0)
@@ -152,11 +177,20 @@ export default function StudentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [toast, currentPage, pageSize])
+  }, [toast, currentPage, pageSize, debouncedSearchTerm])
+
+  // Debounce search term to avoid too many API calls
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 300) // 300ms debounce
+    
+    return () => clearTimeout(timeoutId)
+  }, [searchTerm])
 
   useEffect(() => {
     loadStudents()
-  }, [loadStudents])
+  }, [currentPage, pageSize, debouncedSearchTerm, loadStudents])
 
   // Role-based access control
   useEffect(() => {
@@ -171,13 +205,8 @@ export default function StudentsPage() {
     }
   }, [user, isAuthenticated, router])
 
-  // Client-side filtering for search (applied to current page only)
-  // Note: For large datasets, server-side search would be better
-  const filteredStudents = students.filter(student =>
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (student.phone && student.phone.includes(searchTerm))
-  )
+  // No client-side filtering - all filtering is done on the backend
+  const filteredStudents = students
 
   // Reset to first page when search term or page size changes
   useEffect(() => {
@@ -262,14 +291,6 @@ export default function StudentsPage() {
     return null
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
   return (
     <div>
         <div className="mb-6 flex items-center justify-between">
@@ -291,7 +312,7 @@ export default function StudentsPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>
-                  All Students {searchTerm ? `(${filteredStudents.length} of ${totalElements})` : `(${totalElements})`}
+                  All Students ({totalElements.toLocaleString()})
                 </CardTitle>
                 <div className="relative w-64">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -300,12 +321,17 @@ export default function StudentsPage() {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-8"
+                    disabled={loading}
                   />
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              {filteredStudents.length === 0 ? (
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : filteredStudents.length === 0 ? (
                 <div className="text-center py-12">
                   <User className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground">
@@ -321,7 +347,8 @@ export default function StudentsPage() {
                   )}
                 </div>
               ) : (
-                <Table>
+                <>
+                  <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
@@ -370,11 +397,10 @@ export default function StudentsPage() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
-              )}
-              
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
+                  </Table>
+                  
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">
                   <div className="flex items-center gap-2">
                     <Label className="text-sm">Page size:</Label>
@@ -438,7 +464,9 @@ export default function StudentsPage() {
                       Last
                     </Button>
                   </div>
-                </div>
+                  </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>

@@ -31,8 +31,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Predicate;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -125,6 +128,11 @@ public class UserService {
     
     @Transactional(readOnly = true)
     public Page<UserDTO> getUsersByRolePaginated(String roleStr, Pageable pageable) {
+        return getUsersByRolePaginated(roleStr, pageable, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<UserDTO> getUsersByRolePaginated(String roleStr, Pageable pageable, String email, String search) {
         String clientIdStr = TenantContext.getClientId();
         
         User.Role role;
@@ -134,22 +142,66 @@ public class UserService {
             throw new IllegalArgumentException("Invalid role: " + roleStr);
         }
         
-        Page<User> userPage;
+        log.info("Fetching paginated users with role {} - email: {}, search: {}, page: {}, size: {}", 
+            role, email, search, pageable.getPageNumber(), pageable.getPageSize());
         
-        // SYSTEM_ADMIN can see all users
-        if (clientIdStr == null || "SYSTEM".equals(clientIdStr) || "PENDING_TENANT_SELECTION".equals(clientIdStr)) {
-            log.info("Fetching paginated users with role {} (SYSTEM_ADMIN), page: {}, size: {}", 
-                role, pageable.getPageNumber(), pageable.getPageSize());
-            userPage = userRepository.findByRole(role, pageable);
-        } else {
-            // Tenant-scoped users see only their tenant's users
-            UUID clientId = UUID.fromString(clientIdStr);
-            log.info("Fetching paginated users with role {} for tenant: {}, page: {}, size: {}", 
-                role, clientId, pageable.getPageNumber(), pageable.getPageSize());
-            userPage = userRepository.findByClientIdAndRole(clientId, role, pageable);
-        }
+        // Build specification for filtering
+        Specification<User> spec = buildUserSpecification(role, email, search, clientIdStr);
+        
+        Page<User> userPage = userRepository.findAll(spec, pageable);
+        
+        log.info("Repository returned {} users (total: {}, page: {}/{})", 
+            userPage.getNumberOfElements(), userPage.getTotalElements(), 
+            userPage.getNumber(), userPage.getTotalPages());
         
         return userPage.map(this::toDTO);
+    }
+
+    /**
+     * Build JPA Specification for user filtering
+     */
+    private Specification<User> buildUserSpecification(User.Role role, String email, String search, String clientIdStr) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            // Always filter by role
+            predicates.add(cb.equal(root.get("role"), role));
+            
+            // Filter by tenant (clientId) if not SYSTEM_ADMIN context
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                try {
+                    UUID clientId = UUID.fromString(clientIdStr);
+                    predicates.add(cb.equal(root.get("clientId"), clientId));
+                    log.info("Adding clientId backend filter: {}", clientId);
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid clientId format: {}", clientIdStr);
+                }
+            } else {
+                // SYSTEM_ADMIN context - no clientId filter
+                log.info("SYSTEM_ADMIN context - no clientId filter");
+            }
+            
+            // Apply email filter (contains match, case-insensitive)
+            if (email != null && !email.trim().isEmpty()) {
+                String emailLower = email.trim().toLowerCase();
+                log.info("Adding email backend filter (contains): {}", email);
+                predicates.add(cb.like(cb.lower(root.get("email")), "%" + emailLower + "%"));
+            }
+            
+            // Apply search filter (searches email, name, phone - contains match, case-insensitive)
+            if (search != null && !search.trim().isEmpty()) {
+                String searchLower = search.trim().toLowerCase();
+                log.info("Adding search backend filter (contains): {}", search);
+                Predicate emailMatch = cb.like(cb.lower(root.get("email")), "%" + searchLower + "%");
+                Predicate nameMatch = cb.like(cb.lower(root.get("name")), "%" + searchLower + "%");
+                Predicate phoneMatch = cb.like(cb.lower(root.get("phone")), "%" + searchLower + "%");
+                predicates.add(cb.or(emailMatch, nameMatch, phoneMatch));
+            }
+            
+            Predicate finalPredicate = cb.and(predicates.toArray(new Predicate[0]));
+            log.info("Built user specification with {} predicates", predicates.size());
+            return finalPredicate;
+        };
     }
 
     @Transactional(readOnly = true)

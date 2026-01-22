@@ -450,22 +450,29 @@ public class EnrollmentService {
      * @param classId Optional class filter
      * @param batchId Optional section/batch filter
      * @param studentIds Optional list of student IDs to filter by (for email search)
+     * @param emailSearch Optional email search term (used for fallback filtering if studentIds is empty)
      */
     public Page<EnrollmentDTO> getAllEnrollments(Pageable pageable, String courseId, String instituteId, 
-                                                  String classId, String batchId, List<String> studentIds) {
+                                                  String classId, String batchId, List<String> studentIds, String emailSearch) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        log.info("Getting enrollments with filters - courseId: {}, instituteId: {}, classId: {}, sectionId (batchId): {}, studentIds: {} (count: {})", 
-            courseId, instituteId, classId, batchId, studentIds, studentIds != null ? studentIds.size() : 0);
+        log.info("Getting enrollments with filters - courseId: {}, instituteId: {}, classId: {}, sectionId (batchId): {}, studentIds: {} (count: {}), emailSearch: {}", 
+            courseId, instituteId, classId, batchId, studentIds, studentIds != null ? studentIds.size() : 0, emailSearch);
         
-        // Build specification for filtering
-        Specification<Enrollment> spec = buildEnrollmentSpecification(clientId, courseId, instituteId, classId, batchId, studentIds);
+        // If studentIds is empty but emailSearch is provided, we'll filter after fetching emails
+        boolean needsEmailFiltering = (studentIds != null && studentIds.isEmpty() && emailSearch != null && !emailSearch.trim().isEmpty());
+        
+        // Build specification for filtering (don't use studentIds if we need email filtering)
+        Specification<Enrollment> spec = buildEnrollmentSpecification(
+            clientId, courseId, instituteId, classId, batchId, 
+            needsEmailFiltering ? null : studentIds);
         
         // Get paginated enrollments with filters
+        // If we need email filtering, we might need to fetch more to filter properly
         Page<Enrollment> enrollmentsPage = enrollmentRepository.findAll(spec, pageable);
         
         log.debug("Repository returned {} enrollments (total: {}, page: {}/{})", 
@@ -491,10 +498,49 @@ public class EnrollmentService {
             })
             .collect(Collectors.toList());
         
+        // If we need email filtering (identity service didn't find matches), filter by email now
+        if (needsEmailFiltering) {
+            String emailLower = emailSearch.trim().toLowerCase();
+            log.info("Filtering {} enrollments by email contains '{}' (fallback after identity service returned 0 matches)", 
+                dtoList.size(), emailSearch);
+            
+            List<EnrollmentDTO> filtered = dtoList.stream()
+                .filter(dto -> dto.getStudentEmail() != null && 
+                        dto.getStudentEmail().toLowerCase().contains(emailLower))
+                .collect(Collectors.toList());
+            
+            log.info("After email filtering: {} enrollments match '{}'", filtered.size(), emailSearch);
+            dtoList = filtered;
+            
+            // Note: totalElements will be approximate since we filtered after pagination
+            // For accurate pagination, we'd need to fetch all and paginate, but that's expensive
+        }
+        
         log.debug("Returning {} enrollment DTOs", dtoList.size());
         
         // Create new Page with filtered content
-        return new PageImpl<>(dtoList, pageable, enrollmentsPage.getTotalElements());
+        // If we did email filtering, adjust totalElements (approximate)
+        long totalElements = needsEmailFiltering && dtoList.size() < enrollmentsPage.getNumberOfElements() 
+            ? dtoList.size() // Approximate - we only filtered current page
+            : enrollmentsPage.getTotalElements();
+        
+        return new PageImpl<>(dtoList, pageable, totalElements);
+    }
+    
+    /**
+     * Get all enrollments with pagination and filters (admin operation)
+     * Filters out placeholder enrollments and includes student emails
+     * 
+     * @param pageable Pagination parameters
+     * @param courseId Optional course filter
+     * @param instituteId Optional institute filter
+     * @param classId Optional class filter
+     * @param batchId Optional section/batch filter
+     * @param studentIds Optional list of student IDs to filter by (for email search)
+     */
+    public Page<EnrollmentDTO> getAllEnrollments(Pageable pageable, String courseId, String instituteId, 
+                                                  String classId, String batchId, List<String> studentIds) {
+        return getAllEnrollments(pageable, courseId, instituteId, classId, batchId, studentIds, null);
     }
 
     /**
@@ -961,15 +1007,23 @@ public class EnrollmentService {
                     List<UserDTO> users = response.getBody().getContent();
                     log.debug("Identity service returned {} users", users != null ? users.size() : 0);
                     if (users != null) {
-                        studentIds = users.stream()
+                        // Filter to ensure emails actually contain the search term (case-insensitive)
+                        String searchTerm = email.toLowerCase();
+                        List<UserDTO> filteredUsers = users.stream()
+                            .filter(user -> user.getEmail() != null && 
+                                    user.getEmail().toLowerCase().contains(searchTerm))
+                            .collect(Collectors.toList());
+                        
+                        studentIds = filteredUsers.stream()
                             .map(UserDTO::getId)
                             .collect(Collectors.toList());
+                        
                         // Log emails for debugging
-                        List<String> emails = users.stream()
+                        List<String> emails = filteredUsers.stream()
                             .map(u -> u.getEmail() != null ? u.getEmail() : "no-email")
                             .collect(Collectors.toList());
-                        log.info("Found {} student IDs using email parameter (contains match). Emails: {}", 
-                            studentIds.size(), emails);
+                        log.info("Identity service returned {} users, filtered to {} matching '{}'. Emails: {}", 
+                            users.size(), filteredUsers.size(), email, emails);
                         log.info("Student IDs: {}", studentIds);
                     }
                     return studentIds;
@@ -994,15 +1048,23 @@ public class EnrollmentService {
                     List<UserDTO> users = response.getBody().getContent();
                     log.debug("Identity service search returned {} users", users != null ? users.size() : 0);
                     if (users != null) {
-                        studentIds = users.stream()
+                        // Filter to ensure emails actually contain the search term (case-insensitive)
+                        String searchTerm = email.toLowerCase();
+                        List<UserDTO> filteredUsers = users.stream()
+                            .filter(user -> user.getEmail() != null && 
+                                    user.getEmail().toLowerCase().contains(searchTerm))
+                            .collect(Collectors.toList());
+                        
+                        studentIds = filteredUsers.stream()
                             .map(UserDTO::getId)
                             .collect(Collectors.toList());
+                        
                         // Log emails for debugging
-                        List<String> emails = users.stream()
+                        List<String> emails = filteredUsers.stream()
                             .map(u -> u.getEmail() != null ? u.getEmail() : "no-email")
                             .collect(Collectors.toList());
-                        log.info("Found {} student IDs using search parameter (contains match). Emails: {}", 
-                            studentIds.size(), emails);
+                        log.info("Identity service search returned {} users, filtered to {} matching '{}'. Emails: {}", 
+                            users.size(), filteredUsers.size(), email, emails);
                         log.info("Student IDs: {}", studentIds);
                     }
                 }

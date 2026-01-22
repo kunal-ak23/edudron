@@ -105,8 +105,13 @@ public class EnrollmentController {
             log.info("Found {} student IDs matching email '{}'", studentIds != null ? studentIds.size() : 0, email.trim());
         }
         
+        // Pass emailSearch for fallback filtering if identity service didn't find matches
+        String emailSearch = (studentIds != null && studentIds.isEmpty() && email != null && !email.trim().isEmpty()) 
+            ? email.trim() 
+            : null;
+        
         Page<EnrollmentDTO> enrollments = enrollmentService.getAllEnrollments(
-            pageable, courseId, instituteId, classId, sectionId, studentIds);
+            pageable, courseId, instituteId, classId, sectionId, studentIds, emailSearch);
         
         log.info("GET /api/enrollments/all/paged - Returning {} enrollments (total: {}, pages: {})", 
             enrollments.getNumberOfElements(), enrollments.getTotalElements(), enrollments.getTotalPages());

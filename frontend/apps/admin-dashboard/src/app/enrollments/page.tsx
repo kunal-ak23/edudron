@@ -74,19 +74,27 @@ export default function EnrollmentsPage() {
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
 
-  // Load students with pagination and server-side email filtering
-  // Passes email filter to API to avoid loading all pages
+  // Load students with pagination and backend filtering
   const loadStudents = useCallback(async (searchQuery: string = '', page: number = 0, size: number = 100) => {
     try {
       setStudentsLoading(true)
       
-      // Build API URL with email filter if provided
-      let apiUrl = `/idp/users/role/STUDENT/paginated?page=${page}&size=${size}`
+      // Build API URL with backend search filter
+      const params = new URLSearchParams()
+      params.append('page', page.toString())
+      params.append('size', size.toString())
+      
       if (searchQuery.trim()) {
-        // Try email parameter first, fallback to search parameter
-        const encodedQuery = encodeURIComponent(searchQuery.trim())
-        apiUrl += `&email=${encodedQuery}`
+        // Use search parameter for backend filtering (searches email, name, phone)
+        params.append('search', searchQuery.trim())
       }
+      
+      const apiUrl = `/idp/users/role/STUDENT/paginated?${params.toString()}`
+      console.log('[EnrollmentsDialog] Loading students with filters:', { 
+        page, 
+        size, 
+        search: searchQuery.trim() || null 
+      })
       
       try {
         const studentsResponse = await apiClient.get<{
@@ -96,43 +104,17 @@ export default function EnrollmentsPage() {
         }>(apiUrl)
         
         const loadedStudents = studentsResponse.data?.content || []
+        console.log('[EnrollmentsDialog] Received {} students (total: {})', 
+          loadedStudents.length, studentsResponse.data?.totalElements)
         
-        // If backend doesn't support email filter, filter client-side on first page only
-        if (searchQuery.trim() && loadedStudents.length > 0) {
-          const query = searchQuery.toLowerCase().trim()
-          const filtered = loadedStudents.filter(s => {
-            const emailMatch = s.email?.toLowerCase().includes(query)
-            const nameMatch = s.name?.toLowerCase().includes(query)
-            return emailMatch || nameMatch
-          })
-          
-          // If filtering removed all results but we have a search query,
-          // the backend might not support email filtering - try with search parameter
-          if (filtered.length === 0 && loadedStudents.length > 0) {
-            try {
-              const searchUrl = `/idp/users/role/STUDENT/paginated?page=${page}&size=${size}&search=${encodeURIComponent(searchQuery.trim())}`
-              const searchResponse = await apiClient.get<{
-                content: Array<{ id: string; email: string; name?: string }>
-                totalElements: number
-                totalPages: number
-              }>(searchUrl)
-              setStudents(searchResponse.data?.content || [])
-              return
-            } catch (searchError) {
-              // Fall through to client-side filtering
-            }
-          }
-          
-          setStudents(filtered)
-        } else {
-          // No search query or backend filtered - use results as-is
-          setStudents(loadedStudents)
-        }
+        setStudents(loadedStudents)
       } catch (paginatedError) {
         // Fallback to non-paginated endpoint if paginated doesn't exist
+        console.warn('Paginated endpoint failed, falling back to non-paginated:', paginatedError)
         const studentsResponse = await apiClient.get<Array<{ id: string; email: string; name?: string }>>('/idp/users/role/STUDENT')
         const allStudents = studentsResponse.data || []
         
+        // Client-side filter as fallback
         if (searchQuery.trim()) {
           const query = searchQuery.toLowerCase().trim()
           const filtered = allStudents.filter(s => {

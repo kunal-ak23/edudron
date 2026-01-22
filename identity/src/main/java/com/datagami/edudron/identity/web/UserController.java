@@ -15,6 +15,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -22,6 +24,8 @@ import java.util.List;
 @RequestMapping("/idp/users")
 @Tag(name = "User Management", description = "User management endpoints")
 public class UserController {
+    
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
     
     @Autowired
     private UserService userService;
@@ -52,9 +56,15 @@ public class UserController {
     public ResponseEntity<Page<UserDTO>> getUsersByRolePaginated(
             @PathVariable String role,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String search) {
         Pageable pageable = PageRequest.of(page, size);
-        Page<UserDTO> users = userService.getUsersByRolePaginated(role, pageable);
+        log.info("GET /idp/users/role/{}/paginated - Filters: email={}, search={}, page={}, size={}", 
+            role, email, search, page, size);
+        Page<UserDTO> users = userService.getUsersByRolePaginated(role, pageable, email, search);
+        log.info("GET /idp/users/role/{}/paginated - Returning {} users (total: {}, pages: {})", 
+            role, users.getNumberOfElements(), users.getTotalElements(), users.getTotalPages());
         return ResponseEntity.ok(users);
     }
 
