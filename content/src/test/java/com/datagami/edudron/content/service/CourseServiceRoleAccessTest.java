@@ -192,8 +192,9 @@ class CourseServiceRoleAccessTest {
             "STUDENT should not be able to create courses");
 
         assertTrue(exception.getMessage().contains("view-only access") &&
-                   exception.getMessage().contains("cannot create courses"),
-            "Exception message should indicate view-only restriction");
+                   exception.getMessage().contains("cannot create courses") &&
+                   exception.getMessage().contains("STUDENT"),
+            "Exception message should indicate view-only restriction and include STUDENT");
     }
 
     // ========== updateCourse() Tests ==========

@@ -91,10 +91,10 @@ public class CourseService {
     }
     
     public CourseDTO createCourse(CreateCourseRequest request) {
-        // INSTRUCTOR has view-only access - cannot create courses
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create courses
         String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot create courses");
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot create courses");
         }
         
         String clientIdStr = TenantContext.getClientId();
@@ -201,10 +201,10 @@ public class CourseService {
     }
     
     public CourseDTO updateCourse(String id, CreateCourseRequest request) {
-        // INSTRUCTOR has view-only access - cannot update courses
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update courses
         String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot update courses");
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot update courses");
         }
         
         String clientIdStr = TenantContext.getClientId();
@@ -477,10 +477,10 @@ public class CourseService {
     }
     
     public void deleteCourse(String id) {
-        // INSTRUCTOR has view-only access - cannot delete courses
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot delete courses
         String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot delete courses");
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot delete courses");
         }
         
         String clientIdStr = TenantContext.getClientId();
@@ -496,10 +496,10 @@ public class CourseService {
     }
     
     public CourseDTO publishCourse(String id) {
-        // INSTRUCTOR has view-only access - cannot publish courses
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot publish courses
         String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot publish courses");
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot publish courses");
         }
         
         String clientIdStr = TenantContext.getClientId();
@@ -566,10 +566,10 @@ public class CourseService {
     }
 
     public CourseDTO unpublishCourse(String id) {
-        // INSTRUCTOR has view-only access - cannot unpublish courses
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot unpublish courses
         String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR and SUPPORT_STAFF have view-only access and cannot unpublish courses");
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot unpublish courses");
         }
         
         String clientIdStr = TenantContext.getClientId();
