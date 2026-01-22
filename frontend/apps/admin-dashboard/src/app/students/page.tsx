@@ -15,7 +15,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Plus, Search, Mail, Phone, User } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Loader2, Plus, Search, Mail, Phone, User, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import { apiClient } from '@/lib/api'
@@ -39,6 +49,19 @@ export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [pageSize, setPageSize] = useState(20)
+  
+  // Form state for adding student
+  const [newStudent, setNewStudent] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    autoGeneratePassword: true,
+  })
 
   const loadStudents = useCallback(async () => {
     try {
@@ -97,6 +120,87 @@ export default function StudentsPage() {
     (student.phone && student.phone.includes(searchTerm))
   )
 
+  // Pagination calculations
+  const totalElements = filteredStudents.length
+  const totalPages = Math.ceil(totalElements / pageSize)
+  const startIndex = currentPage * pageSize
+  const endIndex = startIndex + pageSize
+  const paginatedStudents = filteredStudents.slice(startIndex, endIndex)
+
+  // Reset to first page when search term changes
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [searchTerm])
+
+  const handleAddStudent = async () => {
+    if (!newStudent.name || !newStudent.email) {
+      toast({
+        variant: 'destructive',
+        title: 'Validation error',
+        description: 'Name and email are required',
+      })
+      return
+    }
+
+    if (!newStudent.autoGeneratePassword && !newStudent.password) {
+      toast({
+        variant: 'destructive',
+        title: 'Validation error',
+        description: 'Password is required when auto-generate password is disabled',
+      })
+      return
+    }
+
+    setCreating(true)
+    try {
+      const requestBody: any = {
+        name: newStudent.name,
+        email: newStudent.email,
+        role: 'STUDENT',
+        active: true,
+        autoGeneratePassword: newStudent.autoGeneratePassword,
+      }
+
+      if (newStudent.phone) {
+        requestBody.phone = newStudent.phone
+      }
+
+      if (!newStudent.autoGeneratePassword && newStudent.password) {
+        requestBody.password = newStudent.password
+      }
+
+      await apiClient.post('/idp/users', requestBody)
+      
+      toast({
+        title: 'Student created',
+        description: 'Student has been successfully created',
+      })
+
+      // Reset form
+      setNewStudent({
+        name: '',
+        email: '',
+        phone: '',
+        password: '',
+        autoGeneratePassword: true,
+      })
+      setShowAddDialog(false)
+
+      // Reload students
+      await loadStudents()
+    } catch (err: any) {
+      console.error('Error creating student:', err)
+      const errorMessage = extractErrorMessage(err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to create student',
+        description: errorMessage,
+      })
+    } finally {
+      setCreating(false)
+    }
+  }
+
   if (!user || !isAuthenticated()) {
     return null
   }
@@ -117,9 +221,13 @@ export default function StudentsPage() {
   return (
     <div>
         <div className="mb-6 flex items-center justify-between">
-          <div>
+          <div className="flex gap-2">
+            <Button onClick={() => setShowAddDialog(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Student
+            </Button>
             <Link href="/students/import">
-              <Button>
+              <Button variant="outline">
                 <Plus className="h-4 w-4 mr-2" />
                 Import Students
               </Button>
@@ -171,7 +279,7 @@ export default function StudentsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredStudents.map((student) => (
+                    {paginatedStudents.map((student) => (
                       <TableRow key={student.id}>
                         <TableCell className="font-medium">{student.name}</TableCell>
                         <TableCell>
@@ -210,8 +318,176 @@ export default function StudentsPage() {
                   </TableBody>
                 </Table>
               )}
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm">Page size:</Label>
+                    <Select
+                      value={pageSize.toString()}
+                      onValueChange={(value) => {
+                        setPageSize(Number(value))
+                        setCurrentPage(0) // Reset to first page when changing page size
+                      }}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-sm text-gray-600">
+                      Showing {startIndex + 1} to {Math.min(endIndex, totalElements)} of {totalElements.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(0)}
+                      disabled={currentPage === 0 || loading}
+                    >
+                      First
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+                      disabled={currentPage === 0 || loading}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <span className="text-sm text-gray-600 px-2">
+                      Page {currentPage + 1} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+                      disabled={currentPage >= totalPages - 1 || loading}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(totalPages - 1)}
+                      disabled={currentPage >= totalPages - 1 || loading}
+                    >
+                      Last
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
+
+      {/* Add Student Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add New Student</DialogTitle>
+            <DialogDescription>
+              Create a new student account. You can auto-generate a password or set one manually.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name *</Label>
+              <Input
+                id="name"
+                placeholder="Enter student name"
+                value={newStudent.name}
+                onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email *</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter student email"
+                value={newStudent.email}
+                onChange={(e) => setNewStudent({ ...newStudent, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone (Optional)</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="Enter student phone"
+                value={newStudent.phone}
+                onChange={(e) => setNewStudent({ ...newStudent, phone: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="autoGeneratePassword"
+                  checked={newStudent.autoGeneratePassword}
+                  onChange={(e) => setNewStudent({ ...newStudent, autoGeneratePassword: e.target.checked, password: '' })}
+                  className="rounded"
+                />
+                <Label htmlFor="autoGeneratePassword" className="cursor-pointer">
+                  Auto-generate password
+                </Label>
+              </div>
+            </div>
+            {!newStudent.autoGeneratePassword && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Password *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter password"
+                  value={newStudent.password}
+                  onChange={(e) => setNewStudent({ ...newStudent, password: e.target.value })}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddDialog(false)
+                setNewStudent({
+                  name: '',
+                  email: '',
+                  phone: '',
+                  password: '',
+                  autoGeneratePassword: true,
+                })
+              }}
+              disabled={creating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddStudent}
+              disabled={creating || !newStudent.name || !newStudent.email}
+            >
+              {creating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Create Student'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
   )
 }
