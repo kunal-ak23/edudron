@@ -88,8 +88,29 @@ public class EnrollmentController {
     @GetMapping("/enrollments/all/paged")
     @Operation(summary = "List all enrollments with pagination (admin)", description = "Get paginated enrollments in the tenant (admin/instructor only)")
     public ResponseEntity<Page<EnrollmentDTO>> getAllEnrollments(
-            @PageableDefault(size = 20, sort = "enrolledAt", direction = org.springframework.data.domain.Sort.Direction.DESC) Pageable pageable) {
-        Page<EnrollmentDTO> enrollments = enrollmentService.getAllEnrollments(pageable);
+            @PageableDefault(size = 20, sort = "enrolledAt", direction = org.springframework.data.domain.Sort.Direction.DESC) Pageable pageable,
+            @RequestParam(required = false) String courseId,
+            @RequestParam(required = false) String instituteId,
+            @RequestParam(required = false) String classId,
+            @RequestParam(required = false) String sectionId,
+            @RequestParam(required = false) String email) {
+        log.info("GET /api/enrollments/all/paged - Filters: courseId={}, instituteId={}, classId={}, sectionId={}, email={}, page={}, size={}", 
+            courseId, instituteId, classId, sectionId, email, pageable.getPageNumber(), pageable.getPageSize());
+        
+        // If email is provided, we need to find student IDs first
+        List<String> studentIds = null;
+        if (email != null && !email.trim().isEmpty()) {
+            log.info("Searching for students with email: {}", email.trim());
+            studentIds = enrollmentService.findStudentIdsByEmail(email.trim());
+            log.info("Found {} student IDs matching email '{}'", studentIds != null ? studentIds.size() : 0, email.trim());
+        }
+        
+        Page<EnrollmentDTO> enrollments = enrollmentService.getAllEnrollments(
+            pageable, courseId, instituteId, classId, sectionId, studentIds);
+        
+        log.info("GET /api/enrollments/all/paged - Returning {} enrollments (total: {}, pages: {})", 
+            enrollments.getNumberOfElements(), enrollments.getTotalElements(), enrollments.getTotalPages());
+        
         return ResponseEntity.ok(enrollments);
     }
 

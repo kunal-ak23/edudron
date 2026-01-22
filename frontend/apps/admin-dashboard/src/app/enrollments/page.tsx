@@ -42,8 +42,6 @@ export default function EnrollmentsPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
-  const [allEnrollments, setAllEnrollments] = useState<Enrollment[]>([]) // Store all enrollments for client-side filtering
-  const [filteredEnrollments, setFilteredEnrollments] = useState<Enrollment[]>([])
   const [courses, setCourses] = useState<Record<string, Course>>({})
   const [allCourses, setAllCourses] = useState<Course[]>([]) // All courses for filter dropdown
   const [institutes, setInstitutes] = useState<Institute[]>([])
@@ -58,7 +56,6 @@ export default function EnrollmentsPage() {
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all')
   const [searchEmail, setSearchEmail] = useState<string>('')
   const [debouncedSearchEmail, setDebouncedSearchEmail] = useState<string>('')
-  const [lastSearchedEmail, setLastSearchedEmail] = useState<string>('') // Track last searched value to prevent duplicate calls
   const [unenrollingId, setUnenrollingId] = useState<string | null>(null)
   const [showUnenrollDialog, setShowUnenrollDialog] = useState(false)
   const [enrollmentToUnenroll, setEnrollmentToUnenroll] = useState<Enrollment | null>(null)
@@ -156,105 +153,63 @@ export default function EnrollmentsPage() {
     }
   }, [])
 
-  // Load only enrollments (for search/filter updates without reloading everything)
-  // Uses tableLoading instead of loading to avoid full page reload
-  // Accepts searchEmail as parameter to avoid dependency issues
-  const loadEnrollmentsOnly = useCallback(async (searchQuery: string = '') => {
+  // Load enrollments with backend filtering
+  const loadEnrollments = useCallback(async () => {
     try {
-      setTableLoading(true) // Only set table loading, not full page loading
+      setTableLoading(true)
       
-      let enrollmentsResponse
-      const emailToSearch = searchQuery || debouncedSearchEmail
-      if (emailToSearch.trim()) {
-        // When searching, use the same student API as the enrollment modal
-        // Search for students by email using server-side filtering (single API call)
-        const queryToSearch = emailToSearch.trim()
-        let matchingStudentIds: string[] = []
-        
-        try {
-          // Use server-side email filter - only fetch first page with filter (same as dialog)
-          const emailParam = encodeURIComponent(queryToSearch)
-          
-          // Try email parameter first
-          let studentsResponse
-          try {
-            studentsResponse = await apiClient.get<{
-              content: Array<{ id: string; email: string; name?: string }>
-              totalElements: number
-              totalPages: number
-            }>(`/idp/users/role/STUDENT/paginated?page=0&size=100&email=${emailParam}`)
-          } catch (emailError) {
-            // If email parameter doesn't work, try search parameter
-            try {
-              studentsResponse = await apiClient.get<{
-                content: Array<{ id: string; email: string; name?: string }>
-                totalElements: number
-                totalPages: number
-              }>(`/idp/users/role/STUDENT/paginated?page=0&size=100&search=${emailParam}`)
-            } catch (searchError) {
-              // If backend doesn't support filtering, filter client-side on first page only
-              const fallbackResponse = await apiClient.get<{
-                content: Array<{ id: string; email: string; name?: string }>
-                totalElements: number
-                totalPages: number
-              }>(`/idp/users/role/STUDENT/paginated?page=0&size=100`)
-              const allStudents = fallbackResponse.data?.content || []
-              const query = queryToSearch.toLowerCase()
-              const filtered = allStudents.filter(s => {
-                const emailMatch = s.email?.toLowerCase().includes(query)
-                const nameMatch = s.name?.toLowerCase().includes(query)
-                return emailMatch || nameMatch
-              })
-              matchingStudentIds = filtered.map(s => s.id)
-              throw new Error('Using client-side filter') // Skip to enrollment loading
-            }
-          }
-          
-          // Get students from successful response
-          const students = studentsResponse.data?.content || []
-          matchingStudentIds = students.map(s => s.id)
-        } catch (studentSearchError: any) {
-          // If we already have matchingStudentIds from client-side filter, continue
-          if (studentSearchError.message !== 'Using client-side filter' && matchingStudentIds.length === 0) {
-            console.error('Error searching students:', studentSearchError)
-            // Fallback: continue with empty student IDs, will show no results
-          }
-        }
-        
-        // Filter enrollments by matching student IDs
-        // Use existing enrollments for client-side filtering (no API call needed)
-        let enrollmentsToFilter: Enrollment[] = []
-        
-        if (matchingStudentIds.length > 0) {
-          // Filter existing enrollments client-side (fast, no API call)
-          // If we don't have all enrollments cached, use what we have
-          const enrollmentsToSearch = allEnrollments.length > 0 ? allEnrollments : enrollments
-          enrollmentsToFilter = enrollmentsToSearch.filter(e => matchingStudentIds.includes(e.studentId))
-          
-          // No API call here - just filter cached enrollments client-side
-          // This matches the dialog behavior - only student search API call, filter client-side
-        }
-        
-        // Create a response-like object with filtered enrollments
-        enrollmentsResponse = {
-          content: enrollmentsToFilter,
-          totalElements: enrollmentsToFilter.length,
-          totalPages: 1,
-          number: 0,
-          size: enrollmentsToFilter.length,
-          first: true,
-          last: true
-        }
-      } else {
-        // Normal pagination - load single page
-        enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(currentPage, pageSize)
+      // Build filters object
+      const filters: {
+        courseId?: string
+        instituteId?: string
+        classId?: string
+        sectionId?: string
+        email?: string
+      } = {}
+      
+      if (selectedCourseId && selectedCourseId !== 'all') {
+        filters.courseId = selectedCourseId
       }
+      if (selectedInstituteId && selectedInstituteId !== 'all') {
+        filters.instituteId = selectedInstituteId
+      }
+      if (selectedClassId && selectedClassId !== 'all') {
+        filters.classId = selectedClassId
+      }
+      if (selectedSectionId && selectedSectionId !== 'all') {
+        filters.sectionId = selectedSectionId
+      }
+      if (debouncedSearchEmail.trim()) {
+        filters.email = debouncedSearchEmail.trim()
+      }
+      
+      console.log('[EnrollmentsPage] Loading enrollments with filters:', filters, 'page:', currentPage, 'size:', pageSize)
+      
+      // Call backend API with filters
+      const enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(
+        currentPage,
+        pageSize,
+        Object.keys(filters).length > 0 ? filters : undefined
+      )
+      
+      console.log('[EnrollmentsPage] Received response:', {
+        contentLength: enrollmentsResponse.content.length,
+        totalElements: enrollmentsResponse.totalElements,
+        totalPages: enrollmentsResponse.totalPages,
+        currentPage: enrollmentsResponse.number,
+        firstFew: enrollmentsResponse.content.slice(0, 3).map(e => ({
+          id: e.id,
+          studentId: e.studentId,
+          studentEmail: e.studentEmail,
+          courseId: e.courseId
+        }))
+      })
       
       setEnrollments(enrollmentsResponse.content)
       setTotalElements(enrollmentsResponse.totalElements)
       setTotalPages(enrollmentsResponse.totalPages)
 
-      // Load courses for current page (for display) - only reload course details, not all courses
+      // Load courses for current page (for display)
       const courseIds = Array.from(new Set(enrollmentsResponse.content.map(e => e.courseId)))
       const coursePromises = courseIds.map(id => coursesApi.getCourse(id).catch(() => null))
       const coursesData = await Promise.all(coursePromises)
@@ -274,29 +229,17 @@ export default function EnrollmentsPage() {
         description: extractErrorMessage(err),
       })
     } finally {
-      setTableLoading(false) // Only clear table loading
+      setTableLoading(false)
     }
-  }, [currentPage, pageSize, toast]) // Removed debouncedSearchEmail from deps - passed as parameter instead
+  }, [currentPage, pageSize, selectedCourseId, selectedInstituteId, selectedClassId, selectedSectionId, debouncedSearchEmail, toast])
 
   // Load all data (enrollments, courses, institutes, classes, sections) - only on initial load
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
       
-      // Load enrollments - load more initially to enable client-side filtering
-      const enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(currentPage, pageSize)
-      
-      // Also load first 500 enrollments for client-side filtering when searching
-      let allEnrollmentsForFilter: Enrollment[] = []
-      if (currentPage === 0) {
-        try {
-          const allEnrollmentsPage = await enrollmentsApi.listAllEnrollmentsPaginated(0, 500)
-          allEnrollmentsForFilter = allEnrollmentsPage.content
-        } catch (err) {
-          // If loading all fails, just use current page
-          allEnrollmentsForFilter = enrollmentsResponse.content
-        }
-      }
+      // Load enrollments (no filters on initial load)
+      const enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(currentPage, pageSize, undefined)
       
       const [institutesData, allCoursesData] = await Promise.all([
         institutesApi.listInstitutes(),
@@ -304,7 +247,6 @@ export default function EnrollmentsPage() {
       ])
       
       setEnrollments(enrollmentsResponse.content)
-      setAllEnrollments(allEnrollmentsForFilter.length > 0 ? allEnrollmentsForFilter : enrollmentsResponse.content) // Store for client-side filtering
       setTotalElements(enrollmentsResponse.totalElements)
       setTotalPages(enrollmentsResponse.totalPages)
       setInstitutes(institutesData)
@@ -351,30 +293,6 @@ export default function EnrollmentsPage() {
     }
   }, [currentPage, pageSize, toast])
 
-  const filterEnrollments = useCallback(() => {
-    let filtered = [...enrollments]
-
-    // Note: Email search is now handled in loadData by searching students first
-    // This ensures both the enrollment search and student dropdown use the same API
-    // No additional filtering needed here for email search
-
-    // Filter by course
-    if (selectedCourseId && selectedCourseId !== 'all') {
-      filtered = filtered.filter(e => e.courseId === selectedCourseId)
-    }
-
-    if (selectedInstituteId && selectedInstituteId !== 'all') {
-      filtered = filtered.filter(e => e.instituteId === selectedInstituteId)
-    }
-    if (selectedClassId && selectedClassId !== 'all') {
-      filtered = filtered.filter(e => e.classId === selectedClassId)
-    }
-    if (selectedSectionId && selectedSectionId !== 'all') {
-      filtered = filtered.filter(e => e.batchId === selectedSectionId)
-    }
-
-    setFilteredEnrollments(filtered)
-  }, [enrollments, debouncedSearchEmail, selectedCourseId, selectedInstituteId, selectedClassId, selectedSectionId])
 
   // Initial load - load all data (enrollments, courses, institutes, etc.) only once
   useEffect(() => {
@@ -383,36 +301,12 @@ export default function EnrollmentsPage() {
     }
   }, [loadData, initialLoadDone])
 
-  // When pagination changes (not search), reload enrollments only
+  // When pagination or filters change, reload enrollments
   useEffect(() => {
-    // Only reload on pagination changes, not when searching
-    if (initialLoadDone && !debouncedSearchEmail.trim() && !searchEmail.trim()) {
-      // Only reload enrollments, not all data
-      loadEnrollmentsOnly('')
+    if (initialLoadDone) {
+      loadEnrollments()
     }
-  }, [currentPage, pageSize, initialLoadDone, debouncedSearchEmail, searchEmail, loadEnrollmentsOnly])
-
-  // When search changes, only reload enrollments (not all data) - debounced
-  // This mimics the dialog behavior - only updates table, no page reload
-  useEffect(() => {
-    // Skip if initial load hasn't completed
-    if (!initialLoadDone) return
-    
-    // Skip if search hasn't actually changed (prevents duplicate calls)
-    if (debouncedSearchEmail === lastSearchedEmail) return
-    
-    // Update last searched to prevent duplicate calls
-    setLastSearchedEmail(debouncedSearchEmail)
-    
-    // If searching or search was cleared, reload only enrollments
-    // Uses tableLoading instead of loading to avoid full page reload
-    // Pass the search query explicitly to avoid dependency issues
-    loadEnrollmentsOnly(debouncedSearchEmail)
-  }, [debouncedSearchEmail, loadEnrollmentsOnly, initialLoadDone, lastSearchedEmail])
-
-  useEffect(() => {
-    filterEnrollments()
-  }, [filterEnrollments])
+  }, [currentPage, pageSize, selectedCourseId, selectedInstituteId, selectedClassId, selectedSectionId, debouncedSearchEmail, initialLoadDone, loadEnrollments])
 
   // Debounce search email for enrollment page search (same as dialog)
   // This prevents API calls on every keystroke
@@ -511,8 +405,8 @@ export default function EnrollmentsPage() {
       // Use the admin endpoint to delete enrollment by ID
       await enrollmentsApi.deleteEnrollment(enrollmentToUnenroll.id)
       
-      // Reload only enrollments to refresh table (not all data)
-      await loadEnrollmentsOnly(debouncedSearchEmail)
+      // Reload enrollments to refresh table
+      await loadEnrollments()
       
       toast({
         title: 'Success',
@@ -571,8 +465,8 @@ export default function EnrollmentsPage() {
       setSelectedEnrollSectionId('')
       setShowAddEnrollmentDialog(false)
       
-      // Reload only enrollments to show new enrollment (not all data)
-      await loadEnrollmentsOnly(debouncedSearchEmail)
+      // Reload enrollments to show new enrollment
+      await loadEnrollments()
     } catch (err: any) {
       console.error('Error enrolling student:', err)
       toast({
@@ -671,6 +565,7 @@ export default function EnrollmentsPage() {
                       setSelectedInstituteId(value)
                       setSelectedClassId('all')
                       setSelectedSectionId('all')
+                      setCurrentPage(0) // Reset to first page when filtering
                     }}
                     placeholder="All Institutes"
                     emptyMessage="No institutes found"
@@ -691,6 +586,7 @@ export default function EnrollmentsPage() {
                     onValueChange={(value) => {
                       setSelectedClassId(value)
                       setSelectedSectionId('all')
+                      setCurrentPage(0) // Reset to first page when filtering
                     }}
                     placeholder="All Classes"
                     emptyMessage="No classes found"
@@ -709,7 +605,10 @@ export default function EnrollmentsPage() {
                       })),
                     ]}
                     value={selectedSectionId}
-                    onValueChange={setSelectedSectionId}
+                    onValueChange={(value) => {
+                      setSelectedSectionId(value)
+                      setCurrentPage(0) // Reset to first page when filtering
+                    }}
                     placeholder="All Sections"
                     emptyMessage="No sections found"
                     disabled={!selectedClassId || selectedClassId === 'all'}
@@ -734,11 +633,6 @@ export default function EnrollmentsPage() {
             <CardHeader>
               <CardTitle>
                 All Enrollments ({totalElements.toLocaleString()})
-                {filteredEnrollments.length < enrollments.length && (
-                  <span className="text-sm font-normal text-gray-500 ml-2">
-                    (Showing {filteredEnrollments.length} of {enrollments.length} on this page)
-                  </span>
-                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -747,12 +641,12 @@ export default function EnrollmentsPage() {
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   <span className="ml-2 text-sm text-gray-600">Loading enrollments...</span>
                 </div>
-              ) : filteredEnrollments.length === 0 ? (
+              ) : enrollments.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="mx-auto h-12 w-12 text-gray-400" />
                   <h3 className="mt-2 text-sm font-semibold text-gray-900">No enrollments found</h3>
                   <p className="mt-1 text-sm text-gray-500">
-                    {enrollments.length === 0 
+                    {totalElements === 0 
                       ? 'No enrollments in the system yet.'
                       : 'Try adjusting your filters.'}
                   </p>
@@ -770,7 +664,7 @@ export default function EnrollmentsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredEnrollments.map((enrollment) => (
+                    {enrollments.map((enrollment) => (
                       <TableRow key={enrollment.id}>
                         <TableCell className="font-medium">
                           {enrollment.studentEmail || enrollment.studentId}

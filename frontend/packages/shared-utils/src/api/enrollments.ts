@@ -86,27 +86,66 @@ export class EnrollmentsApi {
     return Array.isArray(response.data) ? response.data : []
   }
 
-  async listAllEnrollmentsPaginated(page: number = 0, size: number = 20): Promise<{
+  async listAllEnrollmentsPaginated(
+    page: number = 0, 
+    size: number = 20,
+    filters?: {
+      courseId?: string
+      instituteId?: string
+      classId?: string
+      sectionId?: string
+      email?: string
+    }
+  ): Promise<{
     content: Enrollment[]
     totalElements: number
     totalPages: number
     size: number
     number: number
   }> {
+    // Build query parameters
+    const params = new URLSearchParams()
+    params.append('page', page.toString())
+    params.append('size', size.toString())
+    params.append('sort', 'enrolledAt,desc')
+    
+    // Add filter parameters if provided
+    if (filters) {
+      if (filters.courseId) params.append('courseId', filters.courseId)
+      if (filters.instituteId) params.append('instituteId', filters.instituteId)
+      if (filters.classId) params.append('classId', filters.classId)
+      if (filters.sectionId) params.append('sectionId', filters.sectionId)
+      if (filters.email) params.append('email', filters.email)
+    }
+    
+    const url = `/api/enrollments/all/paged?${params.toString()}`
+    console.log('[EnrollmentsApi] Calling:', url)
+    
     const response = await this.apiClient.get<{
       content: Enrollment[]
       totalElements: number
       totalPages: number
       size: number
       number: number
-    }>(`/api/enrollments/all/paged?page=${page}&size=${size}&sort=enrolledAt,desc`)
+    }>(url)
+    
+    console.log('[EnrollmentsApi] Raw response:', {
+      hasData: !!response.data,
+      hasContent: !!(response.data && response.data.content),
+      contentLength: response.data?.content?.length,
+      totalElements: response.data?.totalElements,
+      totalPages: response.data?.totalPages,
+      responseKeys: response.data ? Object.keys(response.data) : []
+    })
     
     // Handle Spring Data Page response structure
     if (response.data && response.data.content) {
+      console.log('[EnrollmentsApi] Returning paginated response with', response.data.content.length, 'items')
       return response.data
     }
     
     // Fallback structure
+    console.warn('[EnrollmentsApi] Response structure unexpected, using fallback')
     return {
       content: Array.isArray(response.data) ? response.data : [],
       totalElements: 0,

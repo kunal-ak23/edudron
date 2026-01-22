@@ -22,6 +22,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.Predicate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -435,35 +437,53 @@ public class EnrollmentService {
      * Filters out placeholder enrollments and includes student emails
      */
     public Page<EnrollmentDTO> getAllEnrollments(Pageable pageable) {
+        return getAllEnrollments(pageable, null, null, null, null, null);
+    }
+
+    /**
+     * Get all enrollments with pagination and filters (admin operation)
+     * Filters out placeholder enrollments and includes student emails
+     * 
+     * @param pageable Pagination parameters
+     * @param courseId Optional course filter
+     * @param instituteId Optional institute filter
+     * @param classId Optional class filter
+     * @param batchId Optional section/batch filter
+     * @param studentIds Optional list of student IDs to filter by (for email search)
+     */
+    public Page<EnrollmentDTO> getAllEnrollments(Pageable pageable, String courseId, String instituteId, 
+                                                  String classId, String batchId, List<String> studentIds) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        // Get paginated enrollments
-        Page<Enrollment> enrollmentsPage = enrollmentRepository.findByClientId(clientId, pageable);
+        log.info("Getting enrollments with filters - courseId: {}, instituteId: {}, classId: {}, sectionId (batchId): {}, studentIds: {} (count: {})", 
+            courseId, instituteId, classId, batchId, studentIds, studentIds != null ? studentIds.size() : 0);
         
-        // Filter out placeholder enrollments from current page
-        List<Enrollment> realEnrollments = enrollmentsPage.getContent().stream()
-            .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
-            .collect(Collectors.toList());
+        // Build specification for filtering
+        Specification<Enrollment> spec = buildEnrollmentSpecification(clientId, courseId, instituteId, classId, batchId, studentIds);
         
-        // Get total count of real enrollments (excluding placeholders)
-        // Note: This is an approximation - we filter after pagination
-        // For exact count, we'd need a custom query, but this works for most cases
-        long totalRealEnrollments = enrollmentsPage.getTotalElements();
+        // Get paginated enrollments with filters
+        Page<Enrollment> enrollmentsPage = enrollmentRepository.findAll(spec, pageable);
+        
+        log.debug("Repository returned {} enrollments (total: {}, page: {}/{})", 
+            enrollmentsPage.getNumberOfElements(), enrollmentsPage.getTotalElements(), 
+            enrollmentsPage.getNumber(), enrollmentsPage.getTotalPages());
         
         // Get unique student IDs from current page
-        Set<String> uniqueStudentIds = realEnrollments.stream()
+        Set<String> uniqueStudentIds = enrollmentsPage.getContent().stream()
             .map(Enrollment::getStudentId)
             .collect(Collectors.toSet());
+        
+        log.debug("Fetching emails for {} unique student IDs", uniqueStudentIds.size());
         
         // Batch fetch student emails
         Map<String, String> studentEmailMap = fetchStudentEmails(uniqueStudentIds);
         
         // Convert to DTOs with emails
-        List<EnrollmentDTO> dtoList = realEnrollments.stream()
+        List<EnrollmentDTO> dtoList = enrollmentsPage.getContent().stream()
             .map(enrollment -> {
                 EnrollmentDTO dto = toDTO(enrollment);
                 dto.setStudentEmail(studentEmailMap.get(enrollment.getStudentId()));
@@ -471,9 +491,65 @@ public class EnrollmentService {
             })
             .collect(Collectors.toList());
         
+        log.debug("Returning {} enrollment DTOs", dtoList.size());
+        
         // Create new Page with filtered content
-        // Note: totalElements is approximate since we filter after pagination
-        return new PageImpl<>(dtoList, pageable, totalRealEnrollments);
+        return new PageImpl<>(dtoList, pageable, enrollmentsPage.getTotalElements());
+    }
+
+    /**
+     * Build JPA Specification for enrollment filtering
+     */
+    private Specification<Enrollment> buildEnrollmentSpecification(UUID clientId, String courseId, 
+                                                                     String instituteId, String classId, 
+                                                                     String batchId, List<String> studentIds) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            // Always filter by clientId
+            predicates.add(cb.equal(root.get("clientId"), clientId));
+            
+            // Exclude placeholder enrollments
+            predicates.add(cb.notEqual(root.get("courseId"), "__PLACEHOLDER_ASSOCIATION__"));
+            
+            // Apply optional filters
+            if (courseId != null && !courseId.isEmpty()) {
+                log.info("Adding courseId backend filter: {}", courseId);
+                predicates.add(cb.equal(root.get("courseId"), courseId));
+            }
+            
+            if (instituteId != null && !instituteId.isEmpty()) {
+                log.info("Adding instituteId backend filter: {}", instituteId);
+                predicates.add(cb.equal(root.get("instituteId"), instituteId));
+            }
+            
+            if (classId != null && !classId.isEmpty()) {
+                log.info("Adding classId backend filter: {}", classId);
+                predicates.add(cb.equal(root.get("classId"), classId));
+            }
+            
+            if (batchId != null && !batchId.isEmpty()) {
+                log.info("Adding sectionId (batchId) backend filter: {}", batchId);
+                predicates.add(cb.equal(root.get("batchId"), batchId));
+            }
+            
+            if (studentIds != null && !studentIds.isEmpty()) {
+                log.info("Adding studentIds backend filter with {} IDs", studentIds.size());
+                predicates.add(root.get("studentId").in(studentIds));
+            } else if (studentIds != null && studentIds.isEmpty()) {
+                // If studentIds list is empty (no matches found), return no results
+                log.info("StudentIds list is empty - no matches found, returning empty result");
+                predicates.add(cb.disjunction()); // Always false condition
+            }
+            
+            // Order by enrolledAt descending
+            query.orderBy(cb.desc(root.get("enrolledAt")));
+            
+            Predicate finalPredicate = cb.and(predicates.toArray(new Predicate[0]));
+            log.info("Built specification with {} predicates (clientId, !placeholder, and {} optional filters)", 
+                predicates.size(), predicates.size() - 2);
+            return finalPredicate;
+        };
     }
 
     /**
@@ -854,6 +930,92 @@ public class EnrollmentService {
     }
     
     /**
+     * Find student IDs by email search
+     * Searches the identity service for students matching the email (contains match, not exact)
+     */
+    public List<String> findStudentIdsByEmail(String email) {
+        List<String> studentIds = new ArrayList<>();
+        log.info("Finding student IDs by email (contains match): {}", email);
+        
+        try {
+            // Try email parameter first
+            String url = gatewayUrl + "/idp/users/role/STUDENT/paginated?page=0&size=100&email=" + 
+                        java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8);
+            log.debug("Searching students with URL: {}", url);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            try {
+                ResponseEntity<StudentSearchResponse> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    StudentSearchResponse.class
+                );
+                
+                log.debug("Identity service response status: {}", response.getStatusCode());
+                
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    List<UserDTO> users = response.getBody().getContent();
+                    log.debug("Identity service returned {} users", users != null ? users.size() : 0);
+                    if (users != null) {
+                        studentIds = users.stream()
+                            .map(UserDTO::getId)
+                            .collect(Collectors.toList());
+                        // Log emails for debugging
+                        List<String> emails = users.stream()
+                            .map(u -> u.getEmail() != null ? u.getEmail() : "no-email")
+                            .collect(Collectors.toList());
+                        log.info("Found {} student IDs using email parameter (contains match). Emails: {}", 
+                            studentIds.size(), emails);
+                        log.info("Student IDs: {}", studentIds);
+                    }
+                    return studentIds;
+                }
+            } catch (Exception emailError) {
+                // If email parameter doesn't work, try search parameter
+                log.debug("Email parameter failed, trying search parameter: {}", emailError.getMessage());
+                url = gatewayUrl + "/idp/users/role/STUDENT/paginated?page=0&size=100&search=" + 
+                      java.net.URLEncoder.encode(email, java.nio.charset.StandardCharsets.UTF_8);
+                log.debug("Trying search parameter with URL: {}", url);
+                
+                ResponseEntity<StudentSearchResponse> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    entity,
+                    StudentSearchResponse.class
+                );
+                
+                log.debug("Identity service search response status: {}", response.getStatusCode());
+                
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    List<UserDTO> users = response.getBody().getContent();
+                    log.debug("Identity service search returned {} users", users != null ? users.size() : 0);
+                    if (users != null) {
+                        studentIds = users.stream()
+                            .map(UserDTO::getId)
+                            .collect(Collectors.toList());
+                        // Log emails for debugging
+                        List<String> emails = users.stream()
+                            .map(u -> u.getEmail() != null ? u.getEmail() : "no-email")
+                            .collect(Collectors.toList());
+                        log.info("Found {} student IDs using search parameter (contains match). Emails: {}", 
+                            studentIds.size(), emails);
+                        log.info("Student IDs: {}", studentIds);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("Could not search students by email {}: {}", email, e.getMessage(), e);
+        }
+        
+        log.info("Returning {} student IDs for email contains match '{}'", studentIds.size(), email);
+        return studentIds;
+    }
+
+    /**
      * Fetch user details from identity service
      */
     private UserDTO getUserFromIdentityService(String userId) {
@@ -877,6 +1039,22 @@ public class EnrollmentService {
             log.debug("Could not fetch user details for user {}: {}", userId, e.getMessage());
         }
         return null;
+    }
+    
+    /**
+     * Response class for student search
+     */
+    private static class StudentSearchResponse {
+        private List<UserDTO> content;
+        private long totalElements;
+        private int totalPages;
+        
+        public List<UserDTO> getContent() { return content; }
+        public void setContent(List<UserDTO> content) { this.content = content; }
+        public long getTotalElements() { return totalElements; }
+        public void setTotalElements(long totalElements) { this.totalElements = totalElements; }
+        public int getTotalPages() { return totalPages; }
+        public void setTotalPages(int totalPages) { this.totalPages = totalPages; }
     }
     
     private EnrollmentDTO toDTO(Enrollment enrollment) {
