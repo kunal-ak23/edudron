@@ -135,13 +135,14 @@ public class User {
     
     public boolean canViewAnalytics() {
         return this.role == Role.SYSTEM_ADMIN || this.role == Role.TENANT_ADMIN || 
-               this.role == Role.CONTENT_MANAGER || this.role == Role.INSTRUCTOR;
+               this.role == Role.CONTENT_MANAGER || this.role == Role.INSTRUCTOR ||
+               this.role == Role.SUPPORT_STAFF;
     }
     
     public boolean canAccessCourses() {
         return this.role == Role.STUDENT || this.role == Role.INSTRUCTOR || 
                this.role == Role.TENANT_ADMIN || this.role == Role.CONTENT_MANAGER ||
-               this.role == Role.SYSTEM_ADMIN;
+               this.role == Role.SYSTEM_ADMIN || this.role == Role.SUPPORT_STAFF;
     }
     
     public boolean canViewOnly() {

@@ -5,6 +5,8 @@ import com.datagami.edudron.identity.domain.User;
 import com.datagami.edudron.identity.dto.CreateUserRequest;
 import com.datagami.edudron.identity.dto.UpdateUserRequest;
 import com.datagami.edudron.identity.repo.UserRepository;
+import com.datagami.edudron.identity.repo.UserInstituteRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import static org.mockito.Mockito.lenient;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,6 +40,12 @@ class UserServiceRoleAccessTest {
     private UserRepository userRepository;
 
     @Mock
+    private UserInstituteRepository userInstituteRepository;
+
+    @Mock
+    private PasswordEncoder passwordEncoder;
+
+    @Mock
     private Authentication authentication;
 
     @Mock
@@ -55,7 +64,10 @@ class UserServiceRoleAccessTest {
         
         // Setup SecurityContext mock
         SecurityContextHolder.setContext(securityContext);
-        when(securityContext.getAuthentication()).thenReturn(authentication);
+        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
+        // Default: no authentication unless explicitly mocked in test
+        lenient().when(authentication.getName()).thenReturn(null);
+        lenient().when(authentication.getPrincipal()).thenReturn(null);
     }
 
     @AfterEach
@@ -78,9 +90,39 @@ class UserServiceRoleAccessTest {
 
     private void mockCurrentUser(User user) {
         currentUser = user;
-        when(authentication.getName()).thenReturn(user.getEmail());
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(user.getEmail(), testClientId))
-            .thenReturn(Optional.of(user));
+        lenient().when(authentication.getName()).thenReturn(user.getEmail());
+        lenient().when(authentication.getPrincipal()).thenReturn(user.getEmail());
+        
+        String clientIdStr = TenantContext.getClientId();
+        
+        // For SYSTEM_ADMIN users
+        if (user.getRole() == User.Role.SYSTEM_ADMIN) {
+            // Always mock SYSTEM_ADMIN lookup (this is the fallback)
+            lenient().when(userRepository.findByEmailAndRoleAndActiveTrue(user.getEmail(), User.Role.SYSTEM_ADMIN))
+                .thenReturn(Optional.of(user));
+            
+            // If TenantContext is not "SYSTEM", also mock the tenant lookup (which will fail, then fallback to SYSTEM_ADMIN)
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                try {
+                    UUID clientId = UUID.fromString(clientIdStr);
+                    lenient().when(userRepository.findByEmailAndClientId(user.getEmail(), clientId))
+                        .thenReturn(Optional.empty()); // Will fail, then fallback to SYSTEM_ADMIN lookup
+                } catch (IllegalArgumentException e) {
+                    // Invalid UUID, skip
+                }
+            }
+        } else {
+            // For non-SYSTEM_ADMIN users, mock tenant-based lookup
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                try {
+                    UUID clientId = UUID.fromString(clientIdStr);
+                    lenient().when(userRepository.findByEmailAndClientId(user.getEmail(), clientId))
+                        .thenReturn(Optional.of(user));
+                } catch (IllegalArgumentException e) {
+                    // Invalid UUID, skip
+                }
+            }
+        }
     }
 
     // ========== createUser() Tests ==========
@@ -88,7 +130,9 @@ class UserServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can create SYSTEM_ADMIN user")
     void testSystemAdminCanCreateSystemAdmin() {
+        TenantContext.setClientId("SYSTEM");
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         CreateUserRequest request = new CreateUserRequest();
@@ -97,7 +141,21 @@ class UserServiceRoleAccessTest {
         request.setName("New Admin");
         request.setRole("SYSTEM_ADMIN");
 
-        when(userRepository.findByEmailAndActiveTrue(anyString())).thenReturn(Optional.empty());
+        // Mock for checking if new user exists (should return empty for new user's email)
+        // This needs to handle both the initial check and potential retry logic
+        lenient().when(userRepository.findByEmailAndRoleAndActiveTrue(eq("new-admin@example.com"), eq(User.Role.SYSTEM_ADMIN)))
+            .thenReturn(Optional.empty());
+        // Also mock with anyString() to handle any other email checks
+        lenient().when(userRepository.findByEmailAndRoleAndActiveTrue(anyString(), eq(User.Role.SYSTEM_ADMIN)))
+            .thenAnswer(invocation -> {
+                String email = invocation.getArgument(0);
+                // Return the current user if it's their email, otherwise empty
+                if ("admin@example.com".equals(email)) {
+                    return Optional.of(systemAdmin);
+                }
+                return Optional.empty();
+            });
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.createUser(request),
@@ -107,7 +165,9 @@ class UserServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can create TENANT_ADMIN user")
     void testSystemAdminCanCreateTenantAdmin() {
+        TenantContext.setClientId(testClientId.toString());
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         CreateUserRequest request = new CreateUserRequest();
@@ -115,9 +175,10 @@ class UserServiceRoleAccessTest {
         request.setPassword("password123");
         request.setName("Tenant Admin");
         request.setRole("TENANT_ADMIN");
+        request.setInstituteIds(List.of("institute-1"));
 
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(anyString(), any(UUID.class)))
-            .thenReturn(Optional.empty());
+        when(userRepository.existsByEmailAndClientId(anyString(), any(UUID.class))).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.createUser(request),
@@ -127,7 +188,9 @@ class UserServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can create CONTENT_MANAGER user")
     void testSystemAdminCanCreateContentManager() {
+        TenantContext.setClientId(testClientId.toString());
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         CreateUserRequest request = new CreateUserRequest();
@@ -135,9 +198,10 @@ class UserServiceRoleAccessTest {
         request.setPassword("password123");
         request.setName("Content Manager");
         request.setRole("CONTENT_MANAGER");
+        request.setInstituteIds(List.of("institute-1"));
 
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(anyString(), any(UUID.class)))
-            .thenReturn(Optional.empty());
+        when(userRepository.existsByEmailAndClientId(anyString(), any(UUID.class))).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.createUser(request),
@@ -215,9 +279,10 @@ class UserServiceRoleAccessTest {
         request.setPassword("password123");
         request.setName("Instructor");
         request.setRole("INSTRUCTOR");
+        request.setInstituteIds(List.of("institute-1"));
 
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(anyString(), any(UUID.class)))
-            .thenReturn(Optional.empty());
+        when(userRepository.existsByEmailAndClientId(anyString(), any(UUID.class))).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.createUser(request),
@@ -235,9 +300,10 @@ class UserServiceRoleAccessTest {
         request.setPassword("password123");
         request.setName("Support Staff");
         request.setRole("SUPPORT_STAFF");
+        request.setInstituteIds(List.of("institute-1"));
 
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(anyString(), any(UUID.class)))
-            .thenReturn(Optional.empty());
+        when(userRepository.existsByEmailAndClientId(anyString(), any(UUID.class))).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.createUser(request),
@@ -255,9 +321,10 @@ class UserServiceRoleAccessTest {
         request.setPassword("password123");
         request.setName("Student");
         request.setRole("STUDENT");
+        request.setInstituteIds(List.of("institute-1"));
 
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(anyString(), any(UUID.class)))
-            .thenReturn(Optional.empty());
+        when(userRepository.existsByEmailAndClientId(anyString(), any(UUID.class))).thenReturn(false);
+        when(passwordEncoder.encode(anyString())).thenReturn("encoded-password");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.createUser(request),
@@ -347,9 +414,8 @@ class UserServiceRoleAccessTest {
     @Test
     @DisplayName("Unauthenticated user cannot create users")
     void testUnauthenticatedUserCannotCreateUsers() {
-        when(authentication.getName()).thenReturn(null);
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(anyString(), any(UUID.class)))
-            .thenReturn(Optional.empty());
+        lenient().when(authentication.getName()).thenReturn(null);
+        lenient().when(authentication.getPrincipal()).thenReturn(null);
 
         CreateUserRequest request = new CreateUserRequest();
         request.setEmail("new-user@example.com");
@@ -370,15 +436,27 @@ class UserServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can update any user role")
     void testSystemAdminCanUpdateAnyUserRole() {
+        TenantContext.setClientId(testClientId.toString());
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         User targetUser = createMockUser(User.Role.STUDENT, "student@example.com");
+        targetUser.setClientId(testClientId); // Target user in tenant
         when(userRepository.findById("target-user-id")).thenReturn(Optional.of(targetUser));
 
         UpdateUserRequest request = new UpdateUserRequest();
+        request.setEmail(targetUser.getEmail()); // Keep same email to avoid uniqueness check
+        request.setName(targetUser.getName());
         request.setRole("TENANT_ADMIN");
+        request.setInstituteIds(List.of("institute-1"));
 
+        // Mock email uniqueness check (email not changed, so this won't be called, but mock it anyway)
+        lenient().when(userRepository.existsByEmailAndClientId(anyString(), any(UUID.class))).thenReturn(false);
+        lenient().when(userRepository.findByEmailAndClientId(anyString(), any(UUID.class)))
+            .thenReturn(Optional.empty());
+        doNothing().when(userInstituteRepository).deleteByUserId(anyString());
+        when(userInstituteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.updateUser("target-user-id", request),
@@ -392,9 +470,12 @@ class UserServiceRoleAccessTest {
         mockCurrentUser(tenantAdmin);
 
         User targetUser = createMockUser(User.Role.STUDENT, "student@example.com");
+        targetUser.setClientId(testClientId); // Must be in same tenant
         when(userRepository.findById("target-user-id")).thenReturn(Optional.of(targetUser));
 
         UpdateUserRequest request = new UpdateUserRequest();
+        request.setEmail(targetUser.getEmail());
+        request.setName(targetUser.getName());
         request.setRole("SYSTEM_ADMIN");
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -412,9 +493,12 @@ class UserServiceRoleAccessTest {
         mockCurrentUser(tenantAdmin);
 
         User targetUser = createMockUser(User.Role.STUDENT, "student@example.com");
+        targetUser.setClientId(testClientId); // Must be in same tenant
         when(userRepository.findById("target-user-id")).thenReturn(Optional.of(targetUser));
 
         UpdateUserRequest request = new UpdateUserRequest();
+        request.setEmail(targetUser.getEmail());
+        request.setName(targetUser.getName());
         request.setRole("CONTENT_MANAGER");
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -432,11 +516,22 @@ class UserServiceRoleAccessTest {
         mockCurrentUser(tenantAdmin);
 
         User targetUser = createMockUser(User.Role.STUDENT, "student@example.com");
+        // Target user must be in same tenant
+        targetUser.setClientId(testClientId);
         when(userRepository.findById("target-user-id")).thenReturn(Optional.of(targetUser));
 
         UpdateUserRequest request = new UpdateUserRequest();
+        request.setEmail(targetUser.getEmail()); // Keep same email to avoid uniqueness check
+        request.setName(targetUser.getName());
         request.setRole("INSTRUCTOR");
+        request.setInstituteIds(List.of("institute-1"));
 
+        // Mock email uniqueness check (email not changed, so this won't be called, but mock it anyway)
+        // Note: We don't mock findByEmailAndClientId with anyString() here because it would override
+        // the specific mock from mockCurrentUser() that's needed for getCurrentUser() to work in assignInstitutesToUser
+        lenient().when(userRepository.existsByEmailAndClientId(anyString(), any(UUID.class))).thenReturn(false);
+        doNothing().when(userInstituteRepository).deleteByUserId(anyString());
+        when(userInstituteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.updateUser("target-user-id", request),
@@ -450,10 +545,13 @@ class UserServiceRoleAccessTest {
         mockCurrentUser(contentManager);
 
         User targetUser = createMockUser(User.Role.STUDENT, "student@example.com");
+        targetUser.setClientId(testClientId); // Must be in same tenant
         when(userRepository.findById("target-user-id")).thenReturn(Optional.of(targetUser));
 
         UpdateUserRequest request = new UpdateUserRequest();
+        request.setEmail(targetUser.getEmail());
         request.setName("Updated Name");
+        request.setRole(targetUser.getRole().name()); // Keep same role
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
             () -> userService.updateUser("target-user-id", request),
@@ -468,8 +566,13 @@ class UserServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can assign institutes to users")
     void testSystemAdminCanAssignInstitutes() {
+        TenantContext.setClientId("SYSTEM");
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
+
+        doNothing().when(userInstituteRepository).deleteByUserId(anyString());
+        when(userInstituteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.assignInstitutesToUser("user-id", List.of("institute-1")),
             "SYSTEM_ADMIN should be able to assign institutes to users");
@@ -480,6 +583,9 @@ class UserServiceRoleAccessTest {
     void testTenantAdminCanAssignInstitutes() {
         User tenantAdmin = createMockUser(User.Role.TENANT_ADMIN, "tenant-admin@example.com");
         mockCurrentUser(tenantAdmin);
+
+        doNothing().when(userInstituteRepository).deleteByUserId(anyString());
+        when(userInstituteRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> userService.assignInstitutesToUser("user-id", List.of("institute-1")),
             "TENANT_ADMIN should be able to assign institutes to users");

@@ -4,7 +4,6 @@ import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.identity.domain.Client;
 import com.datagami.edudron.identity.domain.User;
 import com.datagami.edudron.identity.dto.CreateClientRequest;
-import com.datagami.edudron.identity.dto.UpdateClientRequest;
 import com.datagami.edudron.identity.repo.ClientRepository;
 import com.datagami.edudron.identity.repo.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -15,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import static org.mockito.Mockito.lenient;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -60,7 +60,10 @@ class ClientServiceRoleAccessTest {
         
         // Setup SecurityContext mock
         SecurityContextHolder.setContext(securityContext);
-        when(securityContext.getAuthentication()).thenReturn(authentication);
+        lenient().when(securityContext.getAuthentication()).thenReturn(authentication);
+        // Default: no authentication unless explicitly mocked in test
+        lenient().when(authentication.getName()).thenReturn(null);
+        lenient().when(authentication.getPrincipal()).thenReturn(null);
     }
 
     @AfterEach
@@ -93,12 +96,37 @@ class ClientServiceRoleAccessTest {
     private void mockCurrentUser(User user) {
         currentUser = user;
         when(authentication.getName()).thenReturn(user.getEmail());
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(user.getEmail(), testClientId))
-            .thenReturn(Optional.of(user));
-        // For SYSTEM_ADMIN, also check system admin lookup
+        when(authentication.getPrincipal()).thenReturn(user.getEmail());
+        
+        String clientIdStr = TenantContext.getClientId();
+        
+        // For SYSTEM_ADMIN users
         if (user.getRole() == User.Role.SYSTEM_ADMIN) {
-            when(userRepository.findByEmailAndRoleAndActiveTrue(user.getEmail(), User.Role.SYSTEM_ADMIN))
+            // Always mock SYSTEM_ADMIN lookup (this is the fallback)
+            lenient().when(userRepository.findByEmailAndRoleAndActiveTrue(user.getEmail(), User.Role.SYSTEM_ADMIN))
                 .thenReturn(Optional.of(user));
+            
+            // If TenantContext is not "SYSTEM", also mock the tenant lookup (which will fail, then fallback to SYSTEM_ADMIN)
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                try {
+                    UUID clientId = UUID.fromString(clientIdStr);
+                    lenient().when(userRepository.findByEmailAndClientId(user.getEmail(), clientId))
+                        .thenReturn(Optional.empty()); // Will fail, then fallback to SYSTEM_ADMIN lookup
+                } catch (IllegalArgumentException e) {
+                    // Invalid UUID, skip
+                }
+            }
+        } else {
+            // For non-SYSTEM_ADMIN users, mock tenant-based lookup
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                try {
+                    UUID clientId = UUID.fromString(clientIdStr);
+                    lenient().when(userRepository.findByEmailAndClientId(user.getEmail(), clientId))
+                        .thenReturn(Optional.of(user));
+                } catch (IllegalArgumentException e) {
+                    // Invalid UUID, skip
+                }
+            }
         }
     }
 
@@ -107,7 +135,9 @@ class ClientServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can create tenants")
     void testSystemAdminCanCreateTenant() {
+        TenantContext.setClientId("SYSTEM");
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         CreateClientRequest request = new CreateClientRequest();
@@ -220,11 +250,8 @@ class ClientServiceRoleAccessTest {
     @Test
     @DisplayName("Unauthenticated user cannot create tenants")
     void testUnauthenticatedUserCannotCreateTenant() {
-        when(authentication.getName()).thenReturn(null);
-        when(userRepository.findByEmailAndClientIdAndActiveTrue(anyString(), any(UUID.class)))
-            .thenReturn(Optional.empty());
-        when(userRepository.findByEmailAndRoleAndActiveTrue(anyString(), any(User.Role.class)))
-            .thenReturn(Optional.empty());
+        lenient().when(authentication.getName()).thenReturn(null);
+        lenient().when(authentication.getPrincipal()).thenReturn(null);
 
         CreateClientRequest request = new CreateClientRequest();
         request.setSlug("new-tenant");
@@ -244,16 +271,21 @@ class ClientServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can update tenants")
     void testSystemAdminCanUpdateTenant() {
+        TenantContext.setClientId("SYSTEM");
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         UUID clientId = UUID.randomUUID();
         Client client = createMockClient(clientId);
         when(clientRepository.findById(clientId)).thenReturn(Optional.of(client));
+        when(clientRepository.findBySlug(anyString())).thenReturn(Optional.empty());
         when(clientRepository.save(any(Client.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UpdateClientRequest request = new UpdateClientRequest();
+        CreateClientRequest request = new CreateClientRequest();
+        request.setSlug("updated-tenant");
         request.setName("Updated Tenant Name");
+        request.setIsActive(true);
 
         assertDoesNotThrow(() -> clientService.updateClient(clientId, request),
             "SYSTEM_ADMIN should be able to update tenants");
@@ -266,8 +298,10 @@ class ClientServiceRoleAccessTest {
         mockCurrentUser(tenantAdmin);
 
         UUID clientId = UUID.randomUUID();
-        UpdateClientRequest request = new UpdateClientRequest();
+        CreateClientRequest request = new CreateClientRequest();
+        request.setSlug("updated-tenant");
         request.setName("Updated Tenant Name");
+        request.setIsActive(true);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
             () -> clientService.updateClient(clientId, request),
@@ -282,13 +316,15 @@ class ClientServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can delete tenants")
     void testSystemAdminCanDeleteTenant() {
+        TenantContext.setClientId("SYSTEM");
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         UUID clientId = UUID.randomUUID();
         Client client = createMockClient(clientId);
         when(clientRepository.findById(clientId)).thenReturn(Optional.of(client));
-        doNothing().when(clientRepository).delete(any(Client.class));
+        when(clientRepository.save(any(Client.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         assertDoesNotThrow(() -> clientService.deleteClient(clientId),
             "SYSTEM_ADMIN should be able to delete tenants");
@@ -315,7 +351,9 @@ class ClientServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can see all tenants")
     void testSystemAdminCanSeeAllTenants() {
+        TenantContext.setClientId("SYSTEM");
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         Client client1 = createMockClient(UUID.randomUUID());
@@ -360,7 +398,9 @@ class ClientServiceRoleAccessTest {
     @Test
     @DisplayName("SYSTEM_ADMIN can access any tenant by ID")
     void testSystemAdminCanAccessAnyTenantById() {
+        TenantContext.setClientId("SYSTEM");
         User systemAdmin = createMockUser(User.Role.SYSTEM_ADMIN, "admin@example.com");
+        systemAdmin.setClientId(null);
         mockCurrentUser(systemAdmin);
 
         UUID clientId = UUID.randomUUID();
@@ -399,8 +439,7 @@ class ClientServiceRoleAccessTest {
             () -> clientService.getClientById(otherClientId),
             "TENANT_ADMIN should not be able to access other tenant by ID");
 
-        assertTrue(exception.getMessage().contains("Access denied") || 
-                   exception.getMessage().contains("not authorized"),
-            "Exception message should indicate access denial");
+        assertTrue(exception.getMessage().contains("Client not found"),
+            "Exception message should indicate client not found (access denied)");
     }
 }
