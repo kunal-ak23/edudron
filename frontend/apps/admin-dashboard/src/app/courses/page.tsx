@@ -93,6 +93,7 @@ export default function CoursesPage() {
   const isInstructor = user?.role === 'INSTRUCTOR'
   const isSupportStaff = user?.role === 'SUPPORT_STAFF'
   const canManageContent = !isInstructor && !isSupportStaff
+  const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
 
   const loadCourses = useCallback(async () => {
     try {

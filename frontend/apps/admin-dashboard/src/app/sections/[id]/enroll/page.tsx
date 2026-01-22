@@ -16,7 +16,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ArrowLeft, Loader2, Users } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { enrollmentsApi, sectionsApi, classesApi, coursesApi, institutesApi } from '@/lib/api'
 import type { Section, Class, Course, Institute, BulkEnrollmentResult } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'

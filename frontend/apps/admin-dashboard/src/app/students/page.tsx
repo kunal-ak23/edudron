@@ -267,8 +267,9 @@ export default function StudentsPage() {
           setInstitutes(allInstitutes)
           
           // Auto-select first institute from user's instituteIds, or first available
-          if (user.instituteIds && user.instituteIds.length > 0) {
-            const userInstitute = allInstitutes.find(inst => user.instituteIds?.includes(inst.id))
+          const userInstituteIds = (user as any)?.instituteIds as string[] | undefined
+          if (userInstituteIds && userInstituteIds.length > 0) {
+            const userInstitute = allInstitutes.find(inst => userInstituteIds.includes(inst.id))
             if (userInstitute) {
               setNewStudent(prev => ({ ...prev, instituteId: userInstitute.id }))
             } else if (allInstitutes.length > 0) {
@@ -772,6 +773,9 @@ export default function StudentsPage() {
                   phone: '',
                   password: '',
                   autoGeneratePassword: true,
+                  instituteId: '',
+                  classId: '',
+                  sectionId: '',
                 })
               }}
               disabled={creating}

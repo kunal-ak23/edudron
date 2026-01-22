@@ -201,7 +201,10 @@ export default function LectureAnalyticsPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="duration" label={{ value: 'Minutes', position: 'insideBottom', offset: -5 }} />
                     <YAxis label={{ value: 'Count', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip formatter={(value: number) => `${value} sessions`} />
+                    <Tooltip formatter={(value) => {
+                      const numValue = typeof value === 'number' ? value : (value ? Number(value) : 0);
+                      return `${numValue} sessions`;
+                    }} />
                     <Bar dataKey="count" fill="#8884d8" name="Sessions" />
                   </BarChart>
                 </ResponsiveContainer>
