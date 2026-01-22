@@ -119,6 +119,20 @@ public class EnrollmentController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/students/{studentId}/enroll/{courseId}")
+    @Operation(summary = "Enroll student in course (admin)", description = "Enroll a specific student in a course (admin/instructor only)")
+    public ResponseEntity<EnrollmentDTO> enrollStudent(
+            @PathVariable String studentId,
+            @PathVariable String courseId,
+            @RequestBody(required = false) CreateEnrollmentRequest request) {
+        if (request == null) {
+            request = new CreateEnrollmentRequest();
+        }
+        request.setCourseId(courseId);
+        EnrollmentDTO enrollment = enrollmentService.enrollStudent(studentId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(enrollment);
+    }
+
     @GetMapping("/students/{studentId}/class-section")
     @Operation(summary = "Get student class and section info", description = "Get the current class and section information for a student")
     public ResponseEntity<StudentClassSectionInfoDTO> getStudentClassSectionInfo(@PathVariable String studentId) {

@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Plus, Loader2, Users, Filter, X, Trash2, ChevronLeft, ChevronRight, Search } from 'lucide-react'
-import { enrollmentsApi, coursesApi, institutesApi, classesApi, sectionsApi } from '@/lib/api'
+import { enrollmentsApi, coursesApi, institutesApi, classesApi, sectionsApi, apiClient } from '@/lib/api'
 import type { Enrollment, Course, Institute, Class, Section } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -56,6 +56,14 @@ export default function EnrollmentsPage() {
   const [unenrollingId, setUnenrollingId] = useState<string | null>(null)
   const [showUnenrollDialog, setShowUnenrollDialog] = useState(false)
   const [enrollmentToUnenroll, setEnrollmentToUnenroll] = useState<Enrollment | null>(null)
+  const [showAddEnrollmentDialog, setShowAddEnrollmentDialog] = useState(false)
+  const [students, setStudents] = useState<Array<{ id: string; email: string; name?: string }>>([])
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('')
+  const [selectedEnrollCourseId, setSelectedEnrollCourseId] = useState<string>('')
+  const [selectedEnrollInstituteId, setSelectedEnrollInstituteId] = useState<string>('')
+  const [selectedEnrollClassId, setSelectedEnrollClassId] = useState<string>('')
+  const [selectedEnrollSectionId, setSelectedEnrollSectionId] = useState<string>('')
+  const [enrolling, setEnrolling] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
   const [totalElements, setTotalElements] = useState(0)
@@ -101,6 +109,15 @@ export default function EnrollmentsPage() {
       }
       setClasses(allClasses)
       setSections(allSections)
+
+      // Load students for enrollment dropdown
+      try {
+        const studentsResponse = await apiClient.get<Array<{ id: string; email: string; name?: string }>>('/idp/users/role/STUDENT')
+        setStudents(studentsResponse.data || [])
+      } catch (err) {
+        console.error('Error loading students:', err)
+        // Continue without students - will show empty list
+      }
     } catch (err: any) {
       console.error('Error loading data:', err)
       toast({
@@ -223,6 +240,58 @@ export default function EnrollmentsPage() {
     }
   }
 
+  const handleAddEnrollment = async () => {
+    if (!selectedStudentId || !selectedEnrollCourseId) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing required fields',
+        description: 'Please select both student and course',
+      })
+      return
+    }
+
+    setEnrolling(true)
+    try {
+      const options: any = {}
+      if (selectedEnrollClassId && selectedEnrollClassId !== 'all') {
+        options.classId = selectedEnrollClassId
+      }
+      if (selectedEnrollSectionId && selectedEnrollSectionId !== 'all') {
+        options.sectionId = selectedEnrollSectionId
+      }
+      if (selectedEnrollInstituteId && selectedEnrollInstituteId !== 'all') {
+        options.instituteId = selectedEnrollInstituteId
+      }
+
+      await enrollmentsApi.enrollStudentInCourse(selectedStudentId, selectedEnrollCourseId, options)
+      
+      toast({
+        title: 'Success',
+        description: 'Student has been enrolled in the course',
+      })
+      
+      // Reset form
+      setSelectedStudentId('')
+      setSelectedEnrollCourseId('')
+      setSelectedEnrollInstituteId('')
+      setSelectedEnrollClassId('')
+      setSelectedEnrollSectionId('')
+      setShowAddEnrollmentDialog(false)
+      
+      // Reload data to show new enrollment
+      await loadData()
+    } catch (err: any) {
+      console.error('Error enrolling student:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to enroll student',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setEnrolling(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="container mx-auto py-8 px-4">
@@ -235,9 +304,15 @@ export default function EnrollmentsPage() {
 
   return (
     <div className="container mx-auto py-8 px-4">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Enrollments</h1>
-        <p className="text-gray-600 mt-2">Manage student course enrollments</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Enrollments</h1>
+          <p className="text-gray-600 mt-2">Manage student course enrollments</p>
+        </div>
+        <Button onClick={() => setShowAddEnrollmentDialog(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Enrollment
+        </Button>
       </div>
 
       <Card className="mb-6">
@@ -538,6 +613,155 @@ export default function EnrollmentsPage() {
                 </>
               ) : (
                 'Confirm Unenroll'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Enrollment Dialog */}
+      <Dialog open={showAddEnrollmentDialog} onOpenChange={setShowAddEnrollmentDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Enrollment</DialogTitle>
+            <DialogDescription>
+              Enroll a student in a course. You can optionally specify class and section.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="student">Student *</Label>
+              <Select value={selectedStudentId} onValueChange={setSelectedStudentId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a student" />
+                </SelectTrigger>
+                <SelectContent>
+                  {students.map((student) => (
+                    <SelectItem key={student.id} value={student.id}>
+                      {student.email} {student.name && `(${student.name})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="course">Course *</Label>
+              <Select value={selectedEnrollCourseId} onValueChange={setSelectedEnrollCourseId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a course" />
+                </SelectTrigger>
+                <SelectContent>
+                  {allCourses
+                    .filter(c => c.isPublished && c.status !== 'ARCHIVED')
+                    .map((course) => (
+                      <SelectItem key={course.id} value={course.id}>
+                        {course.title}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="institute">Institute (Optional)</Label>
+              <Select 
+                value={selectedEnrollInstituteId} 
+                onValueChange={(value) => {
+                  setSelectedEnrollInstituteId(value)
+                  setSelectedEnrollClassId('all')
+                  setSelectedEnrollSectionId('all')
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an institute" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">None</SelectItem>
+                  {institutes.map((inst) => (
+                    <SelectItem key={inst.id} value={inst.id}>{inst.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="class">Class (Optional)</Label>
+              <Select 
+                value={selectedEnrollClassId} 
+                onValueChange={(value) => {
+                  setSelectedEnrollClassId(value)
+                  setSelectedEnrollSectionId('all')
+                }}
+                disabled={!selectedEnrollInstituteId || selectedEnrollInstituteId === 'all'}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a class" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">None</SelectItem>
+                  {(() => {
+                    const filtered = selectedEnrollInstituteId && selectedEnrollInstituteId !== 'all'
+                      ? classes.filter(c => c.instituteId === selectedEnrollInstituteId)
+                      : classes
+                    return filtered.map((classItem) => (
+                      <SelectItem key={classItem.id} value={classItem.id}>{classItem.name}</SelectItem>
+                    ))
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="section">Section (Optional)</Label>
+              <Select 
+                value={selectedEnrollSectionId} 
+                onValueChange={setSelectedEnrollSectionId}
+                disabled={!selectedEnrollClassId || selectedEnrollClassId === 'all'}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a section" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">None</SelectItem>
+                  {(() => {
+                    const filtered = selectedEnrollClassId && selectedEnrollClassId !== 'all'
+                      ? sections.filter(s => s.classId === selectedEnrollClassId)
+                      : sections
+                    return filtered.map((section) => (
+                      <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>
+                    ))
+                  })()}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddEnrollmentDialog(false)
+                setSelectedStudentId('')
+                setSelectedEnrollCourseId('')
+                setSelectedEnrollInstituteId('')
+                setSelectedEnrollClassId('')
+                setSelectedEnrollSectionId('')
+              }}
+              disabled={enrolling}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddEnrollment}
+              disabled={enrolling || !selectedStudentId || !selectedEnrollCourseId}
+            >
+              {enrolling ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Enrolling...
+                </>
+              ) : (
+                'Enroll Student'
               )}
             </Button>
           </DialogFooter>

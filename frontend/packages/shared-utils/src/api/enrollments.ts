@@ -251,6 +251,18 @@ export class EnrollmentsApi {
   async deleteEnrollment(enrollmentId: string): Promise<void> {
     await this.apiClient.delete(`/api/enrollments/${enrollmentId}`)
   }
+
+  async enrollStudentInCourse(studentId: string, courseId: string, options?: {
+    classId?: string
+    sectionId?: string
+    instituteId?: string
+  }): Promise<Enrollment> {
+    const response = await this.apiClient.post<Enrollment>(
+      `/api/students/${studentId}/enroll/${courseId}`,
+      options || {}
+    )
+    return response.data
+  }
 }
 
 export interface BulkEnrollmentResult {
