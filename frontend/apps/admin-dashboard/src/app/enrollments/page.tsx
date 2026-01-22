@@ -110,10 +110,27 @@ export default function EnrollmentsPage() {
       setClasses(allClasses)
       setSections(allSections)
 
-      // Load students for enrollment dropdown
+      // Load students for enrollment dropdown (using paginated endpoint to avoid loading all at once)
+      // Load first 100 students for the dropdown - if more are needed, we can add search functionality
       try {
-        const studentsResponse = await apiClient.get<Array<{ id: string; email: string; name?: string }>>('/idp/users/role/STUDENT')
-        setStudents(studentsResponse.data || [])
+        // Try paginated endpoint first
+        try {
+          const studentsResponse = await apiClient.get<{
+            content: Array<{ id: string; email: string; name?: string }>
+            totalElements: number
+            totalPages: number
+          }>('/idp/users/role/STUDENT/paginated?page=0&size=100')
+          setStudents(studentsResponse.data?.content || [])
+        } catch (paginatedError) {
+          // Fallback to non-paginated endpoint if paginated doesn't exist
+          const studentsResponse = await apiClient.get<Array<{ id: string; email: string; name?: string }>>('/idp/users/role/STUDENT')
+          // Limit to first 100 to avoid performance issues
+          const allStudents = studentsResponse.data || []
+          setStudents(allStudents.slice(0, 100))
+          if (allStudents.length > 100) {
+            console.warn(`Loaded ${allStudents.length} students, showing first 100 in dropdown. Consider using search.`)
+          }
+        }
       } catch (err) {
         console.error('Error loading students:', err)
         // Continue without students - will show empty list

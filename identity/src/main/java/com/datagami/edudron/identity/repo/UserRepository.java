@@ -1,6 +1,8 @@
 package com.datagami.edudron.identity.repo;
 
 import com.datagami.edudron.identity.domain.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -30,6 +32,10 @@ public interface UserRepository extends JpaRepository<User, String> {
     // Find users by tenant and role
     List<User> findByClientIdAndRole(UUID clientId, User.Role role);
     List<User> findByClientIdAndRoleAndActiveTrue(UUID clientId, User.Role role);
+    
+    // Paginated queries
+    Page<User> findByClientIdAndRole(UUID clientId, User.Role role, Pageable pageable);
+    Page<User> findByRole(User.Role role, Pageable pageable);
 
     // Counts (used for dashboards / stats)
     long countByClientIdAndRole(UUID clientId, User.Role role);

@@ -9,6 +9,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -41,6 +44,17 @@ public class UserController {
     @Operation(summary = "List users by role", description = "Get all users with a specific role for the current tenant")
     public ResponseEntity<List<UserDTO>> getUsersByRole(@PathVariable String role) {
         List<UserDTO> users = userService.getUsersByRole(role);
+        return ResponseEntity.ok(users);
+    }
+    
+    @GetMapping("/role/{role}/paginated")
+    @Operation(summary = "List users by role (paginated)", description = "Get paginated users with a specific role for the current tenant")
+    public ResponseEntity<Page<UserDTO>> getUsersByRolePaginated(
+            @PathVariable String role,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        Page<UserDTO> users = userService.getUsersByRolePaginated(role, pageable);
         return ResponseEntity.ok(users);
     }
 

@@ -42,6 +42,16 @@ interface Student {
   lastLoginAt?: string
 }
 
+interface PaginatedResponse<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+  first: boolean
+  last: boolean
+}
+
 export default function StudentsPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -53,6 +63,8 @@ export default function StudentsPage() {
   const [creating, setCreating] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
   
   // Form state for adding student
   const [newStudent, setNewStudent] = useState({
@@ -67,21 +79,66 @@ export default function StudentsPage() {
     try {
       setLoading(true)
 
-      // Use role-specific endpoint via ApiClient (handles auth automatically)
+      // Use paginated endpoint to avoid loading all students at once
       try {
-        const response = await apiClient.get<Student[]>('/idp/users/role/STUDENT')
-        // ApiClient.get always returns ApiResponse<T> with a data property
-        const students = response.data || []
-        setStudents(students)
-      } catch (roleError) {
-        // Fallback to filtering all users if role endpoint doesn't work
+        const response = await apiClient.get<PaginatedResponse<Student>>(
+          `/idp/users/role/STUDENT/paginated?page=${currentPage}&size=${pageSize}`
+        )
+        const paginatedData = response.data || { content: [], totalElements: 0, totalPages: 0, number: 0, size: pageSize, first: true, last: true }
+        setStudents(paginatedData.content || [])
+        setTotalElements(paginatedData.totalElements || 0)
+        setTotalPages(paginatedData.totalPages || 0)
+      } catch (paginatedError: any) {
+        // Check if it's a connection error (broken pipe, timeout, etc.)
+        const isConnectionError = paginatedError?.message?.includes('Broken pipe') ||
+          paginatedError?.message?.includes('timeout') ||
+          paginatedError?.message?.includes('ECONNRESET') ||
+          paginatedError?.code === 'ECONNRESET'
+        
+        if (isConnectionError) {
+          // Connection error - likely too many students, suggest using pagination
+          toast({
+            variant: 'destructive',
+            title: 'Connection error',
+            description: 'Too many students to load at once. Please try refreshing the page or contact support if the issue persists.',
+          })
+          throw paginatedError
+        }
+        
+        // Fallback to non-paginated endpoint if paginated endpoint doesn't exist (404, etc.)
+        console.warn('Paginated endpoint failed, falling back to non-paginated:', paginatedError)
         try {
-          const allUsersResponse = await apiClient.get<Student[]>('/idp/users')
-          const allUsers = allUsersResponse.data || []
-          const studentUsers = allUsers.filter((user: Student) => user.role === 'STUDENT')
-          setStudents(studentUsers)
-        } catch (fallbackError) {
-          throw new Error('Failed to load students from both endpoints')
+          const response = await apiClient.get<Student[]>('/idp/users/role/STUDENT')
+          const students = response.data || []
+          setStudents(students)
+          setTotalElements(students.length)
+          setTotalPages(Math.ceil(students.length / pageSize))
+        } catch (roleError: any) {
+          // Check if this is also a connection error
+          const isRoleConnectionError = roleError?.message?.includes('Broken pipe') ||
+            roleError?.message?.includes('timeout') ||
+            roleError?.message?.includes('ECONNRESET')
+          
+          if (isRoleConnectionError) {
+            toast({
+              variant: 'destructive',
+              title: 'Connection error',
+              description: 'Too many students to load. The server is implementing pagination to fix this issue.',
+            })
+            throw roleError
+          }
+          
+          // Final fallback to filtering all users
+          try {
+            const allUsersResponse = await apiClient.get<Student[]>('/idp/users')
+            const allUsers = allUsersResponse.data || []
+            const studentUsers = allUsers.filter((user: Student) => user.role === 'STUDENT')
+            setStudents(studentUsers)
+            setTotalElements(studentUsers.length)
+            setTotalPages(Math.ceil(studentUsers.length / pageSize))
+          } catch (fallbackError) {
+            throw new Error('Failed to load students from all endpoints')
+          }
         }
       }
     } catch (err: any) {
@@ -95,7 +152,7 @@ export default function StudentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [toast])
+  }, [toast, currentPage, pageSize])
 
   useEffect(() => {
     loadStudents()
@@ -114,23 +171,18 @@ export default function StudentsPage() {
     }
   }, [user, isAuthenticated, router])
 
+  // Client-side filtering for search (applied to current page only)
+  // Note: For large datasets, server-side search would be better
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (student.phone && student.phone.includes(searchTerm))
   )
 
-  // Pagination calculations
-  const totalElements = filteredStudents.length
-  const totalPages = Math.ceil(totalElements / pageSize)
-  const startIndex = currentPage * pageSize
-  const endIndex = startIndex + pageSize
-  const paginatedStudents = filteredStudents.slice(startIndex, endIndex)
-
-  // Reset to first page when search term changes
+  // Reset to first page when search term or page size changes
   useEffect(() => {
     setCurrentPage(0)
-  }, [searchTerm])
+  }, [searchTerm, pageSize])
 
   const handleAddStudent = async () => {
     if (!newStudent.name || !newStudent.email) {
@@ -238,7 +290,9 @@ export default function StudentsPage() {
         <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>All Students ({filteredStudents.length})</CardTitle>
+                <CardTitle>
+                  All Students {searchTerm ? `(${filteredStudents.length} of ${totalElements})` : `(${totalElements})`}
+                </CardTitle>
                 <div className="relative w-64">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -279,7 +333,7 @@ export default function StudentsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedStudents.map((student) => (
+                    {filteredStudents.map((student) => (
                       <TableRow key={student.id}>
                         <TableCell className="font-medium">{student.name}</TableCell>
                         <TableCell>
@@ -342,7 +396,7 @@ export default function StudentsPage() {
                       </SelectContent>
                     </Select>
                     <span className="text-sm text-gray-600">
-                      Showing {startIndex + 1} to {Math.min(endIndex, totalElements)} of {totalElements.toLocaleString()}
+                      Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalElements)} of {totalElements.toLocaleString()}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

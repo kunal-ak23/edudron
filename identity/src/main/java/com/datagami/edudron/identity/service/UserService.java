@@ -28,6 +28,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -117,6 +121,35 @@ public class UserService {
         return userRepository.findByClientIdAndRole(clientId, role).stream()
             .map(this::toDTO)
             .collect(Collectors.toList());
+    }
+    
+    @Transactional(readOnly = true)
+    public Page<UserDTO> getUsersByRolePaginated(String roleStr, Pageable pageable) {
+        String clientIdStr = TenantContext.getClientId();
+        
+        User.Role role;
+        try {
+            role = User.Role.valueOf(roleStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Invalid role: " + roleStr);
+        }
+        
+        Page<User> userPage;
+        
+        // SYSTEM_ADMIN can see all users
+        if (clientIdStr == null || "SYSTEM".equals(clientIdStr) || "PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+            log.info("Fetching paginated users with role {} (SYSTEM_ADMIN), page: {}, size: {}", 
+                role, pageable.getPageNumber(), pageable.getPageSize());
+            userPage = userRepository.findByRole(role, pageable);
+        } else {
+            // Tenant-scoped users see only their tenant's users
+            UUID clientId = UUID.fromString(clientIdStr);
+            log.info("Fetching paginated users with role {} for tenant: {}, page: {}, size: {}", 
+                role, clientId, pageable.getPageNumber(), pageable.getPageSize());
+            userPage = userRepository.findByClientIdAndRole(clientId, role, pageable);
+        }
+        
+        return userPage.map(this::toDTO);
     }
 
     @Transactional(readOnly = true)
