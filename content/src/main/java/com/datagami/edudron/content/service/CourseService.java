@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -172,6 +173,45 @@ public class CourseService {
             ? courseRepository.findByClientIdAndIsPublished(clientId, isPublished, pageable)
             : courseRepository.findByClientId(clientId, pageable);
         
+        // For instructors, filter courses to only show those assigned to their institutes' classes/sections
+        if ("INSTRUCTOR".equals(userRole)) {
+            List<String> userInstituteIds = getCurrentUserInstituteIds();
+            if (userInstituteIds != null && !userInstituteIds.isEmpty()) {
+                List<String> allowedClassIds = getClassIdsByInstituteIds(userInstituteIds);
+                List<String> allowedSectionIds = getSectionIdsByClassIds(allowedClassIds);
+                
+                // Filter courses to only include those assigned to allowed classes/sections
+                List<Course> filteredCourses = courses.getContent().stream()
+                    .filter(course -> {
+                        // Course is visible if it's assigned to any allowed class or section
+                        boolean hasAllowedClass = course.getAssignedToClassIds() != null && 
+                            course.getAssignedToClassIds().stream().anyMatch(allowedClassIds::contains);
+                        boolean hasAllowedSection = course.getAssignedToSectionIds() != null && 
+                            course.getAssignedToSectionIds().stream().anyMatch(allowedSectionIds::contains);
+                        return hasAllowedClass || hasAllowedSection;
+                    })
+                    .collect(Collectors.toList());
+                
+                log.debug("Filtered courses for INSTRUCTOR user - showing {} out of {} total courses", 
+                    filteredCourses.size(), courses.getTotalElements());
+                
+                // Create a new Page with filtered content
+                // Note: This is a simplified approach - for proper pagination, you'd need to filter at the repository level
+                return new org.springframework.data.domain.PageImpl<>(
+                    filteredCourses.stream().map(this::toDTO).collect(Collectors.toList()),
+                    pageable,
+                    filteredCourses.size()
+                );
+            } else {
+                log.warn("INSTRUCTOR user has no assigned institutes - returning empty course list");
+                return new org.springframework.data.domain.PageImpl<>(
+                    new ArrayList<>(),
+                    pageable,
+                    0
+                );
+            }
+        }
+        
         return courses.map(this::toDTO);
     }
     
@@ -196,6 +236,44 @@ public class CourseService {
             clientId, categoryId, difficultyLevel, language, 
             isFree, isPublished, searchTerm, pageable
         );
+        
+        // For instructors, filter courses to only show those assigned to their institutes' classes/sections
+        if ("INSTRUCTOR".equals(userRole)) {
+            List<String> userInstituteIds = getCurrentUserInstituteIds();
+            if (userInstituteIds != null && !userInstituteIds.isEmpty()) {
+                List<String> allowedClassIds = getClassIdsByInstituteIds(userInstituteIds);
+                List<String> allowedSectionIds = getSectionIdsByClassIds(allowedClassIds);
+                
+                // Filter courses to only include those assigned to allowed classes/sections
+                List<Course> filteredCourses = courses.getContent().stream()
+                    .filter(course -> {
+                        // Course is visible if it's assigned to any allowed class or section
+                        boolean hasAllowedClass = course.getAssignedToClassIds() != null && 
+                            course.getAssignedToClassIds().stream().anyMatch(allowedClassIds::contains);
+                        boolean hasAllowedSection = course.getAssignedToSectionIds() != null && 
+                            course.getAssignedToSectionIds().stream().anyMatch(allowedSectionIds::contains);
+                        return hasAllowedClass || hasAllowedSection;
+                    })
+                    .collect(Collectors.toList());
+                
+                log.debug("Filtered courses in search for INSTRUCTOR user - showing {} out of {} total courses", 
+                    filteredCourses.size(), courses.getTotalElements());
+                
+                // Create a new Page with filtered content
+                return new org.springframework.data.domain.PageImpl<>(
+                    filteredCourses.stream().map(this::toDTO).collect(Collectors.toList()),
+                    pageable,
+                    filteredCourses.size()
+                );
+            } else {
+                log.warn("INSTRUCTOR user has no assigned institutes - returning empty course list");
+                return new org.springframework.data.domain.PageImpl<>(
+                    new ArrayList<>(),
+                    pageable,
+                    0
+                );
+            }
+        }
         
         return courses.map(this::toDTO);
     }
@@ -641,12 +719,13 @@ public class CourseService {
     
     /**
      * Get the current user's role from the identity service
-     * Returns null if unable to determine role
+     * Returns null if unable to determine role (e.g., anonymous user)
      */
     private String getCurrentUserRole() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication == null || authentication.getName() == null) {
+            if (authentication == null || authentication.getName() == null || 
+                "anonymousUser".equals(authentication.getName())) {
                 return null;
             }
             
@@ -656,11 +735,11 @@ public class CourseService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
             
-            ResponseEntity<Map> response = getRestTemplate().exchange(
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
                 meUrl,
                 HttpMethod.GET,
                 entity,
-                Map.class
+                new ParameterizedTypeReference<Map<String, Object>>() {}
             );
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
@@ -671,6 +750,124 @@ public class CourseService {
             log.debug("Could not determine user role: {}", e.getMessage());
         }
         return null;
+    }
+    
+    /**
+     * Get the current user's assigned institute IDs from the identity service
+     * Returns empty list if unable to determine or user has no assigned institutes
+     */
+    @SuppressWarnings("unchecked")
+    private List<String> getCurrentUserInstituteIds() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null || 
+                "anonymousUser".equals(authentication.getName())) {
+                return new ArrayList<>();
+            }
+            
+            // Get user info from identity service
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object instituteIds = response.getBody().get("instituteIds");
+                if (instituteIds instanceof List) {
+                    return (List<String>) instituteIds;
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user institute IDs: {}", e.getMessage());
+        }
+        return new ArrayList<>();
+    }
+    
+    /**
+     * Get all class IDs for the given institute IDs by calling the student service
+     * Returns empty list if unable to determine or no classes found
+     */
+    private List<String> getClassIdsByInstituteIds(List<String> instituteIds) {
+        if (instituteIds == null || instituteIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        List<String> allClassIds = new ArrayList<>();
+        try {
+            for (String instituteId : instituteIds) {
+                String classesUrl = gatewayUrl + "/api/institutes/" + instituteId + "/classes";
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<?> entity = new HttpEntity<>(headers);
+                
+                ResponseEntity<List<Map<String, Object>>> response = getRestTemplate().exchange(
+                    classesUrl,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                );
+                
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    List<Map<String, Object>> classes = response.getBody();
+                    for (Map<String, Object> classObj : classes) {
+                        Object id = classObj.get("id");
+                        if (id != null) {
+                            allClassIds.add(id.toString());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not get class IDs for institutes: {}", e.getMessage());
+        }
+        return allClassIds;
+    }
+    
+    /**
+     * Get all section IDs for the given class IDs by calling the student service
+     * Returns empty list if unable to determine or no sections found
+     */
+    private List<String> getSectionIdsByClassIds(List<String> classIds) {
+        if (classIds == null || classIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        List<String> allSectionIds = new ArrayList<>();
+        try {
+            for (String classId : classIds) {
+                String sectionsUrl = gatewayUrl + "/api/classes/" + classId + "/sections";
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                HttpEntity<?> entity = new HttpEntity<>(headers);
+                
+                ResponseEntity<List<Map<String, Object>>> response = getRestTemplate().exchange(
+                    sectionsUrl,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+                );
+                
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    List<Map<String, Object>> sections = response.getBody();
+                    for (Map<String, Object> sectionObj : sections) {
+                        Object id = sectionObj.get("id");
+                        if (id != null) {
+                            allSectionIds.add(id.toString());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Could not get section IDs for classes: {}", e.getMessage());
+        }
+        return allSectionIds;
     }
     
     private CourseDTO toDTO(Course course) {
