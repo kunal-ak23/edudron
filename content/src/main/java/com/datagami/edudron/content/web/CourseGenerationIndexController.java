@@ -26,12 +26,13 @@ public class CourseGenerationIndexController {
     @PostMapping("/reference-content")
     @Operation(
         summary = "Upload reference content",
-        description = "Upload a document (PDF, DOCX, etc.) to use as reference content for course generation. Text will be automatically extracted."
+        description = "Upload a document (PDF, DOCX, etc.) to use as reference content for course generation. Text will be automatically extracted. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features."
     )
     public ResponseEntity<CourseGenerationIndexDTO> uploadReferenceContent(
             @RequestParam @NotBlank String title,
             @RequestParam(required = false) String description,
             @RequestParam("file") MultipartFile file) throws IOException {
+        // Role check is done in service, but we check here for better error messages
         CourseGenerationIndexDTO index = indexService.uploadReferenceContent(title, description, file);
         return ResponseEntity.status(HttpStatus.CREATED).body(index);
     }
@@ -39,13 +40,14 @@ public class CourseGenerationIndexController {
     @PostMapping("/writing-format")
     @Operation(
         summary = "Create writing format",
-        description = "Create a writing format template by providing text directly or uploading a document"
+        description = "Create a writing format template by providing text directly or uploading a document. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features."
     )
     public ResponseEntity<CourseGenerationIndexDTO> createWritingFormat(
             @RequestParam @NotBlank String title,
             @RequestParam(required = false) String description,
             @RequestParam(required = false) String writingFormat,
             @RequestParam(value = "file", required = false) MultipartFile file) throws IOException {
+        // Role check is done in service, but we check here for better error messages
         CourseGenerationIndexDTO index;
         if (file != null && !file.isEmpty()) {
             index = indexService.uploadWritingFormat(title, description, file);
@@ -80,8 +82,9 @@ public class CourseGenerationIndexController {
     }
     
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete index", description = "Delete an index")
+    @Operation(summary = "Delete index", description = "Delete an index. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features.")
     public ResponseEntity<Void> deleteIndex(@PathVariable String id) {
+        // Role check is done in service
         indexService.deleteIndex(id);
         return ResponseEntity.noContent().build();
     }

@@ -721,7 +721,7 @@ public class CourseService {
      * Get the current user's role from the identity service
      * Returns null if unable to determine role (e.g., anonymous user)
      */
-    private String getCurrentUserRole() {
+    public String getCurrentUserRole() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             if (authentication == null || authentication.getName() == null || 

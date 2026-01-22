@@ -116,9 +116,15 @@ public class CourseController {
     @PostMapping(value = "/generate", consumes = {"application/json"})
     @Operation(
         summary = "Generate course from prompt (JSON)",
-        description = "Submit a course generation job to the queue using JSON. Returns a job ID that can be used to check status."
+        description = "Submit a course generation job to the queue using JSON. Returns a job ID that can be used to check status. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features."
     )
     public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateCourseJson(@Valid @RequestBody GenerateCourseRequest request) {
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        String userRole = courseService.getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
+        
         com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.submitCourseGenerationJob(request, aiJobWorker);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
@@ -126,7 +132,7 @@ public class CourseController {
     @PostMapping(value = "/generate", consumes = {"multipart/form-data"})
     @Operation(
         summary = "Generate course from prompt with PDF (Multipart)",
-        description = "Submit a course generation job to the queue with optional PDF file. Returns a job ID that can be used to check status."
+        description = "Submit a course generation job to the queue with optional PDF file. Returns a job ID that can be used to check status. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features."
     )
     public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateCourseMultipart(
             @RequestPart(required = false) String prompt,
@@ -140,6 +146,12 @@ public class CourseController {
             @RequestPart(required = false) String writingFormatId,
             @RequestPart(required = false) String writingFormat,
             @RequestPart(required = false) MultipartFile pdfFile) {
+        
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        String userRole = courseService.getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
         
         GenerateCourseRequest request = new GenerateCourseRequest();
         request.setPrompt(prompt != null ? prompt : "");

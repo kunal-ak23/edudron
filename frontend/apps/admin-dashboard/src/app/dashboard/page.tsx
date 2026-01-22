@@ -406,14 +406,16 @@ export default function DashboardPage() {
                       <Users className="w-5 h-5 mr-2" />
                       Create New Batch
                     </Button>
-                    <Button
-                      className="w-full justify-start"
-                      variant="outline"
-                      onClick={() => router.push('/courses/generate')}
-                    >
-                      <Sparkles className="w-5 h-5 mr-2" />
-                      Generate Course with AI
-                    </Button>
+                    {(authUser?.role === 'SYSTEM_ADMIN' || authUser?.role === 'TENANT_ADMIN') && (
+                      <Button
+                        className="w-full justify-start"
+                        variant="outline"
+                        onClick={() => router.push('/courses/generate')}
+                      >
+                        <Sparkles className="w-5 h-5 mr-2" />
+                        Generate Course with AI
+                      </Button>
+                    )}
                     <Button
                       className="w-full justify-start"
                       variant="outline"

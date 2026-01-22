@@ -49,6 +49,7 @@ export default function CourseEditPage() {
   const isInstructor = user?.role === 'INSTRUCTOR'
   const isSupportStaff = user?.role === 'SUPPORT_STAFF'
   const canManageContent = !isInstructor && !isSupportStaff
+  const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
   const [institutes, setInstitutes] = useState<Institute[]>([])
   const [classes, setClasses] = useState<Class[]>([])
   const [sections, setSections] = useState<Section[]>([])
@@ -955,15 +956,17 @@ export default function CourseEditPage() {
                             <Plus className="h-4 w-4 mr-2" />
                             Add Lecture
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleGenerateWithAI(undefined, false)}
-                            disabled={loadingSections}
-                          >
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Generate with AI
-                          </Button>
+                          {canUseAI && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleGenerateWithAI(undefined, false)}
+                              disabled={loadingSections}
+                            >
+                              <Sparkles className="h-4 w-4 mr-2" />
+                              Generate with AI
+                            </Button>
+                          )}
                         </div>
                       </div>
                       {loadingSections ? (
@@ -984,14 +987,16 @@ export default function CourseEditPage() {
                               <Plus className="h-4 w-4 mr-2" />
                               Add Lecture
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleGenerateWithAI(undefined, false)}
-                            >
-                              <Sparkles className="h-4 w-4 mr-2" />
-                              Generate with AI
-                            </Button>
+                            {canUseAI && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleGenerateWithAI(undefined, false)}
+                              >
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                Generate with AI
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -1089,14 +1094,16 @@ export default function CourseEditPage() {
                                               >
                                                 <Edit className="h-4 w-4" />
                                               </Button>
-                                              <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handleDeleteSubLecture(section.id, lecture.id, lecture.title)}
-                                                className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                              >
-                                                <Trash2 className="h-4 w-4" />
-                                              </Button>
+                                              {canManageContent && (
+                                                <Button
+                                                  variant="ghost"
+                                                  size="sm"
+                                                  onClick={() => handleDeleteSubLecture(section.id, lecture.id, lecture.title)}
+                                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                >
+                                                  <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                              )}
                                             </div>
                                           </div>
                                         ))}
@@ -1113,15 +1120,17 @@ export default function CourseEditPage() {
                                         <Plus className="h-4 w-4 mr-2" />
                                         Add Sub-Lecture
                                       </Button>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleGenerateWithAI(section.id, true)}
-                                        className="flex-1"
-                                      >
-                                        <Sparkles className="h-4 w-4 mr-2" />
-                                        Generate with AI
-                                      </Button>
+                                      {canUseAI && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => handleGenerateWithAI(section.id, true)}
+                                          className="flex-1"
+                                        >
+                                          <Sparkles className="h-4 w-4 mr-2" />
+                                          Generate with AI
+                                        </Button>
+                                      )}
                                     </div>
                                   </div>
                                 </div>

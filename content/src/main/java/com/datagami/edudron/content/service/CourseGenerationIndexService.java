@@ -1,6 +1,7 @@
 package com.datagami.edudron.content.service;
 
 import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.content.domain.CourseGenerationIndex;
 import com.datagami.edudron.content.dto.CourseGenerationIndexDTO;
@@ -10,12 +11,28 @@ import org.apache.tika.exception.TikaException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -31,9 +48,49 @@ public class CourseGenerationIndexService {
     @Autowired(required = false)
     private MediaAssetService mediaAssetService;
     
+    @Value("${GATEWAY_URL:http://localhost:8080}")
+    private String gatewayUrl;
+    
+    private RestTemplate restTemplate;
+    
     private final Tika tika = new Tika();
     
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+    
+    private RestTemplate getRestTemplate() {
+        if (restTemplate == null) {
+            logger.debug("Initializing RestTemplate for identity service calls. Gateway URL: {}", gatewayUrl);
+            restTemplate = new RestTemplate();
+            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+            interceptors.add(new TenantContextRestTemplateInterceptor());
+            // Add interceptor to forward JWT token (Authorization header)
+            interceptors.add((request, body, execution) -> {
+                // Get current request to extract Authorization header
+                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    HttpServletRequest currentRequest = attributes.getRequest();
+                    String authHeader = currentRequest.getHeader("Authorization");
+                    if (authHeader != null && !authHeader.isBlank()) {
+                        // Only add if not already present
+                        if (!request.getHeaders().containsKey("Authorization")) {
+                            request.getHeaders().add("Authorization", authHeader);
+                            logger.debug("Propagated Authorization header (JWT token) to identity service: {}", request.getURI());
+                        } else {
+                            logger.debug("Authorization header already present in request to {}", request.getURI());
+                        }
+                    } else {
+                        logger.debug("No Authorization header found in current request");
+                    }
+                } else {
+                    logger.debug("No ServletRequestAttributes found - cannot forward JWT token");
+                }
+                return execution.execute(request, body);
+            });
+            restTemplate.setInterceptors(interceptors);
+            logger.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
+        }
+        return restTemplate;
+    }
     
     /**
      * Safely parse clientId from TenantContext, handling SYSTEM_ADMIN users
@@ -63,6 +120,12 @@ public class CourseGenerationIndexService {
             String title,
             String description,
             MultipartFile file) throws IOException {
+        
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        String userRole = getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
         
         UUID clientId = getClientId();
         
@@ -118,6 +181,12 @@ public class CourseGenerationIndexService {
             String description,
             String writingFormat) {
         
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        String userRole = getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
+        
         UUID clientId = getClientId();
         
         // Create index entity
@@ -140,6 +209,12 @@ public class CourseGenerationIndexService {
             String title,
             String description,
             MultipartFile file) throws IOException {
+        
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        String userRole = getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
         
         UUID clientId = getClientId();
         
@@ -195,6 +270,12 @@ public class CourseGenerationIndexService {
     }
     
     public void deleteIndex(String id) {
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        String userRole = getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
+        
         UUID clientId = getClientId();
         
         CourseGenerationIndex index = indexRepository.findByIdAndClientId(id, clientId)
@@ -202,6 +283,41 @@ public class CourseGenerationIndexService {
         
         indexRepository.delete(index);
         logger.info("Deleted index: {}", id);
+    }
+    
+    /**
+     * Get the current user's role from the identity service
+     * Returns null if unable to determine role (e.g., anonymous user)
+     */
+    private String getCurrentUserRole() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null || 
+                "anonymousUser".equals(authentication.getName())) {
+                return null;
+            }
+            
+            // Get user info from identity service
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object role = response.getBody().get("role");
+                return role != null ? role.toString() : null;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not determine user role: {}", e.getMessage());
+        }
+        return null;
     }
     
     private String extractTextFromFile(MultipartFile file) throws IOException {

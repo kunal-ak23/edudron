@@ -151,10 +151,17 @@ public class ExamController {
     }
     
     @PostMapping("/{id}/generate")
-    @Operation(summary = "Generate exam with AI", description = "Generate exam questions using AI based on selected modules")
+    @Operation(summary = "Generate exam with AI", description = "Generate exam questions using AI based on selected modules. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features.")
     public ResponseEntity<Assessment> generateExamWithAI(
             @PathVariable String id,
             @RequestBody Map<String, Object> request) {
+        
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        // This check is also done in ExamService.generateExamWithAI, but we check here for better error messages
+        String userRole = examService.getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
         
         Integer numberOfQuestions = request.get("numberOfQuestions") != null ? 
             ((Number) request.get("numberOfQuestions")).intValue() : 10;

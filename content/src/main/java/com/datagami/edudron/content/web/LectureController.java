@@ -103,12 +103,18 @@ public class LectureController {
 
     // Multipart endpoint for PDF support
     @PostMapping(value = "/sections/{sectionId}/lectures/generate", consumes = "multipart/form-data")
-    @Operation(summary = "Generate sub-lecture with AI (with PDF)", description = "Submit a sub-lecture generation job to the queue with optional PDF file. Returns a job ID that can be used to check status.")
+    @Operation(summary = "Generate sub-lecture with AI (with PDF)", description = "Submit a sub-lecture generation job to the queue with optional PDF file. Returns a job ID that can be used to check status. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features.")
     public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateSubLectureWithAIMultipart(
             @PathVariable String sectionId,
             @RequestPart(required = false) String prompt,
             @RequestPart(required = false) String courseId,
             @RequestPart(required = false) MultipartFile pdfFile) {
+        
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        String userRole = lectureService.getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
         
         String finalPrompt = prompt;
         
@@ -142,10 +148,16 @@ public class LectureController {
     
     // JSON endpoint for backward compatibility
     @PostMapping(value = "/sections/{sectionId}/lectures/generate", consumes = "application/json")
-    @Operation(summary = "Generate sub-lecture with AI (JSON)", description = "Submit a sub-lecture generation job to the queue. Returns a job ID that can be used to check status.")
+    @Operation(summary = "Generate sub-lecture with AI (JSON)", description = "Submit a sub-lecture generation job to the queue. Returns a job ID that can be used to check status. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features.")
     public ResponseEntity<com.datagami.edudron.content.dto.AIGenerationJobDTO> generateSubLectureWithAI(
             @PathVariable String sectionId,
             @RequestBody Map<String, String> request) {
+        // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
+        String userRole = lectureService.getCurrentUserRole();
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
+        }
+        
         String prompt = request.get("prompt");
         String courseId = request.get("courseId");
         if (prompt == null || prompt.trim().isEmpty() || courseId == null) {

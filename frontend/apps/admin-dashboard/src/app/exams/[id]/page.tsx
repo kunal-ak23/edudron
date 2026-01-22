@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -63,6 +64,8 @@ export default function ExamDetailPage() {
   const params = useParams()
   const examId = params.id as string
   const { toast } = useToast()
+  const { user } = useAuth()
+  const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
   const [exam, setExam] = useState<Exam | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -464,7 +467,7 @@ export default function ExamDetailPage() {
                       <Plus className="h-4 w-4 mr-2" />
                       Add Question Manually
                     </Button>
-                    {exam.moduleIds && exam.moduleIds.length > 0 && (
+                    {canUseAI && exam.moduleIds && exam.moduleIds.length > 0 && (
                       <Button onClick={async () => {
                         setSaving(true)
                         try {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +20,8 @@ export const dynamic = 'force-dynamic'
 export default function NewExamPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
+  const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [courses, setCourses] = useState<Course[]>([])
@@ -336,11 +339,13 @@ export default function NewExamPage() {
             {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
             Create Exam
           </Button>
-          <Button onClick={handleGenerateWithAI} disabled={loading || generating} variant="default">
-            {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
-             <Sparkles className="h-4 w-4 mr-2" />}
-            Create & Generate with AI
-          </Button>
+          {canUseAI && (
+            <Button onClick={handleGenerateWithAI} disabled={loading || generating} variant="default">
+              {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
+               <Sparkles className="h-4 w-4 mr-2" />}
+              Create & Generate with AI
+            </Button>
+          )}
         </div>
     </div>
   )

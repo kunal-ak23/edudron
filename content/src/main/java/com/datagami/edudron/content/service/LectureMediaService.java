@@ -30,11 +30,19 @@ public class LectureMediaService {
     @Autowired
     private MediaUploadService mediaUploadService;
     
+    @Autowired
+    private LectureService lectureService; // Reuse getCurrentUserRole from LectureService
+    
     /**
      * Upload a single video or audio file for a lecture
      * Replaces any existing video/audio content
      */
     public LectureContentDTO uploadVideoOrAudio(String lectureId, MultipartFile file, boolean isVideo) throws IOException {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload media
+        String userRole = lectureService.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
+        }
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -98,6 +106,12 @@ public class LectureMediaService {
      * Replaces any existing document content
      */
     public LectureContentDTO uploadDocument(String lectureId, MultipartFile file) throws IOException {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload media
+        String userRole = lectureService.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -144,6 +158,12 @@ public class LectureMediaService {
      * Upload multiple attachment files for a lecture
      */
     public List<LectureContentDTO> uploadAttachments(String lectureId, List<MultipartFile> files) throws IOException {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload media
+        String userRole = lectureService.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
+        }
+        
         if (lectureId == null || lectureId.trim().isEmpty()) {
             throw new IllegalArgumentException("Lecture ID cannot be null or empty");
         }
@@ -222,6 +242,12 @@ public class LectureMediaService {
      * Delete a media content item
      */
     public void deleteMedia(String contentId) {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot delete media
+        String userRole = lectureService.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot delete media");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -269,6 +295,12 @@ public class LectureMediaService {
      * Create a text content item for a lecture
      */
     public LectureContentDTO createTextContent(String lectureId, String textContent, String title, Integer sequence) {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create content
+        String userRole = lectureService.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot create content");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -304,6 +336,12 @@ public class LectureMediaService {
      * Update an existing text content item
      */
     public LectureContentDTO updateTextContent(String contentId, String textContent, String title) {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update content
+        String userRole = lectureService.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot update content");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -332,6 +370,12 @@ public class LectureMediaService {
      * Upload transcript file for a video lecture
      */
     public LectureContentDTO uploadTranscript(String lectureId, MultipartFile file) throws IOException {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload media
+        String userRole = lectureService.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
+        }
+        
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
