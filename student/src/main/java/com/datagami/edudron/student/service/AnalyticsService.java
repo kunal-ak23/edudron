@@ -141,23 +141,38 @@ public class AnalyticsService {
         LectureAnalyticsDTO dto = new LectureAnalyticsDTO();
         dto.setLectureId(lectureId);
         
+        // Get courseId from sessions if available
+        String courseId = sessions.isEmpty() ? null : sessions.get(0).getCourseId();
+        
         // Get lecture title and duration from content service
         Integer lectureDurationSeconds = null;
+        String lectureTitle = null;
         try {
-            String url = gatewayUrl + "/content/lectures/" + lectureId;
+            // Use the correct endpoint with courseId if available, otherwise fallback to old endpoint
+            String url = courseId != null 
+                ? gatewayUrl + "/content/courses/" + courseId + "/lectures/" + lectureId
+                : gatewayUrl + "/content/lectures/" + lectureId;
+            log.debug("Fetching lecture info from: {}", url);
             ResponseEntity<JsonNode> response = getRestTemplate().exchange(
                 url, HttpMethod.GET, null, JsonNode.class);
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode lecture = response.getBody();
-                dto.setLectureTitle(lecture.has("title") ? lecture.get("title").asText() : lectureId);
+                if (lecture.has("title")) {
+                    String title = lecture.get("title").asText();
+                    if (title != null && !title.trim().isEmpty() && !title.equals(lectureId)) {
+                        lectureTitle = title;
+                    }
+                }
                 if (lecture.has("durationSeconds")) {
                     lectureDurationSeconds = lecture.get("durationSeconds").asInt();
                 }
             }
         } catch (Exception e) {
             log.warn("Failed to fetch lecture info for {}: {}", lectureId, e.getMessage());
-            dto.setLectureTitle(lectureId);
         }
+        dto.setLectureTitle(lectureTitle != null && !lectureTitle.trim().isEmpty() 
+            ? lectureTitle 
+            : "Lecture " + lectureId.substring(0, Math.min(8, lectureId.length())));
         
         dto.setTotalViews((long) sessions.size());
         dto.setUniqueViewers(sessionRepository.countUniqueViewersByLectureId(clientId, lectureId));
@@ -240,20 +255,31 @@ public class AnalyticsService {
             
             // Get lecture duration from content service
             Integer lectureDurationSeconds = null;
-            String lectureTitle = lectureId;
+            String lectureTitle = null;
             try {
-                String url = gatewayUrl + "/content/lectures/" + lectureId;
+                // Use the correct endpoint with courseId
+                String url = gatewayUrl + "/content/courses/" + courseId + "/lectures/" + lectureId;
+                log.debug("Fetching lecture info for skipped detection from: {}", url);
                 ResponseEntity<JsonNode> response = getRestTemplate().exchange(
                     url, HttpMethod.GET, null, JsonNode.class);
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                     JsonNode lecture = response.getBody();
-                    lectureTitle = lecture.has("title") ? lecture.get("title").asText() : lectureId;
+                    if (lecture.has("title")) {
+                        String title = lecture.get("title").asText();
+                        if (title != null && !title.trim().isEmpty() && !title.equals(lectureId)) {
+                            lectureTitle = title;
+                        }
+                    }
                     if (lecture.has("durationSeconds")) {
                         lectureDurationSeconds = lecture.get("durationSeconds").asInt();
                     }
                 }
             } catch (Exception e) {
-                log.debug("Failed to fetch lecture duration for {}: {}", lectureId, e.getMessage());
+                log.warn("Failed to fetch lecture duration for {}: {}", lectureId, e.getMessage());
+            }
+            // Use fallback title if not found
+            if (lectureTitle == null || lectureTitle.trim().isEmpty()) {
+                lectureTitle = "Lecture " + lectureId.substring(0, Math.min(8, lectureId.length()));
             }
             
             if (lectureDurationSeconds == null || lectureDurationSeconds == 0) {
@@ -332,26 +358,44 @@ public class AnalyticsService {
             LectureEngagementSummaryDTO summary = new LectureEngagementSummaryDTO();
             summary.setLectureId(lectureId);
             
-            // Get lecture title
+            // Get lecture title and duration - use the correct endpoint with courseId
             String lectureTitle = null;
+            Integer lectureDurationSeconds = null;
             try {
-                String url = gatewayUrl + "/content/lectures/" + lectureId;
+                String url = gatewayUrl + "/content/courses/" + courseId + "/lectures/" + lectureId;
+                log.debug("Fetching lecture info from: {}", url);
                 ResponseEntity<JsonNode> response = getRestTemplate().exchange(
                     url, HttpMethod.GET, null, JsonNode.class);
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                     JsonNode lecture = response.getBody();
+                    log.debug("Lecture response for {}: {}", lectureId, lecture.toString());
                     if (lecture.has("title")) {
                         String title = lecture.get("title").asText();
                         if (title != null && !title.trim().isEmpty() && !title.equals(lectureId)) {
                             lectureTitle = title;
+                            log.debug("Found lecture title for {}: {}", lectureId, lectureTitle);
+                        } else {
+                            log.debug("Title for {} is empty or equals ID: '{}'", lectureId, title);
                         }
+                    } else {
+                        log.debug("Lecture {} response does not have 'title' field", lectureId);
                     }
+                    if (lecture.has("durationSeconds")) {
+                        lectureDurationSeconds = lecture.get("durationSeconds").asInt();
+                        log.debug("Found lecture duration for {}: {} seconds", lectureId, lectureDurationSeconds);
+                    }
+                } else {
+                    log.warn("Failed to fetch lecture info for {}: HTTP {}", lectureId, response.getStatusCode());
                 }
             } catch (Exception e) {
-                log.debug("Failed to fetch lecture title for {}: {}", lectureId, e.getMessage());
+                log.warn("Failed to fetch lecture info for {}: {}", lectureId, e.getMessage(), e);
             }
             // Set title, or use a formatted version of the ID if title is not available
-            summary.setLectureTitle(lectureTitle != null ? lectureTitle : "Lecture " + lectureId.substring(0, Math.min(8, lectureId.length())));
+            if (lectureTitle == null || lectureTitle.trim().isEmpty()) {
+                lectureTitle = "Lecture " + lectureId.substring(0, Math.min(8, lectureId.length()));
+                log.debug("Using fallback title for {}: {}", lectureId, lectureTitle);
+            }
+            summary.setLectureTitle(lectureTitle);
             
             summary.setTotalViews((long) sessions.size());
             summary.setUniqueViewers(sessionRepository.countUniqueViewersByLectureId(clientId, lectureId));
@@ -378,29 +422,16 @@ public class AnalyticsService {
             summary.setCompletionRate(completionRate);
             
             // Calculate skip rate if we have lecture duration
-            try {
-                String url = gatewayUrl + "/content/lectures/" + lectureId;
-                ResponseEntity<JsonNode> response = getRestTemplate().exchange(
-                    url, HttpMethod.GET, null, JsonNode.class);
-                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                    JsonNode lecture = response.getBody();
-                    if (lecture.has("durationSeconds")) {
-                        Integer lectureDurationSeconds = lecture.get("durationSeconds").asInt();
-                        if (lectureDurationSeconds != null && lectureDurationSeconds > 0) {
-                            int thresholdSeconds = (int) (lectureDurationSeconds * 0.1);
-                            long skipped = completedSessions.stream()
-                                .filter(s -> s.getDurationSeconds() < thresholdSeconds)
-                                .count();
-                            BigDecimal skipRate = completedSessions.isEmpty() ? BigDecimal.ZERO :
-                                BigDecimal.valueOf(skipped)
-                                    .divide(BigDecimal.valueOf(completedSessions.size()), 4, RoundingMode.HALF_UP)
-                                    .multiply(BigDecimal.valueOf(100));
-                            summary.setSkipRate(skipRate);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                log.debug("Failed to fetch lecture duration for skip rate calculation: {}", e.getMessage());
+            if (lectureDurationSeconds != null && lectureDurationSeconds > 0 && !completedSessions.isEmpty()) {
+                int thresholdSeconds = (int) (lectureDurationSeconds * 0.1);
+                long skipped = completedSessions.stream()
+                    .filter(s -> s.getDurationSeconds() < thresholdSeconds)
+                    .count();
+                BigDecimal skipRate = BigDecimal.valueOf(skipped)
+                    .divide(BigDecimal.valueOf(completedSessions.size()), 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+                summary.setSkipRate(skipRate);
+            } else {
                 summary.setSkipRate(BigDecimal.ZERO);
             }
             
