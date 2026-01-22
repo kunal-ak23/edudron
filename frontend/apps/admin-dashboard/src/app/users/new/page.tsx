@@ -55,7 +55,22 @@ export default function NewUserPage() {
   })
   
   const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN'
+  const canManageUsers = isSystemAdmin || isTenantAdmin
   const showInstituteSelection = formData.role !== 'SYSTEM_ADMIN'
+  
+  // Platform-side roles that only SYSTEM_ADMIN can create
+  const platformSideRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']
+  // University-side roles that TENANT_ADMIN can create
+  const universitySideRoles = ['INSTRUCTOR', 'SUPPORT_STAFF', 'STUDENT']
+  
+  useEffect(() => {
+    // Check if user can manage users
+    if (!canManageUsers) {
+      router.push('/unauthorized')
+      return
+    }
+  }, [canManageUsers, router])
   
   useEffect(() => {
     const loadInstitutes = async () => {
@@ -260,29 +275,39 @@ export default function NewUserPage() {
                   <Label htmlFor="role">
                     Role <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={formData.role} onValueChange={handleRoleChange}>
+                  <Select value={formData.role} onValueChange={handleRoleChange} disabled={!canManageUsers}>
                     <SelectTrigger id="role">
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
+                      {/* University-side roles - available to both SYSTEM_ADMIN and TENANT_ADMIN */}
                       <SelectItem value="STUDENT">Student</SelectItem>
                       <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
-                      <SelectItem value="CONTENT_MANAGER">Content Manager</SelectItem>
-                      <SelectItem value="TENANT_ADMIN">Tenant Admin</SelectItem>
                       <SelectItem value="SUPPORT_STAFF">Support Staff</SelectItem>
+                      
+                      {/* Platform-side roles - only available to SYSTEM_ADMIN */}
                       {isSystemAdmin && (
-                        <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
+                        <>
+                          <SelectItem value="CONTENT_MANAGER">Content Manager</SelectItem>
+                          <SelectItem value="TENANT_ADMIN">Tenant Admin</SelectItem>
+                          <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
+                        </>
                       )}
                     </SelectContent>
                   </Select>
-                  {!isSystemAdmin && (
+                  {isTenantAdmin && (
                     <p className="text-sm text-muted-foreground">
-                      Note: SYSTEM_ADMIN can only be created by existing SYSTEM_ADMIN users
+                      You can only create university-side roles (Student, Instructor, Support Staff)
                     </p>
                   )}
                   {isSystemAdmin && formData.role === 'SYSTEM_ADMIN' && (
                     <p className="text-sm text-muted-foreground">
                       System Admin users have access to all tenants and institutes
+                    </p>
+                  )}
+                  {isSystemAdmin && platformSideRoles.includes(formData.role) && formData.role !== 'SYSTEM_ADMIN' && (
+                    <p className="text-sm text-muted-foreground">
+                      Platform-side roles can only be created by SYSTEM_ADMIN
                     </p>
                   )}
                 </div>

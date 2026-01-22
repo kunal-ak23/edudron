@@ -157,6 +157,17 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
       return false
     }
     
+    // Hide tenant management for non-SYSTEM_ADMIN users
+    if (item.href === '/tenants' && user?.role !== 'SYSTEM_ADMIN') {
+      return false
+    }
+    
+    // Hide user management for users who cannot manage users
+    const canManageUsers = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
+    if (item.href === '/users' && !canManageUsers) {
+      return false
+    }
+    
     // Show tenant-specific items only if user has a tenant selected
     if (item.requiresTenant) {
       const tenantId = localStorage.getItem('tenant_id') || 

@@ -33,6 +33,7 @@ import { extractErrorMessage } from '@/lib/error-utils'
 export default function TenantsPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
   const [tenants, setTenants] = useState<Tenant[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -43,6 +44,15 @@ export default function TenantsPage() {
     isActive: true
   })
   const [submitting, setSubmitting] = useState(false)
+  
+  const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
+  
+  // Redirect if not SYSTEM_ADMIN
+  useEffect(() => {
+    if (user && !isSystemAdmin) {
+      router.push('/unauthorized')
+    }
+  }, [user, isSystemAdmin, router])
 
   const loadTenants = async () => {
     try {
@@ -126,10 +136,12 @@ export default function TenantsPage() {
     <div>
         <div className="flex justify-between items-center mb-8">
           <div>
-            <Button onClick={() => setShowCreateDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Create New Tenant
-            </Button>
+            {isSystemAdmin && (
+              <Button onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create New Tenant
+              </Button>
+            )}
           </div>
 
           <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>

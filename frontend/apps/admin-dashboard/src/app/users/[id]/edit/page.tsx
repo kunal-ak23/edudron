@@ -69,7 +69,25 @@ export default function EditUserPage() {
   })
   
   const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN'
+  const canManageUsers = isSystemAdmin || isTenantAdmin
   const showInstituteSelection = formData.role !== 'SYSTEM_ADMIN'
+  
+  // Platform-side roles that only SYSTEM_ADMIN can modify
+  const platformSideRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']
+  // University-side roles that TENANT_ADMIN can modify
+  const universitySideRoles = ['INSTRUCTOR', 'SUPPORT_STAFF', 'STUDENT']
+  
+  // Check if the user being edited is a platform-side role
+  const isEditingPlatformSideUser = platformSideRoles.includes(formData.role)
+  
+  // Check permissions
+  useEffect(() => {
+    if (!canManageUsers) {
+      router.push('/unauthorized')
+      return
+    }
+  }, [canManageUsers, router])
   
   // Load user data
   useEffect(() => {
@@ -80,6 +98,17 @@ export default function EditUserPage() {
         setLoadingUser(true)
         const response = await apiClient.get<User>(`/idp/users/${userId}`)
         const userData = response.data
+        
+        // Check if TENANT_ADMIN is trying to edit a platform-side user
+        if (isTenantAdmin && platformSideRoles.includes(userData.role)) {
+          toast({
+            variant: 'destructive',
+            title: 'Access Denied',
+            description: 'You can only edit university-side users (Student, Instructor, Support Staff)',
+          })
+          router.push('/users')
+          return
+        }
         
         setFormData({
           email: userData.email || '',
@@ -106,7 +135,7 @@ export default function EditUserPage() {
     }
     
     loadUser()
-  }, [userId, router, toast])
+  }, [userId, router, toast, isTenantAdmin, platformSideRoles])
   
   // Load institutes
   useEffect(() => {
@@ -314,24 +343,38 @@ export default function EditUserPage() {
                   <Label htmlFor="role">
                     Role <span className="text-destructive">*</span>
                   </Label>
-                  <Select value={formData.role} onValueChange={handleRoleChange}>
+                  <Select 
+                    value={formData.role} 
+                    onValueChange={handleRoleChange}
+                    disabled={isEditingPlatformSideUser && !isSystemAdmin}
+                  >
                     <SelectTrigger id="role">
                       <SelectValue placeholder="Select a role" />
                     </SelectTrigger>
                     <SelectContent>
+                      {/* University-side roles - available to both SYSTEM_ADMIN and TENANT_ADMIN */}
                       <SelectItem value="STUDENT">Student</SelectItem>
                       <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
-                      <SelectItem value="CONTENT_MANAGER">Content Manager</SelectItem>
-                      <SelectItem value="TENANT_ADMIN">Tenant Admin</SelectItem>
                       <SelectItem value="SUPPORT_STAFF">Support Staff</SelectItem>
+                      
+                      {/* Platform-side roles - only available to SYSTEM_ADMIN */}
                       {isSystemAdmin && (
-                        <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
+                        <>
+                          <SelectItem value="CONTENT_MANAGER">Content Manager</SelectItem>
+                          <SelectItem value="TENANT_ADMIN">Tenant Admin</SelectItem>
+                          <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
+                        </>
                       )}
                     </SelectContent>
                   </Select>
-                  {!isSystemAdmin && (
+                  {isTenantAdmin && isEditingPlatformSideUser && (
+                    <p className="text-sm text-destructive">
+                      You cannot modify platform-side users. Only SYSTEM_ADMIN can modify these roles.
+                    </p>
+                  )}
+                  {isTenantAdmin && !isEditingPlatformSideUser && (
                     <p className="text-sm text-muted-foreground">
-                      Note: SYSTEM_ADMIN can only be modified by existing SYSTEM_ADMIN users
+                      You can only assign university-side roles (Student, Instructor, Support Staff)
                     </p>
                   )}
                   {isSystemAdmin && formData.role === 'SYSTEM_ADMIN' && (

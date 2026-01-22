@@ -36,10 +36,15 @@ interface User {
 export default function UsersPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  
+  const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN'
+  const canManageUsers = isSystemAdmin || isTenantAdmin
 
   const loadUsers = useCallback(async () => {
     try {
@@ -113,14 +118,23 @@ export default function UsersPage() {
     }
   }
 
+  // Redirect if user cannot manage users
+  useEffect(() => {
+    if (user && !canManageUsers) {
+      router.push('/unauthorized')
+    }
+  }, [user, canManageUsers, router])
+  
   return (
     <div>
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <Button onClick={() => router.push('/users/new')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add User
-            </Button>
+            {canManageUsers && (
+              <Button onClick={() => router.push('/users/new')}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add User
+              </Button>
+            )}
           </div>
         </div>
 
@@ -198,13 +212,16 @@ export default function UsersPage() {
                           {new Date(user.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => router.push(`/users/${user.id}/edit`)}
-                          >
-                            Edit
-                          </Button>
+                          {canManageUsers && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => router.push(`/users/${user.id}/edit`)}
+                              disabled={isTenantAdmin && ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER'].includes(user.role)}
+                            >
+                              Edit
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

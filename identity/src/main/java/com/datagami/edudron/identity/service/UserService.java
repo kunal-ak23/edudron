@@ -235,7 +235,17 @@ public class UserService {
         
         // Get current user to check permissions
         User currentUser = getCurrentUser();
-        boolean isCurrentUserSystemAdmin = currentUser != null && currentUser.getRole() == User.Role.SYSTEM_ADMIN;
+        if (currentUser == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        
+        // Check if current user can manage users
+        if (!currentUser.canManageUsers()) {
+            throw new IllegalArgumentException("Only SYSTEM_ADMIN and TENANT_ADMIN can create users");
+        }
+        
+        boolean isCurrentUserSystemAdmin = currentUser.getRole() == User.Role.SYSTEM_ADMIN;
+        boolean isCurrentUserTenantAdmin = currentUser.getRole() == User.Role.TENANT_ADMIN;
         
         // SECURITY: Only SYSTEM_ADMIN can create SYSTEM_ADMIN users
         if (role == User.Role.SYSTEM_ADMIN) {
@@ -244,6 +254,20 @@ public class UserService {
             }
             // SYSTEM_ADMIN users have no tenant and no institutes
             return createSystemAdminUser(request);
+        }
+        
+        // SECURITY: Platform-side roles (TENANT_ADMIN, CONTENT_MANAGER) can only be created by SYSTEM_ADMIN
+        if (role == User.Role.TENANT_ADMIN || role == User.Role.CONTENT_MANAGER) {
+            if (!isCurrentUserSystemAdmin) {
+                throw new IllegalArgumentException("Only SYSTEM_ADMIN can create platform-side roles (TENANT_ADMIN, CONTENT_MANAGER)");
+            }
+        }
+        
+        // SECURITY: TENANT_ADMIN can only create university-side roles (INSTRUCTOR, SUPPORT_STAFF, STUDENT)
+        if (isCurrentUserTenantAdmin) {
+            if (role != User.Role.INSTRUCTOR && role != User.Role.SUPPORT_STAFF && role != User.Role.STUDENT) {
+                throw new IllegalArgumentException("TENANT_ADMIN can only create university-side roles (INSTRUCTOR, SUPPORT_STAFF, STUDENT)");
+            }
         }
         
         // For non-SYSTEM_ADMIN users, validate tenant context and institutes
@@ -330,6 +354,17 @@ public class UserService {
         User user = userRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
         
+        // Get current user to check permissions
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        
+        // Check if current user can manage users
+        if (!currentUser.canManageUsers()) {
+            throw new IllegalArgumentException("Only SYSTEM_ADMIN and TENANT_ADMIN can update users");
+        }
+        
         // Check tenant access
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
@@ -339,9 +374,8 @@ public class UserService {
             }
         }
         
-        // Get current user to check permissions
-        User currentUser = getCurrentUser();
-        boolean isCurrentUserSystemAdmin = currentUser != null && currentUser.getRole() == User.Role.SYSTEM_ADMIN;
+        boolean isCurrentUserSystemAdmin = currentUser.getRole() == User.Role.SYSTEM_ADMIN;
+        boolean isCurrentUserTenantAdmin = currentUser.getRole() == User.Role.TENANT_ADMIN;
         
         User.Role newRole = User.Role.valueOf(request.getRole().toUpperCase());
         
@@ -355,6 +389,26 @@ public class UserService {
         // SECURITY: Only SYSTEM_ADMIN can change SYSTEM_ADMIN users
         if (user.getRole() == User.Role.SYSTEM_ADMIN && !isCurrentUserSystemAdmin) {
             throw new IllegalArgumentException("SYSTEM_ADMIN users can only be modified by existing SYSTEM_ADMIN users.");
+        }
+        
+        // SECURITY: Platform-side roles (TENANT_ADMIN, CONTENT_MANAGER) can only be assigned by SYSTEM_ADMIN
+        if ((newRole == User.Role.TENANT_ADMIN || newRole == User.Role.CONTENT_MANAGER) && 
+            (user.getRole() != User.Role.TENANT_ADMIN && user.getRole() != User.Role.CONTENT_MANAGER)) {
+            if (!isCurrentUserSystemAdmin) {
+                throw new IllegalArgumentException("Only SYSTEM_ADMIN can assign platform-side roles (TENANT_ADMIN, CONTENT_MANAGER)");
+            }
+        }
+        
+        // SECURITY: Only SYSTEM_ADMIN can modify platform-side users
+        if ((user.getRole() == User.Role.TENANT_ADMIN || user.getRole() == User.Role.CONTENT_MANAGER) && !isCurrentUserSystemAdmin) {
+            throw new IllegalArgumentException("Platform-side users (TENANT_ADMIN, CONTENT_MANAGER) can only be modified by SYSTEM_ADMIN");
+        }
+        
+        // SECURITY: TENANT_ADMIN can only change roles to university-side roles
+        if (isCurrentUserTenantAdmin) {
+            if (newRole != User.Role.INSTRUCTOR && newRole != User.Role.SUPPORT_STAFF && newRole != User.Role.STUDENT) {
+                throw new IllegalArgumentException("TENANT_ADMIN can only assign university-side roles (INSTRUCTOR, SUPPORT_STAFF, STUDENT)");
+            }
         }
         
         // Validate email uniqueness if email is being changed
@@ -521,6 +575,12 @@ public class UserService {
     
     @Transactional
     public void assignInstitutesToUser(String userId, List<String> instituteIds) {
+        // Check if current user can manage users
+        User currentUser = getCurrentUser();
+        if (currentUser == null || !currentUser.canManageUsers()) {
+            throw new IllegalArgumentException("Only SYSTEM_ADMIN and TENANT_ADMIN can modify institute associations");
+        }
+        
         // Remove existing associations
         userInstituteRepository.deleteByUserId(userId);
         

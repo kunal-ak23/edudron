@@ -20,6 +20,7 @@ export default function TenantEditPage() {
   const params = useParams()
   const tenantId = params.id as string
   const { toast } = useToast()
+  const { user } = useAuth()
 
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [formData, setFormData] = useState<CreateTenantRequest>({
@@ -32,6 +33,15 @@ export default function TenantEditPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  
+  const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
+  
+  // Redirect if not SYSTEM_ADMIN
+  useEffect(() => {
+    if (user && !isSystemAdmin) {
+      router.push('/unauthorized')
+    }
+  }, [user, isSystemAdmin, router])
 
   const loadTenant = useCallback(async () => {
     try {
@@ -237,15 +247,17 @@ export default function TenantEditPage() {
                   )}
 
                   <div className="flex justify-between pt-4">
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={() => setShowDeleteDialog(true)}
-                      disabled={saving}
-                    >
-                      Delete Tenant
-                    </Button>
-                    <div className="flex gap-3">
+                    {isSystemAdmin && (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => setShowDeleteDialog(true)}
+                        disabled={saving}
+                      >
+                        Delete Tenant
+                      </Button>
+                    )}
+                    <div className="flex gap-3 ml-auto">
                       <Button
                         type="button"
                         variant="outline"
@@ -254,10 +266,12 @@ export default function TenantEditPage() {
                       >
                         Cancel
                       </Button>
-                      <Button type="submit" disabled={saving}>
-                        {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                        Save Changes
-                      </Button>
+                      {isSystemAdmin && (
+                        <Button type="submit" disabled={saving}>
+                          {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Save Changes
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
