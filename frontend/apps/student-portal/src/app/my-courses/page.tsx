@@ -32,12 +32,12 @@ export default function MyCoursesPage() {
   const loadEnrollments = async () => {
     try {
       const enrollmentsData = await enrollmentsApi.listEnrollments()
-      setEnrollments(enrollmentsData)
 
       // Deduplicate course IDs to avoid fetching the same course multiple times
       const uniqueCourseIds = Array.from(new Set(enrollmentsData.map(e => e.courseId)))
       
       // Load course details only for unique courses
+      // Backend will return 404 or error for unpublished courses for students
       const coursePromises = uniqueCourseIds.map((courseId) =>
         coursesApi.getCourse(courseId).catch(() => null)
       )
@@ -49,16 +49,22 @@ export default function MyCoursesPage() {
         }
       })
       setCourses(coursesMap)
+      
+      // Filter out enrollments for courses that couldn't be loaded (unpublished courses)
+      const validEnrollments = enrollmentsData.filter(enrollment => 
+        coursesMap[enrollment.courseId] !== undefined
+      )
+      setEnrollments(validEnrollments)
 
-      // Load progress for each course
-      const progressPromises = enrollmentsData.map((enrollment) =>
+      // Load progress for each valid course only
+      const progressPromises = validEnrollments.map((enrollment) =>
         enrollmentsApi.getProgress(enrollment.courseId).catch(() => null)
       )
       const progressResults = await Promise.all(progressPromises)
       const progressMap: Record<string, Progress> = {}
       progressResults.forEach((progress, index) => {
         if (progress) {
-          progressMap[enrollmentsData[index].courseId] = progress
+          progressMap[validEnrollments[index].courseId] = progress
         }
       })
       setProgressData(progressMap)

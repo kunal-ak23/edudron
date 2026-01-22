@@ -55,5 +55,23 @@ public class BulkEnrollmentController {
         List<BulkEnrollmentResult> results = bulkEnrollmentService.enrollSectionToCourses(sectionId, request);
         return ResponseEntity.status(HttpStatus.OK).body(results);
     }
+
+    @DeleteMapping("/classes/{classId}/enroll/{courseId}")
+    @Operation(summary = "Unenroll class from course", description = "Unenroll all students in a class from a course")
+    public ResponseEntity<BulkEnrollmentResult> unenrollClassFromCourse(
+            @PathVariable String classId,
+            @PathVariable String courseId) {
+        BulkEnrollmentResult result = bulkEnrollmentService.unenrollClassFromCourse(classId, courseId);
+        return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/sections/{sectionId}/enroll/{courseId}")
+    @Operation(summary = "Unenroll section from course", description = "Unenroll all students in a section from a course")
+    public ResponseEntity<BulkEnrollmentResult> unenrollSectionFromCourse(
+            @PathVariable String sectionId,
+            @PathVariable String courseId) {
+        BulkEnrollmentResult result = bulkEnrollmentService.unenrollSectionFromCourse(sectionId, courseId);
+        return ResponseEntity.ok(result);
+    }
 }
 

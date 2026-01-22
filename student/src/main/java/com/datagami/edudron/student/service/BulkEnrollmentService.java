@@ -225,6 +225,106 @@ public class BulkEnrollmentService {
         }
         return results;
     }
+
+    /**
+     * Unenroll all students in a class from a course
+     */
+    public BulkEnrollmentResult unenrollClassFromCourse(String classId, String courseId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Validate class
+        Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
+        
+        // Get all enrollments for students in this class for this course
+        List<Enrollment> classEnrollments = enrollmentRepository.findByClientIdAndClassId(clientId, classId);
+        List<Enrollment> enrollmentsToDelete = classEnrollments.stream()
+            .filter(e -> courseId.equals(e.getCourseId()))
+            .collect(Collectors.toList());
+        
+        BulkEnrollmentResult result = new BulkEnrollmentResult();
+        result.setTotalStudents((long) enrollmentsToDelete.size());
+        result.setEnrolledStudents(0L);
+        result.setSkippedStudents(0L);
+        result.setFailedStudents(0L);
+        List<String> errorMessages = new ArrayList<>();
+        
+        log.info("Unenrolling {} students from class {} in course {}", 
+            enrollmentsToDelete.size(), classId, courseId);
+        
+        for (Enrollment enrollment : enrollmentsToDelete) {
+            try {
+                enrollmentRepository.delete(enrollment);
+                result.setEnrolledStudents(result.getEnrolledStudents() + 1);
+                log.debug("Deleted enrollment {} for student {} in course {}", 
+                    enrollment.getId(), enrollment.getStudentId(), courseId);
+            } catch (Exception e) {
+                log.warn("Failed to delete enrollment {}: {}", enrollment.getId(), e.getMessage());
+                errorMessages.add("Enrollment " + enrollment.getId() + ": " + e.getMessage());
+                result.setFailedStudents(result.getFailedStudents() + 1);
+            }
+        }
+        
+        result.setErrorMessages(errorMessages.isEmpty() ? null : errorMessages);
+        log.info("Unenrollment completed: {} successful, {} failed", 
+            result.getEnrolledStudents(), result.getFailedStudents());
+        
+        return result;
+    }
+
+    /**
+     * Unenroll all students in a section from a course
+     */
+    public BulkEnrollmentResult unenrollSectionFromCourse(String sectionId, String courseId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Validate section
+        Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+        
+        // Get all enrollments for students in this section for this course
+        List<Enrollment> sectionEnrollments = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId);
+        List<Enrollment> enrollmentsToDelete = sectionEnrollments.stream()
+            .filter(e -> courseId.equals(e.getCourseId()))
+            .collect(Collectors.toList());
+        
+        BulkEnrollmentResult result = new BulkEnrollmentResult();
+        result.setTotalStudents((long) enrollmentsToDelete.size());
+        result.setEnrolledStudents(0L);
+        result.setSkippedStudents(0L);
+        result.setFailedStudents(0L);
+        List<String> errorMessages = new ArrayList<>();
+        
+        log.info("Unenrolling {} students from section {} in course {}", 
+            enrollmentsToDelete.size(), sectionId, courseId);
+        
+        for (Enrollment enrollment : enrollmentsToDelete) {
+            try {
+                enrollmentRepository.delete(enrollment);
+                result.setEnrolledStudents(result.getEnrolledStudents() + 1);
+                log.debug("Deleted enrollment {} for student {} in course {}", 
+                    enrollment.getId(), enrollment.getStudentId(), courseId);
+            } catch (Exception e) {
+                log.warn("Failed to delete enrollment {}: {}", enrollment.getId(), e.getMessage());
+                errorMessages.add("Enrollment " + enrollment.getId() + ": " + e.getMessage());
+                result.setFailedStudents(result.getFailedStudents() + 1);
+            }
+        }
+        
+        result.setErrorMessages(errorMessages.isEmpty() ? null : errorMessages);
+        log.info("Unenrollment completed: {} successful, {} failed", 
+            result.getEnrolledStudents(), result.getFailedStudents());
+        
+        return result;
+    }
     
     private void validateCourseAssignment(String courseId, String classId, String sectionId, UUID clientId) {
         // Get course from content service

@@ -20,6 +20,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -31,6 +33,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -131,6 +134,13 @@ public class CourseService {
         Course course = courseRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
         
+        // For students, check if course is published - throw error if not
+        String userRole = getCurrentUserRole();
+        if ("STUDENT".equals(userRole) && !course.getIsPublished()) {
+            log.warn("Student attempted to access unpublished course: {}", id);
+            throw new IllegalArgumentException("Course not found: " + id);
+        }
+        
         try {
             return toDTO(course);
         } catch (Exception e) {
@@ -144,6 +154,13 @@ public class CourseService {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
+        
+        // For students, always filter to only published courses
+        String userRole = getCurrentUserRole();
+        if ("STUDENT".equals(userRole)) {
+            isPublished = true; // Force published=true for students
+            log.debug("Student user detected - filtering to only published courses");
+        }
         
         Page<Course> courses = isPublished != null
             ? courseRepository.findByClientIdAndIsPublished(clientId, isPublished, pageable)
@@ -161,6 +178,13 @@ public class CourseService {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
+        
+        // For students, always filter to only published courses
+        String userRole = getCurrentUserRole();
+        if ("STUDENT".equals(userRole)) {
+            isPublished = true; // Force published=true for students
+            log.debug("Student user detected in search - filtering to only published courses");
+        }
         
         Page<Course> courses = courseRepository.searchCourses(
             clientId, categoryId, difficultyLevel, language, 
@@ -583,6 +607,40 @@ public class CourseService {
         return courses.stream()
             .map(this::toDTO)
             .collect(Collectors.toList());
+    }
+    
+    /**
+     * Get the current user's role from the identity service
+     * Returns null if unable to determine role
+     */
+    private String getCurrentUserRole() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null) {
+                return null;
+            }
+            
+            // Get user info from identity service
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                Map.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object role = response.getBody().get("role");
+                return role != null ? role.toString() : null;
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user role: {}", e.getMessage());
+        }
+        return null;
     }
     
     private CourseDTO toDTO(Course course) {

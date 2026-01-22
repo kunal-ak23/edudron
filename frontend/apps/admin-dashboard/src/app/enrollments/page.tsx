@@ -23,7 +23,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Loader2, Users, Filter, X } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Plus, Loader2, Users, Filter, X, Trash2, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { enrollmentsApi, coursesApi, institutesApi, classesApi, sectionsApi } from '@/lib/api'
 import type { Enrollment, Course, Institute, Class, Section } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -35,26 +43,41 @@ export default function EnrollmentsPage() {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [filteredEnrollments, setFilteredEnrollments] = useState<Enrollment[]>([])
   const [courses, setCourses] = useState<Record<string, Course>>({})
+  const [allCourses, setAllCourses] = useState<Course[]>([]) // All courses for filter dropdown
   const [institutes, setInstitutes] = useState<Institute[]>([])
   const [classes, setClasses] = useState<Class[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('all')
   const [selectedInstituteId, setSelectedInstituteId] = useState<string>('all')
   const [selectedClassId, setSelectedClassId] = useState<string>('all')
   const [selectedSectionId, setSelectedSectionId] = useState<string>('all')
+  const [searchEmail, setSearchEmail] = useState<string>('')
+  const [unenrollingId, setUnenrollingId] = useState<string | null>(null)
+  const [showUnenrollDialog, setShowUnenrollDialog] = useState(false)
+  const [enrollmentToUnenroll, setEnrollmentToUnenroll] = useState<Enrollment | null>(null)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [pageSize, setPageSize] = useState(20)
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [enrollmentsData, institutesData] = await Promise.all([
-        enrollmentsApi.listEnrollments(),
-        institutesApi.listInstitutes()
+      const [enrollmentsResponse, institutesData, allCoursesData] = await Promise.all([
+        enrollmentsApi.listAllEnrollmentsPaginated(currentPage, pageSize),
+        institutesApi.listInstitutes(),
+        coursesApi.listCourses().catch(() => []) // Load all courses for filter
       ])
-      setEnrollments(enrollmentsData)
+      
+      setEnrollments(enrollmentsResponse.content)
+      setTotalElements(enrollmentsResponse.totalElements)
+      setTotalPages(enrollmentsResponse.totalPages)
       setInstitutes(institutesData)
+      setAllCourses(allCoursesData)
 
-      // Load courses
-      const courseIds = Array.from(new Set(enrollmentsData.map(e => e.courseId)))
+      // Load courses for current page (for display)
+      const courseIds = Array.from(new Set(enrollmentsResponse.content.map(e => e.courseId)))
       const coursePromises = courseIds.map(id => coursesApi.getCourse(id).catch(() => null))
       const coursesData = await Promise.all(coursePromises)
       const coursesMap: Record<string, Course> = {}
@@ -88,10 +111,25 @@ export default function EnrollmentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [toast])
+  }, [currentPage, pageSize, toast])
 
   const filterEnrollments = useCallback(() => {
     let filtered = [...enrollments]
+
+    // Filter by email search (case-insensitive)
+    if (searchEmail.trim()) {
+      const searchLower = searchEmail.toLowerCase().trim()
+      filtered = filtered.filter(e => {
+        const email = e.studentEmail?.toLowerCase() || ''
+        const studentId = e.studentId?.toLowerCase() || ''
+        return email.includes(searchLower) || studentId.includes(searchLower)
+      })
+    }
+
+    // Filter by course
+    if (selectedCourseId && selectedCourseId !== 'all') {
+      filtered = filtered.filter(e => e.courseId === selectedCourseId)
+    }
 
     if (selectedInstituteId && selectedInstituteId !== 'all') {
       filtered = filtered.filter(e => e.instituteId === selectedInstituteId)
@@ -104,11 +142,11 @@ export default function EnrollmentsPage() {
     }
 
     setFilteredEnrollments(filtered)
-  }, [enrollments, selectedInstituteId, selectedClassId, selectedSectionId])
+  }, [enrollments, searchEmail, selectedCourseId, selectedInstituteId, selectedClassId, selectedSectionId])
 
   useEffect(() => {
     loadData()
-  }, [loadData])
+  }, [loadData, currentPage, pageSize])
 
   useEffect(() => {
     filterEnrollments()
@@ -142,24 +180,67 @@ export default function EnrollmentsPage() {
   }
 
   const clearFilters = () => {
+    setSelectedCourseId('all')
     setSelectedInstituteId('all')
     setSelectedClassId('all')
     setSelectedSectionId('all')
+    setSearchEmail('')
+    setCurrentPage(0) // Reset to first page when clearing filters
+  }
+
+  const handleUnenrollClick = (enrollment: Enrollment) => {
+    setEnrollmentToUnenroll(enrollment)
+    setShowUnenrollDialog(true)
+  }
+
+  const handleUnenrollConfirm = async () => {
+    if (!enrollmentToUnenroll) return
+
+    setUnenrollingId(enrollmentToUnenroll.id)
+    try {
+      // Use the admin endpoint to delete enrollment by ID
+      await enrollmentsApi.deleteEnrollment(enrollmentToUnenroll.id)
+      
+      // Reload current page to refresh data
+      await loadData()
+      
+      toast({
+        title: 'Success',
+        description: 'Student has been unenrolled from the course',
+      })
+      
+      setShowUnenrollDialog(false)
+      setEnrollmentToUnenroll(null)
+    } catch (err: any) {
+      console.error('Error unenrolling:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to unenroll',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setUnenrollingId(null)
+    }
   }
 
   if (loading) {
     return (
-      
+      <div className="container mx-auto py-8 px-4">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-  )
-}
+      </div>
+    )
+  }
 
   return (
-    <div>
+    <div className="container mx-auto py-8 px-4">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold">Enrollments</h1>
+        <p className="text-gray-600 mt-2">Manage student course enrollments</p>
+      </div>
 
-          <Card className="mb-6">
+      <Card className="mb-6">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Filter className="h-5 w-5" />
@@ -167,7 +248,46 @@ export default function EnrollmentsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
+                <div className="space-y-2 md:col-span-1">
+                  <Label>Search Email</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search by email..."
+                      value={searchEmail}
+                      onChange={(e) => {
+                        setSearchEmail(e.target.value)
+                        setCurrentPage(0) // Reset to first page when searching
+                      }}
+                      className="pl-8"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Course</Label>
+                  <Select 
+                    value={selectedCourseId} 
+                    onValueChange={(value) => {
+                      setSelectedCourseId(value)
+                      setCurrentPage(0) // Reset to first page when filtering
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Courses" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Courses</SelectItem>
+                      {allCourses
+                        .filter(c => c.isPublished && c.status !== 'ARCHIVED')
+                        .map(course => (
+                          <SelectItem key={course.id} value={course.id}>
+                            {course.title}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label>Institute</Label>
                   <Select value={selectedInstituteId} onValueChange={(value) => {
@@ -230,7 +350,7 @@ export default function EnrollmentsPage() {
                     variant="outline" 
                     onClick={clearFilters}
                     className="w-full"
-                    disabled={selectedInstituteId === 'all' && selectedClassId === 'all' && selectedSectionId === 'all'}
+                    disabled={selectedCourseId === 'all' && selectedInstituteId === 'all' && selectedClassId === 'all' && selectedSectionId === 'all' && !searchEmail.trim()}
                   >
                     <X className="h-4 w-4 mr-2" />
                     Clear Filters
@@ -242,7 +362,14 @@ export default function EnrollmentsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>All Enrollments ({filteredEnrollments.length})</CardTitle>
+              <CardTitle>
+                All Enrollments ({totalElements.toLocaleString()})
+                {filteredEnrollments.length < enrollments.length && (
+                  <span className="text-sm font-normal text-gray-500 ml-2">
+                    (Showing {filteredEnrollments.length} of {enrollments.length} on this page)
+                  </span>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {filteredEnrollments.length === 0 ? (
@@ -259,17 +386,20 @@ export default function EnrollmentsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Student ID</TableHead>
+                      <TableHead>Student Email</TableHead>
                       <TableHead>Course</TableHead>
                       <TableHead>Hierarchy</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Enrolled At</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredEnrollments.map((enrollment) => (
                       <TableRow key={enrollment.id}>
-                        <TableCell className="font-medium">{enrollment.studentId}</TableCell>
+                        <TableCell className="font-medium">
+                          {enrollment.studentEmail || enrollment.studentId}
+                        </TableCell>
                         <TableCell>{courses[enrollment.courseId]?.title || enrollment.courseId}</TableCell>
                         <TableCell>
                           <div className="text-sm text-gray-600">
@@ -284,14 +414,136 @@ export default function EnrollmentsPage() {
                         <TableCell>
                           {new Date(enrollment.enrolledAt).toLocaleDateString()}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleUnenrollClick(enrollment)}
+                            disabled={unenrollingId === enrollment.id}
+                          >
+                            {unenrollingId === enrollment.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                            )}
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               )}
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm">Page size:</Label>
+                    <Select
+                      value={pageSize.toString()}
+                      onValueChange={(value) => {
+                        setPageSize(Number(value))
+                        setCurrentPage(0) // Reset to first page when changing page size
+                      }}
+                    >
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10</SelectItem>
+                        <SelectItem value="20">20</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <span className="text-sm text-gray-600">
+                      Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalElements)} of {totalElements.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(0)}
+                      disabled={currentPage === 0 || loading}
+                    >
+                      First
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+                      disabled={currentPage === 0 || loading}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <span className="text-sm text-gray-600 px-2">
+                      Page {currentPage + 1} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+                      disabled={currentPage >= totalPages - 1 || loading}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(totalPages - 1)}
+                      disabled={currentPage >= totalPages - 1 || loading}
+                    >
+                      Last
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
-      </div>
+
+      {/* Unenroll Confirmation Dialog */}
+      <Dialog open={showUnenrollDialog} onOpenChange={setShowUnenrollDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Unenrollment</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to unenroll student {enrollmentToUnenroll?.studentId} from{' '}
+              {enrollmentToUnenroll ? courses[enrollmentToUnenroll.courseId]?.title || enrollmentToUnenroll.courseId : 'this course'}?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowUnenrollDialog(false)
+                setEnrollmentToUnenroll(null)
+              }}
+              disabled={unenrollingId !== null}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleUnenrollConfirm}
+              disabled={unenrollingId !== null}
+            >
+              {unenrollingId ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Unenrolling...
+                </>
+              ) : (
+                'Confirm Unenroll'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }
 

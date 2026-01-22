@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -77,6 +78,21 @@ public class EnrollmentController {
         return ResponseEntity.ok(enrollments);
     }
 
+    @GetMapping("/enrollments/all")
+    @Operation(summary = "List all enrollments (admin)", description = "Get all enrollments in the tenant (admin/instructor only)")
+    public ResponseEntity<List<EnrollmentDTO>> getAllEnrollments() {
+        List<EnrollmentDTO> enrollments = enrollmentService.getAllEnrollments();
+        return ResponseEntity.ok(enrollments);
+    }
+
+    @GetMapping("/enrollments/all/paged")
+    @Operation(summary = "List all enrollments with pagination (admin)", description = "Get paginated enrollments in the tenant (admin/instructor only)")
+    public ResponseEntity<Page<EnrollmentDTO>> getAllEnrollments(
+            @PageableDefault(size = 20, sort = "enrolledAt", direction = org.springframework.data.domain.Sort.Direction.DESC) Pageable pageable) {
+        Page<EnrollmentDTO> enrollments = enrollmentService.getAllEnrollments(pageable);
+        return ResponseEntity.ok(enrollments);
+    }
+
     @GetMapping("/courses/{courseId}/enrolled")
     @Operation(summary = "Check enrollment", description = "Check if current student is enrolled in a course")
     public ResponseEntity<java.util.Map<String, Boolean>> isEnrolled(@PathVariable String courseId) {
@@ -93,6 +109,13 @@ public class EnrollmentController {
     public ResponseEntity<Void> unenroll(@PathVariable String courseId) {
         String studentId = UserUtil.getCurrentUserId();
         enrollmentService.unenroll(studentId, courseId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/enrollments/{enrollmentId}")
+    @Operation(summary = "Delete enrollment (admin)", description = "Delete an enrollment by ID (admin/instructor only)")
+    public ResponseEntity<Void> deleteEnrollment(@PathVariable String enrollmentId) {
+        enrollmentService.deleteEnrollment(enrollmentId);
         return ResponseEntity.noContent().build();
     }
 

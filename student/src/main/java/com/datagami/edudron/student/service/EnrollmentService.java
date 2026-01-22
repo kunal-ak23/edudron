@@ -39,7 +39,10 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -387,6 +390,111 @@ public class EnrollmentService {
         List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndCourseId(clientId, courseId);
         return enrollments.stream().map(this::toDTO).collect(Collectors.toList());
     }
+
+    /**
+     * Get all enrollments for the current tenant (admin operation)
+     * Filters out placeholder enrollments
+     */
+    public List<EnrollmentDTO> getAllEnrollments() {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        List<Enrollment> allEnrollments = enrollmentRepository.findByClientId(clientId);
+        
+        // Filter out placeholder enrollments
+        List<Enrollment> realEnrollments = allEnrollments.stream()
+            .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+            .collect(Collectors.toList());
+        
+        log.info("Getting all enrollments for tenant {}: Found {} total, {} real enrollments (excluding placeholders)", 
+            clientId, allEnrollments.size(), realEnrollments.size());
+        
+        // Get unique student IDs
+        Set<String> uniqueStudentIds = realEnrollments.stream()
+            .map(Enrollment::getStudentId)
+            .collect(Collectors.toSet());
+        
+        // Batch fetch student emails
+        Map<String, String> studentEmailMap = fetchStudentEmails(uniqueStudentIds);
+        
+        // Convert to DTOs with emails
+        return realEnrollments.stream()
+            .map(enrollment -> {
+                EnrollmentDTO dto = toDTO(enrollment);
+                dto.setStudentEmail(studentEmailMap.get(enrollment.getStudentId()));
+                return dto;
+            })
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Get all enrollments with pagination (admin operation)
+     * Filters out placeholder enrollments and includes student emails
+     */
+    public Page<EnrollmentDTO> getAllEnrollments(Pageable pageable) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Get paginated enrollments
+        Page<Enrollment> enrollmentsPage = enrollmentRepository.findByClientId(clientId, pageable);
+        
+        // Filter out placeholder enrollments from current page
+        List<Enrollment> realEnrollments = enrollmentsPage.getContent().stream()
+            .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+            .collect(Collectors.toList());
+        
+        // Get total count of real enrollments (excluding placeholders)
+        // Note: This is an approximation - we filter after pagination
+        // For exact count, we'd need a custom query, but this works for most cases
+        long totalRealEnrollments = enrollmentsPage.getTotalElements();
+        
+        // Get unique student IDs from current page
+        Set<String> uniqueStudentIds = realEnrollments.stream()
+            .map(Enrollment::getStudentId)
+            .collect(Collectors.toSet());
+        
+        // Batch fetch student emails
+        Map<String, String> studentEmailMap = fetchStudentEmails(uniqueStudentIds);
+        
+        // Convert to DTOs with emails
+        List<EnrollmentDTO> dtoList = realEnrollments.stream()
+            .map(enrollment -> {
+                EnrollmentDTO dto = toDTO(enrollment);
+                dto.setStudentEmail(studentEmailMap.get(enrollment.getStudentId()));
+                return dto;
+            })
+            .collect(Collectors.toList());
+        
+        // Create new Page with filtered content
+        // Note: totalElements is approximate since we filter after pagination
+        return new PageImpl<>(dtoList, pageable, totalRealEnrollments);
+    }
+
+    /**
+     * Batch fetch student emails for given student IDs
+     */
+    private Map<String, String> fetchStudentEmails(Set<String> studentIds) {
+        Map<String, String> studentEmailMap = new HashMap<>();
+        for (String studentId : studentIds) {
+            try {
+                UserDTO user = getUserFromIdentityService(studentId);
+                if (user != null && user.getEmail() != null) {
+                    studentEmailMap.put(studentId, user.getEmail());
+                }
+            } catch (Exception e) {
+                log.debug("Could not fetch email for student {}: {}", studentId, e.getMessage());
+                // Continue - email will be null in DTO
+            }
+        }
+        log.debug("Fetched emails for {}/{} unique students", studentEmailMap.size(), studentIds.size());
+        return studentEmailMap;
+    }
     
     public boolean isEnrolled(String studentId, String courseId) {
         String clientIdStr = TenantContext.getClientId();
@@ -416,6 +524,29 @@ public class EnrollmentService {
         Enrollment enrollment = enrollments.get(0); // Use first (most recent) enrollment if duplicates exist
         
         enrollmentRepository.delete(enrollment);
+    }
+
+    /**
+     * Delete an enrollment by ID (admin operation)
+     */
+    public void deleteEnrollment(String enrollmentId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
+            .orElseThrow(() -> new IllegalArgumentException("Enrollment not found: " + enrollmentId));
+        
+        // Verify enrollment belongs to current tenant
+        if (!enrollment.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Enrollment does not belong to current tenant");
+        }
+        
+        enrollmentRepository.delete(enrollment);
+        log.info("Deleted enrollment {} for student {} in course {}", 
+            enrollmentId, enrollment.getStudentId(), enrollment.getCourseId());
     }
     
     /**

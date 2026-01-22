@@ -75,6 +75,9 @@ export default function CourseDetailPage() {
         coursesApi.getCourse(courseId),
         coursesApi.getChapters(courseId).catch(() => [])
       ])
+      
+      // Backend will return error for unpublished courses for students
+      // If we get here, the course is either published or user is admin/instructor
       setCourse(courseData)
       
       // Load sub-lectures for each section

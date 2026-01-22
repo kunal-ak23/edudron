@@ -12,6 +12,7 @@ public class EnrollmentDTO {
     private String instituteId;
     private String classId;
     private OffsetDateTime enrolledAt;
+    private String studentEmail; // Student email for display purposes
 
     // Constructors
     public EnrollmentDTO() {}
@@ -40,5 +41,8 @@ public class EnrollmentDTO {
 
     public OffsetDateTime getEnrolledAt() { return enrolledAt; }
     public void setEnrolledAt(OffsetDateTime enrolledAt) { this.enrolledAt = enrolledAt; }
+
+    public String getStudentEmail() { return studentEmail; }
+    public void setStudentEmail(String studentEmail) { this.studentEmail = studentEmail; }
 }
 

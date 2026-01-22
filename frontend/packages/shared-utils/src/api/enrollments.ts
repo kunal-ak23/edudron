@@ -3,6 +3,7 @@ import { ApiClient } from './ApiClient'
 export interface Enrollment {
   id: string
   studentId: string
+  studentEmail?: string // Student email for display purposes
   courseId: string
   batchId?: string // Now represents Section ID (kept for backward compatibility)
   instituteId?: string
@@ -78,6 +79,41 @@ export class EnrollmentsApi {
       return response.data
     }
     return []
+  }
+
+  async listAllEnrollments(): Promise<Enrollment[]> {
+    const response = await this.apiClient.get<Enrollment[]>('/api/enrollments/all')
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async listAllEnrollmentsPaginated(page: number = 0, size: number = 20): Promise<{
+    content: Enrollment[]
+    totalElements: number
+    totalPages: number
+    size: number
+    number: number
+  }> {
+    const response = await this.apiClient.get<{
+      content: Enrollment[]
+      totalElements: number
+      totalPages: number
+      size: number
+      number: number
+    }>(`/api/enrollments/all/paged?page=${page}&size=${size}&sort=enrolledAt,desc`)
+    
+    // Handle Spring Data Page response structure
+    if (response.data && response.data.content) {
+      return response.data
+    }
+    
+    // Fallback structure
+    return {
+      content: Array.isArray(response.data) ? response.data : [],
+      totalElements: 0,
+      totalPages: 0,
+      size: size,
+      number: page
+    }
   }
 
   async getEnrollment(id: string): Promise<Enrollment> {
@@ -194,6 +230,26 @@ export class EnrollmentsApi {
       { courseIds }
     )
     return Array.isArray(response.data) ? response.data : []
+  }
+
+  // Bulk unenrollment methods
+  async unenrollClassFromCourse(classId: string, courseId: string): Promise<BulkEnrollmentResult> {
+    const response = await this.apiClient.delete<BulkEnrollmentResult>(
+      `/api/classes/${classId}/enroll/${courseId}`
+    )
+    return response.data
+  }
+
+  async unenrollSectionFromCourse(sectionId: string, courseId: string): Promise<BulkEnrollmentResult> {
+    const response = await this.apiClient.delete<BulkEnrollmentResult>(
+      `/api/sections/${sectionId}/enroll/${courseId}`
+    )
+    return response.data
+  }
+
+  // Admin enrollment management
+  async deleteEnrollment(enrollmentId: string): Promise<void> {
+    await this.apiClient.delete(`/api/enrollments/${enrollmentId}`)
   }
 }
 

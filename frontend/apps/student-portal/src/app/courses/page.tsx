@@ -95,25 +95,20 @@ export default function CoursesPage() {
           .filter((courseId): courseId is string => courseId != null && courseId !== '')
       )
       
-      // Fetch all courses (including drafts) to check for enrolled draft courses
-      const allCourses = await coursesApi.listCourses().catch(() => coursesData)
-      
-      // Filter courses based on self-enrollment status
+      // Backend now filters unpublished courses for students, so we can use the published courses directly
+      // For students with self-enrollment disabled, filter to only enrolled courses
       let visibleCourses: Course[]
       if (currentUser?.role === 'STUDENT' && !isSelfEnrollmentEnabled) {
-        // If self-enrollment is disabled, only show enrolled courses (even if draft)
-        visibleCourses = allCourses.filter(course => {
+        // If self-enrollment is disabled, only show enrolled courses
+        // Backend already ensures only published courses are returned
+        visibleCourses = coursesData.filter(course => {
           const isEnrolled = enrolledCourseIds.has(course.id)
           return isEnrolled
         })
       } else {
-        // If self-enrollment is enabled OR user is admin/instructor, show published courses OR enrolled courses (even if draft)
-        visibleCourses = allCourses.filter(course => {
-          const isPublished = course.isPublished
-          const isEnrolled = enrolledCourseIds.has(course.id)
-          const shouldShow = isPublished || isEnrolled
-          return shouldShow
-        })
+        // For students with self-enrollment enabled OR admins/instructors
+        // Backend already filters to published courses for students
+        visibleCourses = coursesData
       }
       
       setCourses(visibleCourses)

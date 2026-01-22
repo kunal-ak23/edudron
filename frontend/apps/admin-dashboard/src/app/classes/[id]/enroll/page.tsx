@@ -93,10 +93,9 @@ export default function ClassEnrollPage() {
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [courses, setCourses] = useState<Course[]>([])
-  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([])
+  const [enrolledCourseIds, setEnrolledCourseIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
-  const [enrolling, setEnrolling] = useState(false)
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [processingCourseId, setProcessingCourseId] = useState<string | null>(null)
   const [result, setResult] = useState<BulkEnrollmentResult | null>(null)
   const [studentCount, setStudentCount] = useState(0)
 
@@ -129,6 +128,17 @@ export default function ClassEnrollPage() {
       // Estimate student count (students with enrollments in this class)
       // This is an approximation - actual count would require API call
       setStudentCount(sectionsData.reduce((sum, s) => sum + (s.studentCount || 0), 0))
+
+      // Load existing enrollments to see which courses are already enrolled
+      try {
+        const enrollments = await enrollmentsApi.listEnrollments()
+        const classEnrollments = enrollments.filter(e => e.classId === classId)
+        const enrolledIds = new Set(classEnrollments.map(e => e.courseId))
+        setEnrolledCourseIds(enrolledIds)
+      } catch (err) {
+        console.error('Error loading existing enrollments:', err)
+        // Continue without pre-populating enrolled courses
+      }
     } catch (err: any) {
       console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
@@ -148,49 +158,64 @@ export default function ClassEnrollPage() {
     }
   }, [classId, loadData])
 
-  const handleEnroll = async () => {
-    if (selectedCourseIds.length === 0) {
-      toast({
-        variant: 'destructive',
-        title: 'No courses selected',
-        description: 'Please select at least one course',
-      })
-      return
-    }
+  const handleCourseToggle = async (courseId: string, isCurrentlyEnrolled: boolean) => {
+    if (processingCourseId === courseId) return // Prevent double-clicks
 
-    setEnrolling(true)
+    setProcessingCourseId(courseId)
     try {
-      const results = await enrollmentsApi.enrollClassToCourses(classId, selectedCourseIds)
-      
-      // Aggregate results
-      const aggregated: BulkEnrollmentResult = {
-        totalStudents: results.reduce((sum, r) => sum + (r.totalStudents || 0), 0),
-        enrolledStudents: results.reduce((sum, r) => sum + (r.enrolledStudents || 0), 0),
-        skippedStudents: results.reduce((sum, r) => sum + (r.skippedStudents || 0), 0),
-        failedStudents: results.reduce((sum, r) => sum + (r.failedStudents || 0), 0),
-        errorMessages: results.flatMap(r => r.errorMessages || []),
+      if (isCurrentlyEnrolled) {
+        // Unenroll from course
+        const unenrollResult = await enrollmentsApi.unenrollClassFromCourse(classId, courseId)
+        
+        // Update enrolled courses set
+        setEnrolledCourseIds(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(courseId)
+          return newSet
+        })
+
+        toast({
+          title: 'Unenrollment completed',
+          description: `Successfully unenrolled ${unenrollResult.totalStudents - unenrollResult.failedStudents} students from the course`,
+        })
+
+        if (unenrollResult.failedStudents > 0) {
+          toast({
+            variant: 'destructive',
+            title: 'Some unenrollments failed',
+            description: `${unenrollResult.failedStudents} students could not be unenrolled`,
+          })
+        }
+      } else {
+        // Enroll in course
+        const enrollResult = await enrollmentsApi.enrollClassToCourse(classId, courseId)
+        
+        // Update enrolled courses set
+        setEnrolledCourseIds(prev => new Set(prev).add(courseId))
+
+        toast({
+          title: 'Enrollment completed',
+          description: `Successfully enrolled ${enrollResult.enrolledStudents} students in the course`,
+        })
+
+        if (enrollResult.failedStudents > 0) {
+          toast({
+            variant: 'destructive',
+            title: 'Some enrollments failed',
+            description: `${enrollResult.failedStudents} students could not be enrolled`,
+          })
+        }
       }
-      
-      setResult(aggregated)
-      setShowConfirmDialog(false)
-      
-      toast({
-        title: 'Enrollment completed',
-        description: `Successfully enrolled ${aggregated.enrolledStudents} students in ${selectedCourseIds.length} course(s)`,
-      })
-      
-      // Reset selection
-      setSelectedCourseIds([])
     } catch (err: any) {
-      console.error('Error enrolling class:', err)
+      console.error(`Error ${isCurrentlyEnrolled ? 'unenrolling' : 'enrolling'} class:`, err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
-        title: 'Enrollment failed',
+        title: `${isCurrentlyEnrolled ? 'Unenrollment' : 'Enrollment'} failed`,
         description: errorMessage,
       })
     } finally {
-      setEnrolling(false)
+      setProcessingCourseId(null)
     }
   }
 
@@ -257,9 +282,9 @@ export default function ClassEnrollPage() {
           {/* Course Selection */}
           <Card>
             <CardHeader>
-              <CardTitle>Select Courses</CardTitle>
+              <CardTitle>Manage Course Enrollments</CardTitle>
               <CardDescription>
-                Select courses to enroll all students in this class. Only courses assigned to this class are shown.
+                Toggle courses to enroll or unenroll all students in this class. Only courses assigned to this class are shown.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -272,130 +297,50 @@ export default function ClassEnrollPage() {
                 </div>
               ) : (
                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {courses.map((course) => (
-                    <div
-                      key={course.id}
-                      className="flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer"
-                      onClick={() => {
-                        if (selectedCourseIds.includes(course.id)) {
-                          setSelectedCourseIds(selectedCourseIds.filter(id => id !== course.id))
-                        } else {
-                          setSelectedCourseIds([...selectedCourseIds, course.id])
-                        }
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedCourseIds.includes(course.id)}
-                        onChange={() => {}}
-                        className="rounded"
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium">{course.title}</p>
-                        {course.description && (
-                          <p className="text-sm text-gray-500 line-clamp-1">
-                            {toPlainText(course.description)}
-                          </p>
+                  {courses.map((course) => {
+                    const isEnrolled = enrolledCourseIds.has(course.id)
+                    const isProcessing = processingCourseId === course.id
+                    return (
+                      <div
+                        key={course.id}
+                        className={`flex items-center space-x-2 p-3 border rounded-lg hover:bg-gray-50 ${
+                          isProcessing ? 'opacity-50 cursor-wait' : 'cursor-pointer'
+                        }`}
+                        onClick={() => !isProcessing && handleCourseToggle(course.id, isEnrolled)}
+                      >
+                        {isProcessing ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={isEnrolled}
+                            onChange={() => handleCourseToggle(course.id, isEnrolled)}
+                            className="rounded"
+                            disabled={isProcessing}
+                          />
                         )}
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{course.title}</p>
+                            {isEnrolled && (
+                              <Badge variant="default" className="text-xs">Enrolled</Badge>
+                            )}
+                          </div>
+                          {course.description && (
+                            <p className="text-sm text-gray-500 line-clamp-1">
+                              {toPlainText(course.description)}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Action */}
-          <div className="flex justify-end">
-            <Button
-              onClick={() => setShowConfirmDialog(true)}
-              disabled={selectedCourseIds.length === 0 || enrolling}
-            >
-              <Users className="mr-2 h-4 w-4" />
-              Enroll Class to {selectedCourseIds.length} Course(s)
-            </Button>
-          </div>
-
-          {/* Results */}
-          {result && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Enrollment Results</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <div className="text-2xl font-bold text-gray-900">
-                      {result.totalStudents}
-                    </div>
-                    <div className="text-sm text-gray-600">Total Students</div>
-                  </div>
-                  <div className="text-center p-4 bg-green-50 rounded-lg">
-                    <div className="text-2xl font-bold text-green-600">
-                      {result.enrolledStudents}
-                    </div>
-                    <div className="text-sm text-gray-600">Enrolled</div>
-                  </div>
-                  <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                    <div className="text-2xl font-bold text-yellow-600">
-                      {result.skippedStudents}
-                    </div>
-                    <div className="text-sm text-gray-600">Skipped</div>
-                  </div>
-                  <div className="text-center p-4 bg-red-50 rounded-lg">
-                    <div className="text-2xl font-bold text-red-600">
-                      {result.failedStudents}
-                    </div>
-                    <div className="text-sm text-gray-600">Failed</div>
-                  </div>
-                </div>
-                {result.errorMessages && result.errorMessages.length > 0 && (
-                  <div className="mt-4">
-                    <h4 className="font-semibold mb-2">Errors:</h4>
-                    <ul className="list-disc list-inside text-sm text-red-600">
-                      {result.errorMessages.map((msg, idx) => (
-                        <li key={idx}>{msg}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
         </div>
-
-        {/* Confirmation Dialog */}
-        <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Confirm Enrollment</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to enroll all students in this class to{' '}
-                {selectedCourseIds.length} course(s)? This will enroll approximately{' '}
-                {studentCount} students.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setShowConfirmDialog(false)}
-                disabled={enrolling}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleEnroll} disabled={enrolling}>
-                {enrolling ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Enrolling...
-                  </>
-                ) : (
-                  'Confirm Enrollment'
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
   )
 }
