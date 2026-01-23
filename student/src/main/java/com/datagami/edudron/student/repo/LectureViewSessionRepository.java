@@ -127,9 +127,9 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
         SELECT 
             COUNT(*) as totalSessions,
             COUNT(DISTINCT s.student_id) as uniqueStudents,
-            AVG(CASE WHEN s.duration_seconds IS NOT NULL AND s.session_ended_at IS NOT NULL 
-                THEN s.duration_seconds ELSE NULL END) as avgDuration,
-            SUM(CASE WHEN s.is_completed_in_session = true THEN 1 ELSE 0 END) as completedSessions
+            COALESCE(AVG(CASE WHEN s.duration_seconds IS NOT NULL AND s.session_ended_at IS NOT NULL 
+                THEN s.duration_seconds ELSE NULL END), 0) as avgDuration,
+            SUM(CASE WHEN s.is_completed_in_session IS TRUE THEN 1 ELSE 0 END) as completedSessions
         FROM student.lecture_view_sessions s
         WHERE s.client_id = CAST(:clientId AS uuid) AND s.course_id = :courseId
         """, nativeQuery = true)

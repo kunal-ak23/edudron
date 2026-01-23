@@ -12,6 +12,7 @@ import com.datagami.edudron.student.repo.LectureViewSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -80,6 +81,9 @@ public class LectureViewSessionService {
         log.info("[Session Service] Successfully started lecture view session: sessionId={}, studentId={}, lectureId={}, enrollmentId={}", 
             saved.getId(), studentId, request.getLectureId(), enrollment.getId());
         
+        // Invalidate course analytics cache when new session is created
+        evictCourseAnalyticsCache(saved.getCourseId());
+        
         return toDTO(saved);
     }
     
@@ -119,6 +123,8 @@ public class LectureViewSessionService {
             if (needsUpdate) {
                 log.info("[Session Service] Updating already-ended session with new progress/completion: sessionId={}", sessionId);
                 session = sessionRepository.save(session);
+                // Invalidate course analytics cache when session is updated
+                evictCourseAnalyticsCache(session.getCourseId());
             }
             
             return toDTO(session);
@@ -139,6 +145,9 @@ public class LectureViewSessionService {
         LectureViewSession saved = sessionRepository.save(session);
         log.info("[Session Service] Successfully ended lecture view session: sessionId={}, lectureId={}, studentId={}, duration={}s, isCompleted={}", 
             saved.getId(), saved.getLectureId(), saved.getStudentId(), saved.getDurationSeconds(), saved.getIsCompletedInSession());
+        
+        // Invalidate course analytics cache when session is updated (ended)
+        evictCourseAnalyticsCache(saved.getCourseId());
         
         // Log video watch progress event
         int progressPercent = saved.getProgressAtEnd() != null ? saved.getProgressAtEnd().intValue() : 0;
@@ -216,6 +225,15 @@ public class LectureViewSessionService {
         }
         
         return sessions.stream().map(this::toDTO).collect(Collectors.toList());
+    }
+    
+    /**
+     * Evict course analytics cache for a specific course.
+     * This is called when sessions are created or updated to ensure analytics are fresh.
+     */
+    @CacheEvict(value = "courseAnalytics", key = "#courseId")
+    public void evictCourseAnalyticsCache(String courseId) {
+        log.debug("[Session Service] Evicting course analytics cache for courseId={}", courseId);
     }
     
     private LectureViewSessionDTO toDTO(LectureViewSession session) {

@@ -154,19 +154,22 @@ public class AnalyticsService {
         // Get course-level aggregates from database (OPTIMIZED: database-level aggregation)
         Object[] courseAggregates = sessionRepository.getCourseAggregates(clientId, courseId);
         if (courseAggregates != null && courseAggregates.length >= 4) {
-            dto.setTotalViewingSessions(((Number) courseAggregates[0]).longValue());
-            dto.setUniqueStudentsEngaged(((Number) courseAggregates[1]).longValue());
+            long totalSessions = courseAggregates[0] != null ? ((Number) courseAggregates[0]).longValue() : 0L;
+            long uniqueStudents = courseAggregates[1] != null ? ((Number) courseAggregates[1]).longValue() : 0L;
             Double avgDuration = courseAggregates[2] != null ? ((Number) courseAggregates[2]).doubleValue() : 0.0;
+            long completedSessions = courseAggregates[3] != null ? ((Number) courseAggregates[3]).longValue() : 0L;
+            
+            dto.setTotalViewingSessions(totalSessions);
+            dto.setUniqueStudentsEngaged(uniqueStudents);
             dto.setAverageTimePerLectureSeconds(avgDuration.intValue());
             
-            long completedSessions = ((Number) courseAggregates[3]).longValue();
-            long totalSessions = ((Number) courseAggregates[0]).longValue();
             BigDecimal completionRate = totalSessions > 0 ?
                 BigDecimal.valueOf(completedSessions)
                     .divide(BigDecimal.valueOf(totalSessions), 4, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100)) : BigDecimal.ZERO;
             dto.setOverallCompletionRate(completionRate);
         } else {
+            // If query returns null or insufficient results, set to zero
             dto.setTotalViewingSessions(0L);
             dto.setUniqueStudentsEngaged(0L);
             dto.setAverageTimePerLectureSeconds(0);
