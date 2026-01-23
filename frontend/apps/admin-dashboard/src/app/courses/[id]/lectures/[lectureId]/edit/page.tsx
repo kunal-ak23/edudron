@@ -945,11 +945,10 @@ export default function LectureEditPage() {
                                   {attachment.fileUrl && (
                                     <a
                                       href={attachment.fileUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
+                                      download
                                       className="text-primary hover:underline text-sm"
                                     >
-                                      View
+                                      Download
                                     </a>
                                   )}
                                   <Button
@@ -1011,7 +1010,7 @@ export default function LectureEditPage() {
                             const input = document.createElement('input')
                             input.type = 'file'
                             input.multiple = true
-                            input.accept = '.pdf,.doc,.docx,.txt,.mp3,.wav,.ogg,.jpg,.jpeg,.png,.gif,.zip,.rar,.csv,.xlsx,.xls'
+                            // No file type restrictions - accept all file types
                             input.onchange = async (e) => {
                               const files = Array.from((e.target as HTMLInputElement).files || [])
                               if (files.length > 0) {
