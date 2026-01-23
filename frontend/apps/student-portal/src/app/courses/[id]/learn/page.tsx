@@ -98,48 +98,72 @@ export default function LearnPage() {
     }
   }
 
-  const buildWatermarkedPdfUrl = (fileUrl?: string) => {
+  const buildWatermarkedPdfUrl = (fileUrl?: string, forDownload: boolean = true) => {
     const blob = extractBlobName(fileUrl)
     const email = (user as any)?.email as string | undefined
     if (!blob || !email) return null
     const params = new URLSearchParams({ blob, email })
+    if (forDownload) {
+      params.append('download', 'true')
+    }
     return `/api/pdf?${params.toString()}`
   }
 
-  // Helper function to download files directly from Azure blob storage
-  const downloadFile = async (fileUrl: string, fileName: string) => {
+  // Helper function to download files
+  // For PDFs: uses watermarked version through API
+  // For other files: downloads directly from Azure blob storage
+  const downloadFile = async (fileUrl: string, fileName: string, isPDF: boolean = false) => {
     try {
       if (!fileUrl) return
 
-      // Always download directly from the original file URL (not through PDF API)
-      // Fetch the file and create a blob URL for download
-      const response = await fetch(fileUrl, { 
-        mode: 'cors',
-        credentials: 'omit'
-      })
+      let downloadUrl = fileUrl
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch file: ${response.statusText}`)
+      // For PDFs, use the watermarked version through the API
+      if (isPDF) {
+        const watermarkedUrl = buildWatermarkedPdfUrl(fileUrl)
+        if (watermarkedUrl) {
+          downloadUrl = watermarkedUrl
+        }
       }
-      
-      const blob = await response.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
-      
-      // Create download link
-      const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      // Clean up blob URL after a short delay
-      setTimeout(() => {
-        window.URL.revokeObjectURL(blobUrl)
-      }, 100)
+
+      // For same-origin URLs (like watermarked PDF API), use download attribute directly
+      if (downloadUrl.startsWith('/') || downloadUrl.startsWith(window.location.origin)) {
+        const link = document.createElement('a')
+        link.href = downloadUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+      } else {
+        // For cross-origin URLs (Azure blob storage), fetch and create blob
+        const response = await fetch(downloadUrl, { 
+          mode: 'cors',
+          credentials: 'omit'
+        })
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch file: ${response.statusText}`)
+        }
+        
+        const blob = await response.blob()
+        const blobUrl = window.URL.createObjectURL(blob)
+        
+        // Create download link
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        // Clean up blob URL after a short delay
+        setTimeout(() => {
+          window.URL.revokeObjectURL(blobUrl)
+        }, 100)
+      }
     } catch (error) {
       console.error('Failed to download file:', error)
-      // Fallback: try direct download link (may not work for CORS-protected files)
+      // Fallback: try direct download link
       try {
         const link = document.createElement('a')
         link.href = fileUrl
@@ -1579,7 +1603,7 @@ export default function LearnPage() {
                                       key={attachment.id}
                                       onClick={() => {
                                         if (!fileUrl) return
-                                        downloadFile(fileUrl, fileName)
+                                        downloadFile(fileUrl, fileName, isPDF)
                                       }}
                                       className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors"
                                     >
@@ -1846,7 +1870,7 @@ export default function LearnPage() {
                                         key={attachment.id}
                                         onClick={() => {
                                           if (!fileUrl) return
-                                          downloadFile(fileUrl, fileName)
+                                          downloadFile(fileUrl, fileName, isPDF)
                                         }}
                                         className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors"
                                       >

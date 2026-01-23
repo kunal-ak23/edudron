@@ -98,11 +98,16 @@ export async function GET(req: NextRequest) {
     // Get the filename from blob name for Content-Disposition
     const filename = blobName.split("/").pop() || "document.pdf";
 
+    // Check if download parameter is present to determine disposition
+    const download = searchParams.get("download");
+    const disposition = download === "true" 
+      ? `attachment; filename="${filename}"` 
+      : `inline; filename="${filename}"`;
+
     return new NextResponse(Buffer.from(watermarkedPdf), {
       headers: {
         "Content-Type": "application/pdf",
-        // inline (not attachment) to discourage "download as default"
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": disposition,
         "Cache-Control": "private, no-store",
         // optional hardening
         "X-Content-Type-Options": "nosniff",
