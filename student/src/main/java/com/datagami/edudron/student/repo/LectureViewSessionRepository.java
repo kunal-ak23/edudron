@@ -142,13 +142,35 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
     /**
      * Wrapper method that returns Object[] for backward compatibility.
      * Extracts the first row from the list result.
+     * 
+     * This wrapper is necessary because Spring Data JPA can return null for single Object[] 
+     * native queries, but List<Object[]> queries are more reliable.
      */
     default Object[] getCourseAggregates(UUID clientId, String courseId) {
+        // Call the List-based query (more reliable than single Object[])
         List<Object[]> results = getCourseAggregatesList(clientId, courseId);
+        
+        // Log what we received (using System.out since interfaces can't use loggers)
+        System.out.println(String.format(
+            "[Repository Wrapper] getCourseAggregates called for clientId=%s, courseId=%s", 
+            clientId, courseId));
+        System.out.println(String.format(
+            "[Repository Wrapper] getCourseAggregatesList returned: %s (null=%s, empty=%s)", 
+            results, 
+            results == null, 
+            results != null && results.isEmpty()));
+        
         if (results != null && !results.isEmpty()) {
-            return results.get(0);
+            Object[] firstRow = results.get(0);
+            System.out.println(String.format(
+                "[Repository Wrapper] ✅ Extracting first row: length=%d, values=[%s, %s, %s, %s]", 
+                firstRow.length,
+                firstRow[0], firstRow[1], firstRow[2], firstRow[3]));
+            return firstRow;
         }
+        
         // Return array with zeros if no results (shouldn't happen for aggregate queries, but handle gracefully)
+        System.out.println("[Repository Wrapper] ⚠️ No results found, returning default zeros array");
         return new Object[]{0L, 0L, 0.0, 0L};
     }
 

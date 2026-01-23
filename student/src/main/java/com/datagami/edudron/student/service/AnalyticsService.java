@@ -156,19 +156,21 @@ public class AnalyticsService {
         log.debug("Fetching course aggregates for courseId={}, clientId={}", courseId, clientId);
         Object[] courseAggregates = null;
         try {
+            // Call the wrapper method which uses List<Object[]> internally
+            log.debug("Calling getCourseAggregates wrapper method (uses List<Object[]> internally)");
             courseAggregates = sessionRepository.getCourseAggregates(clientId, courseId);
             
             if (courseAggregates != null) {
-                log.debug("Course aggregates query returned array of length: {}", courseAggregates.length);
+                log.info("✅ Wrapper method SUCCESS: Course aggregates query returned array of length: {}", courseAggregates.length);
                 for (int i = 0; i < courseAggregates.length; i++) {
-                    log.debug("  courseAggregates[{}] = {} (type: {})", i, courseAggregates[i], 
+                    log.info("  courseAggregates[{}] = {} (type: {})", i, courseAggregates[i], 
                         courseAggregates[i] != null ? courseAggregates[i].getClass().getName() : "null");
                 }
             } else {
-                log.warn("Course aggregates query returned NULL for courseId={}, clientId={}. This should not happen for aggregate queries.", courseId, clientId);
+                log.warn("❌ Wrapper method returned NULL for courseId={}, clientId={}. This should not happen - wrapper should always return an array.", courseId, clientId);
             }
         } catch (Exception e) {
-            log.error("Error executing course aggregates query for courseId={}, clientId={}: {}", courseId, clientId, e.getMessage(), e);
+            log.error("❌ Error executing course aggregates query for courseId={}, clientId={}: {}", courseId, clientId, e.getMessage(), e);
         }
         
         if (courseAggregates != null && courseAggregates.length >= 4) {
