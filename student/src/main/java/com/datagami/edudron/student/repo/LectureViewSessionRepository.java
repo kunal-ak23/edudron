@@ -9,7 +9,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -122,21 +121,36 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
     /**
      * Get course-level aggregated metrics.
      * Using native SQL query to ensure correct schema resolution (same as getActivityTimelineByCourse).
+     * Returns List<Object[]> to handle cases where Spring Data JPA might return null for single Object[].
+     * We'll take the first element if available.
      */
     @Query(value = """
         SELECT 
-            COUNT(*) as totalSessions,
-            COUNT(DISTINCT s.student_id) as uniqueStudents,
+            COUNT(*)::bigint as totalSessions,
+            COUNT(DISTINCT s.student_id)::bigint as uniqueStudents,
             COALESCE(AVG(CASE WHEN s.duration_seconds IS NOT NULL AND s.session_ended_at IS NOT NULL 
-                THEN s.duration_seconds ELSE NULL END), 0) as avgDuration,
-            SUM(CASE WHEN s.is_completed_in_session IS TRUE THEN 1 ELSE 0 END) as completedSessions
+                THEN s.duration_seconds ELSE NULL END), 0.0)::double precision as avgDuration,
+            COALESCE(SUM(CASE WHEN s.is_completed_in_session IS TRUE THEN 1 ELSE 0 END), 0)::bigint as completedSessions
         FROM student.lecture_view_sessions s
         WHERE s.client_id = CAST(:clientId AS uuid) AND s.course_id = :courseId
         """, nativeQuery = true)
-    Object[] getCourseAggregates(
+    List<Object[]> getCourseAggregatesList(
         @Param("clientId") UUID clientId,
         @Param("courseId") String courseId
     );
+    
+    /**
+     * Wrapper method that returns Object[] for backward compatibility.
+     * Extracts the first row from the list result.
+     */
+    default Object[] getCourseAggregates(UUID clientId, String courseId) {
+        List<Object[]> results = getCourseAggregatesList(clientId, courseId);
+        if (results != null && !results.isEmpty()) {
+            return results.get(0);
+        }
+        // Return array with zeros if no results (shouldn't happen for aggregate queries, but handle gracefully)
+        return new Object[]{0L, 0L, 0.0, 0L};
+    }
 
     /**
      * Get activity timeline data aggregated by day.

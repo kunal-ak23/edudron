@@ -128,6 +128,7 @@ public class AnalyticsService {
     
     @Cacheable(value = "courseAnalytics", key = "#courseId", unless = "#result == null")
     public CourseAnalyticsDTO getCourseEngagementMetrics(String courseId) {
+        log.debug("Getting course engagement metrics for courseId={} (cache key: {})", courseId, courseId);
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -152,12 +153,32 @@ public class AnalyticsService {
         }
         
         // Get course-level aggregates from database (OPTIMIZED: database-level aggregation)
-        Object[] courseAggregates = sessionRepository.getCourseAggregates(clientId, courseId);
+        log.debug("Fetching course aggregates for courseId={}, clientId={}", courseId, clientId);
+        Object[] courseAggregates = null;
+        try {
+            courseAggregates = sessionRepository.getCourseAggregates(clientId, courseId);
+            
+            if (courseAggregates != null) {
+                log.debug("Course aggregates query returned array of length: {}", courseAggregates.length);
+                for (int i = 0; i < courseAggregates.length; i++) {
+                    log.debug("  courseAggregates[{}] = {} (type: {})", i, courseAggregates[i], 
+                        courseAggregates[i] != null ? courseAggregates[i].getClass().getName() : "null");
+                }
+            } else {
+                log.warn("Course aggregates query returned NULL for courseId={}, clientId={}. This should not happen for aggregate queries.", courseId, clientId);
+            }
+        } catch (Exception e) {
+            log.error("Error executing course aggregates query for courseId={}, clientId={}: {}", courseId, clientId, e.getMessage(), e);
+        }
+        
         if (courseAggregates != null && courseAggregates.length >= 4) {
             long totalSessions = courseAggregates[0] != null ? ((Number) courseAggregates[0]).longValue() : 0L;
             long uniqueStudents = courseAggregates[1] != null ? ((Number) courseAggregates[1]).longValue() : 0L;
             Double avgDuration = courseAggregates[2] != null ? ((Number) courseAggregates[2]).doubleValue() : 0.0;
             long completedSessions = courseAggregates[3] != null ? ((Number) courseAggregates[3]).longValue() : 0L;
+            
+            log.info("Course aggregates for courseId={}: totalSessions={}, uniqueStudents={}, avgDuration={}, completedSessions={}", 
+                courseId, totalSessions, uniqueStudents, avgDuration, completedSessions);
             
             dto.setTotalViewingSessions(totalSessions);
             dto.setUniqueStudentsEngaged(uniqueStudents);
@@ -170,6 +191,7 @@ public class AnalyticsService {
             dto.setOverallCompletionRate(completionRate);
         } else {
             // If query returns null or insufficient results, set to zero
+            log.warn("Course aggregates query returned null or insufficient results for courseId={}, setting all values to zero", courseId);
             dto.setTotalViewingSessions(0L);
             dto.setUniqueStudentsEngaged(0L);
             dto.setAverageTimePerLectureSeconds(0);
