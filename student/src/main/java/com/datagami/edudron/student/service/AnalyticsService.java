@@ -128,7 +128,6 @@ public class AnalyticsService {
     
     @Cacheable(value = "courseAnalytics", key = "#courseId", unless = "#result == null")
     public CourseAnalyticsDTO getCourseEngagementMetrics(String courseId) {
-        log.debug("Getting course engagement metrics for courseId={} (cache key: {})", courseId, courseId);
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -153,24 +152,11 @@ public class AnalyticsService {
         }
         
         // Get course-level aggregates from database (OPTIMIZED: database-level aggregation)
-        log.debug("Fetching course aggregates for courseId={}, clientId={}", courseId, clientId);
         Object[] courseAggregates = null;
         try {
-            // Call the wrapper method which uses List<Object[]> internally
-            log.debug("Calling getCourseAggregates wrapper method (uses List<Object[]> internally)");
             courseAggregates = sessionRepository.getCourseAggregates(clientId, courseId);
-            
-            if (courseAggregates != null) {
-                log.info("✅ Wrapper method SUCCESS: Course aggregates query returned array of length: {}", courseAggregates.length);
-                for (int i = 0; i < courseAggregates.length; i++) {
-                    log.info("  courseAggregates[{}] = {} (type: {})", i, courseAggregates[i], 
-                        courseAggregates[i] != null ? courseAggregates[i].getClass().getName() : "null");
-                }
-            } else {
-                log.warn("❌ Wrapper method returned NULL for courseId={}, clientId={}. This should not happen - wrapper should always return an array.", courseId, clientId);
-            }
         } catch (Exception e) {
-            log.error("❌ Error executing course aggregates query for courseId={}, clientId={}: {}", courseId, clientId, e.getMessage(), e);
+            log.error("Error executing course aggregates query for courseId={}, clientId={}: {}", courseId, clientId, e.getMessage(), e);
         }
         
         if (courseAggregates != null && courseAggregates.length >= 4) {
@@ -179,8 +165,6 @@ public class AnalyticsService {
             Double avgDuration = courseAggregates[2] != null ? ((Number) courseAggregates[2]).doubleValue() : 0.0;
             long completedSessions = courseAggregates[3] != null ? ((Number) courseAggregates[3]).longValue() : 0L;
             
-            log.info("Course aggregates for courseId={}: totalSessions={}, uniqueStudents={}, avgDuration={}, completedSessions={}", 
-                courseId, totalSessions, uniqueStudents, avgDuration, completedSessions);
             
             dto.setTotalViewingSessions(totalSessions);
             dto.setUniqueStudentsEngaged(uniqueStudents);
@@ -214,8 +198,9 @@ public class AnalyticsService {
         
         for (LectureEngagementAggregateDTO aggregate : aggregates) {
             LectureMetadata metadata = lectureMetadata.get(aggregate.getLectureId());
-            String lectureTitle = metadata != null && metadata.title != null ? metadata.title :
-                "Lecture " + aggregate.getLectureId().substring(0, Math.min(8, aggregate.getLectureId().length()));
+            String lectureTitle = metadata != null && metadata.title != null && !metadata.title.trim().isEmpty() 
+                ? metadata.title 
+                : "Lecture " + aggregate.getLectureId().substring(0, Math.min(8, aggregate.getLectureId().length()));
             Integer lectureDuration = metadata != null ? metadata.durationSeconds : null;
             
             LectureEngagementSummaryDTO summary = new LectureEngagementSummaryDTO();
