@@ -165,6 +165,12 @@ public class AnalyticsService {
             Double avgDuration = courseAggregates[2] != null ? ((Number) courseAggregates[2]).doubleValue() : 0.0;
             long completedSessions = courseAggregates[3] != null ? ((Number) courseAggregates[3]).longValue() : 0L;
             
+            // Temporary log to verify fix is working (remove after confirming)
+            if (totalSessions == 0 && uniqueStudents == 0) {
+                log.warn("Course aggregates returned zeros for courseId={}. This may indicate cached data. Query result: totalSessions={}, uniqueStudents={}, avgDuration={}, completedSessions={}", 
+                    courseId, totalSessions, uniqueStudents, avgDuration, completedSessions);
+            }
+            
             
             dto.setTotalViewingSessions(totalSessions);
             dto.setUniqueStudentsEngaged(uniqueStudents);
