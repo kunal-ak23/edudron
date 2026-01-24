@@ -302,6 +302,18 @@ export class EnrollmentsApi {
     )
     return response.data
   }
+
+  // Get students by section
+  async getStudentsBySection(sectionId: string): Promise<SectionStudentDTO[]> {
+    const response = await this.apiClient.get<SectionStudentDTO[]>(`/api/sections/${sectionId}/students`)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  // Get students by class
+  async getStudentsByClass(classId: string): Promise<ClassStudentDTO[]> {
+    const response = await this.apiClient.get<ClassStudentDTO[]>(`/api/classes/${classId}/students`)
+    return Array.isArray(response.data) ? response.data : []
+  }
 }
 
 export interface BulkEnrollmentResult {
@@ -311,5 +323,19 @@ export interface BulkEnrollmentResult {
   failedStudents: number
   enrolledStudentIds?: string[]
   errorMessages?: string[]
+}
+
+export interface SectionStudentDTO {
+  id: string
+  name: string
+  email: string
+  phone?: string
+}
+
+export interface ClassStudentDTO {
+  id: string
+  name: string
+  email: string
+  phone?: string
 }
 

@@ -3,6 +3,7 @@ package com.datagami.edudron.student.web;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
 import com.datagami.edudron.student.dto.EnrollmentDTO;
 import com.datagami.edudron.student.dto.SectionStudentDTO;
+import com.datagami.edudron.student.dto.ClassStudentDTO;
 import com.datagami.edudron.student.dto.StudentClassSectionInfoDTO;
 import com.datagami.edudron.student.service.EnrollmentService;
 import com.datagami.edudron.student.util.UserUtil;
@@ -174,6 +175,13 @@ public class EnrollmentController {
     @Operation(summary = "Get students by section", description = "Get all students enrolled in a section")
     public ResponseEntity<List<SectionStudentDTO>> getStudentsBySection(@PathVariable String sectionId) {
         List<SectionStudentDTO> students = enrollmentService.getStudentsBySection(sectionId);
+        return ResponseEntity.ok(students);
+    }
+
+    @GetMapping("/classes/{classId}/students")
+    @Operation(summary = "Get students by class", description = "Get all students enrolled in a class")
+    public ResponseEntity<List<ClassStudentDTO>> getStudentsByClass(@PathVariable String classId) {
+        List<ClassStudentDTO> students = enrollmentService.getStudentsByClass(classId);
         return ResponseEntity.ok(students);
     }
 }

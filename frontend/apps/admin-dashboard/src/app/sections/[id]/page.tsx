@@ -7,13 +7,22 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, Save } from 'lucide-react'
-import { sectionsApi, classesApi, institutesApi } from '@/lib/api'
-import type { Section, CreateSectionRequest, Class, Institute } from '@kunal-ak23/edudron-shared-utils'
+import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone } from 'lucide-react'
+import { sectionsApi, classesApi, institutesApi, enrollmentsApi } from '@/lib/api'
+import type { Section, CreateSectionRequest, Class, Institute, SectionStudentDTO } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
+import { AddStudentToSectionDialog } from '@/components/AddStudentToSectionDialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 export default function SectionDetailPage() {
   const router = useRouter()
@@ -26,6 +35,9 @@ export default function SectionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [members, setMembers] = useState<SectionStudentDTO[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [showAddStudentDialog, setShowAddStudentDialog] = useState(false)
   const [formData, setFormData] = useState<CreateSectionRequest>({
     name: '',
     description: '',
@@ -69,11 +81,29 @@ export default function SectionDetailPage() {
     }
   }, [sectionId, toast, router])
 
+  const loadMembers = useCallback(async () => {
+    try {
+      setMembersLoading(true)
+      const students = await enrollmentsApi.getStudentsBySection(sectionId)
+      setMembers(students)
+    } catch (err: any) {
+      console.error('Error loading members:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to load members',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setMembersLoading(false)
+    }
+  }, [sectionId, toast])
+
   useEffect(() => {
     if (sectionId) {
       loadSection()
+      loadMembers()
     }
-  }, [sectionId, loadSection])
+  }, [sectionId, loadSection, loadMembers])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -238,6 +268,73 @@ export default function SectionDetailPage() {
               </Link>
             </CardContent>
           </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Members ({members.length})</CardTitle>
+                <Button onClick={() => setShowAddStudentDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Student
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {membersLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : members.length === 0 ? (
+                <div className="text-center py-12">
+                  <Users className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-semibold text-gray-900">No members found</h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Add students to this section by enrolling them in a course.
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Phone</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {members.map((member) => (
+                      <TableRow key={member.id}>
+                        <TableCell className="font-medium">{member.name || '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <Mail className="h-4 w-4 mr-2 text-gray-400" />
+                            {member.email}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {member.phone ? (
+                            <div className="flex items-center">
+                              <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                              {member.phone}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+      <AddStudentToSectionDialog
+        open={showAddStudentDialog}
+        onOpenChange={setShowAddStudentDialog}
+        sectionId={sectionId}
+        onSuccess={loadMembers}
+      />
 
       <ConfirmationDialog
         isOpen={showDeleteDialog}

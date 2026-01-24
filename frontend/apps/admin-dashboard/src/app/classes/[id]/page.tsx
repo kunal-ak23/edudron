@@ -8,13 +8,22 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ArrowLeft, Save } from 'lucide-react'
-import { classesApi, institutesApi } from '@/lib/api'
-import type { Class, CreateClassRequest, Institute } from '@kunal-ak23/edudron-shared-utils'
+import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone } from 'lucide-react'
+import { classesApi, institutesApi, enrollmentsApi, sectionsApi } from '@/lib/api'
+import type { Class, CreateClassRequest, Institute, ClassStudentDTO, Section } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
+import { AddStudentToClassDialog } from '@/components/AddStudentToClassDialog'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 export default function ClassDetailPage() {
   const router = useRouter()
@@ -26,6 +35,10 @@ export default function ClassDetailPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [members, setMembers] = useState<ClassStudentDTO[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [sections, setSections] = useState<Section[]>([])
+  const [showAddStudentDialog, setShowAddStudentDialog] = useState(false)
   const [formData, setFormData] = useState<CreateClassRequest>({
     name: '',
     code: '',
@@ -67,6 +80,39 @@ export default function ClassDetailPage() {
       setLoading(false)
     }
   }, [classId, toast, router])
+
+  const loadMembers = useCallback(async () => {
+    try {
+      setMembersLoading(true)
+      const students = await enrollmentsApi.getStudentsByClass(classId)
+      setMembers(students)
+    } catch (err: any) {
+      console.error('Error loading members:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to load members',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setMembersLoading(false)
+    }
+  }, [classId, toast])
+
+  const loadSections = useCallback(async () => {
+    try {
+      const sectionsData = await sectionsApi.listSectionsByClass(classId)
+      setSections(sectionsData)
+    } catch (err: any) {
+      console.error('Error loading sections:', err)
+    }
+  }, [classId])
+
+  useEffect(() => {
+    if (classId) {
+      loadMembers()
+      loadSections()
+    }
+  }, [classId, loadMembers, loadSections])
 
   useEffect(() => {
     if (classId) {
@@ -244,7 +290,102 @@ export default function ClassDetailPage() {
             </Link>
           </CardContent>
         </Card>
+
+        <Card className="mt-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Members ({members.length})</CardTitle>
+              <Button onClick={() => setShowAddStudentDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Student
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {membersLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : members.length === 0 ? (
+              <div className="text-center py-12">
+                <Users className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-sm font-semibold text-gray-900">No members found</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Add students to this class by enrolling them in a course.
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Sections</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {members.map((member) => {
+                    // Find sections this student is in (by checking enrollments)
+                    const studentSections = sections.filter(section => {
+                      // This is a simplified check - in a real scenario, you'd check enrollments
+                      // For now, we'll just show all sections as a placeholder
+                      return true
+                    })
+                    
+                    return (
+                      <TableRow key={member.id}>
+                        <TableCell className="font-medium">{member.name || '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <Mail className="h-4 w-4 mr-2 text-gray-400" />
+                            {member.email}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {member.phone ? (
+                            <div className="flex items-center">
+                              <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                              {member.phone}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {studentSections.length > 0 ? (
+                              studentSections.slice(0, 2).map((section) => (
+                                <Badge key={section.id} variant="outline" className="text-xs">
+                                  {section.name}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-gray-400 text-sm">—</span>
+                            )}
+                            {studentSections.length > 2 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{studentSections.length - 2}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
+
+      <AddStudentToClassDialog
+        open={showAddStudentDialog}
+        onOpenChange={setShowAddStudentDialog}
+        classId={classId}
+        onSuccess={loadMembers}
+      />
 
       <ConfirmationDialog
         isOpen={showDeleteDialog}

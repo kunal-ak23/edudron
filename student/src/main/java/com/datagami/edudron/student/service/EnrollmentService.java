@@ -10,6 +10,7 @@ import com.datagami.edudron.student.domain.Section;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
 import com.datagami.edudron.student.dto.EnrollmentDTO;
 import com.datagami.edudron.student.dto.SectionStudentDTO;
+import com.datagami.edudron.student.dto.ClassStudentDTO;
 import com.datagami.edudron.student.dto.StudentClassSectionInfoDTO;
 import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
@@ -878,6 +879,52 @@ public class EnrollmentService {
                 UserDTO user = getUserFromIdentityService(studentId);
                 if (user != null) {
                     students.add(new SectionStudentDTO(
+                        user.getId(),
+                        user.getName(),
+                        user.getEmail(),
+                        user.getPhone()
+                    ));
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch user details for student {}: {}", studentId, e.getMessage());
+                // Continue with other students even if one fails
+            }
+        }
+        
+        return students;
+    }
+    
+    public List<ClassStudentDTO> getStudentsByClass(String classId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Validate class exists
+        Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
+        
+        // Get all enrollments for this class
+        List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndClassId(clientId, classId);
+        
+        // Extract unique student IDs
+        List<String> studentIds = enrollments.stream()
+            .map(Enrollment::getStudentId)
+            .distinct()
+            .collect(Collectors.toList());
+        
+        if (studentIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Fetch user details from identity service
+        List<ClassStudentDTO> students = new ArrayList<>();
+        for (String studentId : studentIds) {
+            try {
+                UserDTO user = getUserFromIdentityService(studentId);
+                if (user != null) {
+                    students.add(new ClassStudentDTO(
                         user.getId(),
                         user.getName(),
                         user.getEmail(),
