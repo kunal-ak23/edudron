@@ -849,6 +849,11 @@ public class EnrollmentService {
      */
     @Transactional(readOnly = true)
     public List<SectionStudentDTO> getStudentsBySection(String sectionId) {
+        return getStudentsBySection(sectionId, null).getContent();
+    }
+    
+    @Transactional(readOnly = true)
+    public Page<SectionStudentDTO> getStudentsBySection(String sectionId, Pageable pageable) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -869,7 +874,7 @@ public class EnrollmentService {
             .collect(Collectors.toList());
         
         if (studentIds.isEmpty()) {
-            return new ArrayList<>();
+            return new PageImpl<>(new ArrayList<>(), pageable != null ? pageable : Pageable.unpaged(), 0);
         }
         
         // Fetch user details from identity service
@@ -891,10 +896,25 @@ public class EnrollmentService {
             }
         }
         
-        return students;
+        // Apply pagination if pageable is provided
+        if (pageable != null && pageable.isPaged()) {
+            int start = (int) pageable.getOffset();
+            int end = Math.min((start + pageable.getPageSize()), students.size());
+            List<SectionStudentDTO> pagedStudents = start < students.size() 
+                ? students.subList(start, end) 
+                : new ArrayList<>();
+            return new PageImpl<>(pagedStudents, pageable, students.size());
+        }
+        
+        return new PageImpl<>(students, pageable != null ? pageable : Pageable.unpaged(), students.size());
     }
     
     public List<ClassStudentDTO> getStudentsByClass(String classId) {
+        return getStudentsByClass(classId, null).getContent();
+    }
+    
+    @Transactional(readOnly = true)
+    public Page<ClassStudentDTO> getStudentsByClass(String classId, Pageable pageable) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -915,7 +935,7 @@ public class EnrollmentService {
             .collect(Collectors.toList());
         
         if (studentIds.isEmpty()) {
-            return new ArrayList<>();
+            return new PageImpl<>(new ArrayList<>(), pageable != null ? pageable : Pageable.unpaged(), 0);
         }
         
         // Fetch user details from identity service
@@ -937,7 +957,17 @@ public class EnrollmentService {
             }
         }
         
-        return students;
+        // Apply pagination if pageable is provided
+        if (pageable != null && pageable.isPaged()) {
+            int start = (int) pageable.getOffset();
+            int end = Math.min((start + pageable.getPageSize()), students.size());
+            List<ClassStudentDTO> pagedStudents = start < students.size() 
+                ? students.subList(start, end) 
+                : new ArrayList<>();
+            return new PageImpl<>(pagedStudents, pageable, students.size());
+        }
+        
+        return new PageImpl<>(students, pageable != null ? pageable : Pageable.unpaged(), students.size());
     }
     
     /**

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight } from 'lucide-react'
 import { sectionsApi, classesApi, institutesApi, enrollmentsApi } from '@/lib/api'
 import type { Section, CreateSectionRequest, Class, Institute, SectionStudentDTO } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -23,6 +23,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 export default function SectionDetailPage() {
   const router = useRouter()
@@ -38,6 +45,10 @@ export default function SectionDetailPage() {
   const [members, setMembers] = useState<SectionStudentDTO[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [showAddStudentDialog, setShowAddStudentDialog] = useState(false)
+  const [membersCurrentPage, setMembersCurrentPage] = useState(0)
+  const [membersPageSize, setMembersPageSize] = useState(20)
+  const [membersTotalElements, setMembersTotalElements] = useState(0)
+  const [membersTotalPages, setMembersTotalPages] = useState(0)
   const [formData, setFormData] = useState<CreateSectionRequest>({
     name: '',
     description: '',
@@ -84,8 +95,14 @@ export default function SectionDetailPage() {
   const loadMembers = useCallback(async () => {
     try {
       setMembersLoading(true)
-      const students = await enrollmentsApi.getStudentsBySection(sectionId)
-      setMembers(students)
+      const response = await enrollmentsApi.getStudentsBySectionPaginated(
+        sectionId,
+        membersCurrentPage,
+        membersPageSize
+      )
+      setMembers(response.content)
+      setMembersTotalElements(response.totalElements)
+      setMembersTotalPages(response.totalPages)
     } catch (err: any) {
       console.error('Error loading members:', err)
       toast({
@@ -96,7 +113,7 @@ export default function SectionDetailPage() {
     } finally {
       setMembersLoading(false)
     }
-  }, [sectionId, toast])
+  }, [sectionId, membersCurrentPage, membersPageSize, toast])
 
   useEffect(() => {
     if (sectionId) {
@@ -104,6 +121,11 @@ export default function SectionDetailPage() {
       loadMembers()
     }
   }, [sectionId, loadSection, loadMembers])
+
+  // Reset to first page when page size changes
+  useEffect(() => {
+    setMembersCurrentPage(0)
+  }, [membersPageSize])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -272,7 +294,7 @@ export default function SectionDetailPage() {
           <Card className="mt-6">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Members ({members.length})</CardTitle>
+                <CardTitle>Members ({membersTotalElements.toLocaleString()})</CardTitle>
                 <Button onClick={() => setShowAddStudentDialog(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Student
@@ -293,38 +315,108 @@ export default function SectionDetailPage() {
                   </p>
                 </div>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Phone</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {members.map((member) => (
-                      <TableRow key={member.id}>
-                        <TableCell className="font-medium">{member.name || '-'}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center">
-                            <Mail className="h-4 w-4 mr-2 text-gray-400" />
-                            {member.email}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {member.phone ? (
-                            <div className="flex items-center">
-                              <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                              {member.phone}
-                            </div>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </TableCell>
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Phone</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {members.map((member) => (
+                        <TableRow key={member.id}>
+                          <TableCell className="font-medium">{member.name || '-'}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center">
+                              <Mail className="h-4 w-4 mr-2 text-gray-400" />
+                              {member.email}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {member.phone ? (
+                              <div className="flex items-center">
+                                <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                                {member.phone}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  
+                  {/* Pagination Controls */}
+                  {membersTotalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-sm">Page size:</Label>
+                        <Select
+                          value={membersPageSize.toString()}
+                          onValueChange={(value) => {
+                            setMembersPageSize(Number(value))
+                            setMembersCurrentPage(0)
+                          }}
+                        >
+                          <SelectTrigger className="w-20">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="10">10</SelectItem>
+                            <SelectItem value="20">20</SelectItem>
+                            <SelectItem value="50">50</SelectItem>
+                            <SelectItem value="100">100</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <span className="text-sm text-gray-600">
+                          Showing {membersCurrentPage * membersPageSize + 1} to {Math.min((membersCurrentPage + 1) * membersPageSize, membersTotalElements)} of {membersTotalElements.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMembersCurrentPage(0)}
+                          disabled={membersCurrentPage === 0 || membersLoading}
+                        >
+                          First
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMembersCurrentPage(prev => Math.max(0, prev - 1))}
+                          disabled={membersCurrentPage === 0 || membersLoading}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <span className="text-sm text-gray-600 px-2">
+                          Page {membersCurrentPage + 1} of {membersTotalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMembersCurrentPage(prev => Math.min(membersTotalPages - 1, prev + 1))}
+                          disabled={membersCurrentPage >= membersTotalPages - 1 || membersLoading}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMembersCurrentPage(membersTotalPages - 1)}
+                          disabled={membersCurrentPage >= membersTotalPages - 1 || membersLoading}
+                        >
+                          Last
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>

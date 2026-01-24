@@ -309,10 +309,88 @@ export class EnrollmentsApi {
     return Array.isArray(response.data) ? response.data : []
   }
 
+  // Get students by section (paginated)
+  async getStudentsBySectionPaginated(
+    sectionId: string,
+    page: number = 0,
+    size: number = 20
+  ): Promise<{
+    content: SectionStudentDTO[]
+    totalElements: number
+    totalPages: number
+    size: number
+    number: number
+  }> {
+    const params = new URLSearchParams()
+    params.append('page', page.toString())
+    params.append('size', size.toString())
+    params.append('sort', 'name,asc')
+    
+    const url = `/api/sections/${sectionId}/students/paged?${params.toString()}`
+    const response = await this.apiClient.get<{
+      content: SectionStudentDTO[]
+      totalElements: number
+      totalPages: number
+      size: number
+      number: number
+    }>(url)
+    
+    if (response.data && response.data.content) {
+      return response.data
+    }
+    
+    return {
+      content: Array.isArray(response.data) ? response.data : [],
+      totalElements: 0,
+      totalPages: 0,
+      size: size,
+      number: page
+    }
+  }
+
   // Get students by class
   async getStudentsByClass(classId: string): Promise<ClassStudentDTO[]> {
     const response = await this.apiClient.get<ClassStudentDTO[]>(`/api/classes/${classId}/students`)
     return Array.isArray(response.data) ? response.data : []
+  }
+
+  // Get students by class (paginated)
+  async getStudentsByClassPaginated(
+    classId: string,
+    page: number = 0,
+    size: number = 20
+  ): Promise<{
+    content: ClassStudentDTO[]
+    totalElements: number
+    totalPages: number
+    size: number
+    number: number
+  }> {
+    const params = new URLSearchParams()
+    params.append('page', page.toString())
+    params.append('size', size.toString())
+    params.append('sort', 'name,asc')
+    
+    const url = `/api/classes/${classId}/students/paged?${params.toString()}`
+    const response = await this.apiClient.get<{
+      content: ClassStudentDTO[]
+      totalElements: number
+      totalPages: number
+      size: number
+      number: number
+    }>(url)
+    
+    if (response.data && response.data.content) {
+      return response.data
+    }
+    
+    return {
+      content: Array.isArray(response.data) ? response.data : [],
+      totalElements: 0,
+      totalPages: 0,
+      size: size,
+      number: page
+    }
   }
 }
 

@@ -178,10 +178,28 @@ public class EnrollmentController {
         return ResponseEntity.ok(students);
     }
 
+    @GetMapping("/sections/{sectionId}/students/paged")
+    @Operation(summary = "Get students by section (paginated)", description = "Get paginated students enrolled in a section")
+    public ResponseEntity<Page<SectionStudentDTO>> getStudentsBySection(
+            @PathVariable String sectionId,
+            @PageableDefault(size = 20, sort = "name") Pageable pageable) {
+        Page<SectionStudentDTO> students = enrollmentService.getStudentsBySection(sectionId, pageable);
+        return ResponseEntity.ok(students);
+    }
+
     @GetMapping("/classes/{classId}/students")
     @Operation(summary = "Get students by class", description = "Get all students enrolled in a class")
     public ResponseEntity<List<ClassStudentDTO>> getStudentsByClass(@PathVariable String classId) {
         List<ClassStudentDTO> students = enrollmentService.getStudentsByClass(classId);
+        return ResponseEntity.ok(students);
+    }
+
+    @GetMapping("/classes/{classId}/students/paged")
+    @Operation(summary = "Get students by class (paginated)", description = "Get paginated students enrolled in a class")
+    public ResponseEntity<Page<ClassStudentDTO>> getStudentsByClass(
+            @PathVariable String classId,
+            @PageableDefault(size = 20, sort = "name") Pageable pageable) {
+        Page<ClassStudentDTO> students = enrollmentService.getStudentsByClass(classId, pageable);
         return ResponseEntity.ok(students);
     }
 }
