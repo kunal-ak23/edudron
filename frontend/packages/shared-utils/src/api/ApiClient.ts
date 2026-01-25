@@ -264,8 +264,16 @@ export class ApiClient {
   }
 
   async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
-    const response: AxiosResponse<ApiResponse<T>> = await this.client.delete(url, config)
-    return response.data
+    const response: AxiosResponse<any> = await this.client.delete(url, config)
+    const responseData = response.data
+    
+    // If the response is already in ApiResponse format { data: ... }, return it
+    if (responseData && typeof responseData === 'object' && 'data' in responseData && !Array.isArray(responseData)) {
+      return responseData as ApiResponse<T>
+    }
+    
+    // If the response is a direct value (object, etc.), wrap it in ApiResponse format
+    return { data: responseData } as ApiResponse<T>
   }
 
   setBaseURL(baseURL: string) {

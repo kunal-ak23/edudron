@@ -212,8 +212,23 @@ public class EnrollmentService {
         // Admins, instructors, and other roles can always enroll students
         
         // Check if already enrolled
-        if (enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, request.getCourseId())) {
-            throw new IllegalArgumentException("Student is already enrolled in this course");
+        // For placeholder enrollments, allow multiple (one per section)
+        // For real courses, prevent duplicates
+        if (request.getCourseId().equals("__PLACEHOLDER_ASSOCIATION__")) {
+            // Check if placeholder already exists for this specific section
+            if (request.getBatchId() != null) {
+                List<Enrollment> existingPlaceholders = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, request.getCourseId());
+                boolean sectionPlaceholderExists = existingPlaceholders.stream()
+                    .anyMatch(e -> request.getBatchId().equals(e.getBatchId()));
+                if (sectionPlaceholderExists) {
+                    throw new IllegalArgumentException("Student is already associated with this section");
+                }
+            }
+        } else {
+            // For real courses, check for any existing enrollment
+            if (enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, request.getCourseId())) {
+                throw new IllegalArgumentException("Student is already enrolled in this course");
+            }
         }
         
         String instituteId = null;

@@ -1,11 +1,13 @@
 package com.datagami.edudron.student.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 
 public class CreateEnrollmentRequest {
     @NotBlank(message = "Course ID is required")
     private String courseId;
     
+    @JsonAlias({"sectionId"}) // Accept both "batchId" and "sectionId" from frontend
     private String batchId; // Now represents Section ID (kept for backward compatibility)
     
     private String instituteId;
