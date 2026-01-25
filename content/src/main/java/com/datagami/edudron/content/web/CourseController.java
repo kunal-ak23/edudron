@@ -4,8 +4,12 @@ import com.datagami.edudron.content.dto.CourseDTO;
 import com.datagami.edudron.content.dto.CreateCourseRequest;
 import com.datagami.edudron.content.dto.GenerateCourseRequest;
 import com.datagami.edudron.content.dto.SectionDTO;
+import com.datagami.edudron.content.dto.CourseCopyRequest;
+import com.datagami.edudron.content.dto.AIGenerationJobDTO;
 import com.datagami.edudron.content.service.CourseService;
 import com.datagami.edudron.content.service.SectionService;
+import com.datagami.edudron.content.service.CourseCopyWorker;
+import com.datagami.edudron.content.service.AIJobQueueService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -37,6 +41,12 @@ public class CourseController {
     
     @Autowired
     private SectionService sectionService;
+    
+    @Autowired
+    private CourseCopyWorker courseCopyWorker;
+    
+    @Autowired
+    private AIJobQueueService queueService;
 
     @GetMapping
     @Operation(summary = "List courses", description = "Get paginated list of courses with optional filters")
@@ -281,6 +291,40 @@ public class CourseController {
     public ResponseEntity<List<CourseDTO>> getPublishedCoursesByClass(@PathVariable String classId) {
         List<CourseDTO> courses = courseService.getPublishedCoursesByClassId(classId);
         return ResponseEntity.ok(courses);
+    }
+    
+    /**
+     * Submit course copy job (SYSTEM_ADMIN only)
+     * Returns immediately with job ID for async processing
+     */
+    @PostMapping("/{courseId}/copy-to-tenant")
+    @Operation(summary = "Copy course to another tenant (SYSTEM_ADMIN only)", 
+               description = "Submit an async job to copy a course to another tenant. Returns immediately with a job ID. " +
+                            "Only SYSTEM_ADMIN users can perform this operation. The copy includes all course structure, " +
+                            "content, assessments, and media assets.")
+    public ResponseEntity<AIGenerationJobDTO> copyCourseToTenant(
+            @PathVariable String courseId,
+            @Valid @RequestBody CourseCopyRequest request) {
+        
+        logger.info("Received course copy request for course {} to tenant {}", courseId, request.getTargetClientId());
+        AIGenerationJobDTO job = courseCopyWorker.submitCourseCopyJob(courseId, request);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
+    }
+    
+    /**
+     * Get course copy job status (polling endpoint)
+     */
+    @GetMapping("/copy-jobs/{jobId}")
+    @Operation(summary = "Get course copy job status", 
+               description = "Poll this endpoint to track the progress of a course copy operation. " +
+                            "The job status includes progress percentage (0-100) and current step description.")
+    public ResponseEntity<AIGenerationJobDTO> getCourseCopyJobStatus(@PathVariable String jobId) {
+        AIGenerationJobDTO job = queueService.getJob(jobId);
+        if (job == null) {
+            logger.warn("Course copy job {} not found", jobId);
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(job);
     }
 }
 

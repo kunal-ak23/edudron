@@ -259,6 +259,68 @@ export class CoursesApi {
     return response.data
   }
   
+  /**
+   * Copy a course to another tenant (SYSTEM_ADMIN only)
+   * Returns a job ID immediately for async processing
+   */
+  async copyCourseToTenant(courseId: string, request: CourseCopyRequest): Promise<AIGenerationJobDTO> {
+    const response = await this.apiClient.post<AIGenerationJobDTO>(
+      `/content/courses/${courseId}/copy-to-tenant`,
+      request
+    )
+    return response.data
+  }
+  
+  /**
+   * Get course copy job status
+   * Poll this endpoint to track copy progress
+   */
+  async getCourseCopyJobStatus(jobId: string): Promise<AIGenerationJobDTO> {
+    const response = await this.apiClient.get<AIGenerationJobDTO>(`/content/courses/copy-jobs/${jobId}`)
+    return response.data
+  }
+  
+  /**
+   * Copy a course and wait for completion with progress updates
+   */
+  async copyCourseToTenantWithProgress(
+    courseId: string,
+    request: CourseCopyRequest,
+    onProgress?: (progress: number, message: string) => void,
+    maxWaitTime: number = 600000 // 10 minutes default
+  ): Promise<CourseCopyResult> {
+    // Submit job
+    const job = await this.copyCourseToTenant(courseId, request)
+    
+    // Poll for completion
+    const startTime = Date.now()
+    const pollInterval = 2000 // Poll every 2 seconds
+    
+    while (Date.now() - startTime < maxWaitTime) {
+      const jobStatus = await this.getCourseCopyJobStatus(job.jobId)
+      
+      if (onProgress && jobStatus.progress !== undefined && jobStatus.message) {
+        onProgress(jobStatus.progress, jobStatus.message)
+      }
+      
+      if (jobStatus.status === 'COMPLETED') {
+        if (jobStatus.result) {
+          return jobStatus.result as CourseCopyResult
+        }
+        throw new Error('Job completed but result is invalid')
+      }
+      
+      if (jobStatus.status === 'FAILED') {
+        throw new Error(jobStatus.error || jobStatus.message || 'Course copy failed')
+      }
+      
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollInterval))
+    }
+    
+    throw new Error('Course copy timed out')
+  }
+  
   private async waitForJobCompletion(jobId: string, onProgress?: (progress: number, message: string) => void, maxWaitTime: number = 300000): Promise<Course> {
     const startTime = Date.now()
     const pollInterval = 2000 // Poll every 2 seconds
@@ -305,16 +367,33 @@ export interface GenerateCourseRequest {
 
 export interface AIGenerationJobDTO {
   jobId: string
-  jobType: 'COURSE_GENERATION' | 'LECTURE_GENERATION' | 'SUB_LECTURE_GENERATION'
+  jobType: 'COURSE_GENERATION' | 'LECTURE_GENERATION' | 'SUB_LECTURE_GENERATION' | 'COURSE_COPY'
   status: 'PENDING' | 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
   message?: string
   clientId?: string
   userId?: string
-  result?: Course | any
+  result?: Course | CourseCopyResult | any
   error?: string
   createdAt: string
   updatedAt: string
   progress?: number
+}
+
+export interface CourseCopyRequest {
+  targetClientId: string
+  newCourseTitle?: string
+  copyPublishedState?: boolean
+}
+
+export interface CourseCopyResult {
+  newCourseId: string
+  sourceCourseId: string
+  targetClientId: string
+  copiedEntities: {
+    [key: string]: number
+  }
+  completedAt: string
+  duration: string
 }
 
 export interface CourseGenerationIndex {

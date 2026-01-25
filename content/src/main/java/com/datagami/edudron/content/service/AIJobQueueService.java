@@ -22,6 +22,7 @@ public class AIJobQueueService {
     // Queue names
     private static final String COURSE_GENERATION_QUEUE = "ai:queue:course-generation";
     private static final String LECTURE_GENERATION_QUEUE = "ai:queue:lecture-generation";
+    private static final String COURSE_COPY_QUEUE = "ai:queue:course-copy";
     
     // Job storage prefix
     private static final String JOB_PREFIX = "ai:job:";
@@ -96,6 +97,24 @@ public class AIJobQueueService {
             return job;
         } catch (Exception e) {
             logger.error("Failed to submit sub-lecture generation job", e);
+            throw new RuntimeException("Failed to submit job", e);
+        }
+    }
+    
+    /**
+     * Submit a course copy job to the queue
+     */
+    public AIGenerationJobDTO submitCourseCopyJob(String jobId) {
+        AIGenerationJobDTO job = createJob(jobId, AIGenerationJobDTO.JobType.COURSE_COPY);
+        
+        try {
+            saveJob(job);
+            redisTemplate.opsForList().rightPush(COURSE_COPY_QUEUE, jobId);
+            
+            logger.info("Course copy job {} submitted to queue", jobId);
+            return job;
+        } catch (Exception e) {
+            logger.error("Failed to submit course copy job", e);
             throw new RuntimeException("Failed to submit job", e);
         }
     }
@@ -187,6 +206,8 @@ public class AIJobQueueService {
             case LECTURE_GENERATION:
             case SUB_LECTURE_GENERATION:
                 return LECTURE_GENERATION_QUEUE;
+            case COURSE_COPY:
+                return COURSE_COPY_QUEUE;
             default:
                 throw new IllegalArgumentException("Unknown job type: " + jobType);
         }

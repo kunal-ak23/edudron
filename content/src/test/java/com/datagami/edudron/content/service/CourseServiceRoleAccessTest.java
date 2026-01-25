@@ -13,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,9 @@ class CourseServiceRoleAccessTest {
 
     @Mock
     private LectureRepository lectureRepository;
+
+    @Mock
+    private CommonEventService eventService;
 
     @Mock
     private RestTemplate restTemplate;
@@ -93,13 +97,13 @@ class CourseServiceRoleAccessTest {
     private void mockUserRole(String role) {
         Map<String, Object> userResponse = new HashMap<>();
         userResponse.put("role", role);
-        ResponseEntity<Map> responseEntity = new ResponseEntity<>(userResponse, HttpStatus.OK);
+        ResponseEntity<Map<String, Object>> responseEntity = new ResponseEntity<>(userResponse, HttpStatus.OK);
         
         when(restTemplate.exchange(
             anyString(),
             eq(HttpMethod.GET),
             any(HttpEntity.class),
-            eq(Map.class)
+            any(ParameterizedTypeReference.class)
         )).thenReturn(responseEntity);
     }
 

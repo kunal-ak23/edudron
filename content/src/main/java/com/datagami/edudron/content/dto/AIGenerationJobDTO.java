@@ -19,7 +19,8 @@ public class AIGenerationJobDTO {
     public enum JobType {
         COURSE_GENERATION,
         LECTURE_GENERATION,
-        SUB_LECTURE_GENERATION
+        SUB_LECTURE_GENERATION,
+        COURSE_COPY
     }
 
     public enum JobStatus {

@@ -17,12 +17,16 @@ public class AIQueueProcessor {
     
     private static final String COURSE_GENERATION_QUEUE = "ai:queue:course-generation";
     private static final String LECTURE_GENERATION_QUEUE = "ai:queue:lecture-generation";
+    private static final String COURSE_COPY_QUEUE = "ai:queue:course-copy";
     
     @Autowired
     private AIJobQueueService queueService;
     
     @Autowired
     private AIJobWorker jobWorker;
+    
+    @Autowired
+    private CourseCopyWorker courseCopyWorker;
     
     private volatile boolean processing = false;
     
@@ -85,6 +89,35 @@ public class AIQueueProcessor {
             }
         } catch (Exception e) {
             logger.error("Error processing lecture generation queue", e);
+        } finally {
+            processing = false;
+        }
+    }
+    
+    /**
+     * Process course copy queue
+     * Runs every 2 seconds
+     */
+    @Scheduled(fixedDelay = 2000, initialDelay = 2000)
+    public void processCourseCopyQueue() {
+        if (processing) {
+            return; // Skip if already processing
+        }
+        
+        try {
+            processing = true;
+            String jobId = queueService.getJobFromQueue(COURSE_COPY_QUEUE, 1);
+            if (jobId != null) {
+                logger.info("Found course copy job: {}", jobId);
+                AIGenerationJobDTO job = queueService.getJob(jobId);
+                if (job != null) {
+                    job.setStatus(AIGenerationJobDTO.JobStatus.QUEUED);
+                    queueService.updateJob(job);
+                    courseCopyWorker.processCourseCopyJob(jobId);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error processing course copy queue", e);
         } finally {
             processing = false;
         }
