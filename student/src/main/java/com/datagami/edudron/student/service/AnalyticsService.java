@@ -42,6 +42,12 @@ public class AnalyticsService {
     @Autowired
     private LectureViewSessionRepository sessionRepository;
     
+    @Autowired
+    private SectionService sectionService;
+    
+    @Autowired
+    private ClassService classService;
+    
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
@@ -562,6 +568,371 @@ public class AnalyticsService {
         dto.setIsCompletedInSession(session.getIsCompletedInSession());
         dto.setCreatedAt(session.getCreatedAt());
         dto.setUpdatedAt(session.getUpdatedAt());
+        return dto;
+    }
+    
+    /**
+     * Batch fetch lecture metadata for multiple courses.
+     * Returns a map of lectureId -> {title, durationSeconds}
+     */
+    private Map<String, LectureMetadata> batchFetchLectureMetadataForCourses(Set<String> courseIds) {
+        Map<String, LectureMetadata> metadataMap = new HashMap<>();
+        for (String courseId : courseIds) {
+            metadataMap.putAll(batchFetchLectureMetadata(courseId));
+        }
+        return metadataMap;
+    }
+    
+    /**
+     * Fetch course title by courseId.
+     */
+    private String fetchCourseTitle(String courseId) {
+        try {
+            String url = gatewayUrl + "/content/courses/" + courseId;
+            ResponseEntity<JsonNode> response = getRestTemplate().exchange(
+                url, HttpMethod.GET, null, JsonNode.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode course = response.getBody();
+                return course.has("title") ? course.get("title").asText() : courseId;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch course title for {}: {}", courseId, e.getMessage());
+        }
+        return courseId;
+    }
+    
+    /**
+     * Get comprehensive analytics for a section (AGGREGATED ACROSS ALL COURSES).
+     */
+    @Cacheable(value = "sectionAnalytics", key = "#sectionId", unless = "#result == null")
+    public SectionAnalyticsDTO getSectionEngagementMetrics(String sectionId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        SectionAnalyticsDTO dto = new SectionAnalyticsDTO();
+        dto.setSectionId(sectionId);
+        
+        // Get section details
+        try {
+            var section = sectionService.getSection(sectionId);
+            dto.setSectionName(section.getName());
+            dto.setClassId(section.getClassId());
+            
+            // Get class name if available
+            if (section.getClassId() != null) {
+                try {
+                    var classEntity = classService.getClass(section.getClassId());
+                    dto.setClassName(classEntity.getName());
+                } catch (Exception e) {
+                    log.warn("Failed to fetch class name for section {}: {}", sectionId, e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch section details for {}: {}", sectionId, e.getMessage());
+            dto.setSectionName("Section " + sectionId.substring(0, Math.min(8, sectionId.length())));
+        }
+        
+        // Get section-level aggregates (includes totalCourses count)
+        Object[] sectionAggregates = null;
+        try {
+            sectionAggregates = sessionRepository.getSectionAggregates(clientId, sectionId);
+        } catch (Exception e) {
+            log.error("Error executing section aggregates query for sectionId={}: {}", sectionId, e.getMessage(), e);
+        }
+        
+        if (sectionAggregates != null && sectionAggregates.length >= 5) {
+            long totalSessions = sectionAggregates[0] != null ? ((Number) sectionAggregates[0]).longValue() : 0L;
+            long uniqueStudents = sectionAggregates[1] != null ? ((Number) sectionAggregates[1]).longValue() : 0L;
+            Double avgDuration = sectionAggregates[2] != null ? ((Number) sectionAggregates[2]).doubleValue() : 0.0;
+            long completedSessions = sectionAggregates[3] != null ? ((Number) sectionAggregates[3]).longValue() : 0L;
+            long totalCourses = sectionAggregates[4] != null ? ((Number) sectionAggregates[4]).longValue() : 0L;
+            
+            dto.setTotalCourses(Math.toIntExact(totalCourses));
+            dto.setTotalViewingSessions(totalSessions);
+            dto.setUniqueStudentsEngaged(uniqueStudents);
+            dto.setAverageTimePerLectureSeconds(avgDuration.intValue());
+            
+            BigDecimal completionRate = totalSessions > 0 ?
+                BigDecimal.valueOf(completedSessions)
+                    .divide(BigDecimal.valueOf(totalSessions), 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)) : BigDecimal.ZERO;
+            dto.setOverallCompletionRate(completionRate);
+        } else {
+            dto.setTotalCourses(0);
+            dto.setTotalViewingSessions(0L);
+            dto.setUniqueStudentsEngaged(0L);
+            dto.setAverageTimePerLectureSeconds(0);
+            dto.setOverallCompletionRate(BigDecimal.ZERO);
+        }
+        
+        // Get course breakdown
+        List<Object[]> courseBreakdownData = sessionRepository.getCourseBreakdownBySection(clientId, sectionId);
+        Set<String> courseIds = new HashSet<>();
+        List<CourseBreakdownDTO> courseBreakdown = new ArrayList<>();
+        
+        for (Object[] row : courseBreakdownData) {
+            String courseId = (String) row[0];
+            courseIds.add(courseId);
+            
+            CourseBreakdownDTO breakdown = new CourseBreakdownDTO();
+            breakdown.setCourseId(courseId);
+            breakdown.setTotalSessions(((Number) row[1]).longValue());
+            breakdown.setUniqueStudents(((Number) row[2]).longValue());
+            breakdown.setCompletionRate(BigDecimal.valueOf(((Number) row[3]).doubleValue()));
+            breakdown.setAverageTimeSpentSeconds(((Number) row[4]).intValue());
+            
+            // Fetch course title
+            breakdown.setCourseTitle(fetchCourseTitle(courseId));
+            
+            courseBreakdown.add(breakdown);
+        }
+        dto.setCourseBreakdown(courseBreakdown);
+        
+        // Batch fetch lecture metadata for ALL courses
+        Map<String, LectureMetadata> lectureMetadata = batchFetchLectureMetadataForCourses(courseIds);
+        
+        // Get lecture engagement aggregates (across all courses)
+        List<LectureEngagementAggregateDTO> aggregates = sessionRepository.getLectureEngagementAggregatesBySection(
+            clientId, sectionId, 60);
+        
+        // Convert aggregates to DTOs with metadata
+        List<LectureEngagementSummaryDTO> lectureEngagements = new ArrayList<>();
+        List<SkippedLectureDTO> skippedLectures = new ArrayList<>();
+        
+        for (LectureEngagementAggregateDTO aggregate : aggregates) {
+            LectureMetadata metadata = lectureMetadata.get(aggregate.getLectureId());
+            String lectureTitle = metadata != null && metadata.title != null && !metadata.title.trim().isEmpty() 
+                ? metadata.title 
+                : "Lecture " + aggregate.getLectureId().substring(0, Math.min(8, aggregate.getLectureId().length()));
+            Integer lectureDuration = metadata != null ? metadata.durationSeconds : null;
+            
+            LectureEngagementSummaryDTO summary = new LectureEngagementSummaryDTO();
+            summary.setLectureId(aggregate.getLectureId());
+            summary.setLectureTitle(lectureTitle);
+            summary.setTotalViews(aggregate.getTotalViews());
+            summary.setUniqueViewers(aggregate.getUniqueViewers());
+            summary.setAverageDurationSeconds(aggregate.getAverageDurationSecondsInt());
+            summary.setCompletionRate(aggregate.getCompletionRate());
+            
+            if (lectureDuration != null && lectureDuration > 0 && aggregate.getTotalSessions() > 0) {
+                BigDecimal skipRate = aggregate.getSkipRate();
+                summary.setSkipRate(skipRate);
+                
+                if (skipRate.compareTo(BigDecimal.valueOf(50)) > 0) {
+                    SkippedLectureDTO skipped = new SkippedLectureDTO();
+                    skipped.setLectureId(aggregate.getLectureId());
+                    skipped.setLectureTitle(lectureTitle);
+                    skipped.setLectureDurationSeconds(lectureDuration);
+                    skipped.setTotalSessions(aggregate.getTotalSessions());
+                    skipped.setSkippedSessions(aggregate.getShortDurationSessions());
+                    skipped.setSkipRate(skipRate);
+                    skipped.setAverageDurationSeconds(aggregate.getAverageDurationSecondsInt());
+                    skipped.setSkipReason("DURATION_THRESHOLD");
+                    skippedLectures.add(skipped);
+                }
+            } else {
+                summary.setSkipRate(BigDecimal.ZERO);
+            }
+            
+            lectureEngagements.add(summary);
+        }
+        
+        dto.setLectureEngagements(lectureEngagements);
+        dto.setSkippedLectures(skippedLectures);
+        
+        // Get activity timeline (across all courses)
+        List<Object[]> timelineData = sessionRepository.getActivityTimelineBySection(clientId, sectionId);
+        List<ActivityTimelinePointDTO> timeline = new ArrayList<>();
+        for (Object[] row : timelineData) {
+            LocalDate date = ((java.sql.Date) row[0]).toLocalDate();
+            long sessionCount = ((Number) row[1]).longValue();
+            long uniqueStudents = ((Number) row[2]).longValue();
+            
+            OffsetDateTime timestamp = date.atStartOfDay().atOffset(ZoneOffset.UTC);
+            timeline.add(new ActivityTimelinePointDTO(timestamp, sessionCount, uniqueStudents));
+        }
+        dto.setActivityTimeline(timeline);
+        
+        return dto;
+    }
+    
+    /**
+     * Get comprehensive analytics for a class (AGGREGATED ACROSS ALL SECTIONS AND COURSES).
+     */
+    @Cacheable(value = "classAnalytics", key = "#classId", unless = "#result == null")
+    public ClassAnalyticsDTO getClassEngagementMetrics(String classId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        ClassAnalyticsDTO dto = new ClassAnalyticsDTO();
+        dto.setClassId(classId);
+        
+        // Get class details
+        try {
+            var classEntity = classService.getClass(classId);
+            dto.setClassName(classEntity.getName());
+            dto.setInstituteId(classEntity.getInstituteId());
+        } catch (Exception e) {
+            log.warn("Failed to fetch class details for {}: {}", classId, e.getMessage());
+            dto.setClassName("Class " + classId.substring(0, Math.min(8, classId.length())));
+        }
+        
+        // Get class-level aggregates (includes totalCourses and totalSections)
+        Object[] classAggregates = null;
+        try {
+            classAggregates = sessionRepository.getClassAggregates(clientId, classId);
+        } catch (Exception e) {
+            log.error("Error executing class aggregates query for classId={}: {}", classId, e.getMessage(), e);
+        }
+        
+        if (classAggregates != null && classAggregates.length >= 6) {
+            long totalSessions = classAggregates[0] != null ? ((Number) classAggregates[0]).longValue() : 0L;
+            long uniqueStudents = classAggregates[1] != null ? ((Number) classAggregates[1]).longValue() : 0L;
+            Double avgDuration = classAggregates[2] != null ? ((Number) classAggregates[2]).doubleValue() : 0.0;
+            long completedSessions = classAggregates[3] != null ? ((Number) classAggregates[3]).longValue() : 0L;
+            long totalCourses = classAggregates[4] != null ? ((Number) classAggregates[4]).longValue() : 0L;
+            long totalSections = classAggregates[5] != null ? ((Number) classAggregates[5]).longValue() : 0L;
+            
+            dto.setTotalSections(Math.toIntExact(totalSections));
+            dto.setTotalCourses(Math.toIntExact(totalCourses));
+            dto.setTotalViewingSessions(totalSessions);
+            dto.setUniqueStudentsEngaged(uniqueStudents);
+            dto.setAverageTimePerLectureSeconds(avgDuration.intValue());
+            
+            BigDecimal completionRate = totalSessions > 0 ?
+                BigDecimal.valueOf(completedSessions)
+                    .divide(BigDecimal.valueOf(totalSessions), 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)) : BigDecimal.ZERO;
+            dto.setOverallCompletionRate(completionRate);
+        } else {
+            dto.setTotalSections(0);
+            dto.setTotalCourses(0);
+            dto.setTotalViewingSessions(0L);
+            dto.setUniqueStudentsEngaged(0L);
+            dto.setAverageTimePerLectureSeconds(0);
+            dto.setOverallCompletionRate(BigDecimal.ZERO);
+        }
+        
+        // Get course breakdown
+        List<Object[]> courseBreakdownData = sessionRepository.getCourseBreakdownByClass(clientId, classId);
+        Set<String> courseIds = new HashSet<>();
+        List<CourseBreakdownDTO> courseBreakdown = new ArrayList<>();
+        
+        for (Object[] row : courseBreakdownData) {
+            String courseId = (String) row[0];
+            courseIds.add(courseId);
+            
+            CourseBreakdownDTO breakdown = new CourseBreakdownDTO();
+            breakdown.setCourseId(courseId);
+            breakdown.setTotalSessions(((Number) row[1]).longValue());
+            breakdown.setUniqueStudents(((Number) row[2]).longValue());
+            breakdown.setCompletionRate(BigDecimal.valueOf(((Number) row[3]).doubleValue()));
+            breakdown.setAverageTimeSpentSeconds(((Number) row[4]).intValue());
+            
+            // Fetch course title
+            breakdown.setCourseTitle(fetchCourseTitle(courseId));
+            
+            courseBreakdown.add(breakdown);
+        }
+        dto.setCourseBreakdown(courseBreakdown);
+        
+        // Batch fetch lecture metadata for ALL courses
+        Map<String, LectureMetadata> lectureMetadata = batchFetchLectureMetadataForCourses(courseIds);
+        
+        // Get lecture engagement aggregates (across all sections and courses)
+        List<LectureEngagementAggregateDTO> aggregates = sessionRepository.getLectureEngagementAggregatesByClass(
+            clientId, classId, 60);
+        
+        // Convert aggregates to DTOs with metadata
+        List<LectureEngagementSummaryDTO> lectureEngagements = new ArrayList<>();
+        List<SkippedLectureDTO> skippedLectures = new ArrayList<>();
+        
+        for (LectureEngagementAggregateDTO aggregate : aggregates) {
+            LectureMetadata metadata = lectureMetadata.get(aggregate.getLectureId());
+            String lectureTitle = metadata != null && metadata.title != null && !metadata.title.trim().isEmpty() 
+                ? metadata.title 
+                : "Lecture " + aggregate.getLectureId().substring(0, Math.min(8, aggregate.getLectureId().length()));
+            Integer lectureDuration = metadata != null ? metadata.durationSeconds : null;
+            
+            LectureEngagementSummaryDTO summary = new LectureEngagementSummaryDTO();
+            summary.setLectureId(aggregate.getLectureId());
+            summary.setLectureTitle(lectureTitle);
+            summary.setTotalViews(aggregate.getTotalViews());
+            summary.setUniqueViewers(aggregate.getUniqueViewers());
+            summary.setAverageDurationSeconds(aggregate.getAverageDurationSecondsInt());
+            summary.setCompletionRate(aggregate.getCompletionRate());
+            
+            if (lectureDuration != null && lectureDuration > 0 && aggregate.getTotalSessions() > 0) {
+                BigDecimal skipRate = aggregate.getSkipRate();
+                summary.setSkipRate(skipRate);
+                
+                if (skipRate.compareTo(BigDecimal.valueOf(50)) > 0) {
+                    SkippedLectureDTO skipped = new SkippedLectureDTO();
+                    skipped.setLectureId(aggregate.getLectureId());
+                    skipped.setLectureTitle(lectureTitle);
+                    skipped.setLectureDurationSeconds(lectureDuration);
+                    skipped.setTotalSessions(aggregate.getTotalSessions());
+                    skipped.setSkippedSessions(aggregate.getShortDurationSessions());
+                    skipped.setSkipRate(skipRate);
+                    skipped.setAverageDurationSeconds(aggregate.getAverageDurationSecondsInt());
+                    skipped.setSkipReason("DURATION_THRESHOLD");
+                    skippedLectures.add(skipped);
+                }
+            } else {
+                summary.setSkipRate(BigDecimal.ZERO);
+            }
+            
+            lectureEngagements.add(summary);
+        }
+        
+        dto.setLectureEngagements(lectureEngagements);
+        dto.setSkippedLectures(skippedLectures);
+        
+        // Get activity timeline (across all sections and courses)
+        List<Object[]> timelineData = sessionRepository.getActivityTimelineByClass(clientId, classId);
+        List<ActivityTimelinePointDTO> timeline = new ArrayList<>();
+        for (Object[] row : timelineData) {
+            LocalDate date = ((java.sql.Date) row[0]).toLocalDate();
+            long sessionCount = ((Number) row[1]).longValue();
+            long uniqueStudents = ((Number) row[2]).longValue();
+            
+            OffsetDateTime timestamp = date.atStartOfDay().atOffset(ZoneOffset.UTC);
+            timeline.add(new ActivityTimelinePointDTO(timestamp, sessionCount, uniqueStudents));
+        }
+        dto.setActivityTimeline(timeline);
+        
+        // Get section comparison data
+        List<Object[]> sectionComparisonData = sessionRepository.getSectionComparisonByClass(clientId, classId);
+        List<SectionComparisonDTO> sectionComparison = new ArrayList<>();
+        
+        for (Object[] row : sectionComparisonData) {
+            String sectionId = (String) row[0];
+            
+            SectionComparisonDTO comparison = new SectionComparisonDTO();
+            comparison.setSectionId(sectionId);
+            comparison.setTotalStudents(((Number) row[1]).longValue());
+            comparison.setActiveStudents(((Number) row[2]).longValue());
+            comparison.setAverageCompletionRate(BigDecimal.valueOf(((Number) row[3]).doubleValue()));
+            comparison.setAverageTimeSpentSeconds(((Number) row[4]).intValue());
+            
+            // Fetch section name
+            try {
+                var section = sectionService.getSection(sectionId);
+                comparison.setSectionName(section.getName());
+            } catch (Exception e) {
+                comparison.setSectionName("Section " + sectionId.substring(0, Math.min(8, sectionId.length())));
+            }
+            
+            sectionComparison.add(comparison);
+        }
+        dto.setSectionComparison(sectionComparison);
+        
         return dto;
     }
 }

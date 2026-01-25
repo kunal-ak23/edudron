@@ -206,4 +206,230 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
         @Param("clientId") UUID clientId,
         @Param("lectureId") String lectureId
     );
+
+    // ==================== SECTION ANALYTICS QUERIES ====================
+    
+    /**
+     * Get aggregated engagement metrics for all lectures in a section (ACROSS ALL COURSES).
+     * Joins with Enrollment table to filter by section (batchId).
+     * Note: No courseId filter - captures ALL courses assigned to the section.
+     */
+    @Query("""
+        SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
+            s.lectureId,
+            COUNT(s),
+            COUNT(DISTINCT s.studentId),
+            AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                THEN CAST(s.durationSeconds AS double) ELSE NULL END),
+            SUM(CASE WHEN s.isCompletedInSession = true THEN 1L ELSE 0L END),
+            COUNT(s),
+            SUM(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                AND s.durationSeconds < :thresholdSeconds THEN 1L ELSE 0L END)
+        )
+        FROM LectureViewSession s
+        INNER JOIN Enrollment e ON s.enrollmentId = e.id
+        WHERE s.clientId = :clientId AND e.batchId = :sectionId
+        GROUP BY s.lectureId
+        ORDER BY COUNT(s) DESC
+        """)
+    List<LectureEngagementAggregateDTO> getLectureEngagementAggregatesBySection(
+        @Param("clientId") UUID clientId,
+        @Param("sectionId") String sectionId,
+        @Param("thresholdSeconds") Integer thresholdSeconds
+    );
+
+    /**
+     * Get section-level aggregated metrics (MULTI-COURSE AGGREGATION).
+     * This query aggregates across ALL courses that students in the section are enrolled in.
+     */
+    @Query(value = """
+        SELECT 
+            COUNT(*)::bigint as totalSessions,
+            COUNT(DISTINCT s.student_id)::bigint as uniqueStudents,
+            COALESCE(AVG(CASE WHEN s.duration_seconds IS NOT NULL AND s.session_ended_at IS NOT NULL 
+                THEN s.duration_seconds ELSE NULL END), 0.0)::double precision as avgDuration,
+            COALESCE(SUM(CASE WHEN s.is_completed_in_session IS TRUE THEN 1 ELSE 0 END), 0)::bigint as completedSessions,
+            COUNT(DISTINCT s.course_id)::bigint as totalCourses
+        FROM student.lecture_view_sessions s
+        INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+        WHERE s.client_id = CAST(:clientId AS uuid) AND e.batch_id = :sectionId
+        """, nativeQuery = true)
+    List<Object[]> getSectionAggregatesList(
+        @Param("clientId") UUID clientId,
+        @Param("sectionId") String sectionId
+    );
+
+    default Object[] getSectionAggregates(UUID clientId, String sectionId) {
+        List<Object[]> results = getSectionAggregatesList(clientId, sectionId);
+        if (results != null && !results.isEmpty()) {
+            return results.get(0);
+        }
+        // Return array with zeros if no results
+        return new Object[]{0L, 0L, 0.0, 0L, 0L};
+    }
+
+    /**
+     * Get per-course breakdown for a section.
+     * Shows individual course metrics within the section.
+     */
+    @Query(value = """
+        SELECT 
+            s.course_id as courseId,
+            COUNT(*)::bigint as totalSessions,
+            COUNT(DISTINCT s.student_id)::bigint as uniqueStudents,
+            COALESCE(AVG(CASE WHEN s.is_completed_in_session IS TRUE THEN 100.0 ELSE 0.0 END), 0.0)::double precision as completionRate,
+            COALESCE(AVG(s.duration_seconds), 0)::integer as avgTimeSpentSeconds
+        FROM student.lecture_view_sessions s
+        INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+        WHERE s.client_id = CAST(:clientId AS uuid) AND e.batch_id = :sectionId
+        GROUP BY s.course_id
+        ORDER BY totalSessions DESC
+        """, nativeQuery = true)
+    List<Object[]> getCourseBreakdownBySection(
+        @Param("clientId") UUID clientId,
+        @Param("sectionId") String sectionId
+    );
+
+    /**
+     * Get activity timeline for a section (ACROSS ALL COURSES).
+     */
+    @Query(value = """
+        SELECT 
+            CAST(s.session_started_at AS DATE) as date,
+            COUNT(*)::bigint as sessionCount,
+            COUNT(DISTINCT s.student_id)::bigint as uniqueStudents
+        FROM student.lecture_view_sessions s
+        INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+        WHERE s.client_id = CAST(:clientId AS uuid) AND e.batch_id = :sectionId
+        GROUP BY CAST(s.session_started_at AS DATE)
+        ORDER BY CAST(s.session_started_at AS DATE) ASC
+        """, nativeQuery = true)
+    List<Object[]> getActivityTimelineBySection(
+        @Param("clientId") UUID clientId,
+        @Param("sectionId") String sectionId
+    );
+
+    // ==================== CLASS ANALYTICS QUERIES ====================
+
+    /**
+     * Get aggregated engagement metrics for all lectures in a class (ACROSS ALL SECTIONS AND COURSES).
+     * Joins with Enrollment table to filter by class (classId).
+     */
+    @Query("""
+        SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
+            s.lectureId,
+            COUNT(s),
+            COUNT(DISTINCT s.studentId),
+            AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                THEN CAST(s.durationSeconds AS double) ELSE NULL END),
+            SUM(CASE WHEN s.isCompletedInSession = true THEN 1L ELSE 0L END),
+            COUNT(s),
+            SUM(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL 
+                AND s.durationSeconds < :thresholdSeconds THEN 1L ELSE 0L END)
+        )
+        FROM LectureViewSession s
+        INNER JOIN Enrollment e ON s.enrollmentId = e.id
+        WHERE s.clientId = :clientId AND e.classId = :classId
+        GROUP BY s.lectureId
+        ORDER BY COUNT(s) DESC
+        """)
+    List<LectureEngagementAggregateDTO> getLectureEngagementAggregatesByClass(
+        @Param("clientId") UUID clientId,
+        @Param("classId") String classId,
+        @Param("thresholdSeconds") Integer thresholdSeconds
+    );
+
+    /**
+     * Get class-level aggregated metrics (MULTI-COURSE, MULTI-SECTION AGGREGATION).
+     * This query aggregates across ALL sections and ALL courses in the class.
+     */
+    @Query(value = """
+        SELECT 
+            COUNT(*)::bigint as totalSessions,
+            COUNT(DISTINCT s.student_id)::bigint as uniqueStudents,
+            COALESCE(AVG(CASE WHEN s.duration_seconds IS NOT NULL AND s.session_ended_at IS NOT NULL 
+                THEN s.duration_seconds ELSE NULL END), 0.0)::double precision as avgDuration,
+            COALESCE(SUM(CASE WHEN s.is_completed_in_session IS TRUE THEN 1 ELSE 0 END), 0)::bigint as completedSessions,
+            COUNT(DISTINCT s.course_id)::bigint as totalCourses,
+            COUNT(DISTINCT e.batch_id)::bigint as totalSections
+        FROM student.lecture_view_sessions s
+        INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+        WHERE s.client_id = CAST(:clientId AS uuid) AND e.class_id = :classId
+        """, nativeQuery = true)
+    List<Object[]> getClassAggregatesList(
+        @Param("clientId") UUID clientId,
+        @Param("classId") String classId
+    );
+
+    default Object[] getClassAggregates(UUID clientId, String classId) {
+        List<Object[]> results = getClassAggregatesList(clientId, classId);
+        if (results != null && !results.isEmpty()) {
+            return results.get(0);
+        }
+        // Return array with zeros if no results
+        return new Object[]{0L, 0L, 0.0, 0L, 0L, 0L};
+    }
+
+    /**
+     * Get per-course breakdown for a class (ACROSS ALL SECTIONS).
+     */
+    @Query(value = """
+        SELECT 
+            s.course_id as courseId,
+            COUNT(*)::bigint as totalSessions,
+            COUNT(DISTINCT s.student_id)::bigint as uniqueStudents,
+            COALESCE(AVG(CASE WHEN s.is_completed_in_session IS TRUE THEN 100.0 ELSE 0.0 END), 0.0)::double precision as completionRate,
+            COALESCE(AVG(s.duration_seconds), 0)::integer as avgTimeSpentSeconds
+        FROM student.lecture_view_sessions s
+        INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+        WHERE s.client_id = CAST(:clientId AS uuid) AND e.class_id = :classId
+        GROUP BY s.course_id
+        ORDER BY totalSessions DESC
+        """, nativeQuery = true)
+    List<Object[]> getCourseBreakdownByClass(
+        @Param("clientId") UUID clientId,
+        @Param("classId") String classId
+    );
+
+    /**
+     * Get activity timeline for a class (ACROSS ALL SECTIONS AND COURSES).
+     */
+    @Query(value = """
+        SELECT 
+            CAST(s.session_started_at AS DATE) as date,
+            COUNT(*)::bigint as sessionCount,
+            COUNT(DISTINCT s.student_id)::bigint as uniqueStudents
+        FROM student.lecture_view_sessions s
+        INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+        WHERE s.client_id = CAST(:clientId AS uuid) AND e.class_id = :classId
+        GROUP BY CAST(s.session_started_at AS DATE)
+        ORDER BY CAST(s.session_started_at AS DATE) ASC
+        """, nativeQuery = true)
+    List<Object[]> getActivityTimelineByClass(
+        @Param("clientId") UUID clientId,
+        @Param("classId") String classId
+    );
+
+    /**
+     * Get section comparison within a class.
+     * Shows aggregate metrics for each section (each section aggregated across its courses).
+     */
+    @Query(value = """
+        SELECT 
+            e.batch_id as sectionId,
+            COUNT(DISTINCT s.student_id)::bigint as totalStudents,
+            COUNT(DISTINCT CASE WHEN s.session_started_at >= NOW() - INTERVAL '30 days' 
+                THEN s.student_id ELSE NULL END)::bigint as activeStudents,
+            COALESCE(AVG(CASE WHEN s.is_completed_in_session IS TRUE THEN 100.0 ELSE 0.0 END), 0.0)::double precision as avgCompletionRate,
+            COALESCE(AVG(s.duration_seconds), 0)::integer as avgTimeSpentSeconds
+        FROM student.lecture_view_sessions s
+        INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+        WHERE s.client_id = CAST(:clientId AS uuid) AND e.class_id = :classId
+        GROUP BY e.batch_id
+        ORDER BY avgCompletionRate DESC
+        """, nativeQuery = true)
+    List<Object[]> getSectionComparisonByClass(
+        @Param("clientId") UUID clientId,
+        @Param("classId") String classId
+    );
 }

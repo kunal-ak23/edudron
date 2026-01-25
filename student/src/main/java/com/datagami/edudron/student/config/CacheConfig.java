@@ -15,7 +15,12 @@ public class CacheConfig {
 
     @Bean
     public CacheManager cacheManager() {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager(
+            "courseAnalytics",
+            "lectureAnalytics",
+            "sectionAnalytics",    // NEW: Section-level analytics cache
+            "classAnalytics"       // NEW: Class-level analytics cache
+        );
         cacheManager.setCaffeine(
             Caffeine.newBuilder()
                 .maximumSize(1000) // Maximum 1000 entries per cache

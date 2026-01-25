@@ -235,6 +235,24 @@ public class LectureViewSessionService {
     public void evictCourseAnalyticsCache(String courseId) {
         log.debug("[Session Service] Evicting course analytics cache for courseId={}", courseId);
     }
+
+    /**
+     * Evict section analytics cache for a specific section.
+     * This is called manually via API endpoint to refresh section analytics.
+     */
+    @CacheEvict(value = "sectionAnalytics", key = "#sectionId")
+    public void evictSectionAnalyticsCache(String sectionId) {
+        log.info("[Session Service] Evicting section analytics cache for sectionId={}", sectionId);
+    }
+
+    /**
+     * Evict class analytics cache for a specific class.
+     * This is called manually via API endpoint to refresh class analytics.
+     */
+    @CacheEvict(value = "classAnalytics", key = "#classId")
+    public void evictClassAnalyticsCache(String classId) {
+        log.info("[Session Service] Evicting class analytics cache for classId={}", classId);
+    }
     
     private LectureViewSessionDTO toDTO(LectureViewSession session) {
         LectureViewSessionDTO dto = new LectureViewSessionDTO();

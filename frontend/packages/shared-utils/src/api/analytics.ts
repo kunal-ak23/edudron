@@ -82,6 +82,57 @@ export interface ActivityTimelinePoint {
   uniqueStudents: number
 }
 
+export interface SectionAnalytics {
+  sectionId: string
+  sectionName: string
+  classId?: string
+  className?: string
+  totalCourses: number // Number of courses in section
+  totalViewingSessions: number // Across all courses
+  uniqueStudentsEngaged: number
+  averageTimePerLectureSeconds: number
+  overallCompletionRate: number
+  lectureEngagements: LectureEngagementSummary[] // Lectures from all courses
+  skippedLectures: SkippedLecture[] // Across all courses
+  activityTimeline: ActivityTimelinePoint[] // Across all courses
+  courseBreakdown: CourseBreakdown[] // Per-course metrics
+}
+
+export interface ClassAnalytics {
+  classId: string
+  className: string
+  instituteId: string
+  totalSections: number
+  totalCourses: number // Number of unique courses across all sections
+  totalViewingSessions: number // Across all sections and courses
+  uniqueStudentsEngaged: number
+  averageTimePerLectureSeconds: number
+  overallCompletionRate: number
+  lectureEngagements: LectureEngagementSummary[] // Lectures from all courses
+  skippedLectures: SkippedLecture[] // Across all courses and sections
+  activityTimeline: ActivityTimelinePoint[] // Across all courses and sections
+  sectionComparison: SectionComparison[] // Each section's aggregate metrics
+  courseBreakdown: CourseBreakdown[] // Per-course metrics
+}
+
+export interface SectionComparison {
+  sectionId: string
+  sectionName: string
+  totalStudents: number
+  activeStudents: number
+  averageCompletionRate: number // Across all courses
+  averageTimeSpentSeconds: number // Across all courses
+}
+
+export interface CourseBreakdown {
+  courseId: string
+  courseTitle: string
+  totalSessions: number
+  uniqueStudents: number
+  completionRate: number
+  averageTimeSpentSeconds: number
+}
+
 export interface StartSessionRequest {
   courseId: string
   lectureId: string
@@ -170,5 +221,39 @@ export class AnalyticsApi {
   async getSkippedLectures(courseId: string): Promise<SkippedLecture[]> {
     const response = await this.apiClient.get<SkippedLecture[]>(`/api/courses/${courseId}/analytics/skipped`)
     return Array.isArray(response.data) ? response.data : []
+  }
+
+  // ==================== SECTION ANALYTICS ====================
+
+  async getSectionAnalytics(sectionId: string): Promise<SectionAnalytics> {
+    const response = await this.apiClient.get<SectionAnalytics>(`/api/sections/${sectionId}/analytics`)
+    return response.data
+  }
+
+  async getSectionSkippedLectures(sectionId: string): Promise<SkippedLecture[]> {
+    const response = await this.apiClient.get<SkippedLecture[]>(`/api/sections/${sectionId}/analytics/skipped`)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async clearSectionAnalyticsCache(sectionId: string): Promise<{ message: string }> {
+    const response = await this.apiClient.delete<{ message: string }>(`/api/sections/${sectionId}/analytics/cache`)
+    return response.data
+  }
+
+  // ==================== CLASS ANALYTICS ====================
+
+  async getClassAnalytics(classId: string): Promise<ClassAnalytics> {
+    const response = await this.apiClient.get<ClassAnalytics>(`/api/classes/${classId}/analytics`)
+    return response.data
+  }
+
+  async getClassSectionComparison(classId: string): Promise<SectionComparison[]> {
+    const response = await this.apiClient.get<SectionComparison[]>(`/api/classes/${classId}/analytics/sections/compare`)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async clearClassAnalyticsCache(classId: string): Promise<{ message: string }> {
+    const response = await this.apiClient.delete<{ message: string }>(`/api/classes/${classId}/analytics/cache`)
+    return response.data
   }
 }
