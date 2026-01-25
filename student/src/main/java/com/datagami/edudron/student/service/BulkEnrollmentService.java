@@ -246,11 +246,17 @@ public class BulkEnrollmentService {
         Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
         
-        // Count enrollments before deletion for reporting
+        // Get students that will be affected by this unenrollment
         List<Enrollment> classEnrollments = enrollmentRepository.findByClientIdAndClassId(clientId, classId);
-        long enrollmentCount = classEnrollments.stream()
+        List<Enrollment> enrollmentsToDelete = classEnrollments.stream()
             .filter(e -> courseId.equals(e.getCourseId()))
-            .count();
+            .collect(Collectors.toList());
+        
+        Set<String> affectedStudentIds = enrollmentsToDelete.stream()
+            .map(Enrollment::getStudentId)
+            .collect(Collectors.toSet());
+        
+        long enrollmentCount = enrollmentsToDelete.size();
         
         log.info("Unenrolling {} students from class {} in course {}", 
             enrollmentCount, classId, courseId);
@@ -266,6 +272,60 @@ public class BulkEnrollmentService {
             result.setEnrolledStudents((long) deletedCount);
             
             log.info("Unenrollment completed: {} enrollments deleted successfully", deletedCount);
+            
+            // CRITICAL: Check each affected student to see if they need a placeholder enrollment
+            // If a student has no other real course enrollments for this class, create a placeholder
+            // to maintain their association with the class
+            int placeholdersCreated = 0;
+            for (String studentId : affectedStudentIds) {
+                try {
+                    // Get all remaining enrollments for this student in this class
+                    List<Enrollment> remainingEnrollments = enrollmentRepository.findByClientIdAndClassId(clientId, classId)
+                        .stream()
+                        .filter(e -> studentId.equals(e.getStudentId()))
+                        .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId())) // Exclude existing placeholders
+                        .collect(Collectors.toList());
+                    
+                    if (remainingEnrollments.isEmpty()) {
+                        // Student has no other course enrollments for this class
+                        // Get the student's section from the deleted enrollment (if they had one)
+                        String sectionId = enrollmentsToDelete.stream()
+                            .filter(e -> studentId.equals(e.getStudentId()))
+                            .map(Enrollment::getBatchId)
+                            .filter(bId -> bId != null && !bId.isBlank())
+                            .findFirst()
+                            .orElse(null);
+                        
+                        // Create placeholder to maintain class (and optionally section) association
+                        Enrollment placeholder = new Enrollment();
+                        placeholder.setId(com.datagami.edudron.common.UlidGenerator.nextUlid());
+                        placeholder.setClientId(clientId);
+                        placeholder.setStudentId(studentId);
+                        placeholder.setCourseId("__PLACEHOLDER_ASSOCIATION__");
+                        placeholder.setBatchId(sectionId);
+                        placeholder.setClassId(classId);
+                        placeholder.setInstituteId(classEntity.getInstituteId());
+                        
+                        enrollmentRepository.save(placeholder);
+                        placeholdersCreated++;
+                        
+                        log.info("Created placeholder enrollment for student {} in class {} (section: {}) after unenrolling from their last course", 
+                            studentId, classId, sectionId != null ? sectionId : "none");
+                    } else {
+                        log.debug("Student {} still has {} other course enrollments in class {}, no placeholder needed", 
+                            studentId, remainingEnrollments.size(), classId);
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to create placeholder enrollment for student {} in class {}: {}", 
+                        studentId, classId, e.getMessage(), e);
+                    // Continue with other students
+                }
+            }
+            
+            if (placeholdersCreated > 0) {
+                log.info("Created {} placeholder enrollments to maintain class associations", placeholdersCreated);
+            }
+            
         } catch (Exception e) {
             log.error("Failed to delete enrollments for class {} and course {}: {}", classId, courseId, e.getMessage());
             result.setFailedStudents(enrollmentCount);
@@ -291,11 +351,21 @@ public class BulkEnrollmentService {
         Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
         
-        // Count enrollments before deletion for reporting
+        // Get class from section
+        Class classEntity = classRepository.findByIdAndClientId(section.getClassId(), clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + section.getClassId()));
+        
+        // Get students that will be affected by this unenrollment
         List<Enrollment> sectionEnrollments = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId);
-        long enrollmentCount = sectionEnrollments.stream()
+        List<Enrollment> enrollmentsToDelete = sectionEnrollments.stream()
             .filter(e -> courseId.equals(e.getCourseId()))
-            .count();
+            .collect(Collectors.toList());
+        
+        Set<String> affectedStudentIds = enrollmentsToDelete.stream()
+            .map(Enrollment::getStudentId)
+            .collect(Collectors.toSet());
+        
+        long enrollmentCount = enrollmentsToDelete.size();
         
         log.info("Unenrolling {} students from section {} in course {}", 
             enrollmentCount, sectionId, courseId);
@@ -311,6 +381,52 @@ public class BulkEnrollmentService {
             result.setEnrolledStudents((long) deletedCount);
             
             log.info("Unenrollment completed: {} enrollments deleted successfully", deletedCount);
+            
+            // CRITICAL: Check each affected student to see if they need a placeholder enrollment
+            // If a student has no other real course enrollments for this section, create a placeholder
+            // to maintain their association with the section
+            int placeholdersCreated = 0;
+            for (String studentId : affectedStudentIds) {
+                try {
+                    // Get all remaining enrollments for this student in this section
+                    List<Enrollment> remainingEnrollments = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId)
+                        .stream()
+                        .filter(e -> studentId.equals(e.getStudentId()))
+                        .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId())) // Exclude existing placeholders
+                        .collect(Collectors.toList());
+                    
+                    if (remainingEnrollments.isEmpty()) {
+                        // Student has no other course enrollments for this section
+                        // Create placeholder to maintain section association
+                        Enrollment placeholder = new Enrollment();
+                        placeholder.setId(com.datagami.edudron.common.UlidGenerator.nextUlid());
+                        placeholder.setClientId(clientId);
+                        placeholder.setStudentId(studentId);
+                        placeholder.setCourseId("__PLACEHOLDER_ASSOCIATION__");
+                        placeholder.setBatchId(sectionId);
+                        placeholder.setClassId(section.getClassId());
+                        placeholder.setInstituteId(classEntity.getInstituteId());
+                        
+                        enrollmentRepository.save(placeholder);
+                        placeholdersCreated++;
+                        
+                        log.info("Created placeholder enrollment for student {} in section {} after unenrolling from their last course", 
+                            studentId, sectionId);
+                    } else {
+                        log.debug("Student {} still has {} other course enrollments in section {}, no placeholder needed", 
+                            studentId, remainingEnrollments.size(), sectionId);
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to create placeholder enrollment for student {} in section {}: {}", 
+                        studentId, sectionId, e.getMessage(), e);
+                    // Continue with other students
+                }
+            }
+            
+            if (placeholdersCreated > 0) {
+                log.info("Created {} placeholder enrollments to maintain section associations", placeholdersCreated);
+            }
+            
         } catch (Exception e) {
             log.error("Failed to delete enrollments for section {} and course {}: {}", sectionId, courseId, e.getMessage());
             result.setFailedStudents(enrollmentCount);

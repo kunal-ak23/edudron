@@ -711,6 +711,11 @@ public class EnrollmentService {
         }
         Enrollment enrollment = enrollments.get(0); // Use first (most recent) enrollment if duplicates exist
         
+        // Store enrollment details before deletion
+        String sectionId = enrollment.getBatchId();
+        String classId = enrollment.getClassId();
+        String instituteId = enrollment.getInstituteId();
+        
         // Log unenrollment event before deleting
         String currentUserId = getCurrentUserId();
         String currentUserEmail = getCurrentUserEmail();
@@ -718,13 +723,60 @@ public class EnrollmentService {
             "enrollmentId", enrollment.getId(),
             "studentId", studentId,
             "courseId", courseId,
-            "instituteId", enrollment.getInstituteId() != null ? enrollment.getInstituteId() : "",
-            "classId", enrollment.getClassId() != null ? enrollment.getClassId() : "",
-            "sectionId", enrollment.getBatchId() != null ? enrollment.getBatchId() : ""
+            "instituteId", instituteId != null ? instituteId : "",
+            "classId", classId != null ? classId : "",
+            "sectionId", sectionId != null ? sectionId : ""
         );
         eventService.logUserAction("COURSE_UNENROLLED", currentUserId, currentUserEmail, "/api/courses/" + courseId + "/enroll", eventData);
         
         enrollmentRepository.delete(enrollment);
+        
+        // CRITICAL: Check if student needs a placeholder enrollment to maintain section/class association
+        // If this was their last course enrollment for the section/class, create a placeholder
+        if (sectionId != null || classId != null) {
+            try {
+                // Get all remaining real course enrollments for this student in the same section/class
+                List<Enrollment> remainingEnrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId)
+                    .stream()
+                    .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId())) // Exclude placeholders
+                    .filter(e -> {
+                        // Check if enrollment is for the same section or class
+                        if (sectionId != null && sectionId.equals(e.getBatchId())) {
+                            return true; // Same section
+                        }
+                        if (classId != null && classId.equals(e.getClassId()) && e.getBatchId() == null) {
+                            return true; // Same class, no section
+                        }
+                        return false;
+                    })
+                    .collect(Collectors.toList());
+                
+                if (remainingEnrollments.isEmpty()) {
+                    // Student has no other course enrollments for this section/class
+                    // Create placeholder to maintain association
+                    Enrollment placeholder = new Enrollment();
+                    placeholder.setId(UlidGenerator.nextUlid());
+                    placeholder.setClientId(clientId);
+                    placeholder.setStudentId(studentId);
+                    placeholder.setCourseId("__PLACEHOLDER_ASSOCIATION__");
+                    placeholder.setBatchId(sectionId);
+                    placeholder.setClassId(classId);
+                    placeholder.setInstituteId(instituteId);
+                    
+                    enrollmentRepository.save(placeholder);
+                    
+                    log.info("Created placeholder enrollment for student {} in section/class (sectionId: {}, classId: {}) after unenrolling from their last course", 
+                        studentId, sectionId, classId);
+                } else {
+                    log.debug("Student {} still has {} other course enrollments in section/class, no placeholder needed", 
+                        studentId, remainingEnrollments.size());
+                }
+            } catch (Exception e) {
+                log.error("Failed to create placeholder enrollment for student {} after unenrolling from course {}: {}", 
+                    studentId, courseId, e.getMessage(), e);
+                // Don't fail the unenrollment if placeholder creation fails
+            }
+        }
     }
 
     /**
@@ -745,22 +797,76 @@ public class EnrollmentService {
             throw new IllegalArgumentException("Enrollment does not belong to current tenant");
         }
         
+        // Store enrollment details before deletion
+        String studentId = enrollment.getStudentId();
+        String courseId = enrollment.getCourseId();
+        String sectionId = enrollment.getBatchId();
+        String classId = enrollment.getClassId();
+        String instituteId = enrollment.getInstituteId();
+        
         // Log enrollment deletion event before deleting
         String currentUserId = getCurrentUserId();
         String currentUserEmail = getCurrentUserEmail();
         Map<String, Object> eventData = Map.of(
             "enrollmentId", enrollment.getId(),
-            "studentId", enrollment.getStudentId(),
-            "courseId", enrollment.getCourseId(),
-            "instituteId", enrollment.getInstituteId() != null ? enrollment.getInstituteId() : "",
-            "classId", enrollment.getClassId() != null ? enrollment.getClassId() : "",
-            "sectionId", enrollment.getBatchId() != null ? enrollment.getBatchId() : ""
+            "studentId", studentId,
+            "courseId", courseId,
+            "instituteId", instituteId != null ? instituteId : "",
+            "classId", classId != null ? classId : "",
+            "sectionId", sectionId != null ? sectionId : ""
         );
         eventService.logUserAction("ENROLLMENT_DELETED", currentUserId, currentUserEmail, "/api/enrollments/" + enrollmentId, eventData);
         
         enrollmentRepository.delete(enrollment);
         log.info("Deleted enrollment {} for student {} in course {}", 
-            enrollmentId, enrollment.getStudentId(), enrollment.getCourseId());
+            enrollmentId, studentId, courseId);
+        
+        // CRITICAL: Check if student needs a placeholder enrollment to maintain section/class association
+        // Only do this for real course enrollments (not placeholders)
+        if (!"__PLACEHOLDER_ASSOCIATION__".equals(courseId) && (sectionId != null || classId != null)) {
+            try {
+                // Get all remaining real course enrollments for this student in the same section/class
+                List<Enrollment> remainingEnrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId)
+                    .stream()
+                    .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId())) // Exclude placeholders
+                    .filter(e -> {
+                        // Check if enrollment is for the same section or class
+                        if (sectionId != null && sectionId.equals(e.getBatchId())) {
+                            return true; // Same section
+                        }
+                        if (classId != null && classId.equals(e.getClassId()) && e.getBatchId() == null) {
+                            return true; // Same class, no section
+                        }
+                        return false;
+                    })
+                    .collect(Collectors.toList());
+                
+                if (remainingEnrollments.isEmpty()) {
+                    // Student has no other course enrollments for this section/class
+                    // Create placeholder to maintain association
+                    Enrollment placeholder = new Enrollment();
+                    placeholder.setId(UlidGenerator.nextUlid());
+                    placeholder.setClientId(clientId);
+                    placeholder.setStudentId(studentId);
+                    placeholder.setCourseId("__PLACEHOLDER_ASSOCIATION__");
+                    placeholder.setBatchId(sectionId);
+                    placeholder.setClassId(classId);
+                    placeholder.setInstituteId(instituteId);
+                    
+                    enrollmentRepository.save(placeholder);
+                    
+                    log.info("Created placeholder enrollment for student {} in section/class (sectionId: {}, classId: {}) after deleting their last course enrollment", 
+                        studentId, sectionId, classId);
+                } else {
+                    log.debug("Student {} still has {} other course enrollments in section/class, no placeholder needed", 
+                        studentId, remainingEnrollments.size());
+                }
+            } catch (Exception e) {
+                log.error("Failed to create placeholder enrollment for student {} after deleting enrollment {}: {}", 
+                    studentId, enrollmentId, e.getMessage(), e);
+                // Don't fail the deletion if placeholder creation fails
+            }
+        }
     }
     
     /**
