@@ -32,7 +32,7 @@ export default function BatchesPage() {
       setBatches(batchesData)
 
       // Load course details
-      const courseIds = Array.from(new Set(batchesData.map((b) => b.courseId)))
+      const courseIds = Array.from(new Set(batchesData.map((b) => b.courseId).filter((id): id is string => !!id)))
       const coursePromises = courseIds.map((id) =>
         coursesApi.getCourse(id).catch(() => null)
       )
@@ -102,7 +102,7 @@ export default function BatchesPage() {
           ) : (
             <div className="space-y-4">
               {batches.map((batch) => {
-                const course = courses[batch.courseId]
+                const course = batch.courseId ? courses[batch.courseId] : undefined
                 return (
                   <Card key={batch.id}>
                     <div className="flex items-start justify-between">

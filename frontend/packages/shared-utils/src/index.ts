@@ -14,9 +14,9 @@ export type { TenantFeatureDto } from './api/tenantFeatures'
 export { InstitutesApi, InstituteType } from './api/institutes'
 export type { Institute, CreateInstituteRequest } from './api/institutes'
 export { ClassesApi } from './api/classes'
-export type { Class, CreateClassRequest } from './api/classes'
+export type { Class, CreateClassRequest, BatchCreateClassesRequest, BatchCreateClassesResponse, CreateClassWithSectionsRequest, ClassWithSections, CreateSectionForClassRequest } from './api/classes'
 export { SectionsApi } from './api/sections'
-export type { Section, CreateSectionRequest } from './api/sections'
+export type { Section, CreateSectionRequest, BatchCreateSectionsRequest, BatchCreateSectionsResponse } from './api/sections'
 export { LecturesApi } from './api/lectures'
 export type { CreateLectureRequest, UpdateLectureRequest } from './api/lectures'
 export type { LectureContent } from './api/courses'
@@ -66,7 +66,10 @@ export type {
   Chapter,
   Lecture,
   Assessment,
-  AssessmentQuestion
+  AssessmentQuestion,
+  AIGenerationJobDTO,
+  CourseCopyRequest,
+  CourseCopyResult
 } from './api/courses'
 
 export type {
@@ -74,7 +77,9 @@ export type {
   Batch,
   Progress,
   LectureProgress,
-  SectionProgress
+  SectionProgress,
+  ClassStudentDTO,
+  SectionStudentDTO
 } from './api/enrollments'
 // Section and CreateSectionRequest are already exported above on line 17
 
