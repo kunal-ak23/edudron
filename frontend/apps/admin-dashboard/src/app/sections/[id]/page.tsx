@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
 import { sectionsApi, classesApi, institutesApi, enrollmentsApi } from '@/lib/api'
 import type { Section, CreateSectionRequest, Class, Institute, SectionStudentDTO } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -222,12 +222,21 @@ export default function SectionDetailPage() {
             <span className="text-gray-900">{section.name}</span>
           </div>
 
-          <Link href={`/classes/${classItem.id}/sections`}>
-            <Button variant="ghost" className="mb-4">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Sections
+          <div className="flex items-center justify-between mb-4">
+            <Link href={`/classes/${classItem.id}/sections`}>
+              <Button variant="ghost">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Sections
+              </Button>
+            </Link>
+            <Button 
+              variant="outline"
+              onClick={() => router.push(`/analytics/sections/${sectionId}`)}
+            >
+              <BarChart3 className="h-4 w-4 mr-2" />
+              View Analytics
             </Button>
-          </Link>
+          </div>
 
 
           <Card>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -12,14 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { BarChart3, Loader2, TrendingUp, Users, BookOpen, Clock } from 'lucide-react'
-import { coursesApi, analyticsApi } from '@/lib/api'
-import type { Course, CourseAnalytics } from '@kunal-ak23/edudron-shared-utils'
+import { BarChart3, Loader2, TrendingUp, Users, BookOpen, Clock, Layers, GraduationCap, ArrowRight } from 'lucide-react'
+import { coursesApi, analyticsApi, sectionsApi, enrollmentsApi } from '@/lib/api'
+import type { Course, CourseAnalytics, Section, Batch } from '@kunal-ak23/edudron-shared-utils'
 
 export default function AnalyticsPage() {
   const router = useRouter()
   const { isAuthenticated } = useAuth()
   const [courses, setCourses] = useState<Course[]>([])
+  const [sections, setSections] = useState<Batch[]>([])
   const [selectedCourseId, setSelectedCourseId] = useState<string>('')
   const [analytics, setAnalytics] = useState<CourseAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -42,10 +43,14 @@ export default function AnalyticsPage() {
   const loadCourses = async () => {
     try {
       setLoading(true)
-      const coursesData = await coursesApi.listCourses()
+      const [coursesData, sectionsData] = await Promise.all([
+        coursesApi.listCourses().catch(() => []),
+        enrollmentsApi.listSections().catch(() => [])
+      ])
       setCourses(coursesData.filter(c => c.isPublished && c.status !== 'ARCHIVED'))
+      setSections(sectionsData.filter(s => s.isActive))
     } catch (error) {
-      console.error('Failed to load courses:', error)
+      console.error('Failed to load data:', error)
     } finally {
       setLoading(false)
     }
@@ -84,13 +89,96 @@ export default function AnalyticsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Analytics Dashboard</h1>
-          <p className="text-gray-600 mt-2">View course and lecture engagement analytics</p>
+          <p className="text-gray-600 mt-2">View engagement analytics by course, section, or class</p>
         </div>
+      </div>
+
+      {/* Quick Access Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-blue-100">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-blue-600" />
+              <CardTitle>Course Analytics</CardTitle>
+            </div>
+            <CardDescription>
+              View analytics for individual courses
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              {courses.length} published course{courses.length !== 1 ? 's' : ''} available
+            </p>
+            <div className="text-xs text-muted-foreground">
+              Select a course below to view detailed analytics
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-green-100">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-green-600" />
+              <CardTitle>Section Analytics</CardTitle>
+            </div>
+            <CardDescription>
+              Analytics aggregated by section/batch
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              {sections.length} active section{sections.length !== 1 ? 's' : ''} available
+            </p>
+            {sections.length > 0 ? (
+              <Select onValueChange={(id) => router.push(`/analytics/sections/${id}`)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Select a section" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sections.slice(0, 10).map(section => (
+                    <SelectItem key={section.id} value={section.id}>
+                      {section.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-xs text-muted-foreground">No sections available</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-purple-100">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5 text-purple-600" />
+              <CardTitle>Class Analytics</CardTitle>
+            </div>
+            <CardDescription>
+              Compare sections within a class
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              View aggregated analytics by class
+            </p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full"
+              onClick={() => router.push('/classes')}
+            >
+              <ArrowRight className="h-3 w-3 mr-2" />
+              Go to Classes
+            </Button>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Select Course</CardTitle>
+          <CardTitle>Course Analytics</CardTitle>
+          <CardDescription>Select a course to view quick overview</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-4 items-end">

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
 import { classesApi, institutesApi, enrollmentsApi, sectionsApi } from '@/lib/api'
 import type { Class, CreateClassRequest, Institute, ClassStudentDTO, Section } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -245,12 +245,21 @@ export default function ClassDetailPage() {
           <span className="text-gray-900">{classItem.name}</span>
         </div>
 
-        <Link href={`/institutes/${institute.id}/classes`}>
-        <Button variant="ghost" className="mb-4">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Classes
-        </Button>
-      </Link>
+        <div className="flex items-center justify-between mb-4">
+          <Link href={`/institutes/${institute.id}/classes`}>
+            <Button variant="ghost">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Classes
+            </Button>
+          </Link>
+          <Button 
+            variant="outline"
+            onClick={() => router.push(`/analytics/classes/${classId}`)}
+          >
+            <BarChart3 className="h-4 w-4 mr-2" />
+            View Analytics
+          </Button>
+        </div>
 
         <Card>
           <CardHeader>
