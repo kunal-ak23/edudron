@@ -156,6 +156,28 @@ public class SectionService {
         sectionRepository.save(section);
     }
 
+    public void activateSection(String sectionId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+        
+        // Validate that the class is still active before activating section
+        Class classEntity = classRepository.findByIdAndClientId(section.getClassId(), clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + section.getClassId()));
+        
+        if (!classEntity.getIsActive()) {
+            throw new IllegalArgumentException("Cannot activate section: class is not active");
+        }
+        
+        section.setIsActive(true);
+        sectionRepository.save(section);
+    }
+
     @Transactional(readOnly = true)
     public long countSections(boolean activeOnly) {
         String clientIdStr = TenantContext.getClientId();

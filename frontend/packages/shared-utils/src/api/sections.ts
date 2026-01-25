@@ -88,6 +88,10 @@ export class SectionsApi {
   async deleteSection(id: string): Promise<void> {
     await this.apiClient.delete(`/api/sections/${id}`)
   }
+
+  async activateSection(id: string): Promise<void> {
+    await this.apiClient.put(`/api/sections/${id}/activate`, {})
+  }
 }
 
 

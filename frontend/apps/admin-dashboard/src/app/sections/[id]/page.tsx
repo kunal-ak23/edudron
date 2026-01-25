@@ -42,6 +42,7 @@ export default function SectionDetailPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showActivateDialog, setShowActivateDialog] = useState(false)
   const [members, setMembers] = useState<SectionStudentDTO[]>([])
   const [membersLoading, setMembersLoading] = useState(false)
   const [showAddStudentDialog, setShowAddStudentDialog] = useState(false)
@@ -158,7 +159,8 @@ export default function SectionDetailPage() {
         title: 'Section deactivated',
         description: 'The section has been deactivated successfully.',
       })
-      router.push(`/classes/${section?.classId}/sections`)
+      // Reload section to refresh status
+      await loadSection()
     } catch (err: any) {
       console.error('Error deleting section:', err)
       const errorMessage = extractErrorMessage(err)
@@ -169,6 +171,28 @@ export default function SectionDetailPage() {
       })
     } finally {
       setShowDeleteDialog(false)
+    }
+  }
+
+  const handleActivate = async () => {
+    try {
+      await sectionsApi.activateSection(sectionId)
+      toast({
+        title: 'Section activated',
+        description: 'The section has been activated successfully.',
+      })
+      // Reload section to refresh status
+      await loadSection()
+    } catch (err: any) {
+      console.error('Error activating section:', err)
+      const errorMessage = extractErrorMessage(err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to activate section',
+        description: errorMessage,
+      })
+    } finally {
+      setShowActivateDialog(false)
     }
   }
 
@@ -208,7 +232,14 @@ export default function SectionDetailPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Section Details</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Section Details</CardTitle>
+                {!section.isActive && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-yellow-100 text-yellow-800 rounded-md text-sm font-medium">
+                    Inactive
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleUpdate} className="space-y-6">
@@ -220,6 +251,7 @@ export default function SectionDetailPage() {
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
+                      disabled={!section.isActive}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -228,6 +260,7 @@ export default function SectionDetailPage() {
                       id="description"
                       value={formData.description || ''}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      disabled={!section.isActive}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -237,6 +270,7 @@ export default function SectionDetailPage() {
                       type="date"
                       value={formData.startDate || ''}
                       onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      disabled={!section.isActive}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -246,6 +280,7 @@ export default function SectionDetailPage() {
                       type="date"
                       value={formData.endDate || ''}
                       onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                      disabled={!section.isActive}
                     />
                   </div>
                   <div className="grid gap-2">
@@ -257,18 +292,29 @@ export default function SectionDetailPage() {
                       value={formData.maxStudents || ''}
                       onChange={(e) => setFormData({ ...formData, maxStudents: e.target.value ? parseInt(e.target.value) : undefined })}
                       placeholder="Leave empty for unlimited"
+                      disabled={!section.isActive}
                     />
                   </div>
                 </div>
                 <div className="flex justify-between">
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={() => setShowDeleteDialog(true)}
-                  >
-                    Deactivate Section
-                  </Button>
-                  <Button type="submit" disabled={submitting}>
+                  {section.isActive ? (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => setShowDeleteDialog(true)}
+                    >
+                      Deactivate Section
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="default"
+                      onClick={() => setShowActivateDialog(true)}
+                    >
+                      Activate Section
+                    </Button>
+                  )}
+                  <Button type="submit" disabled={submitting || !section.isActive}>
                     {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     <Save className="mr-2 h-4 w-4" />
                     Save Changes
@@ -436,6 +482,16 @@ export default function SectionDetailPage() {
         description="Are you sure you want to deactivate this section?"
         confirmText="Deactivate"
         variant="destructive"
+      />
+
+      <ConfirmationDialog
+        isOpen={showActivateDialog}
+        onClose={() => setShowActivateDialog(false)}
+        onConfirm={handleActivate}
+        title="Activate Section"
+        description="Are you sure you want to activate this section?"
+        confirmText="Activate"
+        variant="default"
       />
     </div>
   )

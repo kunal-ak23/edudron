@@ -88,6 +88,13 @@ public class SectionController {
         return ResponseEntity.noContent().build();
     }
 
+    @PutMapping("/sections/{id}/activate")
+    @Operation(summary = "Activate section", description = "Activate an inactive section")
+    public ResponseEntity<Void> activateSection(@PathVariable String id) {
+        sectionService.activateSection(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/sections/{id}/progress")
     @Operation(summary = "Get section progress", description = "Get progress statistics for a section")
     public ResponseEntity<SectionProgressDTO> getSectionProgress(@PathVariable String id) {
