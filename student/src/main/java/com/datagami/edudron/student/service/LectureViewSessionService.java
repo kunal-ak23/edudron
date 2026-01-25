@@ -7,6 +7,7 @@ import com.datagami.edudron.student.domain.LectureViewSession;
 import com.datagami.edudron.student.dto.EndSessionRequest;
 import com.datagami.edudron.student.dto.LectureViewSessionDTO;
 import com.datagami.edudron.student.dto.StartSessionRequest;
+import com.datagami.edudron.student.dto.UpdateSessionRequest;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.LectureViewSessionRepository;
 import org.slf4j.Logger;
@@ -85,6 +86,46 @@ public class LectureViewSessionService {
         evictCourseAnalyticsCache(saved.getCourseId());
         
         return toDTO(saved);
+    }
+    
+    @Transactional
+    public LectureViewSessionDTO updateSession(String sessionId, UpdateSessionRequest request) {
+        log.info("[Session Service] Updating session: sessionId={}, progressAtEnd={}, isCompleted={}", 
+            sessionId, request.getProgressAtEnd(), request.getIsCompleted());
+        
+        LectureViewSession session = sessionRepository.findById(sessionId)
+            .orElseThrow(() -> {
+                log.error("[Session Service] Session not found: sessionId={}", sessionId);
+                return new IllegalArgumentException("Session not found: " + sessionId);
+            });
+        
+        log.debug("[Session Service] Found session: sessionId={}, lectureId={}, studentId={}, isEnded={}", 
+            sessionId, session.getLectureId(), session.getStudentId(), session.getSessionEndedAt() != null);
+        
+        // Update progress and completion without ending the session
+        boolean needsUpdate = false;
+        if (request.getProgressAtEnd() != null && 
+            (session.getProgressAtEnd() == null || !session.getProgressAtEnd().equals(request.getProgressAtEnd()))) {
+            session.setProgressAtEnd(request.getProgressAtEnd());
+            needsUpdate = true;
+        }
+        if (request.getIsCompleted() != null && 
+            (session.getIsCompletedInSession() == null || !session.getIsCompletedInSession().equals(request.getIsCompleted()))) {
+            session.setIsCompletedInSession(request.getIsCompleted());
+            needsUpdate = true;
+        }
+        
+        if (needsUpdate) {
+            log.info("[Session Service] Updating session progress/completion: sessionId={}, progressAtEnd={}, isCompleted={}", 
+                sessionId, session.getProgressAtEnd(), session.getIsCompletedInSession());
+            session = sessionRepository.save(session);
+            // Invalidate course analytics cache when session is updated
+            evictCourseAnalyticsCache(session.getCourseId());
+        } else {
+            log.debug("[Session Service] No updates needed for session: sessionId={}", sessionId);
+        }
+        
+        return toDTO(session);
     }
     
     @Transactional

@@ -3,6 +3,7 @@ package com.datagami.edudron.student.web;
 import com.datagami.edudron.student.dto.EndSessionRequest;
 import com.datagami.edudron.student.dto.LectureViewSessionDTO;
 import com.datagami.edudron.student.dto.StartSessionRequest;
+import com.datagami.edudron.student.dto.UpdateSessionRequest;
 import com.datagami.edudron.student.service.LectureViewSessionService;
 import com.datagami.edudron.student.util.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,6 +43,35 @@ public class LectureViewSessionController {
         } catch (Exception e) {
             log.error("[Session Controller] Failed to start session: lectureId={}, studentId={}, error={}", 
                 lectureId, studentId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @PatchMapping("/lectures/{lectureId}/sessions/{sessionId}")
+    @Operation(summary = "Update lecture viewing session", description = "Update session progress and completion status without ending the session")
+    public ResponseEntity<LectureViewSessionDTO> updateSession(
+            @PathVariable String lectureId,
+            @PathVariable String sessionId,
+            @Valid @RequestBody UpdateSessionRequest request) {
+        log.info("[Session Controller] Received update session request: sessionId={}, lectureId={}, progressAtEnd={}, isCompleted={}", 
+            sessionId, lectureId, request.getProgressAtEnd(), request.getIsCompleted());
+        
+        try {
+            LectureViewSessionDTO session = sessionService.updateSession(sessionId, request);
+            
+            // Validate that the lectureId in the path matches the session's lectureId
+            if (!lectureId.equals(session.getLectureId())) {
+                log.warn("[Session Controller] Lecture ID mismatch: path lectureId={}, session lectureId={}, sessionId={}", 
+                    lectureId, session.getLectureId(), sessionId);
+                // Still return the session, but log the warning
+            }
+            
+            log.info("[Session Controller] Successfully updated session: sessionId={}, lectureId={}, isCompleted={}", 
+                sessionId, session.getLectureId(), session.getIsCompletedInSession());
+            return ResponseEntity.ok(session);
+        } catch (Exception e) {
+            log.error("[Session Controller] Failed to update session: sessionId={}, lectureId={}, error={}", 
+                sessionId, lectureId, e.getMessage(), e);
             throw e;
         }
     }

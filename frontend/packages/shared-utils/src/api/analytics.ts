@@ -144,6 +144,11 @@ export interface EndSessionRequest {
   isCompleted?: boolean
 }
 
+export interface UpdateSessionRequest {
+  progressAtEnd?: number
+  isCompleted?: boolean
+}
+
 export class AnalyticsApi {
   constructor(private apiClient: ApiClient) {}
 
@@ -171,6 +176,37 @@ export class AnalyticsApi {
         courseId: request.courseId,
         error: error instanceof Error ? error.message : String(error),
         errorResponse: (error as any)?.response?.data
+      })
+      throw error
+    }
+  }
+
+  async updateLectureSession(lectureId: string, sessionId: string, request: UpdateSessionRequest): Promise<LectureViewSession> {
+    console.log('[AnalyticsApi] updateLectureSession called:', {
+      lectureId,
+      sessionId,
+      progressAtEnd: request.progressAtEnd,
+      isCompleted: request.isCompleted,
+      url: `/api/lectures/${lectureId}/sessions/${sessionId}`
+    })
+    try {
+      const response = await this.apiClient.patch<LectureViewSession>(
+        `/api/lectures/${lectureId}/sessions/${sessionId}`,
+        request
+      )
+      console.log('[AnalyticsApi] updateLectureSession success:', {
+        sessionId: response.data?.id,
+        lectureId: response.data?.lectureId,
+        isCompleted: response.data?.isCompletedInSession
+      })
+      return response.data
+    } catch (error) {
+      console.error('[AnalyticsApi] updateLectureSession error:', {
+        lectureId,
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+        errorResponse: (error as any)?.response?.data,
+        statusCode: (error as any)?.response?.status
       })
       throw error
     }
