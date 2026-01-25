@@ -39,7 +39,11 @@ export type {
   SkippedLecture,
   ActivityTimelinePoint,
   StartSessionRequest,
-  EndSessionRequest
+  EndSessionRequest,
+  SectionAnalytics,
+  ClassAnalytics,
+  SectionComparison,
+  CourseBreakdown
 } from './api/analytics'
 
 // Auth
