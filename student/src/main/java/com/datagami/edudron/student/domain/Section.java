@@ -9,31 +9,37 @@ import java.util.UUID;
 @Table(name = "sections", schema = "student")
 public class Section {
     @Id
+    @Column(name = "id")
     private String id; // ULID
 
-    @Column(nullable = false)
+    @Column(name = "client_id", nullable = false)
     private UUID clientId;
 
-    @Column(nullable = false)
+    @Column(name = "name", nullable = false)
     private String name;
 
-    @Column(columnDefinition = "text")
+    @Column(name = "description", columnDefinition = "text")
     private String description;
 
-    @Column(nullable = false)
+    @Column(name = "class_id", nullable = false)
     private String classId;
 
+    @Column(name = "start_date")
     private LocalDate startDate;
+    
+    @Column(name = "end_date")
     private LocalDate endDate;
+    
+    @Column(name = "max_students")
     private Integer maxStudents;
 
-    @Column(nullable = false)
+    @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
-    @Column(nullable = false)
+    @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
-    @Column(nullable = false)
+    @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
     // Constructors

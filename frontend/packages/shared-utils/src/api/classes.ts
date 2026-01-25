@@ -12,6 +12,7 @@ export interface Class {
   level?: string
   isActive: boolean
   sectionCount?: number
+  studentCount?: number
   createdAt: string
   updatedAt: string
 }

@@ -193,6 +193,7 @@ export default function InstituteClassesPage() {
                       <TableHead>Academic Year</TableHead>
                       <TableHead>Grade/Level</TableHead>
                       <TableHead>Sections</TableHead>
+                      <TableHead>Students</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -208,6 +209,12 @@ export default function InstituteClassesPage() {
                           <div className="flex items-center gap-1">
                             <FolderOpen className="h-4 w-4 text-gray-400" />
                             {classItem.sectionCount || 0}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Users className="h-4 w-4 text-gray-400" />
+                            {classItem.studentCount || 0}
                           </div>
                         </TableCell>
                         <TableCell>

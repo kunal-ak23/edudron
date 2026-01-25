@@ -7,6 +7,7 @@ import com.datagami.edudron.student.domain.Institute;
 import com.datagami.edudron.student.domain.Section;
 import com.datagami.edudron.student.dto.*;
 import com.datagami.edudron.student.repo.ClassRepository;
+import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.InstituteRepository;
 import com.datagami.edudron.student.repo.SectionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +29,9 @@ public class ClassService {
     
     @Autowired
     private SectionRepository sectionRepository;
+    
+    @Autowired
+    private EnrollmentRepository enrollmentRepository;
     
     public ClassDTO createClass(String instituteId, CreateClassRequest request) {
         String clientIdStr = TenantContext.getClientId();
@@ -341,11 +345,16 @@ public class ClassService {
         dto.setCreatedAt(classEntity.getCreatedAt());
         dto.setUpdatedAt(classEntity.getUpdatedAt());
         
-        // Get section count
+        // Get section count and student count
         String clientIdStr = TenantContext.getClientId();
         UUID clientId = clientIdStr != null ? UUID.fromString(clientIdStr) : classEntity.getClientId();
+        
         long sectionCount = sectionRepository.findByClientIdAndClassId(clientId, classEntity.getId()).size();
         dto.setSectionCount(sectionCount);
+        
+        // Count distinct students in this class (includes students in sections and class-level only)
+        long studentCount = enrollmentRepository.countDistinctStudentsByClientIdAndClassId(clientId, classEntity.getId());
+        dto.setStudentCount(studentCount);
         
         return dto;
     }

@@ -48,6 +48,9 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, String>,
     
     List<Enrollment> findByClientIdAndClassId(UUID clientId, String classId);
     
+    @Query("SELECT COUNT(DISTINCT e.studentId) FROM Enrollment e WHERE e.clientId = :clientId AND e.classId = :classId")
+    long countDistinctStudentsByClientIdAndClassId(@Param("clientId") UUID clientId, @Param("classId") String classId);
+    
     List<Enrollment> findByClientId(UUID clientId);
     
     Page<Enrollment> findByClientId(UUID clientId, Pageable pageable);

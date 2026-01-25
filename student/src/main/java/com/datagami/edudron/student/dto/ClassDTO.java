@@ -14,6 +14,7 @@ public class ClassDTO {
     private String level;
     private Boolean isActive;
     private Long sectionCount;
+    private Long studentCount;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
@@ -47,6 +48,9 @@ public class ClassDTO {
 
     public Long getSectionCount() { return sectionCount; }
     public void setSectionCount(Long sectionCount) { this.sectionCount = sectionCount; }
+
+    public Long getStudentCount() { return studentCount; }
+    public void setStudentCount(Long studentCount) { this.studentCount = studentCount; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
