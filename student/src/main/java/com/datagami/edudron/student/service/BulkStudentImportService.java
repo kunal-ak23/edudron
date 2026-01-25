@@ -2,7 +2,6 @@ package com.datagami.edudron.student.service;
 
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
-import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.student.dto.UserResponseDTO;
 import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.Enrollment;
@@ -34,11 +33,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
-import org.springframework.dao.DataAccessException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -51,7 +47,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -107,10 +102,7 @@ public class BulkStudentImportService {
                     if (authHeader != null && !authHeader.isBlank()) {
                         if (!request.getHeaders().containsKey("Authorization")) {
                             request.getHeaders().add("Authorization", authHeader);
-                            log.debug("Forwarding Authorization header to identity service");
                         }
-                    } else {
-                        log.warn("No Authorization header found in incoming request - identity service calls may fail");
                     }
                 }
                 return execution.execute(request, body);
@@ -127,33 +119,25 @@ public class BulkStudentImportService {
         
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
-            log.error("Tenant context is not set - cannot process import");
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        log.debug("Processing import for client ID: {}", clientId);
-        
         String fileName = file.getOriginalFilename();
         if (fileName == null) {
-            log.error("File name is required but not provided");
             throw new IllegalArgumentException("File name is required");
         }
         
         boolean isExcel = fileName.toLowerCase().endsWith(".xlsx") || fileName.toLowerCase().endsWith(".xls");
-        log.debug("File type detected: {}", isExcel ? "Excel" : "CSV");
         
         try {
             if (isExcel) {
-                log.debug("Parsing Excel file...");
                 importFromExcel(file, options, clientId, result, rowResults);
             } else {
-                log.debug("Parsing CSV file...");
                 importFromCSV(file, options, clientId, result, rowResults);
             }
-            log.debug("File parsing completed. Total rows parsed: {}", rowResults.size());
         } catch (Exception e) {
-            log.error("Error during bulk import", e);
+            log.error("Error during bulk import: {}", e.getMessage());
             throw new RuntimeException("Failed to import students: " + e.getMessage(), e);
         }
         
@@ -339,94 +323,71 @@ public class BulkStudentImportService {
             
             // Validate class/section/institute if provided
             if (StringUtils.hasText(sectionId)) {
-                log.debug("Row {}: Looking up section: {} for client: {}", rowNumber, sectionId, clientId);
                 Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
                     .orElse(null);
                 if (section == null) {
-                    log.warn("Row {}: Section not found: {} for client: {}", rowNumber, sectionId, clientId);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("Section not found: " + sectionId);
                     rowResults.add(rowResult);
                     return;
                 }
-                log.debug("Row {}: Section found: {} (name: {}, active: {}, classId: {})", 
-                    rowNumber, section.getId(), section.getName(), section.getIsActive(), section.getClassId());
                     
                 if (!section.getIsActive()) {
-                    log.warn("Row {}: Section is not active: {}", rowNumber, sectionId);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("Section is not active: " + sectionId);
                     rowResults.add(rowResult);
                     return;
                 }
                 if (StringUtils.hasText(classId) && !section.getClassId().equals(classId)) {
-                    log.warn("Row {}: Section {} belongs to class {} but classId {} was provided", 
-                        rowNumber, sectionId, section.getClassId(), classId);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("Section does not belong to class: " + classId);
                     rowResults.add(rowResult);
                     return;
                 }
                 classId = section.getClassId();
-                log.debug("Row {}: Using classId from section: {}", rowNumber, classId);
             }
             
             if (StringUtils.hasText(classId)) {
-                log.debug("Row {}: Looking up class: {} for client: {}", rowNumber, classId, clientId);
                 Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
                     .orElse(null);
                 if (classEntity == null) {
-                    log.warn("Row {}: Class not found: {} for client: {}", rowNumber, classId, clientId);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("Class not found: " + classId);
                     rowResults.add(rowResult);
                     return;
                 }
-                log.debug("Row {}: Class found: {} (name: {}, active: {}, instituteId: {})", 
-                    rowNumber, classEntity.getId(), classEntity.getName(), classEntity.getIsActive(), classEntity.getInstituteId());
                     
                 if (!classEntity.getIsActive()) {
-                    log.warn("Row {}: Class is not active: {}", rowNumber, classId);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("Class is not active: " + classId);
                     rowResults.add(rowResult);
                     return;
                 }
                 if (StringUtils.hasText(instituteId) && !classEntity.getInstituteId().equals(instituteId)) {
-                    log.warn("Row {}: Class {} belongs to institute {} but instituteId {} was provided", 
-                        rowNumber, classId, classEntity.getInstituteId(), instituteId);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("Class does not belong to institute: " + instituteId);
                     rowResults.add(rowResult);
                     return;
                 }
                 instituteId = classEntity.getInstituteId();
-                log.debug("Row {}: Using instituteId from class: {}", rowNumber, instituteId);
             }
             
             if (StringUtils.hasText(instituteId)) {
-                log.debug("Row {}: Looking up institute: {} for client: {}", rowNumber, instituteId, clientId);
                 Institute institute = instituteRepository.findByIdAndClientId(instituteId, clientId)
                     .orElse(null);
                 if (institute == null) {
-                    log.warn("Row {}: Institute not found: {} for client: {}", rowNumber, instituteId, clientId);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("Institute not found: " + instituteId);
                     rowResults.add(rowResult);
                     return;
                 }
-                log.debug("Row {}: Institute found: {} (name: {}, active: {})", 
-                    rowNumber, institute.getId(), institute.getName(), institute.getIsActive());
                     
                 if (!institute.getIsActive()) {
-                    log.warn("Row {}: Institute is not active: {}", rowNumber, instituteId);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("Institute is not active: " + instituteId);
                     rowResults.add(rowResult);
                     return;
                 }
-            } else {
-                log.warn("Row {}: No instituteId found after processing", rowNumber);
             }
             
             // Create user via identity service
@@ -442,7 +403,6 @@ public class BulkStudentImportService {
             if (StringUtils.hasText(instituteId)) {
                 createUserRequest.setInstituteIds(java.util.Collections.singletonList(instituteId));
             } else {
-                log.warn("Row {}: Institute ID is required but not provided for student: {}", rowNumber, email);
                 rowResult.setSuccess(false);
                 rowResult.setErrorMessage("Institute ID is required");
                 rowResults.add(rowResult);
@@ -453,9 +413,6 @@ public class BulkStudentImportService {
             if (options.getAutoGeneratePassword() != null && options.getAutoGeneratePassword()) {
                 createUserRequest.setAutoGeneratePassword(true);
             }
-            
-            log.debug("Row {}: Creating user in identity service: {} (institute: {}, class: {}, section: {})", 
-                rowNumber, email, instituteId, classId, sectionId);
             
             String identityUrl = gatewayUrl + "/idp/users";
             HttpHeaders headers = new HttpHeaders();
@@ -471,14 +428,12 @@ public class BulkStudentImportService {
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 UserResponseDTO user = response.getBody();
-                log.info("Row {}: Successfully created user: {} (ID: {})", rowNumber, email, user.getId());
                 rowResult.setSuccess(true);
                 rowResult.setStudentId(user.getId());
                 
                 // Handle enrollments and associations
                 handleEnrollmentsAndAssociations(user, classId, sectionId, courseId, instituteId, options, clientId, rowResult);
             } else {
-                log.error("Row {}: Failed to create user: {} - Status: {}", rowNumber, email, response.getStatusCode());
                 rowResult.setSuccess(false);
                 rowResult.setErrorMessage("Failed to create user: " + (response.getBody() != null ? response.getBody().toString() : "Unknown error"));
             }
@@ -510,7 +465,6 @@ public class BulkStudentImportService {
                             rowResult.setErrorMessage("User already exists but could not be found for update");
                         }
                     } catch (Exception updateException) {
-                        log.error("Row {}: Failed to update existing user {}: {}", rowNumber, email, updateException.getMessage());
                         rowResult.setSuccess(false);
                         rowResult.setErrorMessage("Failed to update existing user: " + updateException.getMessage());
                     }
@@ -549,24 +503,18 @@ public class BulkStudentImportService {
                             rowResult.setErrorMessage("User already exists but could not be found for update");
                         }
                     } catch (Exception updateException) {
-                        log.error("Row {}: Failed to update existing user {}: {}", rowNumber, email, updateException.getMessage());
                         rowResult.setSuccess(false);
                         rowResult.setErrorMessage("Failed to update existing user: " + updateException.getMessage());
                     }
                 } else {
-                    log.error("Row {}: Server error creating user. Status: {}, Response: {}", 
-                        rowNumber, e.getStatusCode(), errorMessage);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage(errorMessage);
                 }
             } else {
-                log.error("Row {}: Server error creating user. Status: {}, Response: {}", 
-                    rowNumber, e.getStatusCode(), errorMessage);
                 rowResult.setSuccess(false);
                 rowResult.setErrorMessage(errorMessage);
             }
         } catch (Exception e) {
-            log.error("Row {}: Unexpected error creating user", rowNumber, e);
             rowResult.setSuccess(false);
             rowResult.setErrorMessage(e.getMessage() != null ? e.getMessage() : "Unknown error: " + e.getClass().getSimpleName());
         }
@@ -663,7 +611,7 @@ public class BulkStudentImportService {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to find user by email {}: {}", email, e.getMessage());
+            // Silently return null if user not found
         }
         return null;
     }
@@ -674,7 +622,6 @@ public class BulkStudentImportService {
     private UserResponseDTO updateExistingUser(String userId, String email, String name, String phone, 
                                                String instituteId, UUID clientId) {
         try {
-            // Create update request
             UpdateUserRequestDTO updateRequest = new UpdateUserRequestDTO();
             updateRequest.setEmail(email);
             updateRequest.setName(name);
@@ -701,7 +648,6 @@ public class BulkStudentImportService {
                 return response.getBody();
             }
         } catch (Exception e) {
-            log.error("Failed to update user {}: {}", userId, e.getMessage());
             throw new RuntimeException("Failed to update user: " + e.getMessage(), e);
         }
         return null;
@@ -714,14 +660,11 @@ public class BulkStudentImportService {
                                                    String courseId, String instituteId,
                                                    BulkStudentImportRequest options, UUID clientId,
                                                    StudentImportRowResult rowResult) {
-        log.debug("Handling enrollments and associations for student: {} (class: {}, section: {}, course: {})", 
-            user.getId(), classId, sectionId, courseId);
         boolean hasEnrollment = false;
         
         // Create enrollment if needed
         if (options.getAutoEnroll() != null && options.getAutoEnroll() && StringUtils.hasText(courseId)) {
             try {
-                log.debug("Auto-enrolling student {} in course: {}", user.getId(), courseId);
                 CreateEnrollmentRequest enrollmentRequest = new CreateEnrollmentRequest();
                 enrollmentRequest.setCourseId(courseId);
                 enrollmentRequest.setClassId(classId);
@@ -730,9 +673,7 @@ public class BulkStudentImportService {
                 
                 enrollmentService.enrollStudent(user.getId(), enrollmentRequest);
                 hasEnrollment = true;
-                log.debug("Successfully enrolled student {} in course: {}", user.getId(), courseId);
             } catch (Exception e) {
-                log.warn("Failed to enroll student {} in course {}: {}", user.getId(), courseId, e.getMessage());
                 // Don't fail the import if enrollment fails
             }
         }
@@ -750,28 +691,21 @@ public class BulkStudentImportService {
                     enrollmentService.enrollStudent(user.getId(), enrollmentRequest);
                     hasEnrollment = true;
                 } catch (Exception e) {
-                    log.warn("Failed to enroll student {} in default course {}: {}", user.getId(), defaultCourseId, e.getMessage());
+                    // Don't fail the import if enrollment fails
                 }
             }
         }
         
         // If student has classId or sectionId but no enrollment created yet, create a placeholder enrollment
         if (!hasEnrollment && (StringUtils.hasText(classId) || StringUtils.hasText(sectionId))) {
-            log.debug("Creating placeholder enrollment for student {} (class: {}, section: {})", 
-                user.getId(), classId, sectionId);
             try {
                 String placeholderCourseId = "__PLACEHOLDER_ASSOCIATION__";
                 
                 // Check if placeholder enrollment already exists
-                // Use try-catch to handle potential transaction errors
                 boolean exists = false;
                 try {
                     exists = enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, user.getId(), placeholderCourseId);
-                    log.debug("Placeholder enrollment exists for student {}: {}", user.getId(), exists);
                 } catch (Exception checkException) {
-                    // If the check fails (e.g., transaction aborted), log and skip creation
-                    log.debug("Could not check for existing placeholder enrollment for student {}: {}", 
-                        user.getId(), checkException.getMessage());
                     return; // Skip enrollment creation if we can't check
                 }
                 
@@ -787,34 +721,18 @@ public class BulkStudentImportService {
                     placeholderEnrollment.setInstituteId(instituteId);
                     
                     enrollmentRepository.save(placeholderEnrollment);
-                    log.info("Created placeholder enrollment for student {} to associate with class {} / section {}", 
-                        user.getId(), classId, sectionId);
                     
                     // Automatically enroll student in all published courses assigned to this section/class
                     try {
-                        log.debug("Auto-enrolling student {} in courses assigned to class/section", user.getId());
                         enrollmentService.autoEnrollStudentInAssignedCourses(
                             user.getId(), sectionId, classId, instituteId, clientId);
                     } catch (Exception e) {
-                        // Log error but don't fail the import if auto-enrollment fails
-                        log.warn("Failed to auto-enroll student {} in assigned courses after placeholder enrollment: {}", 
-                            user.getId(), e.getMessage(), e);
+                        // Don't fail the import if auto-enrollment fails
                     }
-                } else {
-                    log.debug("Placeholder enrollment already exists for student {}, skipping creation", user.getId());
                 }
-            } catch (org.springframework.dao.DataAccessException e) {
-                // Handle database-specific errors (including transaction aborted)
-                log.warn("Failed to create placeholder enrollment for student {} due to database error: {}", 
-                    user.getId(), e.getMessage());
-                // Don't fail the import if placeholder enrollment fails
             } catch (Exception e) {
-                log.warn("Failed to create placeholder enrollment for student {}: {}", user.getId(), e.getMessage());
                 // Don't fail the import if placeholder enrollment fails
             }
-        } else {
-            log.debug("No placeholder enrollment needed for student {} (hasEnrollment: {}, classId: {}, sectionId: {})", 
-                user.getId(), hasEnrollment, classId, sectionId);
         }
     }
 }
