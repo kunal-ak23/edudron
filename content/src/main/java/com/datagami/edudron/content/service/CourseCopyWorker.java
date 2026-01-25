@@ -1,6 +1,6 @@
 package com.datagami.edudron.content.service;
 
-import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.content.dto.AIGenerationJobDTO;
 import com.datagami.edudron.content.dto.CourseCopyJobData;
@@ -10,11 +10,28 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -34,6 +51,33 @@ public class CourseCopyWorker {
     
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Value("${GATEWAY_URL:http://localhost:8080}")
+    private String gatewayUrl;
+    
+    private RestTemplate restTemplate;
+    
+    private RestTemplate getRestTemplate() {
+        if (restTemplate == null) {
+            restTemplate = new RestTemplate();
+            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+            interceptors.add(new TenantContextRestTemplateInterceptor());
+            // Add interceptor to forward JWT token
+            interceptors.add((request, body, execution) -> {
+                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    HttpServletRequest currentRequest = attributes.getRequest();
+                    String authHeader = currentRequest.getHeader("Authorization");
+                    if (authHeader != null && !authHeader.isBlank() && !request.getHeaders().containsKey("Authorization")) {
+                        request.getHeaders().add("Authorization", authHeader);
+                    }
+                }
+                return execution.execute(request, body);
+            });
+            restTemplate.setInterceptors(interceptors);
+        }
+        return restTemplate;
+    }
     
     /**
      * Submit course copy job to queue (called by API endpoint)
@@ -153,16 +197,45 @@ public class CourseCopyWorker {
     }
     
     private void validateSystemAdmin() {
-        String currentTenantContext = TenantContext.getClientId();
+        // Get user role from identity service (same pattern as CourseService)
+        String userRole = getCurrentUserRole();
         
-        // For now, check if tenant context is SYSTEM
-        // In a full implementation, we'd also validate the user's role
-        if (currentTenantContext == null || 
-            (!currentTenantContext.equals("SYSTEM") && 
-             !currentTenantContext.equals("PENDING_TENANT_SELECTION"))) {
-            throw new AccessDeniedException("Only SYSTEM_ADMIN can copy courses across tenants. Please ensure you're logged in as SYSTEM_ADMIN.");
+        if (!"SYSTEM_ADMIN".equals(userRole)) {
+            logger.warn("User with role {} attempted to copy course - access denied", userRole);
+            throw new AccessDeniedException("Only SYSTEM_ADMIN can copy courses across tenants. Current role: " + userRole);
         }
         
-        logger.info("SYSTEM_ADMIN validation passed for tenant context: {}", currentTenantContext);
+        logger.info("SYSTEM_ADMIN validation passed for user with role: {}", userRole);
+    }
+    
+    private String getCurrentUserRole() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null || 
+                "anonymousUser".equals(authentication.getName())) {
+                return null;
+            }
+            
+            // Get user info from identity service
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object role = response.getBody().get("role");
+                return role != null ? role.toString() : null;
+            }
+        } catch (Exception e) {
+            logger.error("Could not determine user role: {}", e.getMessage(), e);
+        }
+        return null;
     }
 }

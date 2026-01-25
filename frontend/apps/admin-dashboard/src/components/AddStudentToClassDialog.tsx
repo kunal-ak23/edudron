@@ -141,24 +141,31 @@ export function AddStudentToClassDialog({
   }, [studentsSearchQuery, open, loadStudents, students.length])
 
   const handleAddStudent = async () => {
-    if (!selectedStudentId || !selectedCourseId) {
+    if (!selectedStudentId) {
       toast({
         variant: 'destructive',
         title: 'Missing required fields',
-        description: 'Please select both student and course',
+        description: 'Please select a student',
       })
       return
     }
 
     setEnrolling(true)
     try {
-      await enrollmentsApi.enrollStudentInCourse(selectedStudentId, selectedCourseId, {
+      // If no course selected, use placeholder to just associate student with class
+      const courseIdToUse = selectedCourseId || '__PLACEHOLDER_ASSOCIATION__'
+      
+      await enrollmentsApi.enrollStudentInCourse(selectedStudentId, courseIdToUse, {
         classId,
       })
       
+      const message = selectedCourseId 
+        ? 'Student has been enrolled in the course and associated with the class'
+        : 'Student has been associated with the class'
+      
       toast({
         title: 'Success',
-        description: 'Student has been enrolled in the course and associated with the class',
+        description: message,
       })
       
       // Reset form
@@ -171,10 +178,10 @@ export function AddStudentToClassDialog({
         onSuccess()
       }
     } catch (err: any) {
-      console.error('Error enrolling student:', err)
+      console.error('Error adding student to class:', err)
       toast({
         variant: 'destructive',
-        title: 'Failed to enroll student',
+        title: 'Failed to add student',
         description: extractErrorMessage(err),
       })
     } finally {
@@ -188,7 +195,7 @@ export function AddStudentToClassDialog({
         <DialogHeader>
           <DialogTitle>Add Student to Class</DialogTitle>
           <DialogDescription>
-            Enroll a student in a course and associate them with this class.
+            Associate a student with this class. Optionally enroll them in a course at the same time.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -210,7 +217,7 @@ export function AddStudentToClassDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="course">Course *</Label>
+            <Label htmlFor="course">Course (Optional)</Label>
             <SearchableSelect
               options={courses.map((course) => ({
                 value: course.id,
@@ -219,10 +226,13 @@ export function AddStudentToClassDialog({
               }))}
               value={selectedCourseId}
               onValueChange={setSelectedCourseId}
-              placeholder="Select a course"
+              placeholder="Select a course (optional)"
               emptyMessage="No courses found"
               loading={coursesLoading}
             />
+            <p className="text-sm text-muted-foreground">
+              Leave empty to just associate the student with the class
+            </p>
           </div>
         </div>
         <DialogFooter>
@@ -239,15 +249,15 @@ export function AddStudentToClassDialog({
           </Button>
           <Button
             onClick={handleAddStudent}
-            disabled={enrolling || !selectedStudentId || !selectedCourseId}
+            disabled={enrolling || !selectedStudentId}
           >
             {enrolling ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Enrolling...
+                {selectedCourseId ? 'Enrolling...' : 'Adding...'}
               </>
             ) : (
-              'Enroll Student'
+              selectedCourseId ? 'Enroll Student' : 'Add Student'
             )}
           </Button>
         </DialogFooter>

@@ -5,6 +5,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -54,5 +55,22 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, String>,
     List<Enrollment> findByClientId(UUID clientId);
     
     Page<Enrollment> findByClientId(UUID clientId, Pageable pageable);
+    
+    // Bulk delete methods for efficient unenrollment
+    @Modifying
+    @Query("DELETE FROM Enrollment e WHERE e.clientId = :clientId AND e.batchId = :batchId AND e.courseId = :courseId")
+    int deleteByClientIdAndBatchIdAndCourseId(
+        @Param("clientId") UUID clientId,
+        @Param("batchId") String batchId,
+        @Param("courseId") String courseId
+    );
+    
+    @Modifying
+    @Query("DELETE FROM Enrollment e WHERE e.clientId = :clientId AND e.classId = :classId AND e.courseId = :courseId")
+    int deleteByClientIdAndClassIdAndCourseId(
+        @Param("clientId") UUID clientId,
+        @Param("classId") String classId,
+        @Param("courseId") String courseId
+    );
 }
 

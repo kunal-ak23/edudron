@@ -56,37 +56,43 @@ public class BulkEnrollmentService {
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     private RestTemplate getRestTemplate() {
         if (restTemplate == null) {
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            // Add interceptor to forward JWT token (Authorization header)
-            interceptors.add((request, body, execution) -> {
-                // Get current request to extract Authorization header
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        // Only add if not already present
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
-                            log.debug("Propagated Authorization header (JWT token) to content service: {}", request.getURI());
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    RestTemplate template = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    // Add interceptor to forward JWT token (Authorization header)
+                    interceptors.add((request, body, execution) -> {
+                        // Get current request to extract Authorization header
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                // Only add if not already present
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                    log.debug("Propagated Authorization header (JWT token) to service: {}", request.getURI());
+                                } else {
+                                    log.debug("Authorization header already present in request to {}", request.getURI());
+                                }
+                            } else {
+                                log.warn("No Authorization header found in current request - service call may fail with 403 Forbidden: {}", request.getURI());
+                            }
                         } else {
-                            log.debug("Authorization header already present in request to {}", request.getURI());
+                            log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
                         }
-                    } else {
-                        log.warn("No Authorization header found in current request - content service call may fail with 403 Forbidden: {}", request.getURI());
-                    }
-                } else {
-                    log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
+                        return execution.execute(request, body);
+                    });
+                    template.setInterceptors(interceptors);
+                    restTemplate = template;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
+            }
         }
         return restTemplate;
     }
@@ -157,26 +163,26 @@ public class BulkEnrollmentService {
         log.info("Section {} enrollment: Found {} enrollment records with batchId={}, resulting in {} unique students from enrollments", 
             sectionId, sectionEnrollments.size(), sectionId, studentsFromEnrollments.size());
         
-        // Method 2: Find students via identity service (users with sectionId field)
+        // Method 2: Find students via student service API (/api/sections/{id}/students)
         try {
-            Set<String> studentsFromIdentity = getStudentsFromIdentityServiceBySection(sectionId, clientId);
-            log.info("Section {} enrollment: Found {} students from identity service with sectionId={}", 
-                sectionId, studentsFromIdentity.size(), sectionId);
-            studentIds.addAll(studentsFromIdentity);
+            Set<String> studentsFromService = getStudentsFromStudentServiceBySection(sectionId, clientId);
+            log.info("Section {} enrollment: Found {} students from student service API", 
+                sectionId, studentsFromService.size());
+            studentIds.addAll(studentsFromService);
             
-            if (studentsFromIdentity.size() > studentsFromEnrollments.size()) {
-                log.info("Section {} enrollment: Identity service found {} additional students not in enrollment records", 
-                    sectionId, studentsFromIdentity.size() - studentsFromEnrollments.size());
+            if (studentsFromService.size() > studentsFromEnrollments.size()) {
+                log.info("Section {} enrollment: Student service API found {} additional students not in enrollment records", 
+                    sectionId, studentsFromService.size() - studentsFromEnrollments.size());
             }
         } catch (Exception e) {
-            log.warn("Section {} enrollment: Failed to fetch students from identity service: {}. Proceeding with enrollment-based students only.", 
+            log.warn("Section {} enrollment: Failed to fetch students from student service API: {}. Proceeding with enrollment-based students only.", 
                 sectionId, e.getMessage());
         }
         
         log.info("Section {} enrollment: Total unique students to enroll: {}", sectionId, studentIds.size());
         
         if (studentIds.isEmpty()) {
-            log.warn("Section {} enrollment: No students found in section via enrollments or identity service.", sectionId);
+            log.warn("Section {} enrollment: No students found in section via enrollments or student service API.", sectionId);
         } else {
             log.debug("Section {} enrollment: Student IDs to enroll: {}", sectionId, studentIds);
         }
@@ -240,38 +246,33 @@ public class BulkEnrollmentService {
         Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
         
-        // Get all enrollments for students in this class for this course
+        // Count enrollments before deletion for reporting
         List<Enrollment> classEnrollments = enrollmentRepository.findByClientIdAndClassId(clientId, classId);
-        List<Enrollment> enrollmentsToDelete = classEnrollments.stream()
+        long enrollmentCount = classEnrollments.stream()
             .filter(e -> courseId.equals(e.getCourseId()))
-            .collect(Collectors.toList());
-        
-        BulkEnrollmentResult result = new BulkEnrollmentResult();
-        result.setTotalStudents((long) enrollmentsToDelete.size());
-        result.setEnrolledStudents(0L);
-        result.setSkippedStudents(0L);
-        result.setFailedStudents(0L);
-        List<String> errorMessages = new ArrayList<>();
+            .count();
         
         log.info("Unenrolling {} students from class {} in course {}", 
-            enrollmentsToDelete.size(), classId, courseId);
+            enrollmentCount, classId, courseId);
         
-        for (Enrollment enrollment : enrollmentsToDelete) {
-            try {
-                enrollmentRepository.delete(enrollment);
-                result.setEnrolledStudents(result.getEnrolledStudents() + 1);
-                log.debug("Deleted enrollment {} for student {} in course {}", 
-                    enrollment.getId(), enrollment.getStudentId(), courseId);
-            } catch (Exception e) {
-                log.warn("Failed to delete enrollment {}: {}", enrollment.getId(), e.getMessage());
-                errorMessages.add("Enrollment " + enrollment.getId() + ": " + e.getMessage());
-                result.setFailedStudents(result.getFailedStudents() + 1);
-            }
+        BulkEnrollmentResult result = new BulkEnrollmentResult();
+        result.setTotalStudents(enrollmentCount);
+        result.setSkippedStudents(0L);
+        result.setFailedStudents(0L);
+        
+        try {
+            // Use bulk delete to avoid stale entity issues
+            int deletedCount = enrollmentRepository.deleteByClientIdAndClassIdAndCourseId(clientId, classId, courseId);
+            result.setEnrolledStudents((long) deletedCount);
+            
+            log.info("Unenrollment completed: {} enrollments deleted successfully", deletedCount);
+        } catch (Exception e) {
+            log.error("Failed to delete enrollments for class {} and course {}: {}", classId, courseId, e.getMessage());
+            result.setFailedStudents(enrollmentCount);
+            List<String> errorMessages = new ArrayList<>();
+            errorMessages.add("Bulk delete failed: " + e.getMessage());
+            result.setErrorMessages(errorMessages);
         }
-        
-        result.setErrorMessages(errorMessages.isEmpty() ? null : errorMessages);
-        log.info("Unenrollment completed: {} successful, {} failed", 
-            result.getEnrolledStudents(), result.getFailedStudents());
         
         return result;
     }
@@ -290,38 +291,33 @@ public class BulkEnrollmentService {
         Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
         
-        // Get all enrollments for students in this section for this course
+        // Count enrollments before deletion for reporting
         List<Enrollment> sectionEnrollments = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId);
-        List<Enrollment> enrollmentsToDelete = sectionEnrollments.stream()
+        long enrollmentCount = sectionEnrollments.stream()
             .filter(e -> courseId.equals(e.getCourseId()))
-            .collect(Collectors.toList());
-        
-        BulkEnrollmentResult result = new BulkEnrollmentResult();
-        result.setTotalStudents((long) enrollmentsToDelete.size());
-        result.setEnrolledStudents(0L);
-        result.setSkippedStudents(0L);
-        result.setFailedStudents(0L);
-        List<String> errorMessages = new ArrayList<>();
+            .count();
         
         log.info("Unenrolling {} students from section {} in course {}", 
-            enrollmentsToDelete.size(), sectionId, courseId);
+            enrollmentCount, sectionId, courseId);
         
-        for (Enrollment enrollment : enrollmentsToDelete) {
-            try {
-                enrollmentRepository.delete(enrollment);
-                result.setEnrolledStudents(result.getEnrolledStudents() + 1);
-                log.debug("Deleted enrollment {} for student {} in course {}", 
-                    enrollment.getId(), enrollment.getStudentId(), courseId);
-            } catch (Exception e) {
-                log.warn("Failed to delete enrollment {}: {}", enrollment.getId(), e.getMessage());
-                errorMessages.add("Enrollment " + enrollment.getId() + ": " + e.getMessage());
-                result.setFailedStudents(result.getFailedStudents() + 1);
-            }
+        BulkEnrollmentResult result = new BulkEnrollmentResult();
+        result.setTotalStudents(enrollmentCount);
+        result.setSkippedStudents(0L);
+        result.setFailedStudents(0L);
+        
+        try {
+            // Use bulk delete to avoid stale entity issues
+            int deletedCount = enrollmentRepository.deleteByClientIdAndBatchIdAndCourseId(clientId, sectionId, courseId);
+            result.setEnrolledStudents((long) deletedCount);
+            
+            log.info("Unenrollment completed: {} enrollments deleted successfully", deletedCount);
+        } catch (Exception e) {
+            log.error("Failed to delete enrollments for section {} and course {}: {}", sectionId, courseId, e.getMessage());
+            result.setFailedStudents(enrollmentCount);
+            List<String> errorMessages = new ArrayList<>();
+            errorMessages.add("Bulk delete failed: " + e.getMessage());
+            result.setErrorMessages(errorMessages);
         }
-        
-        result.setErrorMessages(errorMessages.isEmpty() ? null : errorMessages);
-        log.info("Unenrollment completed: {} successful, {} failed", 
-            result.getEnrolledStudents(), result.getFailedStudents());
         
         return result;
     }
@@ -329,11 +325,15 @@ public class BulkEnrollmentService {
     private void validateCourseAssignment(String courseId, String classId, String sectionId, UUID clientId) {
         // Get course from content service
         String courseUrl = gatewayUrl + "/content/courses/" + courseId;
+        log.info("Validating course assignment - courseId: {}, classId: {}, sectionId: {}, gatewayUrl: {}", 
+            courseId, classId, sectionId, gatewayUrl);
+        
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         HttpEntity<?> entity = new HttpEntity<>(headers);
         
         try {
+            log.debug("Calling content service at URL: {}", courseUrl);
             ResponseEntity<CourseResponseDTO> response = getRestTemplate().exchange(
                 courseUrl,
                 HttpMethod.GET,
@@ -341,12 +341,22 @@ public class BulkEnrollmentService {
                 CourseResponseDTO.class
             );
             
+            log.debug("Content service response status: {}", response.getStatusCode());
+            
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                throw new IllegalArgumentException("Course not found: " + courseId);
+                log.error("Course validation failed - Invalid response: status={}, hasBody={}", 
+                    response.getStatusCode(), response.getBody() != null);
+                throw new IllegalArgumentException("Course not found or invalid response: " + courseId);
             }
             
             CourseResponseDTO course = response.getBody();
-            if (!course.getIsPublished()) {
+            log.debug("Course retrieved: id={}, isPublished={}, assignedToClassIds={}, assignedToSectionIds={}", 
+                course.getId(), course.getIsPublished(), course.getAssignedToClassIds(), course.getAssignedToSectionIds());
+            
+            // Check if course is published
+            if (course.getIsPublished() == null || !course.getIsPublished()) {
+                log.warn("Course validation failed - Course is not published: courseId={}, isPublished={}", 
+                    courseId, course.getIsPublished());
                 throw new IllegalArgumentException("Course is not published: " + courseId);
             }
             
@@ -354,25 +364,44 @@ public class BulkEnrollmentService {
             boolean isAssigned = false;
             if (course.getAssignedToClassIds() != null && course.getAssignedToClassIds().contains(classId)) {
                 isAssigned = true;
+                log.debug("Course is assigned to class: {}", classId);
             }
             if (sectionId != null && course.getAssignedToSectionIds() != null && course.getAssignedToSectionIds().contains(sectionId)) {
                 isAssigned = true;
+                log.debug("Course is assigned to section: {}", sectionId);
             }
             
             if (!isAssigned) {
+                log.warn("Course validation failed - Course not assigned: courseId={}, classId={}, sectionId={}, assignedToClassIds={}, assignedToSectionIds={}", 
+                    courseId, classId, sectionId, course.getAssignedToClassIds(), course.getAssignedToSectionIds());
                 throw new IllegalArgumentException("Course is not assigned to this class/section. Please assign the course first.");
             }
             
+            log.info("Course validation successful: courseId={}", courseId);
+            
         } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("HTTP error during course validation: status={}, message={}, url={}", 
+                e.getStatusCode(), e.getMessage(), courseUrl, e);
             if (e.getStatusCode().value() == 404) {
                 throw new IllegalArgumentException("Course not found: " + courseId);
+            } else if (e.getStatusCode().value() == 403) {
+                throw new IllegalArgumentException("Access denied to course service. Check authentication/authorization.");
             }
-            throw new RuntimeException("Failed to validate course: " + e.getMessage(), e);
+            String errorMsg = e.getMessage() != null ? e.getMessage() : "HTTP " + e.getStatusCode();
+            throw new RuntimeException("Failed to validate course (HTTP error): " + errorMsg, e);
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            log.error("Network error during course validation: message={}, url={}", 
+                e.getMessage(), courseUrl, e);
+            String errorMsg = e.getMessage() != null ? e.getMessage() : "Cannot reach content service";
+            throw new RuntimeException("Failed to connect to content service: " + errorMsg, e);
+        } catch (IllegalArgumentException e) {
+            // Re-throw validation errors
+            throw e;
         } catch (Exception e) {
-            if (e instanceof IllegalArgumentException) {
-                throw e;
-            }
-            throw new RuntimeException("Failed to validate course: " + e.getMessage(), e);
+            log.error("Unexpected error during course validation: type={}, message={}, courseId={}", 
+                e.getClass().getName(), e.getMessage(), courseId, e);
+            String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            throw new RuntimeException("Failed to validate course: " + errorMsg, e);
         }
     }
     
@@ -446,48 +475,77 @@ public class BulkEnrollmentService {
     }
     
     /**
-     * Get all students from identity service that belong to a specific section.
-     * This finds students by their sectionId field in the user record.
+     * Get all students that belong to a specific section via the student service API.
+     * This uses the existing /api/sections/{sectionId}/students endpoint.
      * 
      * @param sectionId The section ID
      * @param clientId The client/tenant ID
      * @return Set of student IDs
      */
-    private Set<String> getStudentsFromIdentityServiceBySection(String sectionId, UUID clientId) {
+    private Set<String> getStudentsFromStudentServiceBySection(String sectionId, UUID clientId) {
         Set<String> studentIds = new java.util.HashSet<>();
         
         try {
-            // Get all students (users with role STUDENT) from identity service
-            String url = gatewayUrl + "/idp/users/role/STUDENT";
+            // Call the student service API to get students by section
+            String url = gatewayUrl + "/api/sections/" + sectionId + "/students";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
             
-            log.debug("Fetching students from identity service for section {}", sectionId);
-            ResponseEntity<UserResponseDTO[]> response = getRestTemplate().exchange(
+            log.debug("Fetching students from student service for section {} at URL: {}", sectionId, url);
+            ResponseEntity<SectionStudentDTO[]> response = getRestTemplate().exchange(
                 url,
                 HttpMethod.GET,
                 entity,
-                UserResponseDTO[].class
+                SectionStudentDTO[].class
             );
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                // Filter students by sectionId
-                for (UserResponseDTO user : response.getBody()) {
-                    if (sectionId.equals(user.getSectionId())) {
-                        studentIds.add(user.getId());
-                        log.debug("Found student {} in section {} via identity service", user.getId(), sectionId);
-                    }
+                for (SectionStudentDTO student : response.getBody()) {
+                    studentIds.add(student.getId());
+                    log.debug("Found student {} (name: {}, email: {}) in section {}", 
+                        student.getId(), student.getName(), student.getEmail(), sectionId);
                 }
-                log.info("Identity service returned {} total students, {} belong to section {}", 
-                    response.getBody().length, studentIds.size(), sectionId);
+                log.info("Student service returned {} students for section {}", studentIds.size(), sectionId);
+            } else {
+                log.warn("Student service returned unexpected status {} for section {}", 
+                    response.getStatusCode(), sectionId);
             }
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            if (e.getStatusCode().value() == 404) {
+                log.debug("Section {} not found or has no students (404)", sectionId);
+                return studentIds; // Return empty set
+            }
+            log.error("HTTP error fetching students from student service for section {}: status={}, message={}", 
+                sectionId, e.getStatusCode(), e.getMessage());
+            throw new RuntimeException("Failed to fetch students from student service: " + e.getMessage(), e);
         } catch (Exception e) {
-            log.warn("Failed to fetch students from identity service for section {}: {}", sectionId, e.getMessage());
-            throw new RuntimeException("Failed to fetch students from identity service: " + e.getMessage(), e);
+            log.error("Unexpected error fetching students from student service for section {}: type={}, message={}", 
+                sectionId, e.getClass().getName(), e.getMessage(), e);
+            throw new RuntimeException("Failed to fetch students from student service: " + e.getMessage(), e);
         }
         
         return studentIds;
+    }
+    
+    // DTO for section student response
+    private static class SectionStudentDTO {
+        private String id;
+        private String name;
+        private String email;
+        private String phone;
+        
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        
+        public String getName() { return name; }
+        public void setName(String name) { this.name = name; }
+        
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        
+        public String getPhone() { return phone; }
+        public void setPhone(String phone) { this.phone = phone; }
     }
     
     // Helper DTO for user response from identity service

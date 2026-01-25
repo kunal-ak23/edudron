@@ -131,9 +131,11 @@ export default function ClassEnrollPage() {
 
       // Load existing enrollments to see which courses are already enrolled
       try {
-        const enrollments = await enrollmentsApi.listEnrollments()
-        const classEnrollments = enrollments.filter(e => e.classId === classId)
-        const enrolledIds = new Set(classEnrollments.map(e => e.courseId))
+        // Use paginated API with classId filter to get enrollments for this class
+        const enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(0, 1000, {
+          classId: classId
+        })
+        const enrolledIds = new Set(enrollmentsResponse.content.map(e => e.courseId))
         setEnrolledCourseIds(enrolledIds)
       } catch (err) {
         console.error('Error loading existing enrollments:', err)
