@@ -235,6 +235,10 @@ public class UserService {
     
     @Transactional
     public UserDTO createUser(CreateUserRequest request) {
+        // Normalize email to lowercase for case-insensitive handling
+        String normalizedEmail = request.getEmail() != null ? request.getEmail().toLowerCase().trim() : null;
+        request.setEmail(normalizedEmail);
+        
         String clientIdStr = TenantContext.getClientId();
         User.Role role = User.Role.valueOf(request.getRole().toUpperCase());
         
@@ -369,6 +373,10 @@ public class UserService {
     
     @Transactional
     public UserDTO updateUser(String id, UpdateUserRequest request) {
+        // Normalize email to lowercase for case-insensitive handling
+        String normalizedEmail = request.getEmail() != null ? request.getEmail().toLowerCase().trim() : null;
+        request.setEmail(normalizedEmail);
+        
         // Load user and validate access
         User user = userRepository.findById(id)
             .orElseThrow(() -> new IllegalArgumentException("User not found: " + id));
@@ -498,8 +506,11 @@ public class UserService {
     }
     
     private UserDTO createSystemAdminUser(CreateUserRequest request) {
+        // Normalize email to lowercase for case-insensitive handling
+        String normalizedEmail = request.getEmail() != null ? request.getEmail().toLowerCase().trim() : null;
+        
         // Check if user already exists (SYSTEM_ADMIN users have unique email globally)
-        var existingUser = userRepository.findByEmailAndRoleAndActiveTrue(request.getEmail(), User.Role.SYSTEM_ADMIN);
+        var existingUser = userRepository.findByEmailAndRoleAndActiveTrue(normalizedEmail, User.Role.SYSTEM_ADMIN);
         if (existingUser.isPresent()) {
             throw new IllegalArgumentException("SYSTEM_ADMIN user already exists with this email");
         }
@@ -524,7 +535,7 @@ public class UserService {
                 user = new User(
                     userId,
                     null, // SYSTEM_ADMIN has no clientId
-                    request.getEmail(),
+                    normalizedEmail,
                     passwordEncoder.encode(password),
                     request.getName(),
                     request.getPhone(),
@@ -538,7 +549,7 @@ public class UserService {
             } catch (org.springframework.dao.DataIntegrityViolationException e) {
                 attempts++;
                 if (attempts >= maxRetries) {
-                    var existing = userRepository.findByEmailAndRoleAndActiveTrue(request.getEmail(), User.Role.SYSTEM_ADMIN);
+                    var existing = userRepository.findByEmailAndRoleAndActiveTrue(normalizedEmail, User.Role.SYSTEM_ADMIN);
                     if (existing.isPresent()) {
                         user = existing.get();
                         break;

@@ -49,9 +49,12 @@ public class AuthService {
     private CommonEventService eventService;
 
     public AuthResponse login(AuthRequest request) {
+        // Normalize email to lowercase for case-insensitive authentication
+        String normalizedEmail = request.email() != null ? request.email().toLowerCase().trim() : null;
+        
         // First try to find SYSTEM_ADMIN user (no tenant context required)
-        if (userRepository.existsByEmailAndRole(request.email(), User.Role.SYSTEM_ADMIN)) {
-            User user = userRepository.findByEmailAndRoleAndActiveTrue(request.email(), User.Role.SYSTEM_ADMIN)
+        if (userRepository.existsByEmailAndRole(normalizedEmail, User.Role.SYSTEM_ADMIN)) {
+            User user = userRepository.findByEmailAndRoleAndActiveTrue(normalizedEmail, User.Role.SYSTEM_ADMIN)
                     .orElseThrow(() -> new RuntimeException("Invalid credentials"));
 
             if (!passwordEncoder.matches(request.password(), user.getPassword())) {
@@ -113,7 +116,7 @@ public class AuthService {
         }
 
         // Regular tenant-scoped user authentication
-        List<User> users = userRepository.findByEmailAndActiveTrue(request.email());
+        List<User> users = userRepository.findByEmailAndActiveTrue(normalizedEmail);
         if (users.isEmpty()) {
             throw new RuntimeException("Invalid credentials");
         }
@@ -260,6 +263,9 @@ public class AuthService {
     }
 
     public AuthResponse register(RegisterRequest request) {
+        // Normalize email to lowercase for case-insensitive registration
+        String normalizedEmail = request.email() != null ? request.email().toLowerCase().trim() : null;
+        
         User.Role role = User.Role.valueOf(request.role().toUpperCase());
         
         // SECURITY: Prevent SYSTEM_ADMIN registration through public API
@@ -276,7 +282,7 @@ public class AuthService {
         UUID clientId = UUID.fromString(clientIdStr);
         String tenantId = clientId.toString();
         
-        if (userRepository.existsByEmailAndClientId(request.email(), clientId)) {
+        if (userRepository.existsByEmailAndClientId(normalizedEmail, clientId)) {
             throw new RuntimeException("User already exists with this email in this tenant");
         }
 
@@ -290,7 +296,7 @@ public class AuthService {
                 user = new User(
                         userId,
                         clientId,
-                        request.email(),
+                        normalizedEmail,
                         passwordEncoder.encode(request.password()),
                         request.name(),
                         request.phone(),
@@ -303,7 +309,7 @@ public class AuthService {
                 attempts++;
                 if (attempts >= maxRetries) {
                     // Check if user was actually created (by email)
-                    var existingUser = userRepository.findByEmailAndClientId(request.email(), clientId);
+                    var existingUser = userRepository.findByEmailAndClientId(normalizedEmail, clientId);
                     if (existingUser.isPresent()) {
                         user = existingUser.get();
                         break; // User already exists, use it

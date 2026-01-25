@@ -60,7 +60,7 @@ public class User {
     public User(String id, UUID clientId, String email, String password, String name, String phone, Role role) {
         this.id = id;
         this.clientId = clientId;
-        this.email = email;
+        this.email = email != null ? email.toLowerCase().trim() : null;
         this.password = password;
         this.name = name;
         this.phone = phone;
@@ -77,7 +77,9 @@ public class User {
     public void setClientId(UUID clientId) { this.clientId = clientId; }
 
     public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
+    public void setEmail(String email) { 
+        this.email = email != null ? email.toLowerCase().trim() : null; 
+    }
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
