@@ -25,7 +25,7 @@ public interface SectionRepository extends JpaRepository<Section, String> {
     
     Optional<Section> findByIdAndClientId(String id, UUID clientId);
     
-    @Query("SELECT COUNT(e) FROM Enrollment e WHERE e.batchId = :sectionId AND e.clientId = :clientId")
+    @Query("SELECT COUNT(DISTINCT e.studentId) FROM Enrollment e WHERE e.batchId = :sectionId AND e.clientId = :clientId")
     long countStudentsInSection(@Param("clientId") UUID clientId, @Param("sectionId") String sectionId);
 }
 

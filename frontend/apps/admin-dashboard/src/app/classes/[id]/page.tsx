@@ -50,6 +50,7 @@ export default function ClassDetailPage() {
   const [membersPageSize, setMembersPageSize] = useState(20)
   const [membersTotalElements, setMembersTotalElements] = useState(0)
   const [membersTotalPages, setMembersTotalPages] = useState(0)
+  const [studentSectionsMap, setStudentSectionsMap] = useState<Map<string, string[]>>(new Map())
   const [formData, setFormData] = useState<CreateClassRequest>({
     name: '',
     code: '',
@@ -124,12 +125,46 @@ export default function ClassDetailPage() {
     }
   }, [classId])
 
+  // Load enrollments to map students to their sections
+  const loadStudentSectionsMap = useCallback(async () => {
+    try {
+      // Load all enrollments for this class (we need to check sectionId/batchId)
+      const enrollments = await enrollmentsApi.listAllEnrollmentsPaginated(0, 1000, {
+        classId: classId
+      })
+      
+      // Build a map: studentId -> array of sectionIds
+      const map = new Map<string, string[]>()
+      
+      enrollments.content.forEach(enrollment => {
+        const studentId = enrollment.studentId
+        const sectionId = enrollment.batchId // batchId is sectionId
+        
+        if (sectionId) {
+          if (!map.has(studentId)) {
+            map.set(studentId, [])
+          }
+          const sections = map.get(studentId)!
+          if (!sections.includes(sectionId)) {
+            sections.push(sectionId)
+          }
+        }
+      })
+      
+      setStudentSectionsMap(map)
+    } catch (err: any) {
+      console.error('Error loading student sections map:', err)
+      // Continue without the map - sections column will be empty
+    }
+  }, [classId])
+
   useEffect(() => {
     if (classId) {
       loadMembers()
       loadSections()
+      loadStudentSectionsMap()
     }
-  }, [classId, loadMembers, loadSections])
+  }, [classId, loadMembers, loadSections, loadStudentSectionsMap])
 
   // Reset to first page when page size changes
   useEffect(() => {
@@ -349,12 +384,11 @@ export default function ClassDetailPage() {
                   </TableHeader>
                   <TableBody>
                     {members.map((member) => {
-                      // Find sections this student is in (by checking enrollments)
-                      const studentSections = sections.filter(section => {
-                        // This is a simplified check - in a real scenario, you'd check enrollments
-                        // For now, we'll just show all sections as a placeholder
-                        return true
-                      })
+                      // Find sections this student is actually enrolled in
+                      const studentSectionIds = studentSectionsMap.get(member.id) || []
+                      const studentSections = sections.filter(section => 
+                        studentSectionIds.includes(section.id)
+                      )
                       
                       return (
                         <TableRow key={member.id}>
@@ -476,7 +510,10 @@ export default function ClassDetailPage() {
         open={showAddStudentDialog}
         onOpenChange={setShowAddStudentDialog}
         classId={classId}
-        onSuccess={loadMembers}
+        onSuccess={() => {
+          loadMembers()
+          loadStudentSectionsMap()
+        }}
       />
 
       <ConfirmationDialog

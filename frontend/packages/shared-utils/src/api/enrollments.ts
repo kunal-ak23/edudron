@@ -416,4 +416,3 @@ export interface ClassStudentDTO {
   email: string
   phone?: string
 }
-
