@@ -12,7 +12,6 @@ spring:
       hibernate:
         default_schema: student
         jdbc.time_zone: UTC
-    show-sql: true
   liquibase:
     change-log: classpath:/db/changelog/db.changelog-master.yaml
     default-schema: public
@@ -55,11 +54,4 @@ server:
 # JWT Configuration (must match Identity service)
 jwt:
   secret: ${JWT_SECRET:mySecretKey123456789012345678901234567890}
-
-# Logging configuration for debugging
-logging:
-  level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-    com.datagami.edudron.student: DEBUG
 
