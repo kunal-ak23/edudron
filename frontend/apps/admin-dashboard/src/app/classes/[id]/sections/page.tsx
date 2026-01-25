@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Loader2, ArrowLeft, Users, Edit } from 'lucide-react'
+import { Plus, Loader2, ArrowLeft, Users, Edit, Layers } from 'lucide-react'
 import { classesApi, sectionsApi, institutesApi, apiClient } from '@/lib/api'
 import type { Class, Section, Institute } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -27,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { BatchCreateSectionsDialog } from '@/components/BatchCreateSectionsDialog'
 
 export default function ClassSectionsPage() {
   const router = useRouter()
@@ -41,6 +42,7 @@ export default function ClassSectionsPage() {
   const [selectedSection, setSelectedSection] = useState<Section | null>(null)
   const [students, setStudents] = useState<Array<{id: string, name: string, email: string, phone: string | null}>>([])
   const [loadingStudents, setLoadingStudents] = useState(false)
+  const [batchSectionsDialogOpen, setBatchSectionsDialogOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -151,12 +153,21 @@ export default function ClassSectionsPage() {
               <h1 className="text-3xl font-bold text-gray-900">Sections - {classItem.name}</h1>
               <p className="mt-2 text-sm text-gray-600">Manage sections for this class</p>
             </div>
-            <Link href={`/classes/${classId}/sections/new`}>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Create New Section
+            <div className="flex gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => setBatchSectionsDialogOpen(true)}
+              >
+                <Layers className="h-4 w-4 mr-2" />
+                Batch Create
               </Button>
-            </Link>
+              <Link href={`/classes/${classId}/sections/new`}>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create New Section
+                </Button>
+              </Link>
+            </div>
           </div>
 
           <Card>
@@ -283,6 +294,14 @@ export default function ClassSectionsPage() {
               )}
             </DialogContent>
           </Dialog>
+
+          {/* Batch Sections Dialog */}
+          <BatchCreateSectionsDialog
+            open={batchSectionsDialogOpen}
+            onOpenChange={setBatchSectionsDialogOpen}
+            classId={classId}
+            onSuccess={loadData}
+          />
         </div>
       </div>
   )

@@ -4,10 +4,7 @@ import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.Section;
-import com.datagami.edudron.student.dto.CreateSectionRequest;
-import com.datagami.edudron.student.dto.SectionDTO;
-import com.datagami.edudron.student.dto.SectionProgressDTO;
-import com.datagami.edudron.student.dto.StudentProgressDTO;
+import com.datagami.edudron.student.dto.*;
 import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.ProgressRepository;
@@ -18,8 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -171,6 +167,73 @@ public class SectionService {
         return activeOnly
             ? sectionRepository.countByClientIdAndIsActive(clientId, true)
             : sectionRepository.countByClientId(clientId);
+    }
+    
+    public BatchCreateSectionsResponse batchCreateSections(String classId, BatchCreateSectionsRequest request) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Validate class exists and belongs to client once upfront
+        Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
+        
+        if (!classEntity.getIsActive()) {
+            throw new IllegalArgumentException("Class is not active");
+        }
+        
+        // Pre-validate: check for duplicate section names within the batch
+        Set<String> names = new HashSet<>();
+        for (int i = 0; i < request.getSections().size(); i++) {
+            String name = request.getSections().get(i).getName();
+            if (!names.add(name)) {
+                throw new IllegalArgumentException("Duplicate section name at index " + i + ": '" + name + "'");
+            }
+        }
+        
+        // Get existing section names for this class to check for duplicates
+        List<Section> existingSections = sectionRepository.findByClientIdAndClassId(clientId, classId);
+        Set<String> existingNames = existingSections.stream()
+            .map(Section::getName)
+            .collect(Collectors.toSet());
+        
+        // Check if any section names already exist
+        for (int i = 0; i < request.getSections().size(); i++) {
+            String name = request.getSections().get(i).getName();
+            if (existingNames.contains(name)) {
+                throw new IllegalArgumentException("Section with name '" + name + "' already exists at index " + i);
+            }
+        }
+        
+        // Create all sections
+        List<Section> sections = new ArrayList<>();
+        for (CreateSectionRequest sectionRequest : request.getSections()) {
+            Section section = new Section();
+            section.setId(UlidGenerator.nextUlid());
+            section.setClientId(clientId);
+            section.setName(sectionRequest.getName());
+            section.setDescription(sectionRequest.getDescription());
+            section.setClassId(classId);
+            section.setStartDate(sectionRequest.getStartDate());
+            section.setEndDate(sectionRequest.getEndDate());
+            section.setMaxStudents(sectionRequest.getMaxStudents());
+            section.setIsActive(true);
+            
+            sections.add(sectionRepository.save(section));
+        }
+        
+        // Convert to DTOs
+        List<SectionDTO> sectionDTOs = sections.stream()
+            .map(section -> toDTO(section, clientId))
+            .collect(Collectors.toList());
+        
+        return new BatchCreateSectionsResponse(
+            sectionDTOs,
+            sectionDTOs.size(),
+            "Successfully created " + sectionDTOs.size() + " sections"
+        );
     }
     
     public SectionProgressDTO getSectionProgress(String sectionId) {

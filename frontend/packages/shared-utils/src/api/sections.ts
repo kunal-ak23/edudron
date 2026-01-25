@@ -24,11 +24,32 @@ export interface CreateSectionRequest {
   maxStudents?: number
 }
 
+export interface BatchCreateSectionsRequest {
+  sections: CreateSectionRequest[]
+}
+
+export interface BatchCreateSectionsResponse {
+  sections: Section[]
+  totalCreated: number
+  message: string
+}
+
 export class SectionsApi {
   constructor(private apiClient: ApiClient) {}
 
   async createSection(classId: string, request: CreateSectionRequest): Promise<Section> {
     const response = await this.apiClient.post<Section>(`/api/classes/${classId}/sections`, request)
+    return response.data
+  }
+
+  async batchCreateSections(
+    classId: string,
+    request: BatchCreateSectionsRequest
+  ): Promise<BatchCreateSectionsResponse> {
+    const response = await this.apiClient.post<BatchCreateSectionsResponse>(
+      `/api/classes/${classId}/sections/batch`,
+      request
+    )
     return response.data
   }
 

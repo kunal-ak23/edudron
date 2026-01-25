@@ -13,12 +13,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Loader2, ArrowLeft, Users, Edit, FolderOpen, Network } from 'lucide-react'
+import { Plus, Loader2, ArrowLeft, Users, Edit, FolderOpen, Network, Layers, FolderPlus } from 'lucide-react'
 import { institutesApi, classesApi } from '@/lib/api'
 import type { Institute, Class } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
+import { BatchCreateClassesDialog } from '@/components/BatchCreateClassesDialog'
+import { BatchCreateClassWithSectionsDialog } from '@/components/BatchCreateClassWithSectionsDialog'
 
 export default function InstituteClassesPage() {
   const router = useRouter()
@@ -29,6 +31,8 @@ export default function InstituteClassesPage() {
   const [classes, setClasses] = useState<Class[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [batchClassesDialogOpen, setBatchClassesDialogOpen] = useState(false)
+  const [batchClassWithSectionsDialogOpen, setBatchClassWithSectionsDialogOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -140,6 +144,20 @@ export default function InstituteClassesPage() {
                   Tree View
                 </Button>
               </Link>
+              <Button 
+                variant="outline"
+                onClick={() => setBatchClassesDialogOpen(true)}
+              >
+                <Layers className="h-4 w-4 mr-2" />
+                Batch Create
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => setBatchClassWithSectionsDialogOpen(true)}
+              >
+                <FolderPlus className="h-4 w-4 mr-2" />
+                Class + Sections
+              </Button>
               <Link href={`/institutes/${instituteId}/classes/new`}>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
@@ -224,6 +242,20 @@ export default function InstituteClassesPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Batch Dialogs */}
+        <BatchCreateClassesDialog
+          open={batchClassesDialogOpen}
+          onOpenChange={setBatchClassesDialogOpen}
+          instituteId={instituteId}
+          onSuccess={loadData}
+        />
+        <BatchCreateClassWithSectionsDialog
+          open={batchClassWithSectionsDialogOpen}
+          onOpenChange={setBatchClassWithSectionsDialogOpen}
+          instituteId={instituteId}
+          onSuccess={loadData}
+        />
       </div>
   )
 }

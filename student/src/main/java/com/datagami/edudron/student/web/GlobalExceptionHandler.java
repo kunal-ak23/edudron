@@ -1,5 +1,7 @@
 package com.datagami.edudron.student.web;
 
+import com.datagami.edudron.student.dto.BatchOperationError;
+import com.datagami.edudron.student.dto.BatchOperationErrorResponse;
 import com.datagami.edudron.student.service.CommonEventService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.MDC;
@@ -7,13 +9,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.io.StringWriter;
 import java.io.PrintWriter;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -22,13 +27,11 @@ public class GlobalExceptionHandler {
     private CommonEventService eventService;
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, Object>> handleIllegalArgumentException(IllegalArgumentException ex) {
-        Map<String, Object> error = new HashMap<>();
-        error.put("error", ex.getMessage());
+    public ResponseEntity<?> handleIllegalArgumentException(IllegalArgumentException ex) {
+        String message = ex.getMessage();
         
         // Determine appropriate status code based on error message
         HttpStatus status = HttpStatus.BAD_REQUEST;
-        String message = ex.getMessage();
         
         if (message != null) {
             String lowerMessage = message.toLowerCase();
@@ -45,9 +48,78 @@ public class GlobalExceptionHandler {
                        lowerMessage.contains("capacity")) {
                 status = HttpStatus.BAD_REQUEST; // 400 Bad Request
             }
+            
+            // Check if this is a batch operation error (contains "at index")
+            if (lowerMessage.contains("at index")) {
+                return handleBatchOperationError(message, status);
+            }
         }
         
+        // Regular error response
+        Map<String, Object> error = new HashMap<>();
+        error.put("error", message);
         return ResponseEntity.status(status).body(error);
+    }
+    
+    private ResponseEntity<BatchOperationErrorResponse> handleBatchOperationError(String message, HttpStatus status) {
+        List<BatchOperationError> errors = new ArrayList<>();
+        
+        // Parse error message to extract index and details
+        // Pattern: "... at index N: 'value'"
+        Pattern pattern = Pattern.compile("at index (\\d+)");
+        Matcher matcher = pattern.matcher(message);
+        
+        if (matcher.find()) {
+            int index = Integer.parseInt(matcher.group(1));
+            
+            // Determine field based on error message
+            String field = "unknown";
+            if (message.toLowerCase().contains("code")) {
+                field = "code";
+            } else if (message.toLowerCase().contains("name")) {
+                field = "name";
+            }
+            
+            errors.add(new BatchOperationError(index, field, message));
+        } else {
+            // If pattern doesn't match, create a general error
+            errors.add(new BatchOperationError(0, "general", message));
+        }
+        
+        BatchOperationErrorResponse response = new BatchOperationErrorResponse(
+            "Batch operation failed",
+            errors
+        );
+        
+        return ResponseEntity.status(status).body(response);
+    }
+    
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<BatchOperationErrorResponse> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        List<BatchOperationError> errors = new ArrayList<>();
+        
+        ex.getBindingResult().getAllErrors().forEach((error) -> {
+            String fieldName = ((FieldError) error).getField();
+            String errorMessage = error.getDefaultMessage();
+            
+            // Try to extract index from field name (e.g., "sections[0].name")
+            Pattern pattern = Pattern.compile("\\[(\\d+)\\]");
+            Matcher matcher = pattern.matcher(fieldName);
+            
+            int index = -1;
+            if (matcher.find()) {
+                index = Integer.parseInt(matcher.group(1));
+            }
+            
+            errors.add(new BatchOperationError(index, fieldName, errorMessage));
+        });
+        
+        BatchOperationErrorResponse response = new BatchOperationErrorResponse(
+            "Validation failed",
+            errors
+        );
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
     @ExceptionHandler(IllegalStateException.class)

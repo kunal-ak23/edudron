@@ -1,7 +1,6 @@
 package com.datagami.edudron.student.web;
 
-import com.datagami.edudron.student.dto.ClassDTO;
-import com.datagami.edudron.student.dto.CreateClassRequest;
+import com.datagami.edudron.student.dto.*;
 import com.datagami.edudron.student.service.ClassService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +28,29 @@ public class ClassController {
         request.setInstituteId(instituteId);
         ClassDTO classDTO = classService.createClass(instituteId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(classDTO);
+    }
+
+    @PostMapping("/institutes/{instituteId}/classes/with-sections")
+    @Operation(summary = "Create class with sections", 
+               description = "Create a new class along with multiple sections in a single transaction")
+    public ResponseEntity<ClassWithSectionsDTO> createClassWithSections(
+            @PathVariable String instituteId,
+            @Valid @RequestBody CreateClassWithSectionsRequest request) {
+        request.setInstituteId(instituteId);
+        ClassWithSectionsDTO result = classService.createClassWithSections(instituteId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+    }
+
+    @PostMapping("/institutes/{instituteId}/classes/batch")
+    @Operation(summary = "Batch create classes", 
+               description = "Create multiple classes at once for an institute (max 50)")
+    public ResponseEntity<BatchCreateClassesResponse> batchCreateClasses(
+            @PathVariable String instituteId,
+            @Valid @RequestBody BatchCreateClassesRequest request) {
+        // Set institute ID for all classes
+        request.getClasses().forEach(classRequest -> classRequest.setInstituteId(instituteId));
+        BatchCreateClassesResponse response = classService.batchCreateClasses(instituteId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/institutes/{instituteId}/classes")

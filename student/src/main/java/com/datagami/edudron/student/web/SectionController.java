@@ -1,8 +1,6 @@
 package com.datagami.edudron.student.web;
 
-import com.datagami.edudron.student.dto.CreateSectionRequest;
-import com.datagami.edudron.student.dto.SectionDTO;
-import com.datagami.edudron.student.dto.SectionProgressDTO;
+import com.datagami.edudron.student.dto.*;
 import com.datagami.edudron.student.service.SectionService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +28,18 @@ public class SectionController {
         request.setClassId(classId);
         SectionDTO section = sectionService.createSection(classId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(section);
+    }
+
+    @PostMapping("/classes/{classId}/sections/batch")
+    @Operation(summary = "Batch create sections", 
+               description = "Create multiple sections at once for a class (max 50)")
+    public ResponseEntity<BatchCreateSectionsResponse> batchCreateSections(
+            @PathVariable String classId,
+            @Valid @RequestBody BatchCreateSectionsRequest request) {
+        // Set class ID for all sections
+        request.getSections().forEach(sectionRequest -> sectionRequest.setClassId(classId));
+        BatchCreateSectionsResponse response = sectionService.batchCreateSections(classId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/classes/{classId}/sections")
