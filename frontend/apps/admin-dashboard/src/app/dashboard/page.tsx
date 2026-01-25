@@ -54,11 +54,14 @@ function timeAgo(dateStr?: string): string {
 }
 
 function computeSeatUtilization(batches: Batch[]): number | null {
-  const withCapacity = batches.filter((b) => typeof b.capacity === 'number' && (b.capacity ?? 0) > 0)
+  const withCapacity = batches.filter((b) => {
+    const cap = b.capacity ?? b.maxStudents ?? 0
+    return typeof cap === 'number' && cap > 0
+  })
   if (withCapacity.length === 0) return null
-  const totalCapacity = withCapacity.reduce((sum, b) => sum + (b.capacity || 0), 0)
+  const totalCapacity = withCapacity.reduce((sum, b) => sum + (b.capacity ?? b.maxStudents ?? 0), 0)
   if (totalCapacity <= 0) return null
-  const totalEnrolled = withCapacity.reduce((sum, b) => sum + (b.enrolledCount || 0), 0)
+  const totalEnrolled = withCapacity.reduce((sum, b) => sum + (b.enrolledCount ?? b.studentCount ?? 0), 0)
   return Math.max(0, Math.min(100, (totalEnrolled / totalCapacity) * 100))
 }
 
@@ -171,10 +174,9 @@ export default function DashboardPage() {
   const publishedCourses = courses.filter(c => c.isPublished)
   const draftCourses = courses.filter(c => !c.isPublished)
   // "Batches" in the org's terminology maps to "Sections" in the backend.
-  // Keep batches list for now (legacy), but prefer section count for correctness.
   const activeBatches = batches.filter(b => b.isActive)
-  const totalBatches = activeSectionCount ?? batches.length
-  const totalStudentsFromBatches = batches.reduce((sum, batch) => sum + (batch.enrolledCount || 0), 0)
+  const totalBatches = batches.length
+  const totalStudentsFromBatches = batches.reduce((sum, batch) => sum + (batch.enrolledCount ?? batch.studentCount ?? 0), 0)
   const totalStudents = studentCount ?? totalStudentsFromBatches
   const seatUtilization = computeSeatUtilization(batches)
 
@@ -266,7 +268,9 @@ export default function DashboardPage() {
                   <Users className="w-6 h-6 text-green-200" />
                 </div>
                 <p className="text-3xl font-bold">{loading ? '...' : totalBatches}</p>
-                <p className="text-sm text-green-100 mt-1">{activeBatches.length} active</p>
+                <p className="text-sm text-green-100 mt-1">
+                  {loading ? '...' : activeBatches.length} active{activeBatches.length !== totalBatches ? `, ${totalBatches - activeBatches.length} inactive` : ''}
+                </p>
               </CardContent>
             </Card>
 

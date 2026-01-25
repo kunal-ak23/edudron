@@ -56,6 +56,13 @@ public class SectionController {
         return ResponseEntity.ok(sections);
     }
 
+    @GetMapping("/sections")
+    @Operation(summary = "List all sections", description = "Get all sections for the current tenant")
+    public ResponseEntity<List<SectionDTO>> getAllSections() {
+        List<SectionDTO> sections = sectionService.getAllSections();
+        return ResponseEntity.ok(sections);
+    }
+
     @GetMapping("/sections/{id}")
     @Operation(summary = "Get section", description = "Get section details by ID")
     public ResponseEntity<SectionDTO> getSection(@PathVariable String id) {

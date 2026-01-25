@@ -129,9 +129,9 @@ export default function BatchesPage() {
                           <span>
                             End: {new Date(batch.endDate).toLocaleDateString()}
                           </span>
-                          {batch.capacity && (
+                          {(batch.capacity || batch.maxStudents) && (
                             <span>
-                              Capacity: {batch.enrolledCount || 0} / {batch.capacity}
+                              Capacity: {batch.enrolledCount ?? batch.studentCount ?? 0} / {batch.capacity ?? batch.maxStudents}
                             </span>
                           )}
                         </div>

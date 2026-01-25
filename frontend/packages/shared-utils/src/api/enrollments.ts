@@ -16,12 +16,15 @@ export interface Enrollment {
 
 export interface Batch {
   id: string
-  courseId: string
+  courseId?: string // Legacy - batches used to link to courses
+  classId?: string // New - sections link to classes
   name: string
   startDate: string
   endDate: string
-  capacity?: number
-  enrolledCount?: number
+  capacity?: number // Legacy field name
+  maxStudents?: number // New field name (same as capacity)
+  enrolledCount?: number // Legacy field name
+  studentCount?: number // New field name (same as enrolledCount)
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -207,13 +210,19 @@ export class EnrollmentsApi {
     return response.data
   }
 
-  // Batch management
-  async listBatches(courseId?: string): Promise<Batch[]> {
-    const url = courseId 
-      ? `/api/batches/courses/${courseId}`
-      : '/api/batches'
+  // Section management (replaces legacy Batch management)
+  async listSections(classId?: string): Promise<Batch[]> {
+    const url = classId 
+      ? `/api/classes/${classId}/sections`
+      : '/api/sections'
     const response = await this.apiClient.get<Batch[]>(url)
     return Array.isArray(response.data) ? response.data : []
+  }
+
+  // Legacy Batch management - deprecated, use Sections instead
+  async listBatches(courseId?: string): Promise<Batch[]> {
+    // Redirect to sections API since batches table no longer exists
+    return this.listSections()
   }
 
   async getBatch(id: string): Promise<Batch> {

@@ -111,6 +111,19 @@ public class SectionService {
             .collect(Collectors.toList());
     }
     
+    public List<SectionDTO> getAllSections() {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        List<Section> sections = sectionRepository.findByClientId(clientId);
+        return sections.stream()
+            .map(section -> toDTO(section, clientId))
+            .collect(Collectors.toList());
+    }
+    
     public SectionDTO updateSection(String sectionId, CreateSectionRequest request) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
