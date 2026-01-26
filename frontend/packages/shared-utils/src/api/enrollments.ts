@@ -417,9 +417,7 @@ export interface SectionStudentDTO {
   name: string
   email: string
   phone?: string
-}
-
-export interface ClassStudentDTO {
+}export interface ClassStudentDTO {
   id: string
   name: string
   email: string
