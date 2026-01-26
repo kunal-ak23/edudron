@@ -37,6 +37,22 @@ public class UserController {
         return ResponseEntity.ok(users);
     }
     
+    @GetMapping("/paginated")
+    @Operation(summary = "List users (paginated)", description = "Get paginated users. SYSTEM_ADMIN sees all users, others see only their tenant's users.")
+    public ResponseEntity<Page<UserDTO>> getAllUsersPaginated(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) String search) {
+        Pageable pageable = PageRequest.of(page, size);
+        log.info("GET /idp/users/paginated - Filters: email={}, search={}, page={}, size={}", 
+            email, search, page, size);
+        Page<UserDTO> users = userService.getAllUsersPaginated(pageable, email, search);
+        log.info("GET /idp/users/paginated - Returning {} users (total: {}, pages: {})", 
+            users.getNumberOfElements(), users.getTotalElements(), users.getTotalPages());
+        return ResponseEntity.ok(users);
+    }
+    
     @GetMapping("/{id}")
     @Operation(summary = "Get user", description = "Get user details by ID")
     public ResponseEntity<UserDTO> getUser(@PathVariable String id) {

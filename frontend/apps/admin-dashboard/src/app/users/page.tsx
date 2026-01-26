@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,9 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Loader2 } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Plus, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -33,14 +35,29 @@ interface User {
   createdAt: string
 }
 
+interface PaginatedResponse<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+  first: boolean
+  last: boolean
+}
+
 export default function UsersPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { user } = useAuth()
   const [users, setUsers] = useState<User[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [currentPage, setCurrentPage] = useState(0)
+  const [pageSize, setPageSize] = useState(20)
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
   
   const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
   const isTenantAdmin = user?.role === 'TENANT_ADMIN'
@@ -49,58 +66,101 @@ export default function UsersPage() {
 
   const loadUsers = useCallback(async () => {
     try {
-      // Spring Boot returns ResponseEntity<List<UserDTO>> which serializes as an array
-      // ApiClient.get returns response.data, which will be the array directly
-      const response = await apiClient.get<User[]>('/idp/users')
+      setLoading(true)
+
+      // Build query parameters with filters
+      const params = new URLSearchParams()
+      params.append('page', currentPage.toString())
+      params.append('size', pageSize.toString())
       
-      // The response might be the array directly, or wrapped in {data: [...]}
-      let usersData: User[] = []
-      if (Array.isArray(response)) {
-        usersData = response
-      } else if (response && 'data' in response && Array.isArray(response.data)) {
-        usersData = response.data as User[]
+      // Add search filter if provided (use debounced value)
+      const searchToUse = debouncedSearchTerm || searchQuery
+      if (searchToUse.trim()) {
+        params.append('search', searchToUse.trim())
       }
-      
-      setUsers(usersData)
-      setFilteredUsers(usersData)
-    } catch (error: any) {
-      console.error('Failed to load users:', error)
-      const errorMessage = extractErrorMessage(error)
+
+      console.log('[UsersPage] Loading users with filters:', { 
+        page: currentPage, 
+        size: pageSize, 
+        search: searchToUse.trim() || null 
+      })
+
+      // Use paginated endpoint with backend filtering
+      try {
+        const response = await apiClient.get<PaginatedResponse<User>>(
+          `/idp/users/paginated?${params.toString()}`
+        )
+        const paginatedData = response.data || { content: [], totalElements: 0, totalPages: 0, number: 0, size: pageSize, first: true, last: true }
+        
+        console.log('[UsersPage] Received response:', {
+          contentLength: paginatedData.content?.length,
+          totalElements: paginatedData.totalElements,
+          totalPages: paginatedData.totalPages
+        })
+        
+        setUsers(paginatedData.content || [])
+        setTotalElements(paginatedData.totalElements || 0)
+        setTotalPages(paginatedData.totalPages || 0)
+      } catch (paginatedError: any) {
+        // Fallback to non-paginated endpoint if paginated endpoint doesn't exist
+        console.warn('Paginated endpoint failed, falling back to non-paginated:', paginatedError)
+        const response = await apiClient.get<User[]>('/idp/users')
+        
+        let usersData: User[] = []
+        if (Array.isArray(response)) {
+          usersData = response
+        } else if (response && 'data' in response && Array.isArray(response.data)) {
+          usersData = response.data as User[]
+        }
+        
+        // Apply client-side filtering if we had to fall back
+        if (searchToUse.trim()) {
+          const query = searchToUse.toLowerCase()
+          usersData = usersData.filter(
+            (user) =>
+              user.name.toLowerCase().includes(query) ||
+              user.email.toLowerCase().includes(query) ||
+              user.role.toLowerCase().includes(query)
+          )
+        }
+        
+        setUsers(usersData)
+        setTotalElements(usersData.length)
+        setTotalPages(Math.ceil(usersData.length / pageSize))
+      }
+    } catch (err: any) {
+      console.error('Error loading users:', err)
+      const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
         title: 'Failed to load users',
         description: errorMessage,
       })
       setUsers([])
-      setFilteredUsers([])
+      setTotalElements(0)
+      setTotalPages(0)
     } finally {
       setLoading(false)
     }
-  }, [toast])
+  }, [toast, currentPage, pageSize, debouncedSearchTerm])
 
-  const filterUsers = useCallback(() => {
-    if (!searchQuery) {
-      setFilteredUsers(users)
-      return
-    }
+  // Debounce search term to avoid too many API calls
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedSearchTerm(searchQuery)
+    }, 300) // 300ms debounce
+    
+    return () => clearTimeout(timeoutId)
+  }, [searchQuery])
 
-    const query = searchQuery.toLowerCase()
-    const filtered = users.filter(
-      (user) =>
-        user.name.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
-        user.role.toLowerCase().includes(query)
-    )
-    setFilteredUsers(filtered)
-  }, [users, searchQuery])
+  // Reset to first page when search term or page size changes
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [searchQuery, pageSize])
 
   useEffect(() => {
     loadUsers()
-  }, [loadUsers])
-
-  useEffect(() => {
-    filterUsers()
-  }, [filterUsers])
+  }, [currentPage, pageSize, debouncedSearchTerm, loadUsers])
 
   const getRoleBadgeVariant = (role: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (role) {
@@ -163,13 +223,13 @@ export default function UsersPage() {
                 </div>
               </CardContent>
             </Card>
-          ) : filteredUsers.length === 0 ? (
+          ) : users.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
                 <p className="text-muted-foreground mb-4">
                   {searchQuery ? 'No users found matching your search' : 'No users found'}
                 </p>
-                {!searchQuery && (
+                {!searchQuery && canManageUsers && (
                   <Button onClick={() => router.push('/users/new')}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add Your First User
@@ -191,7 +251,7 @@ export default function UsersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.map((user) => (
+                    {users.map((user) => (
                       <TableRow key={user.id}>
                         <TableCell>
                           <div className="flex items-center">
@@ -236,6 +296,74 @@ export default function UsersPage() {
                     ))}
                   </TableBody>
                 </Table>
+                
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 pt-4 border-t px-6 pb-4">
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm">Page size:</Label>
+                      <Select
+                        value={pageSize.toString()}
+                        onValueChange={(value) => {
+                          setPageSize(Number(value))
+                          setCurrentPage(0)
+                        }}
+                      >
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-gray-600">
+                        Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalElements)} of {totalElements.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(0)}
+                        disabled={currentPage === 0 || loading}
+                      >
+                        First
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+                        disabled={currentPage === 0 || loading}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <span className="text-sm text-gray-600 px-2">
+                        Page {currentPage + 1} of {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+                        disabled={currentPage >= totalPages - 1 || loading}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(totalPages - 1)}
+                        disabled={currentPage >= totalPages - 1 || loading}
+                      >
+                        Last
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

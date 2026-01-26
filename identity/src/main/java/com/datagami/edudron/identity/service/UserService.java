@@ -30,7 +30,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.Predicate;
@@ -85,6 +84,25 @@ public class UserService {
         return userRepository.findByClientId(clientId).stream()
             .map(this::toDTO)
             .collect(Collectors.toList());
+    }
+    
+    @Transactional(readOnly = true)
+    public Page<UserDTO> getAllUsersPaginated(Pageable pageable, String email, String search) {
+        String clientIdStr = TenantContext.getClientId();
+        
+        log.info("Fetching paginated users - email: {}, search: {}, page: {}, size: {}", 
+            email, search, pageable.getPageNumber(), pageable.getPageSize());
+        
+        // Build specification for filtering (without role filter)
+        Specification<User> spec = buildAllUsersSpecification(email, search, clientIdStr);
+        
+        Page<User> userPage = userRepository.findAll(spec, pageable);
+        
+        log.info("Repository returned {} users (total: {}, page: {}/{})", 
+            userPage.getNumberOfElements(), userPage.getTotalElements(), 
+            userPage.getNumber(), userPage.getTotalPages());
+        
+        return userPage.map(this::toDTO);
     }
     
     @Transactional(readOnly = true)
@@ -234,6 +252,56 @@ public class UserService {
             
             Predicate finalPredicate = cb.and(predicates.toArray(new Predicate[0]));
             log.info("Built user specification with {} predicates", predicates.size());
+            return finalPredicate;
+        };
+    }
+
+    /**
+     * Build JPA Specification for all users filtering (no role filter)
+     */
+    private Specification<User> buildAllUsersSpecification(String email, String search, String clientIdStr) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            
+            // Filter by tenant (clientId) if not SYSTEM_ADMIN context
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                try {
+                    UUID clientId = UUID.fromString(clientIdStr);
+                    predicates.add(cb.equal(root.get("clientId"), clientId));
+                    log.info("Adding clientId backend filter: {}", clientId);
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid clientId format: {}", clientIdStr);
+                }
+            } else {
+                // SYSTEM_ADMIN context - no clientId filter
+                log.info("SYSTEM_ADMIN context - no clientId filter");
+            }
+            
+            // Apply email filter (contains match, case-insensitive)
+            if (email != null && !email.trim().isEmpty()) {
+                String emailLower = email.trim().toLowerCase();
+                log.info("Adding email backend filter (contains): {}", email);
+                predicates.add(cb.like(cb.lower(root.get("email")), "%" + emailLower + "%"));
+            }
+            
+            // Apply search filter (searches email, name, role - contains match, case-insensitive)
+            if (search != null && !search.trim().isEmpty()) {
+                String searchLower = search.trim().toLowerCase();
+                log.info("Adding search backend filter (contains): {}", search);
+                Predicate emailMatch = cb.like(cb.lower(root.get("email")), "%" + searchLower + "%");
+                Predicate nameMatch = cb.like(cb.lower(root.get("name")), "%" + searchLower + "%");
+                // Convert role enum to string for searching
+                Predicate roleMatch = cb.like(cb.lower(cb.function("CAST", String.class, root.get("role"))), "%" + searchLower + "%");
+                predicates.add(cb.or(emailMatch, nameMatch, roleMatch));
+            }
+            
+            // If no predicates, return a true predicate (fetch all)
+            if (predicates.isEmpty()) {
+                return cb.conjunction();
+            }
+            
+            Predicate finalPredicate = cb.and(predicates.toArray(new Predicate[0]));
+            log.info("Built all users specification with {} predicates", predicates.size());
             return finalPredicate;
         };
     }
