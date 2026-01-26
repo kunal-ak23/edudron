@@ -295,8 +295,8 @@ export default function ExamsPage() {
                         <Button 
                           onClick={() => router.push(`/exams/${exam.id}/take`)}
                           disabled={
-                            (exam.endTime && new Date() > new Date(exam.endTime)) ||
-                            (exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts)
+                            !!(exam.endTime && new Date() > new Date(exam.endTime)) ||
+                            !!(exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts)
                           }
                         >
                           {exam.endTime && new Date() > new Date(exam.endTime) 
