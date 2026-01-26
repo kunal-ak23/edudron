@@ -68,6 +68,14 @@ public class AssessmentSubmission {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "ai_review_feedback", columnDefinition = "jsonb")
     private JsonNode aiReviewFeedback;
+    
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "question_order", columnDefinition = "jsonb")
+    private JsonNode questionOrder;
+    
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "mcq_option_orders", columnDefinition = "jsonb")
+    private JsonNode mcqOptionOrders;
 
     @Column(nullable = false)
     private OffsetDateTime createdAt;
@@ -139,6 +147,12 @@ public class AssessmentSubmission {
 
     public JsonNode getAiReviewFeedback() { return aiReviewFeedback; }
     public void setAiReviewFeedback(JsonNode aiReviewFeedback) { this.aiReviewFeedback = aiReviewFeedback; }
+    
+    public JsonNode getQuestionOrder() { return questionOrder; }
+    public void setQuestionOrder(JsonNode questionOrder) { this.questionOrder = questionOrder; }
+    
+    public JsonNode getMcqOptionOrders() { return mcqOptionOrders; }
+    public void setMcqOptionOrders(JsonNode mcqOptionOrders) { this.mcqOptionOrders = mcqOptionOrders; }
 }
 
 

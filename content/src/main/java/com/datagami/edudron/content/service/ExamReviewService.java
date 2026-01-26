@@ -114,14 +114,16 @@ public class ExamReviewService {
             throw new IllegalArgumentException("Assessment is not an exam");
         }
         
-        // Get all questions for this exam
-        List<QuizQuestion> questions = quizQuestionRepository.findByAssessmentIdAndClientIdOrderBySequenceAsc(
+        // Get all questions for this exam (with options eagerly loaded for grading)
+        List<QuizQuestion> questions = quizQuestionRepository.findByAssessmentIdAndClientIdWithOptions(
             exam.getId(), clientId);
         
         JsonNode answersJson = submission.get("answersJson");
         if (answersJson == null) {
             throw new IllegalStateException("No answers found in submission");
         }
+        
+        logger.info("Grading submission {} with {} questions", submissionId, questions.size());
         
         double totalScore = 0.0;
         double maxScore = 0.0;
@@ -130,6 +132,18 @@ public class ExamReviewService {
         
         for (QuizQuestion question : questions) {
             maxScore += question.getPoints();
+            
+            // Ensure options are loaded for multiple choice questions
+            if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE ||
+                question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
+                if (question.getOptions() == null || question.getOptions().isEmpty()) {
+                    logger.error("Question {} has no options loaded! Type: {}", 
+                        question.getId(), question.getQuestionType());
+                } else {
+                    logger.debug("Question {} has {} options loaded", 
+                        question.getId(), question.getOptions().size());
+                }
+            }
             
             JsonNode answerNode = answersJson.get(question.getId());
             if (answerNode == null) {
@@ -223,13 +237,36 @@ public class ExamReviewService {
     private double gradeObjectiveQuestion(QuizQuestion question, JsonNode answerNode) {
         if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE) {
             String selectedOptionId = answerNode.asText();
+            logger.debug("Grading MC question {}: selected option ID = '{}'", question.getId(), selectedOptionId);
             
             // Find the correct option
             for (QuizOption option : question.getOptions()) {
+                logger.debug("  Checking option {}: id='{}', isCorrect={}", 
+                    option.getSequence(), option.getId(), option.getIsCorrect());
+                
                 if (option.getId().equals(selectedOptionId) && option.getIsCorrect()) {
+                    logger.info("Correct answer! Question {}, option {}, points: {}", 
+                        question.getId(), option.getId(), question.getPoints());
                     return question.getPoints();
                 }
             }
+            
+            // Check if the selected option exists but is incorrect
+            boolean optionFound = false;
+            for (QuizOption option : question.getOptions()) {
+                if (option.getId().equals(selectedOptionId)) {
+                    optionFound = true;
+                    logger.info("Incorrect answer selected. Question {}, selected option {}, correct option not found", 
+                        question.getId(), selectedOptionId);
+                    break;
+                }
+            }
+            
+            if (!optionFound) {
+                logger.warn("Selected option ID '{}' not found in question {} options", 
+                    selectedOptionId, question.getId());
+            }
+            
             return 0.0;
         } else if (question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
             boolean studentAnswer = answerNode.asBoolean();

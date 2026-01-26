@@ -56,4 +56,8 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0015-psych-test-v2-asked-questions.yaml
   - include:
       file: db/changelog/db.changelog-0016-events.yaml
+  - include:
+      file: db/changelog/db.changelog-0017-add-class-id-to-assessments.yaml
+  - include:
+      file: db/changelog/db.changelog-0018-add-randomization-to-assessments.yaml
 

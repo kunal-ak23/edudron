@@ -19,6 +19,9 @@ public class Assessment {
     @Column(name = "course_id", nullable = false, insertable = true, updatable = true)
     private String courseId;
 
+    @Column(name = "class_id", insertable = true, updatable = true)
+    private String classId;
+
     @Column(name = "section_id", insertable = true, updatable = true)
     private String sectionId;
     
@@ -108,6 +111,12 @@ public class Assessment {
     
     @Column(name = "module_ids", columnDefinition = "text[]")
     private List<String> moduleIds = new ArrayList<>();
+    
+    @Column(name = "randomize_questions", nullable = false)
+    private Boolean randomizeQuestions = false;
+    
+    @Column(name = "randomize_mcq_options", nullable = false)
+    private Boolean randomizeMcqOptions = false;
 
     // Constructors
     public Assessment() {
@@ -170,6 +179,9 @@ public class Assessment {
     public Course getCourse() { return course; }
     public void setCourse(Course course) { this.course = course; }
 
+    public String getClassId() { return classId; }
+    public void setClassId(String classId) { this.classId = classId; }
+
     public Section getSection() { return section; }
     public void setSection(Section section) { this.section = section; }
 
@@ -193,6 +205,12 @@ public class Assessment {
 
     public List<String> getModuleIds() { return moduleIds; }
     public void setModuleIds(List<String> moduleIds) { this.moduleIds = moduleIds; }
+    
+    public Boolean getRandomizeQuestions() { return randomizeQuestions; }
+    public void setRandomizeQuestions(Boolean randomizeQuestions) { this.randomizeQuestions = randomizeQuestions; }
+    
+    public Boolean getRandomizeMcqOptions() { return randomizeMcqOptions; }
+    public void setRandomizeMcqOptions(Boolean randomizeMcqOptions) { this.randomizeMcqOptions = randomizeMcqOptions; }
 
     @PreUpdate
     public void preUpdate() {

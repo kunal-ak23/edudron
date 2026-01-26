@@ -89,7 +89,8 @@ public class ExamService {
     }
     
     public Assessment createExam(String courseId, String title, String description, String instructions,
-                                 List<String> moduleIds, Assessment.ReviewMethod reviewMethod) {
+                                 List<String> moduleIds, Assessment.ReviewMethod reviewMethod, String classId, String sectionId,
+                                 Boolean randomizeQuestions, Boolean randomizeMcqOptions) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -113,6 +114,8 @@ public class ExamService {
         exam.setId(UlidGenerator.nextUlid());
         exam.setClientId(clientId);
         exam.setCourseId(courseId);
+        exam.setClassId(classId); // Set class if provided (null = course-wide)
+        exam.setSectionId(sectionId); // Set section if provided (null = not section-specific)
         exam.setAssessmentType(Assessment.AssessmentType.EXAM);
         exam.setTitle(title);
         exam.setDescription(description);
@@ -121,9 +124,14 @@ public class ExamService {
         exam.setStatus(Assessment.ExamStatus.DRAFT);
         exam.setReviewMethod(reviewMethod != null ? reviewMethod : Assessment.ReviewMethod.INSTRUCTOR);
         exam.setModuleIds(moduleIds != null ? moduleIds : List.of());
+        exam.setRandomizeQuestions(randomizeQuestions != null ? randomizeQuestions : false);
+        exam.setRandomizeMcqOptions(randomizeMcqOptions != null ? randomizeMcqOptions : false);
         
         Assessment saved = assessmentRepository.save(exam);
-        logger.info("Created exam with ID: {} for course: {}", saved.getId(), courseId);
+        String audience = sectionId != null ? "section: " + sectionId : 
+                         classId != null ? "class: " + classId : "all students";
+        logger.info("Created exam with ID: {} for course: {}, {}", 
+            saved.getId(), courseId, audience);
         return saved;
     }
     
@@ -286,48 +294,96 @@ public class ExamService {
     }
     
     /**
+     * Check if exam is currently accessible (time-based validation)
+     * Returns true if current time is within exam's start and end time
+     */
+    public boolean isExamAccessible(String examId) {
+        Assessment exam = getExamById(examId);
+        return isExamAccessible(exam);
+    }
+    
+    /**
+     * Check if exam is currently accessible (time-based validation)
+     */
+    public boolean isExamAccessible(Assessment exam) {
+        if (exam.getStartTime() == null || exam.getEndTime() == null) {
+            // If no schedule, it depends on status
+            return exam.getStatus() == Assessment.ExamStatus.LIVE;
+        }
+        
+        OffsetDateTime now = OffsetDateTime.now();
+        return !now.isBefore(exam.getStartTime()) && !now.isAfter(exam.getEndTime());
+    }
+    
+    /**
+     * Get real-time status of exam based on current time
+     */
+    public Assessment.ExamStatus getRealTimeStatus(Assessment exam) {
+        if (exam.getStartTime() == null || exam.getEndTime() == null) {
+            return exam.getStatus();
+        }
+        
+        OffsetDateTime now = OffsetDateTime.now();
+        if (now.isBefore(exam.getStartTime())) {
+            return Assessment.ExamStatus.SCHEDULED;
+        } else if (now.isAfter(exam.getEndTime())) {
+            return Assessment.ExamStatus.COMPLETED;
+        } else {
+            return Assessment.ExamStatus.LIVE;
+        }
+    }
+    
+    /**
      * Auto-update exam status based on current time
      * This is called periodically by a scheduled task
+     * Works across all tenants without requiring tenant context
      */
     @Scheduled(fixedRate = 60000) // Run every minute
     public void updateExamStatus() {
-        String clientIdStr = TenantContext.getClientId();
-        if (clientIdStr == null) {
-            return; // Skip if no tenant context
-        }
-        UUID clientId = UUID.fromString(clientIdStr);
-        
-        OffsetDateTime now = OffsetDateTime.now();
-        
-        List<Assessment> exams = assessmentRepository.findByAssessmentTypeAndStatusInAndClientIdOrderByStartTimeAsc(
-            Assessment.AssessmentType.EXAM,
-            List.of(Assessment.ExamStatus.SCHEDULED, Assessment.ExamStatus.LIVE),
-            clientId
-        );
-        
-        for (Assessment exam : exams) {
-            if (exam.getStartTime() == null || exam.getEndTime() == null) {
-                continue;
+        try {
+            OffsetDateTime now = OffsetDateTime.now();
+            
+            // Get all exams across all tenants that might need status updates
+            List<Assessment> exams = assessmentRepository.findByAssessmentTypeAndStatusInOrderByStartTimeAsc(
+                Assessment.AssessmentType.EXAM,
+                List.of(Assessment.ExamStatus.SCHEDULED, Assessment.ExamStatus.LIVE)
+            );
+            
+            int updatedCount = 0;
+            for (Assessment exam : exams) {
+                if (exam.getStartTime() == null || exam.getEndTime() == null) {
+                    continue;
+                }
+                
+                Assessment.ExamStatus newStatus = null;
+                if (now.isBefore(exam.getStartTime())) {
+                    newStatus = Assessment.ExamStatus.SCHEDULED;
+                } else if (now.isAfter(exam.getEndTime())) {
+                    newStatus = Assessment.ExamStatus.COMPLETED;
+                } else {
+                    newStatus = Assessment.ExamStatus.LIVE;
+                }
+                
+                if (newStatus != null && newStatus != exam.getStatus()) {
+                    exam.setStatus(newStatus);
+                    assessmentRepository.save(exam);
+                    updatedCount++;
+                    logger.info("Updated exam status: examId={}, oldStatus={}, newStatus={}, clientId={}", 
+                        exam.getId(), exam.getStatus(), newStatus, exam.getClientId());
+                }
             }
             
-            Assessment.ExamStatus newStatus = null;
-            if (now.isBefore(exam.getStartTime())) {
-                newStatus = Assessment.ExamStatus.SCHEDULED;
-            } else if (now.isAfter(exam.getEndTime())) {
-                newStatus = Assessment.ExamStatus.COMPLETED;
-            } else {
-                newStatus = Assessment.ExamStatus.LIVE;
+            if (updatedCount > 0) {
+                logger.info("Exam status update completed: {} exams updated", updatedCount);
             }
-            
-            if (newStatus != null && newStatus != exam.getStatus()) {
-                exam.setStatus(newStatus);
-                assessmentRepository.save(exam);
-            }
+        } catch (Exception e) {
+            logger.error("Error updating exam statuses in scheduled task", e);
         }
     }
     
     public Assessment updateExam(String examId, String title, String description, String instructions,
-                                 List<String> moduleIds, Assessment.ReviewMethod reviewMethod) {
+                                 List<String> moduleIds, Assessment.ReviewMethod reviewMethod, String classId, String sectionId,
+                                 Boolean randomizeQuestions, Boolean randomizeMcqOptions) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -350,6 +406,17 @@ public class ExamService {
         }
         if (reviewMethod != null) {
             exam.setReviewMethod(reviewMethod);
+        }
+        // Update class and section (null means all students in course)
+        exam.setClassId(classId);
+        exam.setSectionId(sectionId);
+        
+        // Update randomization settings
+        if (randomizeQuestions != null) {
+            exam.setRandomizeQuestions(randomizeQuestions);
+        }
+        if (randomizeMcqOptions != null) {
+            exam.setRandomizeMcqOptions(randomizeMcqOptions);
         }
         
         return assessmentRepository.save(exam);

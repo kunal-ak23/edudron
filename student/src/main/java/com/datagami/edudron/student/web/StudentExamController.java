@@ -4,9 +4,11 @@ import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.student.domain.AssessmentSubmission;
 import com.datagami.edudron.student.domain.Enrollment;
+import com.datagami.edudron.student.domain.Section;
 import com.datagami.edudron.student.dto.AssessmentSubmissionDTO;
 import com.datagami.edudron.student.repo.AssessmentSubmissionRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
+import com.datagami.edudron.student.repo.SectionRepository;
 import com.datagami.edudron.student.service.ExamSubmissionService;
 import com.datagami.edudron.student.util.UserUtil;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -29,8 +31,10 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -53,6 +57,9 @@ public class StudentExamController {
     
     @Autowired
     private AssessmentSubmissionRepository submissionRepository;
+    
+    @Autowired
+    private SectionRepository sectionRepository;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -191,6 +198,7 @@ public class StudentExamController {
             }
             
             // Filter exams to only include those for courses the student is enrolled in
+            // Also check section-based or class-based access if exam is restricted
             // Also deduplicate by exam ID to prevent same exam appearing multiple times
             Set<String> seenExamIds = new HashSet<>();
             List<Object> filteredExams = exams.stream()
@@ -210,10 +218,80 @@ public class StudentExamController {
                         // Filter by course enrollment
                         if (examNode.has("courseId")) {
                             String courseId = examNode.get("courseId").asText();
-                            return accessibleCourseIds.contains(courseId);
+                            if (!accessibleCourseIds.contains(courseId)) {
+                                return false; // Student not enrolled in this course
+                            }
+                            
+                            // Find student's enrollment for this course
+                            Enrollment studentEnrollment = null;
+                            for (Enrollment enrollment : enrollments) {
+                                if (courseId.equals(enrollment.getCourseId())) {
+                                    studentEnrollment = enrollment;
+                                    break;
+                                }
+                            }
+                            
+                            if (studentEnrollment == null) {
+                                return false; // Should not happen, but safety check
+                            }
+                            
+                            String studentSectionId = studentEnrollment.getBatchId(); // batchId represents sectionId
+                            
+                            // Priority 1: Check if exam is section-specific
+                            if (examNode.has("sectionId") && !examNode.get("sectionId").isNull()) {
+                                String examSectionId = examNode.get("sectionId").asText();
+                                
+                                // Student can access if their section matches
+                                if (studentSectionId != null && studentSectionId.equals(examSectionId)) {
+                                    return true;
+                                }
+                                // If student has no section but exam requires one, deny access
+                                if (studentSectionId == null) {
+                                    logger.debug("Student {} enrolled in course {} without section, exam {} requires section {}", 
+                                        studentId, courseId, examNode.get("id").asText(), examSectionId);
+                                    return false;
+                                }
+                                // Student not in the required section
+                                return false;
+                            }
+                            
+                            // Priority 2: Check if exam is class-specific
+                            if (examNode.has("classId") && !examNode.get("classId").isNull()) {
+                                String examClassId = examNode.get("classId").asText();
+                                
+                                // Need to check if student's section belongs to this class
+                                if (studentSectionId == null) {
+                                    logger.debug("Student {} enrolled in course {} without section, exam {} requires class {}", 
+                                        studentId, courseId, examNode.get("id").asText(), examClassId);
+                                    return false;
+                                }
+                                
+                                // Get student's section to check its classId
+                                try {
+                                    java.util.Optional<Section> sectionOpt = sectionRepository.findByIdAndClientId(studentSectionId, clientId);
+                                    
+                                    if (sectionOpt.isPresent()) {
+                                        Section studentSection = sectionOpt.get();
+                                        String studentClassId = studentSection.getClassId();
+                                        
+                                        if (studentClassId != null && studentClassId.equals(examClassId)) {
+                                            return true;
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    logger.error("Error checking class membership for student section", e);
+                                }
+                                
+                                // Student's section not in the required class
+                                return false;
+                            }
+                            
+                            // Exam has no section or class requirement - accessible to all students in course
+                            return true;
                         }
                         return false;
                     } catch (Exception e) {
+                        logger.error("Error filtering exam", e);
                         return false;
                     }
                 })
@@ -230,17 +308,51 @@ public class StudentExamController {
     @Operation(summary = "Get exam details", description = "Get exam details by ID")
     public ResponseEntity<?> getExamDetails(@PathVariable String id) {
         try {
+            String studentId = UserUtil.getCurrentUserId();
+            String clientIdStr = TenantContext.getClientId();
+            if (clientIdStr == null) {
+                return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).build();
+            }
+            UUID clientId = UUID.fromString(clientIdStr);
+            
+            // Fetch exam details first
             String url = gatewayUrl + "/api/exams/" + id;
-            ResponseEntity<Object> response = getRestTemplate().exchange(
+            ResponseEntity<JsonNode> response = getRestTemplate().exchange(
                 url,
                 HttpMethod.GET,
                 new HttpEntity<>(new HttpHeaders()),
-                Object.class
+                JsonNode.class
             );
-            return ResponseEntity.ok(response.getBody());
+            
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            JsonNode exam = response.getBody();
+            String courseId = exam.has("courseId") ? exam.get("courseId").asText() : null;
+            
+            if (courseId == null) {
+                logger.warn("Exam {} has no courseId, allowing access", id);
+                return ResponseEntity.ok(exam);
+            }
+            
+            // Verify enrollment in the exam's course
+            List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(
+                clientId, studentId, courseId);
+            
+            if (enrollments.isEmpty()) {
+                logger.warn("Student {} attempted to access exam {} but not enrolled in course {}", 
+                    studentId, id, courseId);
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
+            }
+            
+            // Apply randomization if student has a submission with randomized order
+            JsonNode finalExam = applyRandomization(exam, id, studentId, clientId);
+            
+            return ResponseEntity.ok(finalExam);
         } catch (Exception e) {
             logger.error("Failed to fetch exam details", e);
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
@@ -277,10 +389,50 @@ public class StudentExamController {
                 return ResponseEntity.badRequest().build();
             }
             
+            // Real-time validation: Check if exam has ended
+            if (exam.has("endTime") && !exam.get("endTime").isNull()) {
+                String endTimeStr = exam.get("endTime").asText();
+                try {
+                    java.time.OffsetDateTime endTime = java.time.OffsetDateTime.parse(endTimeStr);
+                    java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+                    
+                    if (now.isAfter(endTime)) {
+                        logger.warn("Student {} attempted to start exam {} after end time. End: {}, Now: {}", 
+                            studentId, id, endTime, now);
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                            .body(null);
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to parse exam end time: {}", endTimeStr, e);
+                }
+            }
+            
+            // Also check if exam has started
+            if (exam.has("startTime") && !exam.get("startTime").isNull()) {
+                String startTimeStr = exam.get("startTime").asText();
+                try {
+                    java.time.OffsetDateTime startTime = java.time.OffsetDateTime.parse(startTimeStr);
+                    java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+                    
+                    if (now.isBefore(startTime)) {
+                        logger.warn("Student {} attempted to start exam {} before start time. Start: {}, Now: {}", 
+                            studentId, id, startTime, now);
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                            .body(null);
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to parse exam start time: {}", startTimeStr, e);
+                }
+            }
+            
             AssessmentSubmission submission = examSubmissionService.startExam(
                 studentId, courseId, id, timeLimitSeconds, maxAttempts);
             
             return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(toDTO(submission));
+        } catch (IllegalStateException e) {
+            // Handle max attempts exceeded or other state errors
+            logger.warn("State error starting exam: {}", e.getMessage());
+            return ResponseEntity.status(org.springframework.http.HttpStatus.CONFLICT).build();
         } catch (Exception e) {
             logger.error("Failed to start exam", e);
             return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
@@ -359,6 +511,129 @@ public class StudentExamController {
     public ResponseEntity<AssessmentSubmissionDTO> getSubmissionById(@PathVariable String submissionId) {
         AssessmentSubmission submission = examSubmissionService.getSubmissionStatus(submissionId);
         return ResponseEntity.ok(toDTO(submission));
+    }
+    
+    @PutMapping("/submissions/{submissionId}/manual-grade")
+    @Operation(summary = "Manual grade submission", description = "Manually grade an exam submission")
+    public ResponseEntity<AssessmentSubmissionDTO> manualGrade(
+            @PathVariable String submissionId,
+            @RequestBody JsonNode request) {
+        
+        try {
+            Double score = request.has("score") && !request.get("score").isNull() ? 
+                request.get("score").asDouble() : null;
+            Double maxScore = request.has("maxScore") && !request.get("maxScore").isNull() ? 
+                request.get("maxScore").asDouble() : null;
+            Boolean isPassed = request.has("isPassed") && !request.get("isPassed").isNull() ? 
+                request.get("isPassed").asBoolean() : null;
+            String instructorFeedback = request.has("instructorFeedback") && !request.get("instructorFeedback").isNull() ? 
+                request.get("instructorFeedback").asText() : null;
+            
+            AssessmentSubmission submission = examSubmissionService.manualGrade(
+                submissionId, score, maxScore, isPassed, instructorFeedback);
+            
+            return ResponseEntity.ok(toDTO(submission));
+        } catch (IllegalArgumentException e) {
+            logger.warn("Invalid request for manual grading: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            logger.error("Failed to manually grade submission", e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    /**
+     * Apply randomization to exam based on student's submission
+     */
+    private JsonNode applyRandomization(JsonNode exam, String examId, String studentId, UUID clientId) {
+        try {
+            // Try to find student's submission
+            AssessmentSubmission submission = submissionRepository
+                .findFirstByClientIdAndStudentIdAndAssessmentIdOrderBySubmittedAtDesc(clientId, studentId, examId)
+                .orElse(null);
+            
+            if (submission == null) {
+                // No submission yet, return exam as-is
+                return exam;
+            }
+            
+            JsonNode questionOrder = submission.getQuestionOrder();
+            JsonNode mcqOptionOrders = submission.getMcqOptionOrders();
+            
+            if (questionOrder == null && mcqOptionOrders == null) {
+                // No randomization in submission
+                return exam;
+            }
+            
+            // Clone the exam to avoid modifying the original
+            com.fasterxml.jackson.databind.node.ObjectNode examCopy = exam.deepCopy();
+            JsonNode questionsNode = examCopy.get("questions");
+            
+            if (questionsNode == null || !questionsNode.isArray()) {
+                return exam;
+            }
+            
+            List<JsonNode> questionsList = new ArrayList<>();
+            questionsNode.forEach(questionsList::add);
+            
+            // Apply question randomization
+            if (questionOrder != null && questionOrder.isArray()) {
+                Map<String, JsonNode> questionMap = new HashMap<>();
+                for (JsonNode question : questionsList) {
+                    questionMap.put(question.get("id").asText(), question);
+                }
+                
+                com.fasterxml.jackson.databind.node.ArrayNode reorderedQuestions = objectMapper.createArrayNode();
+                for (JsonNode qId : questionOrder) {
+                    String questionId = qId.asText();
+                    JsonNode question = questionMap.get(questionId);
+                    if (question != null) {
+                        reorderedQuestions.add(question);
+                    }
+                }
+                
+                examCopy.set("questions", reorderedQuestions);
+                questionsList.clear();
+                reorderedQuestions.forEach(questionsList::add);
+            }
+            
+            // Apply MCQ option randomization
+            if (mcqOptionOrders != null && mcqOptionOrders.isObject()) {
+                for (JsonNode question : questionsList) {
+                    String questionId = question.get("id").asText();
+                    JsonNode optionOrder = mcqOptionOrders.get(questionId);
+                    
+                    if (optionOrder != null && optionOrder.isArray()) {
+                        JsonNode optionsNode = question.get("options");
+                        if (optionsNode != null && optionsNode.isArray()) {
+                            // Build map of option ID to option
+                            Map<String, JsonNode> optionMap = new HashMap<>();
+                            optionsNode.forEach(option -> {
+                                optionMap.put(option.get("id").asText(), option);
+                            });
+                            
+                            // Reorder options
+                            com.fasterxml.jackson.databind.node.ArrayNode reorderedOptions = objectMapper.createArrayNode();
+                            for (JsonNode optId : optionOrder) {
+                                String optionId = optId.asText();
+                                JsonNode option = optionMap.get(optionId);
+                                if (option != null) {
+                                    reorderedOptions.add(option);
+                                }
+                            }
+                            
+                            ((com.fasterxml.jackson.databind.node.ObjectNode) question).set("options", reorderedOptions);
+                        }
+                    }
+                }
+            }
+            
+            return examCopy;
+            
+        } catch (Exception e) {
+            logger.error("Failed to apply randomization for exam: {}, student: {}", examId, studentId, e);
+            return exam; // Return original exam on error
+        }
     }
     
     private AssessmentSubmissionDTO toDTO(AssessmentSubmission submission) {

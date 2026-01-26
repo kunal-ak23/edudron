@@ -32,6 +32,8 @@ export default function NewExamPage() {
   const [generating, setGenerating] = useState(false)
   const [courses, setCourses] = useState<Course[]>([])
   const [sections, setSections] = useState<Chapter[]>([])
+  const [batches, setBatches] = useState<any[]>([]) // Student sections/batches
+  const [classes, setClasses] = useState<any[]>([]) // Student classes
   const [formData, setFormData] = useState({
     courseId: '',
     title: '',
@@ -39,8 +41,13 @@ export default function NewExamPage() {
     instructions: '',
     moduleIds: [] as string[],
     reviewMethod: 'INSTRUCTOR' as 'INSTRUCTOR' | 'AI' | 'BOTH',
+    assignmentType: 'all' as 'all' | 'class' | 'section', // How to assign exam
+    classId: '',
+    sectionId: '',
     numberOfQuestions: 10,
-    difficulty: 'INTERMEDIATE'
+    difficulty: 'INTERMEDIATE',
+    randomizeQuestions: false,
+    randomizeMcqOptions: false
   })
 
   useEffect(() => {
@@ -50,6 +57,11 @@ export default function NewExamPage() {
   useEffect(() => {
     if (formData.courseId) {
       loadSections(formData.courseId)
+      loadBatches(formData.courseId)
+      loadClasses(formData.courseId)
+    } else {
+      setBatches([])
+      setClasses([])
     }
   }, [formData.courseId])
 
@@ -69,6 +81,28 @@ export default function NewExamPage() {
     } catch (error) {
       console.error('Failed to load sections:', error)
       setSections([])
+    }
+  }
+
+  const loadBatches = async (courseId: string) => {
+    try {
+      const response = await apiClient.get(`/api/exams/courses/${courseId}/sections`)
+      const data = Array.isArray(response) ? response : (response as any)?.data || []
+      setBatches(data)
+    } catch (error) {
+      console.error('Failed to load batches:', error)
+      setBatches([])
+    }
+  }
+
+  const loadClasses = async (courseId: string) => {
+    try {
+      const response = await apiClient.get(`/api/exams/courses/${courseId}/classes`)
+      const data = Array.isArray(response) ? response : (response as any)?.data || []
+      setClasses(data)
+    } catch (error) {
+      console.error('Failed to load classes:', error)
+      setClasses([])
     }
   }
 
@@ -92,7 +126,9 @@ export default function NewExamPage() {
         description: formData.description,
         instructions: formData.instructions,
         moduleIds: formData.moduleIds,
-        reviewMethod: formData.reviewMethod
+        reviewMethod: formData.reviewMethod,
+        randomizeQuestions: formData.randomizeQuestions,
+        randomizeMcqOptions: formData.randomizeMcqOptions
       })
       const exam = (response as any)?.data || response
       
@@ -147,7 +183,11 @@ export default function NewExamPage() {
         description: formData.description,
         instructions: formData.instructions,
         moduleIds: formData.moduleIds,
-        reviewMethod: formData.reviewMethod
+        reviewMethod: formData.reviewMethod,
+        classId: formData.assignmentType === 'class' ? formData.classId : null,
+        sectionId: formData.assignmentType === 'section' ? formData.sectionId : null,
+        randomizeQuestions: formData.randomizeQuestions,
+        randomizeMcqOptions: formData.randomizeMcqOptions
       })
       
       // Handle response - apiClient might return data directly or wrapped
@@ -289,6 +329,113 @@ export default function NewExamPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-3 border-t pt-3">
+                <Label>Randomization Settings</Label>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="randomizeQuestions"
+                    checked={formData.randomizeQuestions}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, randomizeQuestions: checked === true }))
+                    }
+                  />
+                  <label
+                    htmlFor="randomizeQuestions"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Randomize question order
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="randomizeMcqOptions"
+                    checked={formData.randomizeMcqOptions}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, randomizeMcqOptions: checked === true }))
+                    }
+                  />
+                  <label
+                    htmlFor="randomizeMcqOptions"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Randomize MCQ options
+                  </label>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Each student will see questions/options in a different random order
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="assignmentType">Student Audience</Label>
+                <Select value={formData.assignmentType} onValueChange={(value: any) => 
+                  setFormData(prev => ({ ...prev, assignmentType: value, classId: '', sectionId: '' }))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Students in Course</SelectItem>
+                    <SelectItem value="class">Specific Class</SelectItem>
+                    <SelectItem value="section">Specific Section/Batch</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Choose who can access this exam
+                </p>
+              </div>
+
+              {formData.assignmentType === 'class' && (
+                <div>
+                  <Label htmlFor="class">Select Class</Label>
+                  <Select value={formData.classId} onValueChange={(value) => 
+                    setFormData(prev => ({ ...prev, classId: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No classes found</SelectItem>
+                      ) : (
+                        classes.map(cls => (
+                          <SelectItem key={cls.id} value={cls.id}>
+                            {cls.name} ({cls.code})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Exam will be visible to all sections in this class
+                  </p>
+                </div>
+              )}
+
+              {formData.assignmentType === 'section' && (
+                <div>
+                  <Label htmlFor="section">Select Section/Batch</Label>
+                  <Select value={formData.sectionId} onValueChange={(value) => 
+                    setFormData(prev => ({ ...prev, sectionId: value }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a section" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {batches.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No sections found</SelectItem>
+                      ) : (
+                        batches.map(batch => (
+                          <SelectItem key={batch.id} value={batch.id}>
+                            {batch.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Exam will be visible only to this specific section
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

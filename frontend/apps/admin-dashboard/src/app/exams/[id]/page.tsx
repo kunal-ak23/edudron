@@ -36,6 +36,10 @@ interface Exam {
   moduleIds: string[]
   questions?: Question[]
   courseId: string
+  classId?: string
+  sectionId?: string
+  randomizeQuestions?: boolean
+  randomizeMcqOptions?: boolean
 }
 
 interface Question {
@@ -315,6 +319,32 @@ export default function ExamDetailPage() {
                     <Label>Review Method</Label>
                     <div className="mt-1 font-medium">{exam.reviewMethod}</div>
                   </div>
+                  <div>
+                    <Label>Randomization</Label>
+                    <div className="mt-1">
+                      {exam.randomizeQuestions || exam.randomizeMcqOptions ? (
+                        <div className="space-y-1 text-sm">
+                          {exam.randomizeQuestions && <div>• Questions randomized</div>}
+                          {exam.randomizeMcqOptions && <div>• MCQ options randomized</div>}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500">No randomization</div>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <Label>Available To</Label>
+                    <div className="mt-1">
+                      {exam.sectionId ? (
+                        <Badge variant="secondary">Specific Section</Badge>
+                      ) : exam.classId ? (
+                        <Badge variant="default">Class-Wide</Badge>
+                      ) : (
+                        <Badge variant="outline">All Students</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div></div>
                   {exam.startTime && (
                     <div>
                       <Label>Start Time</Label>
@@ -674,12 +704,20 @@ export default function ExamDetailPage() {
 
 // Submissions List Component
 function SubmissionsList({ examId, questions }: { examId: string; questions: Question[] }) {
+  const router = useRouter()
   const [submissions, setSubmissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null)
   const [showReviewDialog, setShowReviewDialog] = useState(false)
   const [reviewing, setReviewing] = useState(false)
   const [loadingSubmissionDetails, setLoadingSubmissionDetails] = useState(false)
+  const [manualGrading, setManualGrading] = useState(false)
+  const [manualGradeData, setManualGradeData] = useState({
+    score: '',
+    maxScore: '',
+    isPassed: false,
+    instructorFeedback: ''
+  })
   const { toast } = useToast()
 
   const loadSubmissions = useCallback(async () => {
@@ -738,7 +776,16 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Submissions ({submissionsArray.length})</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>Submissions ({submissionsArray.length})</CardTitle>
+          <Button 
+            variant="outline" 
+            onClick={() => router.push(`/exams/${examId}/submissions`)}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Manage All Submissions
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <Table>
@@ -1054,12 +1101,151 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
                   </div>
                 </div>
               )}
+              
+              {/* Manual Grading Section */}
+              <div className="border-t pt-4 mt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <Label className="text-lg font-semibold">Manual Grading</Label>
+                  {!manualGrading && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setManualGrading(true)
+                        setManualGradeData({
+                          score: selectedSubmission.score?.toString() || '',
+                          maxScore: selectedSubmission.maxScore?.toString() || '',
+                          isPassed: selectedSubmission.isPassed || false,
+                          instructorFeedback: selectedSubmission.aiReviewFeedback?.instructorFeedback || ''
+                        })
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Grade
+                    </Button>
+                  )}
+                </div>
+                
+                {manualGrading ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="manualScore">Score</Label>
+                        <Input
+                          id="manualScore"
+                          type="number"
+                          step="0.1"
+                          value={manualGradeData.score}
+                          onChange={(e) => setManualGradeData(prev => ({ ...prev, score: e.target.value }))}
+                          placeholder="Enter score"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="manualMaxScore">Max Score</Label>
+                        <Input
+                          id="manualMaxScore"
+                          type="number"
+                          step="0.1"
+                          value={manualGradeData.maxScore}
+                          onChange={(e) => setManualGradeData(prev => ({ ...prev, maxScore: e.target.value }))}
+                          placeholder="Enter max score"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="manualIsPassed"
+                        checked={manualGradeData.isPassed}
+                        onChange={(e) => setManualGradeData(prev => ({ ...prev, isPassed: e.target.checked }))}
+                      />
+                      <Label htmlFor="manualIsPassed">Passed</Label>
+                    </div>
+                    <div>
+                      <Label htmlFor="instructorFeedback">Instructor Feedback</Label>
+                      <Textarea
+                        id="instructorFeedback"
+                        rows={4}
+                        value={manualGradeData.instructorFeedback}
+                        onChange={(e) => setManualGradeData(prev => ({ ...prev, instructorFeedback: e.target.value }))}
+                        placeholder="Add feedback for the student..."
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        onClick={async () => {
+                          try {
+                            const score = parseFloat(manualGradeData.score)
+                            const maxScore = parseFloat(manualGradeData.maxScore)
+                            
+                            if (isNaN(score) || isNaN(maxScore)) {
+                              toast({
+                                title: 'Invalid Input',
+                                description: 'Please enter valid numbers for score and max score',
+                                variant: 'destructive'
+                              })
+                              return
+                            }
+                            
+                            await apiClient.put(`/api/exams/${examId}/submissions/${selectedSubmission.id}/manual-grade`, {
+                              score,
+                              maxScore,
+                              isPassed: manualGradeData.isPassed,
+                              instructorFeedback: manualGradeData.instructorFeedback
+                            })
+                            
+                            toast({
+                              title: 'Success',
+                              description: 'Grade updated successfully'
+                            })
+                            
+                            setManualGrading(false)
+                            await loadSubmissions()
+                            setShowReviewDialog(false)
+                            setSelectedSubmission(null)
+                          } catch (error) {
+                            console.error('Failed to update grade:', error)
+                            toast({
+                              title: 'Error',
+                              description: 'Failed to update grade',
+                              variant: 'destructive'
+                            })
+                          }
+                        }}
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Grade
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => setManualGrading(false)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-600">
+                    <p>Current Score: {selectedSubmission.score !== null && selectedSubmission.score !== undefined 
+                      ? `${selectedSubmission.score} / ${selectedSubmission.maxScore} (${selectedSubmission.percentage?.toFixed(1)}%)` 
+                      : 'Not graded'}</p>
+                    <p>Status: {selectedSubmission.isPassed ? 'Passed' : 'Not Passed'}</p>
+                    {selectedSubmission.aiReviewFeedback?.instructorFeedback && (
+                      <div className="mt-2">
+                        <Label className="text-sm font-medium">Previous Instructor Feedback:</Label>
+                        <p className="mt-1 italic">{selectedSubmission.aiReviewFeedback.instructorFeedback}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setShowReviewDialog(false)
               setSelectedSubmission(null)
+              setManualGrading(false)
             }}>
               Close
             </Button>

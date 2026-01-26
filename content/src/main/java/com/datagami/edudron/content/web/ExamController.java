@@ -8,6 +8,7 @@ import com.datagami.edudron.content.service.ExamReviewService;
 import com.datagami.edudron.content.service.QuestionService;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -93,6 +94,8 @@ public class ExamController {
         String title = (String) request.get("title");
         String description = (String) request.get("description");
         String instructions = (String) request.get("instructions");
+        String classId = (String) request.get("classId"); // Optional - for class-level assignment
+        String sectionId = (String) request.get("sectionId"); // Optional - for section-level assignment
         
         @SuppressWarnings("unchecked")
         List<String> moduleIds = (List<String>) request.get("moduleIds");
@@ -106,7 +109,12 @@ public class ExamController {
             }
         }
         
-        Assessment exam = examService.createExam(courseId, title, description, instructions, moduleIds, reviewMethod);
+        Boolean randomizeQuestions = request.get("randomizeQuestions") != null ? 
+            (Boolean) request.get("randomizeQuestions") : false;
+        Boolean randomizeMcqOptions = request.get("randomizeMcqOptions") != null ? 
+            (Boolean) request.get("randomizeMcqOptions") : false;
+        
+        Assessment exam = examService.createExam(courseId, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, randomizeQuestions, randomizeMcqOptions);
         return ResponseEntity.status(HttpStatus.CREATED).body(exam);
     }
     
@@ -124,6 +132,66 @@ public class ExamController {
         return ResponseEntity.ok(exam);
     }
     
+    @GetMapping("/courses/{courseId}/sections")
+    @Operation(summary = "Get course sections", description = "Get all sections for a course to assign exams")
+    public ResponseEntity<List<Map<String, Object>>> getCourseSections(@PathVariable String courseId) {
+        try {
+            // Call student service to get sections
+            String url = gatewayUrl + "/api/sections/course/" + courseId;
+            
+            ResponseEntity<Object[]> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                Object[].class
+            );
+            
+            if (response.getBody() != null) {
+                List<Map<String, Object>> sections = new ArrayList<>();
+                for (Object section : response.getBody()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> sectionMap = (Map<String, Object>) section;
+                    sections.add(sectionMap);
+                }
+                return ResponseEntity.ok(sections);
+            }
+            return ResponseEntity.ok(new ArrayList<>());
+        } catch (Exception e) {
+            logger.error("Failed to fetch sections for course: {}", courseId, e);
+            return ResponseEntity.ok(new ArrayList<>());
+        }
+    }
+    
+    @GetMapping("/courses/{courseId}/classes")
+    @Operation(summary = "Get course classes", description = "Get all classes for a course to assign exams")
+    public ResponseEntity<List<Map<String, Object>>> getCourseClasses(@PathVariable String courseId) {
+        try {
+            // Call student service to get classes
+            String url = gatewayUrl + "/api/classes/course/" + courseId;
+            
+            ResponseEntity<Object[]> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                Object[].class
+            );
+            
+            if (response.getBody() != null) {
+                List<Map<String, Object>> classes = new ArrayList<>();
+                for (Object cls : response.getBody()) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> classMap = (Map<String, Object>) cls;
+                    classes.add(classMap);
+                }
+                return ResponseEntity.ok(classes);
+            }
+            return ResponseEntity.ok(new ArrayList<>());
+        } catch (Exception e) {
+            logger.error("Failed to fetch classes for course: {}", courseId, e);
+            return ResponseEntity.ok(new ArrayList<>());
+        }
+    }
+    
     @PutMapping("/{id}")
     @Operation(summary = "Update exam", description = "Update an existing exam")
     public ResponseEntity<Assessment> updateExam(
@@ -133,6 +201,8 @@ public class ExamController {
         String title = (String) request.get("title");
         String description = (String) request.get("description");
         String instructions = (String) request.get("instructions");
+        String classId = request.containsKey("classId") ? (String) request.get("classId") : null;
+        String sectionId = request.containsKey("sectionId") ? (String) request.get("sectionId") : null;
         
         @SuppressWarnings("unchecked")
         List<String> moduleIds = (List<String>) request.get("moduleIds");
@@ -146,7 +216,12 @@ public class ExamController {
             }
         }
         
-        Assessment exam = examService.updateExam(id, title, description, instructions, moduleIds, reviewMethod);
+        Boolean randomizeQuestions = request.get("randomizeQuestions") != null ? 
+            (Boolean) request.get("randomizeQuestions") : null;
+        Boolean randomizeMcqOptions = request.get("randomizeMcqOptions") != null ? 
+            (Boolean) request.get("randomizeMcqOptions") : null;
+        
+        Assessment exam = examService.updateExam(id, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, randomizeQuestions, randomizeMcqOptions);
         return ResponseEntity.ok(exam);
     }
     
@@ -344,6 +419,76 @@ public class ExamController {
         }
     }
     
+    @PostMapping("/{id}/submissions/{submissionId}/regrade")
+    @Operation(summary = "Re-grade submission", description = "Re-trigger AI grading for a specific submission (admin only)")
+    public ResponseEntity<?> regradeSubmission(
+            @PathVariable String id,
+            @PathVariable String submissionId) {
+        try {
+            logger.info("Re-grading submission {} for exam {}", submissionId, id);
+            JsonNode result = examReviewService.reviewSubmissionWithAI(submissionId);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("Failed to re-grade submission {} for exam {}", submissionId, id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to re-grade submission: " + e.getMessage()));
+        }
+    }
+    
+    @PostMapping("/{id}/submissions/regrade-bulk")
+    @Operation(summary = "Re-grade multiple submissions", description = "Re-trigger AI grading for multiple submissions (admin only)")
+    public ResponseEntity<?> regradeBulkSubmissions(
+            @PathVariable String id,
+            @RequestBody Map<String, Object> request) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<String> submissionIds = (List<String>) request.get("submissionIds");
+            
+            if (submissionIds == null || submissionIds.isEmpty()) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "No submission IDs provided"));
+            }
+            
+            logger.info("Bulk re-grading {} submissions for exam {}", submissionIds.size(), id);
+            
+            List<Map<String, Object>> results = new ArrayList<>();
+            int successCount = 0;
+            int failureCount = 0;
+            
+            for (String submissionId : submissionIds) {
+                try {
+                    examReviewService.reviewSubmissionWithAI(submissionId);
+                    results.add(Map.of(
+                        "submissionId", submissionId,
+                        "status", "success"
+                    ));
+                    successCount++;
+                } catch (Exception e) {
+                    logger.error("Failed to re-grade submission {}", submissionId, e);
+                    results.add(Map.of(
+                        "submissionId", submissionId,
+                        "status", "error",
+                        "error", e.getMessage()
+                    ));
+                    failureCount++;
+                }
+            }
+            
+            logger.info("Bulk re-grade completed: {} successful, {} failed", successCount, failureCount);
+            
+            return ResponseEntity.ok(Map.of(
+                "totalCount", submissionIds.size(),
+                "successCount", successCount,
+                "failureCount", failureCount,
+                "results", results
+            ));
+        } catch (Exception e) {
+            logger.error("Failed to process bulk re-grade request for exam {}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to process bulk re-grade: " + e.getMessage()));
+        }
+    }
+    
     @PostMapping("/{id}/questions")
     @Operation(summary = "Create question", description = "Create a new question for an exam")
     public ResponseEntity<QuizQuestion> createQuestion(
@@ -433,5 +578,252 @@ public class ExamController {
     public ResponseEntity<Void> deleteExam(@PathVariable String id) {
         examService.deleteExam(id);
         return ResponseEntity.noContent().build();
+    }
+    
+    @GetMapping("/{id}/current-status")
+    @Operation(summary = "Get real-time exam status", description = "Get exam status based on current time (not cached)")
+    public ResponseEntity<Map<String, Object>> getCurrentStatus(@PathVariable String id) {
+        try {
+            com.datagami.edudron.content.domain.Assessment exam = examService.getExamById(id);
+            com.datagami.edudron.content.domain.Assessment.ExamStatus realTimeStatus = examService.getRealTimeStatus(exam);
+            boolean isAccessible = examService.isExamAccessible(exam);
+            
+            Map<String, Object> response = new java.util.HashMap<>();
+            response.put("examId", id);
+            response.put("currentStatus", realTimeStatus.name());
+            response.put("storedStatus", exam.getStatus().name());
+            response.put("isAccessible", isAccessible);
+            response.put("startTime", exam.getStartTime());
+            response.put("endTime", exam.getEndTime());
+            response.put("serverTime", java.time.OffsetDateTime.now());
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Failed to get current status for exam: {}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    @GetMapping("/all-results")
+    @Operation(summary = "Get all exam results", description = "Get aggregated results across all exams with statistics")
+    public ResponseEntity<List<Map<String, Object>>> getAllResults(
+            @RequestParam(required = false) String courseId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String studentId) {
+        try {
+            List<com.datagami.edudron.content.domain.Assessment> exams = examService.getAllExams();
+            
+            // Filter by status if provided
+            if (status != null && !status.isEmpty()) {
+                try {
+                    com.datagami.edudron.content.domain.Assessment.ExamStatus examStatus = 
+                        com.datagami.edudron.content.domain.Assessment.ExamStatus.valueOf(status);
+                    exams = exams.stream()
+                        .filter(e -> e.getStatus() == examStatus)
+                        .collect(java.util.stream.Collectors.toList());
+                } catch (IllegalArgumentException e) {
+                    logger.warn("Invalid status filter: {}", status);
+                }
+            }
+            
+            // Filter by courseId if provided
+            if (courseId != null && !courseId.isEmpty()) {
+                exams = exams.stream()
+                    .filter(e -> courseId.equals(e.getCourseId()))
+                    .collect(java.util.stream.Collectors.toList());
+            }
+            
+            List<Map<String, Object>> results = new ArrayList<>();
+            
+            for (com.datagami.edudron.content.domain.Assessment exam : exams) {
+                Map<String, Object> examResult = new java.util.HashMap<>();
+                examResult.put("examId", exam.getId());
+                examResult.put("examTitle", exam.getTitle());
+                examResult.put("examDescription", exam.getDescription());
+                examResult.put("courseId", exam.getCourseId());
+                examResult.put("status", exam.getStatus().name());
+                examResult.put("startTime", exam.getStartTime());
+                examResult.put("endTime", exam.getEndTime());
+                examResult.put("reviewMethod", exam.getReviewMethod().name());
+                examResult.put("createdAt", exam.getCreatedAt());
+                
+                // Get submissions for this exam
+                try {
+                    String submissionsUrl = gatewayUrl + "/api/assessments/" + exam.getId() + "/submissions";
+                    
+                    org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>> responseType = 
+                        new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {};
+                    
+                    ResponseEntity<List<Map<String, Object>>> submissionsResponse = getRestTemplate().exchange(
+                        submissionsUrl,
+                        HttpMethod.GET,
+                        new HttpEntity<>(new HttpHeaders()),
+                        responseType
+                    );
+                    
+                    List<Map<String, Object>> submissions = submissionsResponse.getBody();
+                    if (submissions == null) {
+                        submissions = new ArrayList<>();
+                    }
+                    
+                    // Filter by studentId if provided
+                    if (studentId != null && !studentId.isEmpty()) {
+                        final String filterStudentId = studentId;
+                        submissions = submissions.stream()
+                            .filter(s -> filterStudentId.equals(s.get("studentId")))
+                            .collect(java.util.stream.Collectors.toList());
+                    }
+                    
+                    // Calculate statistics
+                    int totalSubmissions = submissions.size();
+                    int gradedSubmissions = 0;
+                    int passedSubmissions = 0;
+                    int pendingReviews = 0;
+                    double totalScore = 0;
+                    double totalMaxScore = 0;
+                    
+                    for (Map<String, Object> submission : submissions) {
+                        Object scoreObj = submission.get("score");
+                        Object maxScoreObj = submission.get("maxScore");
+                        Object isPassedObj = submission.get("isPassed");
+                        Object reviewStatusObj = submission.get("reviewStatus");
+                        
+                        if (scoreObj != null && maxScoreObj != null) {
+                            gradedSubmissions++;
+                            totalScore += ((Number) scoreObj).doubleValue();
+                            totalMaxScore += ((Number) maxScoreObj).doubleValue();
+                            
+                            if (isPassedObj != null && (Boolean) isPassedObj) {
+                                passedSubmissions++;
+                            }
+                        }
+                        
+                        if (reviewStatusObj != null) {
+                            String reviewStatus = reviewStatusObj.toString();
+                            if ("PENDING".equals(reviewStatus) || "IN_PROGRESS".equals(reviewStatus)) {
+                                pendingReviews++;
+                            }
+                        }
+                    }
+                    
+                    double avgScore = gradedSubmissions > 0 ? totalScore / gradedSubmissions : 0;
+                    double avgMaxScore = gradedSubmissions > 0 ? totalMaxScore / gradedSubmissions : 0;
+                    double avgPercentage = avgMaxScore > 0 ? (avgScore / avgMaxScore) * 100 : 0;
+                    double passRate = gradedSubmissions > 0 ? (passedSubmissions * 100.0 / gradedSubmissions) : 0;
+                    
+                    Map<String, Object> statistics = new java.util.HashMap<>();
+                    statistics.put("totalSubmissions", totalSubmissions);
+                    statistics.put("gradedSubmissions", gradedSubmissions);
+                    statistics.put("pendingReviews", pendingReviews);
+                    statistics.put("avgScore", Math.round(avgScore * 100.0) / 100.0);
+                    statistics.put("avgMaxScore", Math.round(avgMaxScore * 100.0) / 100.0);
+                    statistics.put("avgPercentage", Math.round(avgPercentage * 100.0) / 100.0);
+                    statistics.put("passRate", Math.round(passRate * 100.0) / 100.0);
+                    statistics.put("passedCount", passedSubmissions);
+                    
+                    examResult.put("statistics", statistics);
+                    examResult.put("submissions", submissions);
+                    
+                } catch (Exception e) {
+                    logger.error("Failed to fetch submissions for exam: {}", exam.getId(), e);
+                    // Add empty statistics if fetch fails
+                    Map<String, Object> emptyStats = new java.util.HashMap<>();
+                    emptyStats.put("totalSubmissions", 0);
+                    emptyStats.put("gradedSubmissions", 0);
+                    emptyStats.put("pendingReviews", 0);
+                    emptyStats.put("avgScore", 0);
+                    emptyStats.put("avgPercentage", 0);
+                    emptyStats.put("passRate", 0);
+                    examResult.put("statistics", emptyStats);
+                    examResult.put("submissions", new ArrayList<>());
+                }
+                
+                results.add(examResult);
+            }
+            
+            // Sort by creation date (most recent first)
+            results.sort((a, b) -> {
+                Object aCreated = a.get("createdAt");
+                Object bCreated = b.get("createdAt");
+                if (aCreated == null || bCreated == null) return 0;
+                return ((Comparable) bCreated).compareTo(aCreated);
+            });
+            
+            return ResponseEntity.ok(results);
+        } catch (Exception e) {
+            logger.error("Failed to get all exam results", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    @PostMapping("/bulk-review")
+    @Operation(summary = "Bulk AI review", description = "Trigger AI review for multiple submissions")
+    public ResponseEntity<Map<String, Object>> bulkReview(@RequestBody Map<String, Object> request) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<String> submissionIds = (List<String>) request.get("submissionIds");
+            
+            if (submissionIds == null || submissionIds.isEmpty()) {
+                return ResponseEntity.badRequest().build();
+            }
+            
+            int successCount = 0;
+            int failCount = 0;
+            List<String> errors = new ArrayList<>();
+            
+            for (String submissionId : submissionIds) {
+                try {
+                    examReviewService.reviewSubmissionWithAI(submissionId);
+                    successCount++;
+                } catch (Exception e) {
+                    failCount++;
+                    errors.add("Submission " + submissionId + ": " + e.getMessage());
+                    logger.error("Failed to review submission: {}", submissionId, e);
+                }
+            }
+            
+            Map<String, Object> response = new java.util.HashMap<>();
+            response.put("total", submissionIds.size());
+            response.put("success", successCount);
+            response.put("failed", failCount);
+            response.put("errors", errors);
+            
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            logger.error("Failed to process bulk review", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+    
+    @PutMapping("/{examId}/submissions/{submissionId}/manual-grade")
+    @Operation(summary = "Manual grade submission", description = "Manually grade an exam submission by updating scores")
+    public ResponseEntity<Map<String, Object>> manualGrade(
+            @PathVariable String examId,
+            @PathVariable String submissionId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            // Delegate to student service via REST call
+            String url = gatewayUrl + "/api/student/submissions/" + submissionId + "/manual-grade";
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.PUT,
+                new HttpEntity<>(request, headers),
+                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful()) {
+                logger.info("Manually graded submission {} for exam {}", submissionId, examId);
+                return ResponseEntity.ok(response.getBody());
+            } else {
+                return ResponseEntity.status(response.getStatusCode()).build();
+            }
+        } catch (Exception e) {
+            logger.error("Failed to manually grade submission: {} for exam: {}", submissionId, examId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 }
