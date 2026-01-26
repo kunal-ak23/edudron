@@ -1,0 +1,31 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0018-add-randomization-to-assessments
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: assessments
+                schemaName: content
+                columnName: randomize_questions
+      changes:
+        - addColumn:
+            tableName: assessments
+            schemaName: content
+            columns:
+              - column:
+                  name: randomize_questions
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+                  remarks: "Whether to randomize the order of questions for each student"
+              - column:
+                  name: randomize_mcq_options
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+                  remarks: "Whether to randomize the order of MCQ options for each student"

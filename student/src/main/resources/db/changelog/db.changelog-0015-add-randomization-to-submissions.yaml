@@ -1,0 +1,25 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0015-add-randomization-to-submissions
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: assessment_submissions
+                schemaName: student
+                columnName: question_order
+      changes:
+        - addColumn:
+            tableName: assessment_submissions
+            schemaName: student
+            columns:
+              - column:
+                  name: question_order
+                  type: jsonb
+                  remarks: "Stores array of question IDs in randomized order for this submission"
+              - column:
+                  name: mcq_option_orders
+                  type: jsonb
+                  remarks: "Stores map of questionId to array of option IDs in randomized order"
