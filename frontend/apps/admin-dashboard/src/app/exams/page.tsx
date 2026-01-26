@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -26,8 +27,14 @@ export const dynamic = 'force-dynamic'
 export default function ExamsPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
   const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Check if user can create/edit exams
+  const isInstructor = user?.role === 'INSTRUCTOR'
+  const isSupportStaff = user?.role === 'SUPPORT_STAFF'
+  const canManageExams = !isInstructor && !isSupportStaff
 
   const loadExams = useCallback(async () => {
     try {
@@ -118,27 +125,24 @@ export default function ExamsPage() {
     <div className="space-y-3">
       {/* Page Header */}
       <div className="flex items-center justify-between">
-        <Button onClick={() => router.push('/exams/new')}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Exam
-        </Button>
+        {canManageExams && (
+          <Button onClick={() => router.push('/exams/new')}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Exam
+          </Button>
+        )}
       </div>
-
-      {/* Debug info - remove in production */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
-          Debug: exams.length={exams.length}, validExams.length={validExams.length}
-        </div>
-      )}
 
         {validExams.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <p className="text-gray-500 mb-4">No exams created yet</p>
-              <Button onClick={() => router.push('/exams/new')}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Your First Exam
-              </Button>
+              {canManageExams && (
+                <Button onClick={() => router.push('/exams/new')}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Your First Exam
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (

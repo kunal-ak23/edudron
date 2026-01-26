@@ -66,6 +66,12 @@ export default function ExamDetailPage() {
   const { toast } = useToast()
   const { user } = useAuth()
   const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
+  
+  // Check if user can edit exams
+  const isInstructor = user?.role === 'INSTRUCTOR'
+  const isSupportStaff = user?.role === 'SUPPORT_STAFF'
+  const canManageExams = !isInstructor && !isSupportStaff
+  
   const [exam, setExam] = useState<Exam | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -250,36 +256,41 @@ export default function ExamDetailPage() {
             {getStatusBadge(exam.status)}
           </div>
         </div>
-        <div className="flex gap-2">
-          {(exam.status === 'DRAFT' || exam.status === 'SCHEDULED') && (
-            <Button onClick={() => {
-              // Pre-populate with existing times if rescheduling
-              if (exam.startTime && exam.endTime) {
-                // Convert ISO datetime to datetime-local format
-                const startDate = new Date(exam.startTime)
-                const endDate = new Date(exam.endTime)
-                const startLocal = new Date(startDate.getTime() - startDate.getTimezoneOffset() * 60000)
-                  .toISOString().slice(0, 16)
-                const endLocal = new Date(endDate.getTime() - endDate.getTimezoneOffset() * 60000)
-                  .toISOString().slice(0, 16)
-                setScheduleData({
-                  startTime: startLocal,
-                  endTime: endLocal
-                })
-              } else {
-                setScheduleData({ startTime: '', endTime: '' })
-              }
-              setShowScheduleDialog(true)
-            }}>
-              <Calendar className="h-4 w-4 mr-2" />
-              {exam.status === 'SCHEDULED' ? 'Reschedule Exam' : 'Schedule Exam'}
+        {canManageExams && (
+          <div className="flex gap-2">
+            {(exam.status === 'DRAFT' || exam.status === 'SCHEDULED') && (
+              <Button onClick={() => {
+                // Pre-populate with existing times if rescheduling
+                if (exam.startTime && exam.endTime) {
+                  // Convert ISO datetime to datetime-local format
+                  const startDate = new Date(exam.startTime)
+                  const endDate = new Date(exam.endTime)
+                  const startLocal = new Date(startDate.getTime() - startDate.getTimezoneOffset() * 60000)
+                    .toISOString().slice(0, 16)
+                  const endLocal = new Date(endDate.getTime() - endDate.getTimezoneOffset() * 60000)
+                    .toISOString().slice(0, 16)
+                  setScheduleData({
+                    startTime: startLocal,
+                    endTime: endLocal
+                  })
+                } else {
+                  setScheduleData({ startTime: '', endTime: '' })
+                }
+                setShowScheduleDialog(true)
+              }}>
+                <Calendar className="h-4 w-4 mr-2" />
+                {exam.status === 'SCHEDULED' ? 'Reschedule Exam' : 'Schedule Exam'}
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => setEditing(!editing)}>
+              <Edit className="h-4 w-4 mr-2" />
+              {editing ? 'Cancel Edit' : 'Edit'}
             </Button>
-          )}
-          <Button variant="outline" onClick={() => setEditing(!editing)}>
-            <Edit className="h-4 w-4 mr-2" />
-            {editing ? 'Cancel Edit' : 'Edit'}
-          </Button>
-        </div>
+          </div>
+        )}
+        {!canManageExams && (
+          <Badge variant="outline" className="text-sm">View Only</Badge>
+        )}
       </div>
 
       <Tabs defaultValue="details" className="space-y-4">
@@ -334,7 +345,7 @@ export default function ExamDetailPage() {
           </TabsContent>
 
           <TabsContent value="questions" className="space-y-4">
-            {exam.status === 'DRAFT' && (
+            {exam.status === 'DRAFT' && canManageExams && (
               <div className="flex justify-end">
                 <Button onClick={() => {
                   setIsCreatingQuestion(true)
@@ -357,7 +368,7 @@ export default function ExamDetailPage() {
                         </CardTitle>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline">{question.questionType}</Badge>
-                          {exam.status === 'DRAFT' && (
+                          {exam.status === 'DRAFT' && canManageExams && (
                             <>
                               <Button
                                 variant="ghost"
@@ -435,7 +446,7 @@ export default function ExamDetailPage() {
                                'No tentative answer available'}
                             </div>
                           </div>
-                          {exam.status === 'DRAFT' && (
+                          {exam.status === 'DRAFT' && canManageExams && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -458,45 +469,47 @@ export default function ExamDetailPage() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <p className="text-gray-500 mb-4">No questions added yet</p>
-                  <div className="flex gap-2 justify-center">
-                    <Button onClick={() => {
-                      setIsCreatingQuestion(true)
-                      setEditingQuestion(null)
-                      setShowQuestionEditor(true)
-                    }}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Question Manually
-                    </Button>
-                    {canUseAI && exam.moduleIds && exam.moduleIds.length > 0 && (
-                      <Button onClick={async () => {
-                        setSaving(true)
-                        try {
-                          await apiClient.post(`/api/exams/${examId}/generate`, {
-                            numberOfQuestions: 10,
-                            difficulty: 'INTERMEDIATE'
-                          })
-                          await loadExam()
-                          toast({
-                            title: 'Success',
-                            description: 'Questions generated successfully'
-                          })
-                        } catch (error) {
-                          console.error('Failed to generate questions:', error)
-                          toast({
-                            title: 'Error',
-                            description: 'Failed to generate questions',
-                            variant: 'destructive'
-                          })
-                        } finally {
-                          setSaving(false)
-                        }
-                      }} disabled={saving} variant="outline">
-                        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
-                         <Sparkles className="h-4 w-4 mr-2" />}
-                        Generate Questions with AI
+                  {canManageExams && (
+                    <div className="flex gap-2 justify-center">
+                      <Button onClick={() => {
+                        setIsCreatingQuestion(true)
+                        setEditingQuestion(null)
+                        setShowQuestionEditor(true)
+                      }}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Question Manually
                       </Button>
-                    )}
-                  </div>
+                      {canUseAI && exam.moduleIds && exam.moduleIds.length > 0 && (
+                        <Button onClick={async () => {
+                          setSaving(true)
+                          try {
+                            await apiClient.post(`/api/exams/${examId}/generate`, {
+                              numberOfQuestions: 10,
+                              difficulty: 'INTERMEDIATE'
+                            })
+                            await loadExam()
+                            toast({
+                              title: 'Success',
+                              description: 'Questions generated successfully'
+                            })
+                          } catch (error) {
+                            console.error('Failed to generate questions:', error)
+                            toast({
+                              title: 'Error',
+                              description: 'Failed to generate questions',
+                              variant: 'destructive'
+                            })
+                          } finally {
+                            setSaving(false)
+                          }
+                        }} disabled={saving} variant="outline">
+                          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
+                           <Sparkles className="h-4 w-4 mr-2" />}
+                          Generate Questions with AI
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

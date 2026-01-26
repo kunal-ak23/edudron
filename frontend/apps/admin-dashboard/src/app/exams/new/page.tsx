@@ -22,6 +22,12 @@ export default function NewExamPage() {
   const { toast } = useToast()
   const { user } = useAuth()
   const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
+  
+  // Check if user can create exams
+  const isInstructor = user?.role === 'INSTRUCTOR'
+  const isSupportStaff = user?.role === 'SUPPORT_STAFF'
+  const canCreateExams = !isInstructor && !isSupportStaff
+  
   const [loading, setLoading] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [courses, setCourses] = useState<Course[]>([])
@@ -182,6 +188,27 @@ export default function NewExamPage() {
         ? prev.moduleIds.filter(id => id !== moduleId)
         : [...prev.moduleIds, moduleId]
     }))
+  }
+
+  // Block access for instructors and support staff
+  if (!canCreateExams) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="py-12 text-center">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
+            <p className="text-gray-600">You do not have permission to create exams.</p>
+            <p className="text-sm text-gray-500 mt-4">Only admins and content managers can create exams.</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
