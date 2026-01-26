@@ -294,17 +294,20 @@ public class BulkStudentImportService {
     private void processStudentData(long rowNumber, String email, String name, String phone, String password,
                                    String instituteId, String classId, String sectionId, String courseId,
                                    BulkStudentImportRequest options, UUID clientId, List<StudentImportRowResult> rowResults) {
+        // Normalize email to lowercase for case-insensitive handling
+        String normalizedEmail = email != null ? email.toLowerCase().trim() : email;
+        
         StudentImportRowResult rowResult = new StudentImportRowResult();
         rowResult.setRowNumber(rowNumber);
-        rowResult.setEmail(email);
+        rowResult.setEmail(normalizedEmail);
         rowResult.setName(name);
         
-        log.debug("Processing row {}: email={}, upsertExisting={}", rowNumber, email, options.getUpsertExisting());
+        log.debug("Processing row {}: email={} (original: {}), upsertExisting={}", rowNumber, normalizedEmail, email, options.getUpsertExisting());
         
         com.datagami.edudron.student.dto.CreateUserRequestDTO createUserRequest = null;
         try {
             // Validate required fields
-            if (!StringUtils.hasText(email) || !StringUtils.hasText(name)) {
+            if (!StringUtils.hasText(normalizedEmail) || !StringUtils.hasText(name)) {
                 rowResult.setSuccess(false);
                 rowResult.setErrorMessage("Email and name are required");
                 rowResults.add(rowResult);
@@ -394,7 +397,7 @@ public class BulkStudentImportService {
             
             // Create user via identity service
             createUserRequest = new com.datagami.edudron.student.dto.CreateUserRequestDTO();
-            createUserRequest.setEmail(email);
+            createUserRequest.setEmail(normalizedEmail);
             createUserRequest.setPassword(password);
             createUserRequest.setName(name);
             createUserRequest.setPhone(phone);
@@ -448,37 +451,40 @@ public class BulkStudentImportService {
                 }
             } catch (Exception ignored) {}
             
-            log.warn("HTTP error creating user {}: {} - {}", email, e.getStatusCode(), errorMessage);
+            log.warn("HTTP error creating user {}: {} - {}", normalizedEmail, e.getStatusCode(), errorMessage);
             
             // Check if user already exists
             if (errorMessage.contains("already exists") || errorMessage.contains("User already exists")) {
                 if (options.getUpsertExisting() != null && options.getUpsertExisting()) {
                     // Try to update existing user
-                    log.info("Upsert enabled - attempting to find and update existing user: {}", email);
+                    log.info("Upsert enabled - attempting to find and update existing user: {}", normalizedEmail);
                     try {
-                        UserResponseDTO existingUser = findUserByEmail(email, clientId);
+                        UserResponseDTO existingUser = findUserByEmail(normalizedEmail, clientId);
                         if (existingUser != null) {
-                            log.info("Found existing user {} (id: {}), updating...", email, existingUser.getId());
+                            log.info("Found existing user {} (id: {}), updating...", normalizedEmail, existingUser.getId());
                             // Update the user
-                            UserResponseDTO updatedUser = updateExistingUser(existingUser.getId(), email, name, phone, instituteId, clientId);
+                            UserResponseDTO updatedUser = updateExistingUser(existingUser.getId(), normalizedEmail, name, phone, instituteId, clientId);
                             rowResult.setSuccess(true);
                             rowResult.setStudentId(updatedUser.getId());
-                            log.info("Successfully updated existing user: {} (id: {})", email, updatedUser.getId());
+                            log.info("Successfully updated existing user: {} (id: {})", normalizedEmail, updatedUser.getId());
                             
                             // Handle enrollments and associations (same as for new users)
                             handleEnrollmentsAndAssociations(updatedUser, classId, sectionId, courseId, instituteId, options, clientId, rowResult);
                         } else {
-                            log.error("User {} already exists but could not be found for update", email);
+                            log.error("User {} already exists but could not be found for update. This might be due to:", normalizedEmail);
+                            log.error("  1. New endpoint not deployed: GET /idp/users/by-email");
+                            log.error("  2. Permission issue accessing identity service");
+                            log.error("  3. Tenant context mismatch");
                             rowResult.setSuccess(false);
-                            rowResult.setErrorMessage("User already exists but could not be found for update");
+                            rowResult.setErrorMessage("User already exists but could not be found for update. Check logs for details.");
                         }
                     } catch (Exception updateException) {
-                        log.error("Failed to update existing user {}: {}", email, updateException.getMessage(), updateException);
+                        log.error("Failed to update existing user {}: {}", normalizedEmail, updateException.getMessage(), updateException);
                         rowResult.setSuccess(false);
                         rowResult.setErrorMessage("Failed to update existing user: " + updateException.getMessage());
                     }
                 } else {
-                    log.debug("Upsert disabled - skipping existing user: {}", email);
+                    log.debug("Upsert disabled - skipping existing user: {}", normalizedEmail);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage("User already exists with this email");
                 }
@@ -494,37 +500,40 @@ public class BulkStudentImportService {
                 }
             } catch (Exception ignored) {}
             
-            log.error("HTTP server error creating user {}: {} - {}", email, e.getStatusCode(), errorMessage);
+            log.error("HTTP server error creating user {}: {} - {}", normalizedEmail, e.getStatusCode(), errorMessage);
             
             // Check if this is a "user already exists" error (sometimes returned as 500)
             if (errorMessage.contains("already exists") || errorMessage.contains("User already exists")) {
                 if (options.getUpsertExisting() != null && options.getUpsertExisting()) {
                     // Try to update existing user
-                    log.info("Upsert enabled - attempting to find and update existing user: {}", email);
+                    log.info("Upsert enabled - attempting to find and update existing user: {}", normalizedEmail);
                     try {
-                        UserResponseDTO existingUser = findUserByEmail(email, clientId);
+                        UserResponseDTO existingUser = findUserByEmail(normalizedEmail, clientId);
                         if (existingUser != null) {
-                            log.info("Found existing user {} (id: {}), updating...", email, existingUser.getId());
+                            log.info("Found existing user {} (id: {}), updating...", normalizedEmail, existingUser.getId());
                             // Update the user
-                            UserResponseDTO updatedUser = updateExistingUser(existingUser.getId(), email, name, phone, instituteId, clientId);
+                            UserResponseDTO updatedUser = updateExistingUser(existingUser.getId(), normalizedEmail, name, phone, instituteId, clientId);
                             rowResult.setSuccess(true);
                             rowResult.setStudentId(updatedUser.getId());
-                            log.info("Successfully updated existing user: {} (id: {})", email, updatedUser.getId());
+                            log.info("Successfully updated existing user: {} (id: {})", normalizedEmail, updatedUser.getId());
                             
                             // Handle enrollments and associations (same as for new users)
                             handleEnrollmentsAndAssociations(updatedUser, classId, sectionId, courseId, instituteId, options, clientId, rowResult);
                         } else {
-                            log.error("User {} already exists but could not be found for update", email);
+                            log.error("User {} already exists but could not be found for update. This might be due to:", normalizedEmail);
+                            log.error("  1. New endpoint not deployed: GET /idp/users/by-email");
+                            log.error("  2. Permission issue accessing identity service");
+                            log.error("  3. Tenant context mismatch");
                             rowResult.setSuccess(false);
-                            rowResult.setErrorMessage("User already exists but could not be found for update");
+                            rowResult.setErrorMessage("User already exists but could not be found for update. Check logs for details.");
                         }
                     } catch (Exception updateException) {
-                        log.error("Failed to update existing user {}: {}", email, updateException.getMessage(), updateException);
+                        log.error("Failed to update existing user {}: {}", normalizedEmail, updateException.getMessage(), updateException);
                         rowResult.setSuccess(false);
                         rowResult.setErrorMessage("Failed to update existing user: " + updateException.getMessage());
                     }
                 } else {
-                    log.debug("Upsert disabled - skipping existing user: {}", email);
+                    log.debug("Upsert disabled - skipping existing user: {}", normalizedEmail);
                     rowResult.setSuccess(false);
                     rowResult.setErrorMessage(errorMessage);
                 }
@@ -607,9 +616,14 @@ public class BulkStudentImportService {
      * Find user by email using the dedicated endpoint
      */
     private UserResponseDTO findUserByEmail(String email, UUID clientId) {
+        // Normalize email to lowercase for consistent lookup
+        String normalizedEmail = email != null ? email.toLowerCase().trim() : email;
+        
         try {
             // Use the new by-email endpoint which is tenant-aware
-            String usersUrl = gatewayUrl + "/idp/users/by-email?email=" + java.net.URLEncoder.encode(email, StandardCharsets.UTF_8);
+            String usersUrl = gatewayUrl + "/idp/users/by-email?email=" + java.net.URLEncoder.encode(normalizedEmail, StandardCharsets.UTF_8);
+            log.info("Attempting to find user by email using endpoint: {}", usersUrl);
+            
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
@@ -625,18 +639,30 @@ public class BulkStudentImportService {
                 UserResponseDTO user = response.getBody();
                 // Verify the clientId matches (extra safety check)
                 if (clientId == null || clientId.equals(user.getClientId())) {
-                    log.info("Found existing user by email: {} with id: {}", email, user.getId());
+                    log.info("Found existing user by email: {} with id: {}", normalizedEmail, user.getId());
                     return user;
+                } else {
+                    log.warn("Found user by email {} but clientId mismatch. Expected: {}, Found: {}", 
+                        normalizedEmail, clientId, user.getClientId());
                 }
             }
         } catch (org.springframework.web.client.HttpClientErrorException e) {
             if (e.getStatusCode().value() == 404) {
-                log.debug("User not found by email: {}", email);
+                log.warn("User not found by email: {} (404 from identity service)", normalizedEmail);
+            } else if (e.getStatusCode().value() == 403) {
+                log.error("Permission denied when finding user by email: {} (403 Forbidden)", normalizedEmail);
             } else {
-                log.warn("Error finding user by email {}: {} - {}", email, e.getStatusCode(), e.getMessage());
+                log.error("HTTP error finding user by email {}: {} - {}", normalizedEmail, e.getStatusCode(), e.getMessage());
             }
+            // Try to get more details from response body
+            try {
+                String responseBody = e.getResponseBodyAsString();
+                if (responseBody != null && !responseBody.isEmpty()) {
+                    log.error("Error response body: {}", responseBody);
+                }
+            } catch (Exception ignored) {}
         } catch (Exception e) {
-            log.error("Error finding user by email {}: {}", email, e.getMessage());
+            log.error("Unexpected error finding user by email {}: {} - {}", normalizedEmail, e.getClass().getName(), e.getMessage(), e);
         }
         return null;
     }
