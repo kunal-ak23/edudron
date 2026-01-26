@@ -39,6 +39,7 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -101,6 +102,34 @@ public class UserService {
         }
         
         return toDTO(user);
+    }
+    
+    @Transactional(readOnly = true)
+    public UserDTO getUserByEmail(String email) {
+        // Normalize email to lowercase for case-insensitive search
+        String normalizedEmail = email != null ? email.toLowerCase().trim() : null;
+        if (normalizedEmail == null || normalizedEmail.isEmpty()) {
+            return null;
+        }
+        
+        String clientIdStr = TenantContext.getClientId();
+        
+        // For tenant context, find user by email and clientId
+        if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+            UUID clientId = UUID.fromString(clientIdStr);
+            log.info("Finding user by email {} for tenant: {}", normalizedEmail, clientId);
+            Optional<User> user = userRepository.findByEmailAndClientId(normalizedEmail, clientId);
+            return user.map(this::toDTO).orElse(null);
+        }
+        
+        // For SYSTEM context, search all users with this email
+        log.info("Finding user by email {} (SYSTEM_ADMIN context)", normalizedEmail);
+        List<User> users = userRepository.findByEmailAndActiveTrue(normalizedEmail);
+        if (users.isEmpty()) {
+            return null;
+        }
+        // Return the first active user found
+        return toDTO(users.get(0));
     }
     
     @Transactional(readOnly = true)

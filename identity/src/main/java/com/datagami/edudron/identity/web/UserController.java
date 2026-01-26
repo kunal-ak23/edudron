@@ -104,6 +104,16 @@ public class UserController {
         return ResponseEntity.ok(user);
     }
     
+    @GetMapping("/by-email")
+    @Operation(summary = "Find user by email", description = "Find a user by email address within the current tenant context")
+    public ResponseEntity<UserDTO> getUserByEmail(@RequestParam String email) {
+        UserDTO user = userService.getUserByEmail(email);
+        if (user == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(user);
+    }
+    
     @GetMapping("/me")
     @Operation(summary = "Get current user profile", description = "Get the profile of the currently authenticated user")
     public ResponseEntity<UserDTO> getCurrentUserProfile() {
