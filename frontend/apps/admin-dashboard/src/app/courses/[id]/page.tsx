@@ -765,12 +765,23 @@ export default function CourseEditPage() {
                       </div>
                       <div className="space-y-2">
                         <Label>Description</Label>
-                        <SplitMarkdownEditor
-                          content={course?.description || ''}
-                          onChange={(content) => setCourse({ ...course, description: content })}
-                          placeholder="Enter course description (markdown supported)"
-                          disabled={!canManageContent}
-                        />
+                        {canManageContent ? (
+                          <SplitMarkdownEditor
+                            content={course?.description || ''}
+                            onChange={(content) => setCourse({ ...course, description: content })}
+                            placeholder="Enter course description (markdown supported)"
+                          />
+                        ) : (
+                          <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 min-h-[200px]">
+                            {course?.description ? (
+                              <div className="prose max-w-none">
+                                {course.description}
+                              </div>
+                            ) : (
+                              <p className="text-gray-400 italic">No description available</p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1224,34 +1235,40 @@ export default function CourseEditPage() {
                             <Eye className="h-4 w-4 mr-2" />
                             Preview as Student
                           </Button>
-                          <Button
-                            variant="outline"
-                            onClick={handleDownloadCourseBookPdf}
-                            disabled={downloadingCourseBookPdf || generatingCourseBookPdf}
-                          >
-                            {(downloadingCourseBookPdf || generatingCourseBookPdf) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            <Download className="h-4 w-4 mr-2" />
-                            Download Course Book PDF
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={handleGenerateCourseBookPdf}
-                            disabled={generatingCourseBookPdf || downloadingCourseBookPdf}
-                          >
-                            {(generatingCourseBookPdf || downloadingCourseBookPdf) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                            <BookOpen className="h-4 w-4 mr-2" />
-                            Generate/Regenerate PDF
-                          </Button>
+                          {canManageContent && (
+                            <>
+                              <Button
+                                variant="outline"
+                                onClick={handleDownloadCourseBookPdf}
+                                disabled={downloadingCourseBookPdf || generatingCourseBookPdf}
+                              >
+                                {(downloadingCourseBookPdf || generatingCourseBookPdf) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                <Download className="h-4 w-4 mr-2" />
+                                Download Course Book PDF
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={handleGenerateCourseBookPdf}
+                                disabled={generatingCourseBookPdf || downloadingCourseBookPdf}
+                              >
+                                {(generatingCourseBookPdf || downloadingCourseBookPdf) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                <BookOpen className="h-4 w-4 mr-2" />
+                                Generate/Regenerate PDF
+                              </Button>
+                            </>
+                          )}
                           {course?.isPublished ? (
-                            <Button
-                              variant="outline"
-                              onClick={handleUnpublish}
-                              disabled={publishing}
-                            >
-                              {publishing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                              <Archive className="h-4 w-4 mr-2" />
-                              Unpublish
-                            </Button>
+                            canManageContent && (
+                              <Button
+                                variant="outline"
+                                onClick={handleUnpublish}
+                                disabled={publishing}
+                              >
+                                {publishing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                                <Archive className="h-4 w-4 mr-2" />
+                                Unpublish
+                              </Button>
+                            )
                           ) : (
                             canManageContent && (
                               <Button
