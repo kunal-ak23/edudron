@@ -87,14 +87,25 @@ public class UserService {
     }
     
     @Transactional(readOnly = true)
-    public Page<UserDTO> getAllUsersPaginated(Pageable pageable, String email, String search) {
+    public Page<UserDTO> getAllUsersPaginated(Pageable pageable, String roleStr, String email, String search) {
         String clientIdStr = TenantContext.getClientId();
         
-        log.info("Fetching paginated users - email: {}, search: {}, page: {}, size: {}", 
-            email, search, pageable.getPageNumber(), pageable.getPageSize());
+        log.info("Fetching paginated users - role: {}, email: {}, search: {}, page: {}, size: {}", 
+            roleStr, email, search, pageable.getPageNumber(), pageable.getPageSize());
         
-        // Build specification for filtering (without role filter)
-        Specification<User> spec = buildAllUsersSpecification(email, search, clientIdStr);
+        // Parse role if provided
+        User.Role role = null;
+        if (roleStr != null && !roleStr.trim().isEmpty()) {
+            try {
+                role = User.Role.valueOf(roleStr.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid role provided: {}", roleStr);
+                // Continue without role filter if invalid
+            }
+        }
+        
+        // Build specification for filtering
+        Specification<User> spec = buildAllUsersSpecification(role, email, search, clientIdStr);
         
         Page<User> userPage = userRepository.findAll(spec, pageable);
         
@@ -257,11 +268,17 @@ public class UserService {
     }
 
     /**
-     * Build JPA Specification for all users filtering (no role filter)
+     * Build JPA Specification for all users filtering (with optional role filter)
      */
-    private Specification<User> buildAllUsersSpecification(String email, String search, String clientIdStr) {
+    private Specification<User> buildAllUsersSpecification(User.Role role, String email, String search, String clientIdStr) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+            
+            // Filter by role if provided
+            if (role != null) {
+                predicates.add(cb.equal(root.get("role"), role));
+                log.info("Adding role backend filter: {}", role);
+            }
             
             // Filter by tenant (clientId) if not SYSTEM_ADMIN context
             if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {

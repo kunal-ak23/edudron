@@ -52,6 +52,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [roleFilter, setRoleFilter] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState(0)
   const [pageSize, setPageSize] = useState(20)
   const [totalElements, setTotalElements] = useState(0)
@@ -73,6 +74,11 @@ export default function UsersPage() {
       params.append('page', currentPage.toString())
       params.append('size', pageSize.toString())
       
+      // Add role filter if not 'all'
+      if (roleFilter && roleFilter !== 'all') {
+        params.append('role', roleFilter)
+      }
+      
       // Add search filter if provided (use debounced value)
       const searchToUse = debouncedSearchTerm || searchQuery
       if (searchToUse.trim()) {
@@ -81,7 +87,8 @@ export default function UsersPage() {
 
       console.log('[UsersPage] Loading users with filters:', { 
         page: currentPage, 
-        size: pageSize, 
+        size: pageSize,
+        role: roleFilter !== 'all' ? roleFilter : null,
         search: searchToUse.trim() || null 
       })
 
@@ -142,7 +149,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [toast, currentPage, pageSize, debouncedSearchTerm])
+  }, [toast, currentPage, pageSize, roleFilter, debouncedSearchTerm])
 
   // Debounce search term to avoid too many API calls
   useEffect(() => {
@@ -153,14 +160,14 @@ export default function UsersPage() {
     return () => clearTimeout(timeoutId)
   }, [searchQuery])
 
-  // Reset to first page when search term or page size changes
+  // Reset to first page when search term, role filter, or page size changes
   useEffect(() => {
     setCurrentPage(0)
-  }, [searchQuery, pageSize])
+  }, [searchQuery, roleFilter, pageSize])
 
   useEffect(() => {
     loadUsers()
-  }, [currentPage, pageSize, debouncedSearchTerm, loadUsers])
+  }, [currentPage, pageSize, roleFilter, debouncedSearchTerm, loadUsers])
 
   const getRoleBadgeVariant = (role: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (role) {
@@ -204,15 +211,33 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* Search */}
-        <div className="mb-6">
-            <Input
-              placeholder="Search users by name, email, or role..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="max-w-sm"
-            />
-          </div>
+        {/* Search and Filters */}
+        <div className="mb-6 flex gap-4">
+          <Input
+            ref={searchInputRef}
+            placeholder="Search users by name, email, or role..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="max-w-sm"
+          />
+          <Select
+            value={roleFilter}
+            onValueChange={setRoleFilter}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Filter by role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
+              <SelectItem value="TENANT_ADMIN">Tenant Admin</SelectItem>
+              <SelectItem value="CONTENT_MANAGER">Content Manager</SelectItem>
+              <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
+              <SelectItem value="SUPPORT_STAFF">Support Staff</SelectItem>
+              <SelectItem value="STUDENT">Student</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
           {/* Users List */}
           {loading ? (

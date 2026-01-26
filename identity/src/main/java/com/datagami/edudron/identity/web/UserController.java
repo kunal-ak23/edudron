@@ -42,12 +42,13 @@ public class UserController {
     public ResponseEntity<Page<UserDTO>> getAllUsersPaginated(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String role,
             @RequestParam(required = false) String email,
             @RequestParam(required = false) String search) {
         Pageable pageable = PageRequest.of(page, size);
-        log.info("GET /idp/users/paginated - Filters: email={}, search={}, page={}, size={}", 
-            email, search, page, size);
-        Page<UserDTO> users = userService.getAllUsersPaginated(pageable, email, search);
+        log.info("GET /idp/users/paginated - Filters: role={}, email={}, search={}, page={}, size={}", 
+            role, email, search, page, size);
+        Page<UserDTO> users = userService.getAllUsersPaginated(pageable, role, email, search);
         log.info("GET /idp/users/paginated - Returning {} users (total: {}, pages: {})", 
             users.getNumberOfElements(), users.getTotalElements(), users.getTotalPages());
         return ResponseEntity.ok(users);
