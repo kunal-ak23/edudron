@@ -13,16 +13,25 @@ import java.util.UUID;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, String>, JpaSpecificationExecutor<User> {
+    // Case-sensitive methods (kept for backward compatibility, but prefer IgnoreCase versions)
     Optional<User> findByEmailAndClientId(String email, UUID clientId);
     Optional<User> findByEmailAndClientIdAndActiveTrue(String email, UUID clientId);
     boolean existsByEmailAndClientId(String email, UUID clientId);
     
+    // Case-insensitive methods (recommended for email lookups)
+    Optional<User> findByEmailIgnoreCaseAndClientId(String email, UUID clientId);
+    Optional<User> findByEmailIgnoreCaseAndClientIdAndActiveTrue(String email, UUID clientId);
+    boolean existsByEmailIgnoreCaseAndClientId(String email, UUID clientId);
+    
     // Find all users with the same email across all tenants
     List<User> findByEmailAndActiveTrue(String email);
+    List<User> findByEmailIgnoreCaseAndActiveTrue(String email);
     
     // Find SYSTEM_ADMIN user by email only (no tenant context)
     Optional<User> findByEmailAndRoleAndActiveTrue(String email, User.Role role);
+    Optional<User> findByEmailIgnoreCaseAndRoleAndActiveTrue(String email, User.Role role);
     boolean existsByEmailAndRole(String email, User.Role role);
+    boolean existsByEmailIgnoreCaseAndRole(String email, User.Role role);
     
     // Find all active users for a specific tenant
     List<User> findByClientIdAndActiveTrue(UUID clientId);

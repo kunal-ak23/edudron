@@ -102,8 +102,13 @@ public class BulkStudentImportService {
                     if (authHeader != null && !authHeader.isBlank()) {
                         if (!request.getHeaders().containsKey("Authorization")) {
                             request.getHeaders().add("Authorization", authHeader);
+                            log.debug("Forwarding Authorization header to identity service");
                         }
+                    } else {
+                        log.warn("No Authorization header found in current request - identity service call may fail");
                     }
+                } else {
+                    log.warn("No request context available - cannot forward Authorization header");
                 }
                 return execution.execute(request, body);
             });
@@ -620,19 +625,25 @@ public class BulkStudentImportService {
         String normalizedEmail = email != null ? email.toLowerCase().trim() : email;
         
         try {
-            // Use the new by-email endpoint which is tenant-aware
-            String usersUrl = gatewayUrl + "/idp/users/by-email?email=" + java.net.URLEncoder.encode(normalizedEmail, StandardCharsets.UTF_8);
-            log.info("Attempting to find user by email using endpoint: {}", usersUrl);
+            // Build URL properly - use URI template to let RestTemplate handle encoding
+            String urlTemplate = gatewayUrl + "/idp/users/by-email?email={email}";
+            
+            log.info("Attempting to find user by email: {}", normalizedEmail);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
             
+            // Use URI variables map for proper encoding
+            java.util.Map<String, String> uriVariables = new java.util.HashMap<>();
+            uriVariables.put("email", normalizedEmail);
+            
             ResponseEntity<UserResponseDTO> response = getRestTemplate().exchange(
-                usersUrl,
+                urlTemplate,
                 HttpMethod.GET,
                 entity,
-                UserResponseDTO.class
+                UserResponseDTO.class,
+                uriVariables
             );
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {

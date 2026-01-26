@@ -107,10 +107,13 @@ public class UserController {
     @GetMapping("/by-email")
     @Operation(summary = "Find user by email", description = "Find a user by email address within the current tenant context")
     public ResponseEntity<UserDTO> getUserByEmail(@RequestParam String email) {
+        log.debug("GET /by-email - Received email parameter: '{}' (length: {})", email, email != null ? email.length() : 0);
         UserDTO user = userService.getUserByEmail(email);
         if (user == null) {
+            log.debug("GET /by-email - User not found for email: '{}'", email);
             return ResponseEntity.notFound().build();
         }
+        log.debug("GET /by-email - Found user with id: {} for email: '{}'", user.getId(), email);
         return ResponseEntity.ok(user);
     }
     

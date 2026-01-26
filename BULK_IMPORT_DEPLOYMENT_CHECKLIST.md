@@ -2,10 +2,13 @@
 
 ## What Was Fixed
 
+✅ **CRITICAL**: Added case-insensitive email lookups throughout the system  
+✅ Fixed double URL encoding in REST template calls  
 ✅ Added email normalization (lowercase) throughout the bulk import flow  
 ✅ Enhanced logging to show exactly what's happening during upsert  
 ✅ Better error messages to diagnose issues  
 ✅ Added test script to verify the new endpoint
+✅ Fixed authentication context lookups to be case-insensitive
 
 ## Deployment Steps
 
@@ -107,10 +110,11 @@ UPDATE users SET email = LOWER(email);
 
 | Issue | Cause | Fix |
 |-------|-------|-----|
+| "User exists but not found" | **Case sensitivity** | ✅ FIXED - Now using case-insensitive queries |
 | "endpoint not found" | Identity service not rebuilt | Rebuild and restart identity service |
 | "403 Forbidden" | Permission issue | Check service-to-service auth |
 | "clientId mismatch" | Wrong tenant context | Verify X-Client-Id header |
-| Case sensitivity issues | Mixed case emails in DB | Run email normalization SQL |
+| URL-encoded email in logs | Double encoding | ✅ FIXED - Using URI templates now |
 
 ## Support
 

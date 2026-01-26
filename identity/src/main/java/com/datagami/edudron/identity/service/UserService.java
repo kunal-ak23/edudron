@@ -106,25 +106,25 @@ public class UserService {
     
     @Transactional(readOnly = true)
     public UserDTO getUserByEmail(String email) {
-        // Normalize email to lowercase for case-insensitive search
-        String normalizedEmail = email != null ? email.toLowerCase().trim() : null;
-        if (normalizedEmail == null || normalizedEmail.isEmpty()) {
+        // Email is trimmed but we'll use case-insensitive search
+        String trimmedEmail = email != null ? email.trim() : null;
+        if (trimmedEmail == null || trimmedEmail.isEmpty()) {
             return null;
         }
         
         String clientIdStr = TenantContext.getClientId();
         
-        // For tenant context, find user by email and clientId
+        // For tenant context, find user by email and clientId (case-insensitive)
         if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
             UUID clientId = UUID.fromString(clientIdStr);
-            log.info("Finding user by email {} for tenant: {}", normalizedEmail, clientId);
-            Optional<User> user = userRepository.findByEmailAndClientId(normalizedEmail, clientId);
+            log.info("Finding user by email {} for tenant: {} (case-insensitive)", trimmedEmail, clientId);
+            Optional<User> user = userRepository.findByEmailIgnoreCaseAndClientId(trimmedEmail, clientId);
             return user.map(this::toDTO).orElse(null);
         }
         
         // For SYSTEM context, search all users with this email
-        log.info("Finding user by email {} (SYSTEM_ADMIN context)", normalizedEmail);
-        List<User> users = userRepository.findByEmailAndActiveTrue(normalizedEmail);
+        log.info("Finding user by email {} (SYSTEM_ADMIN context, case-insensitive)", trimmedEmail);
+        List<User> users = userRepository.findByEmailAndActiveTrue(trimmedEmail);
         if (users.isEmpty()) {
             return null;
         }
@@ -321,8 +321,8 @@ public class UserService {
             throw new IllegalArgumentException("At least one institute must be assigned to the user");
         }
         
-        // Check if user already exists
-        if (userRepository.existsByEmailAndClientId(request.getEmail(), clientId)) {
+        // Check if user already exists (case-insensitive check)
+        if (userRepository.existsByEmailIgnoreCaseAndClientId(request.getEmail(), clientId)) {
             throw new IllegalArgumentException("User already exists with this email in this tenant");
         }
         
@@ -365,8 +365,8 @@ public class UserService {
                 // Handle duplicate key violation (ID collision)
                 attempts++;
                 if (attempts >= maxRetries) {
-                    // Check if user was actually created (by email)
-                    var existingUser = userRepository.findByEmailAndClientId(request.getEmail(), clientId);
+                    // Check if user was actually created (by email, case-insensitive)
+                    var existingUser = userRepository.findByEmailIgnoreCaseAndClientId(request.getEmail(), clientId);
                     if (existingUser.isPresent()) {
                         user = existingUser.get();
                         // Ensure institutes are assigned
@@ -467,18 +467,18 @@ public class UserService {
             }
         }
         
-        // Validate email uniqueness if email is being changed
-        if (!user.getEmail().equals(request.getEmail())) {
+        // Validate email uniqueness if email is being changed (case-insensitive comparison)
+        if (!user.getEmail().equalsIgnoreCase(request.getEmail())) {
             UUID clientId = user.getClientId();
             if (clientId != null) {
-                // For tenant users, check uniqueness within tenant
-                if (userRepository.existsByEmailAndClientId(request.getEmail(), clientId) &&
-                    !userRepository.findByEmailAndClientId(request.getEmail(), clientId).get().getId().equals(id)) {
+                // For tenant users, check uniqueness within tenant (case-insensitive)
+                Optional<User> existingUser = userRepository.findByEmailIgnoreCaseAndClientId(request.getEmail(), clientId);
+                if (existingUser.isPresent() && !existingUser.get().getId().equals(id)) {
                     throw new IllegalArgumentException("User already exists with this email in this tenant");
                 }
             } else {
-                // For SYSTEM_ADMIN users, check global uniqueness
-                var existingUser = userRepository.findByEmailAndRoleAndActiveTrue(request.getEmail(), User.Role.SYSTEM_ADMIN);
+                // For SYSTEM_ADMIN users, check global uniqueness (case-insensitive)
+                var existingUser = userRepository.findByEmailIgnoreCaseAndRoleAndActiveTrue(request.getEmail(), User.Role.SYSTEM_ADMIN);
                 if (existingUser.isPresent() && !existingUser.get().getId().equals(id)) {
                     throw new IllegalArgumentException("SYSTEM_ADMIN user already exists with this email");
                 }
@@ -538,8 +538,8 @@ public class UserService {
         // Normalize email to lowercase for case-insensitive handling
         String normalizedEmail = request.getEmail() != null ? request.getEmail().toLowerCase().trim() : null;
         
-        // Check if user already exists (SYSTEM_ADMIN users have unique email globally)
-        var existingUser = userRepository.findByEmailAndRoleAndActiveTrue(normalizedEmail, User.Role.SYSTEM_ADMIN);
+        // Check if user already exists (SYSTEM_ADMIN users have unique email globally, case-insensitive)
+        var existingUser = userRepository.findByEmailIgnoreCaseAndRoleAndActiveTrue(normalizedEmail, User.Role.SYSTEM_ADMIN);
         if (existingUser.isPresent()) {
             throw new IllegalArgumentException("SYSTEM_ADMIN user already exists with this email");
         }
@@ -578,7 +578,7 @@ public class UserService {
             } catch (org.springframework.dao.DataIntegrityViolationException e) {
                 attempts++;
                 if (attempts >= maxRetries) {
-                    var existing = userRepository.findByEmailAndRoleAndActiveTrue(normalizedEmail, User.Role.SYSTEM_ADMIN);
+                    var existing = userRepository.findByEmailIgnoreCaseAndRoleAndActiveTrue(normalizedEmail, User.Role.SYSTEM_ADMIN);
                     if (existing.isPresent()) {
                         user = existing.get();
                         break;
@@ -611,29 +611,29 @@ public class UserService {
             
             String clientIdStr = TenantContext.getClientId();
             
-            // Try to find user by email and tenant
+            // Try to find user by email and tenant (case-insensitive)
             if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
                 try {
                     UUID clientId = UUID.fromString(clientIdStr);
-                    var user = userRepository.findByEmailAndClientId(email, clientId);
+                    var user = userRepository.findByEmailIgnoreCaseAndClientId(email, clientId);
                     if (user.isPresent()) {
                         return user.get();
                     }
-                    log.warn("User not found with email: {} and clientId: {}", email, clientId);
+                    log.warn("User not found with email: {} and clientId: {} (case-insensitive search)", email, clientId);
                 } catch (IllegalArgumentException e) {
                     log.warn("Invalid clientId format: {}", clientIdStr);
                 }
             }
             
-            // Try SYSTEM_ADMIN lookup
-            var systemAdmin = userRepository.findByEmailAndRoleAndActiveTrue(email, User.Role.SYSTEM_ADMIN);
+            // Try SYSTEM_ADMIN lookup (case-insensitive)
+            var systemAdmin = userRepository.findByEmailIgnoreCaseAndRoleAndActiveTrue(email, User.Role.SYSTEM_ADMIN);
             if (systemAdmin.isPresent()) {
-                log.debug("Found SYSTEM_ADMIN user with email: {}", email);
+                log.debug("Found SYSTEM_ADMIN user with email: {} (case-insensitive)", email);
                 return systemAdmin.get();
             }
             
-            // Log detailed information for debugging
-            var usersByEmail = userRepository.findByEmailAndActiveTrue(email);
+            // Log detailed information for debugging (case-insensitive)
+            var usersByEmail = userRepository.findByEmailIgnoreCaseAndActiveTrue(email);
             if (!usersByEmail.isEmpty()) {
                 log.warn("User with email {} exists but not found for tenant {} or as SYSTEM_ADMIN. Found {} user(s) with this email in other tenants.", 
                     email, clientIdStr, usersByEmail.size());
