@@ -199,18 +199,18 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
         return false
       }
       
-      // CONTENT_MANAGER restrictions: Hide student and enrollment management
+      // CONTENT_MANAGER restrictions: Hide student, enrollment management, and settings
       if (isContentManager) {
-        if (item.href === '/students' || item.href === '/enrollments') {
+        if (item.href === '/students' || item.href === '/enrollments' || item.href === '/settings') {
           return false
         }
-        // CONTENT_MANAGER can access courses, analytics, settings, but not student management
+        // CONTENT_MANAGER can access courses and analytics, but not student management or settings
       }
       
       // INSTRUCTOR and SUPPORT_STAFF restrictions: View-only access
-      // Hide user, student, and enrollment management
+      // Hide user, student, enrollment management, and settings
       if (isInstructor || isSupportStaff) {
-        if (item.href === '/users' || item.href === '/students' || item.href === '/enrollments') {
+        if (item.href === '/users' || item.href === '/students' || item.href === '/enrollments' || item.href === '/settings') {
           return false
         }
         // Hide "Generate Course" submenu for INSTRUCTOR/SUPPORT_STAFF (view-only)
@@ -221,7 +221,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
         if (item.children && item.children.length === 0) {
           return false
         }
-        // INSTRUCTOR can view Dashboard (for student progress), Courses (view-only), Analytics, Settings
+        // INSTRUCTOR can view Dashboard (for student progress), Courses (view-only), Analytics
       }
       
       // Show tenant-specific items only if user has a tenant selected

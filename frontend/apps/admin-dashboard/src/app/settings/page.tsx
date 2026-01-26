@@ -19,6 +19,9 @@ export default function SettingsPage() {
   const [features, setFeatures] = useState<TenantFeatureDto[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  
+  // Check if user has permission to access settings
+  const canAccessSettings = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
 
   const loadFeatures = useCallback(async () => {
     try {
@@ -115,6 +118,21 @@ export default function SettingsPage() {
     }
   }
 
+  // Redirect or show unauthorized message if user doesn't have access
+  if (!canAccessSettings) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
+            <p className="text-gray-600">You do not have permission to access settings.</p>
+            <p className="text-sm text-gray-500 mt-4">Only System Admins and Tenant Admins can access this page.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">

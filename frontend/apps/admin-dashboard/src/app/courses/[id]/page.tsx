@@ -760,6 +760,7 @@ export default function CourseEditPage() {
                           onChange={(e) => setCourse({ ...course, title: e.target.value })}
                           required
                           placeholder="Enter course title"
+                          disabled={!canManageContent}
                         />
                       </div>
                       <div className="space-y-2">
@@ -768,6 +769,7 @@ export default function CourseEditPage() {
                           content={course?.description || ''}
                           onChange={(content) => setCourse({ ...course, description: content })}
                           placeholder="Enter course description (markdown supported)"
+                          disabled={!canManageContent}
                         />
                       </div>
                     </div>
@@ -782,6 +784,7 @@ export default function CourseEditPage() {
                           id="isFree"
                           checked={course?.isFree || false}
                           onCheckedChange={(checked) => setCourse({ ...course, isFree: checked as boolean })}
+                          disabled={!canManageContent}
                         />
                         <Label htmlFor="isFree" className="font-normal cursor-pointer">
                           Free Course
@@ -800,6 +803,7 @@ export default function CourseEditPage() {
                               })
                             }
                             placeholder="0.00"
+                            disabled={!canManageContent}
                           />
                         </div>
                       )}
@@ -815,6 +819,7 @@ export default function CourseEditPage() {
                         <Select
                           value={course?.difficultyLevel || undefined}
                           onValueChange={(value) => setCourse({ ...course, difficultyLevel: value === 'none' ? undefined : value as any })}
+                          disabled={!canManageContent}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select difficulty" />
@@ -837,6 +842,7 @@ export default function CourseEditPage() {
                               isPublished: value === 'PUBLISHED'
                             })
                           }
+                          disabled={!canManageContent}
                         >
                           <SelectTrigger>
                             <SelectValue />
@@ -854,6 +860,7 @@ export default function CourseEditPage() {
                           onCheckedChange={(checked) =>
                             setCourse({ ...course, certificateEligible: checked as boolean })
                           }
+                          disabled={!canManageContent}
                         />
                         <Label htmlFor="certificateEligible" className="font-normal cursor-pointer">
                           Certificate Eligible
@@ -862,84 +869,86 @@ export default function CourseEditPage() {
                     </div>
                   </div>
 
-                  {/* Class/Section Assignments */}
-                  <div className="border-t pt-6">
-                    <h2 className="text-lg font-semibold mb-4">Assign to Classes/Sections</h2>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Assign to Classes</Label>
-                        <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
-                          {classes.length === 0 ? (
-                            <p className="text-sm text-gray-500">No classes available. Create classes first.</p>
-                          ) : (
-                            classes.map((classItem) => {
-                              const institute = institutes.find(i => i.id === classItem.instituteId)
-                              return (
-                                <div key={classItem.id} className="flex items-center space-x-2">
-                                  <Checkbox
-                                    id={`class-${classItem.id}`}
-                                    checked={selectedClassIds.includes(classItem.id)}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        setSelectedClassIds([...selectedClassIds, classItem.id])
-                                      } else {
-                                        setSelectedClassIds(selectedClassIds.filter(id => id !== classItem.id))
-                                      }
-                                    }}
-                                  />
-                                  <Label 
-                                    htmlFor={`class-${classItem.id}`} 
-                                    className="font-normal cursor-pointer flex-1"
-                                  >
-                                    {institute ? `${institute.name} - ${classItem.name}` : classItem.name}
-                                  </Label>
-                                </div>
-                              )
-                            })
-                          )}
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Assign to Sections</Label>
-                        <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
-                          {sections.length === 0 ? (
-                            <p className="text-sm text-gray-500">No sections available. Create sections first.</p>
-                          ) : (
-                            sections.map((section) => {
-                                const classItem = classes.find(c => c.id === section.classId)
-                                const institute = classItem ? institutes.find(i => i.id === classItem.instituteId) : null
+                  {/* Class/Section Assignments - Hidden for instructors and support staff */}
+                  {canManageContent && (
+                    <div className="border-t pt-6">
+                      <h2 className="text-lg font-semibold mb-4">Assign to Classes/Sections</h2>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Assign to Classes</Label>
+                          <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                            {classes.length === 0 ? (
+                              <p className="text-sm text-gray-500">No classes available. Create classes first.</p>
+                            ) : (
+                              classes.map((classItem) => {
+                                const institute = institutes.find(i => i.id === classItem.instituteId)
                                 return (
-                                  <div key={section.id} className="flex items-center space-x-2">
+                                  <div key={classItem.id} className="flex items-center space-x-2">
                                     <Checkbox
-                                      id={`section-${section.id}`}
-                                      checked={selectedSectionIds.includes(section.id)}
+                                      id={`class-${classItem.id}`}
+                                      checked={selectedClassIds.includes(classItem.id)}
                                       onCheckedChange={(checked) => {
                                         if (checked) {
-                                          setSelectedSectionIds([...selectedSectionIds, section.id])
+                                          setSelectedClassIds([...selectedClassIds, classItem.id])
                                         } else {
-                                          setSelectedSectionIds(selectedSectionIds.filter(id => id !== section.id))
+                                          setSelectedClassIds(selectedClassIds.filter(id => id !== classItem.id))
                                         }
                                       }}
                                     />
                                     <Label 
-                                      htmlFor={`section-${section.id}`} 
+                                      htmlFor={`class-${classItem.id}`} 
                                       className="font-normal cursor-pointer flex-1"
                                     >
-                                      {institute && classItem 
-                                        ? `${institute.name} - ${classItem.name} - ${section.name}`
-                                        : section.name}
+                                      {institute ? `${institute.name} - ${classItem.name}` : classItem.name}
                                     </Label>
                                   </div>
                                 )
                               })
-                          )}
+                            )}
+                          </div>
                         </div>
-                        <p className="text-xs text-gray-500">
-                          Classes and sections are independent. You can assign a course to a section without assigning it to the full class.
-                        </p>
+                        <div className="space-y-2">
+                          <Label>Assign to Sections</Label>
+                          <div className="space-y-2 max-h-40 overflow-y-auto border rounded-md p-2">
+                            {sections.length === 0 ? (
+                              <p className="text-sm text-gray-500">No sections available. Create sections first.</p>
+                            ) : (
+                              sections.map((section) => {
+                                  const classItem = classes.find(c => c.id === section.classId)
+                                  const institute = classItem ? institutes.find(i => i.id === classItem.instituteId) : null
+                                  return (
+                                    <div key={section.id} className="flex items-center space-x-2">
+                                      <Checkbox
+                                        id={`section-${section.id}`}
+                                        checked={selectedSectionIds.includes(section.id)}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            setSelectedSectionIds([...selectedSectionIds, section.id])
+                                          } else {
+                                            setSelectedSectionIds(selectedSectionIds.filter(id => id !== section.id))
+                                          }
+                                        }}
+                                      />
+                                      <Label 
+                                        htmlFor={`section-${section.id}`} 
+                                        className="font-normal cursor-pointer flex-1"
+                                      >
+                                        {institute && classItem 
+                                          ? `${institute.name} - ${classItem.name} - ${section.name}`
+                                          : section.name}
+                                      </Label>
+                                    </div>
+                                  )
+                                })
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            Classes and sections are independent. You can assign a course to a section without assigning it to the full class.
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Course Structure - Lectures */}
                   {courseId !== 'new' && (
@@ -947,15 +956,17 @@ export default function CourseEditPage() {
                       <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-semibold">Course Structure</h2>
                         <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCreateMainLecture}
-                            disabled={loadingSections}
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Lecture
-                          </Button>
+                          {canManageContent && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleCreateMainLecture}
+                              disabled={loadingSections}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add Lecture
+                            </Button>
+                          )}
                           {canUseAI && (
                             <Button
                               variant="outline"
@@ -977,27 +988,29 @@ export default function CourseEditPage() {
                       ) : courseSections.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                           <BookOpen className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                          <p className="text-sm mb-4">No lectures found. Create a new lecture or generate with AI.</p>
-                          <div className="flex gap-2 justify-center">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={handleCreateMainLecture}
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Add Lecture
-                            </Button>
-                            {canUseAI && (
+                          <p className="text-sm mb-4">No lectures found. {canManageContent ? 'Create a new lecture or generate with AI.' : ''}</p>
+                          {canManageContent && (
+                            <div className="flex gap-2 justify-center">
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleGenerateWithAI(undefined, false)}
+                                onClick={handleCreateMainLecture}
                               >
-                                <Sparkles className="h-4 w-4 mr-2" />
-                                Generate with AI
+                                <Plus className="h-4 w-4 mr-2" />
+                                Add Lecture
                               </Button>
-                            )}
-                          </div>
+                              {canUseAI && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleGenerateWithAI(undefined, false)}
+                                >
+                                  <Sparkles className="h-4 w-4 mr-2" />
+                                  Generate with AI
+                                </Button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -1041,17 +1054,19 @@ export default function CourseEditPage() {
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleDeleteLecture(section.id, section.title)
-                                    }}
-                                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
+                                  {canManageContent && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleDeleteLecture(section.id, section.title)
+                                      }}
+                                      className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  )}
                                 </div>
                               </button>
                               {expandedSections.has(section.id) && (
@@ -1109,29 +1124,31 @@ export default function CourseEditPage() {
                                         ))}
                                       </>
                                     )}
-                                    {/* Add Sub-Lecture Buttons - Always show when section is expanded */}
-                                    <div className="flex gap-2 mt-2">
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleCreateSubLecture(section.id)}
-                                        className="flex-1"
-                                      >
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        Add Sub-Lecture
-                                      </Button>
-                                      {canUseAI && (
+                                    {/* Add Sub-Lecture Buttons - Only show for users who can manage content */}
+                                    {canManageContent && (
+                                      <div className="flex gap-2 mt-2">
                                         <Button
                                           variant="outline"
                                           size="sm"
-                                          onClick={() => handleGenerateWithAI(section.id, true)}
+                                          onClick={() => handleCreateSubLecture(section.id)}
                                           className="flex-1"
                                         >
-                                          <Sparkles className="h-4 w-4 mr-2" />
-                                          Generate with AI
+                                          <Plus className="h-4 w-4 mr-2" />
+                                          Add Sub-Lecture
                                         </Button>
-                                      )}
-                                    </div>
+                                        {canUseAI && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleGenerateWithAI(section.id, true)}
+                                            className="flex-1"
+                                          >
+                                            <Sparkles className="h-4 w-4 mr-2" />
+                                            Generate with AI
+                                          </Button>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -1143,29 +1160,53 @@ export default function CourseEditPage() {
                   )}
 
                   {/* Media */}
-                  <div className="border-t pt-6">
-                    <h2 className="text-lg font-semibold mb-4">Media</h2>
-                    <div className="space-y-4">
-                      <FileUpload
-                        label="Thumbnail Image"
-                        accept="image/*"
-                        maxSize={10 * 1024 * 1024} // 10MB
-                        value={course?.thumbnailUrl || ''}
-                        onChange={(url) => setCourse({ ...course, thumbnailUrl: url })}
-                        onUpload={async (file) => await mediaApi.uploadImage(file, 'thumbnails')}
-                        helperText="Upload a thumbnail image for the course (PNG, JPG, GIF up to 10MB)"
-                      />
-                      <FileUpload
-                        label="Preview Video"
-                        accept="video/*"
-                        maxSize={2 * 1024 * 1024 * 1024} // 2GB
-                        value={course?.previewVideoUrl || ''}
-                        onChange={(url) => setCourse({ ...course, previewVideoUrl: url })}
-                        onUpload={async (file) => await mediaApi.uploadVideo(file, 'preview-videos')}
-                        helperText="Upload a preview video for the course (MP4, MOV, etc. up to 2GB)"
-                      />
+                  {canManageContent ? (
+                    <div className="border-t pt-6">
+                      <h2 className="text-lg font-semibold mb-4">Media</h2>
+                      <div className="space-y-4">
+                        <FileUpload
+                          label="Thumbnail Image"
+                          accept="image/*"
+                          maxSize={10 * 1024 * 1024} // 10MB
+                          value={course?.thumbnailUrl || ''}
+                          onChange={(url) => setCourse({ ...course, thumbnailUrl: url })}
+                          onUpload={async (file) => await mediaApi.uploadImage(file, 'thumbnails')}
+                          helperText="Upload a thumbnail image for the course (PNG, JPG, GIF up to 10MB)"
+                        />
+                        <FileUpload
+                          label="Preview Video"
+                          accept="video/*"
+                          maxSize={2 * 1024 * 1024 * 1024} // 2GB
+                          value={course?.previewVideoUrl || ''}
+                          onChange={(url) => setCourse({ ...course, previewVideoUrl: url })}
+                          onUpload={async (file) => await mediaApi.uploadVideo(file, 'preview-videos')}
+                          helperText="Upload a preview video for the course (MP4, MOV, etc. up to 2GB)"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="border-t pt-6">
+                      <h2 className="text-lg font-semibold mb-4">Media</h2>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>Thumbnail Image</Label>
+                          {course?.thumbnailUrl ? (
+                            <img src={course.thumbnailUrl} alt="Course thumbnail" className="w-48 h-auto rounded border" />
+                          ) : (
+                            <p className="text-sm text-gray-500">No thumbnail uploaded</p>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Preview Video</Label>
+                          {course?.previewVideoUrl ? (
+                            <video src={course.previewVideoUrl} controls className="w-full max-w-md rounded border" />
+                          ) : (
+                            <p className="text-sm text-gray-500">No preview video uploaded</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Course Actions */}
                   {courseId !== 'new' && (
