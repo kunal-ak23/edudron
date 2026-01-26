@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0017-add-class-id-to-assessments
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: assessments
+                schemaName: content
+                columnName: class_id
+      changes:
+        - addColumn:
+            tableName: assessments
+            schemaName: content
+            columns:
+              - column:
+                  name: class_id
+                  type: varchar(255)
+                  remarks: "Optional class ID for class-level exam assignment. If set, exam is visible to all sections in this class."
+        - createIndex:
+            tableName: assessments
+            schemaName: content
+            indexName: idx_assessments_class_id
+            columns:
+              - column:
+                  name: class_id

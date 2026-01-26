@@ -19,6 +19,8 @@ interface Exam {
   endTime?: string
   reviewMethod: 'INSTRUCTOR' | 'AI' | 'BOTH'
   courseId: string
+  classId?: string
+  sectionId?: string
   createdAt: string
 }
 
@@ -166,7 +168,7 @@ export default function ExamsPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                         <div className="flex items-center gap-2">
                           <Calendar className="h-4 w-4 text-gray-400" />
                           <div>
@@ -186,6 +188,18 @@ export default function ExamsPage() {
                           <div>
                             <div className="text-gray-500">Review</div>
                             <div className="font-medium">{exam.reviewMethod || 'INSTRUCTOR'}</div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Audience</div>
+                          <div className="font-medium">
+                            {exam.sectionId ? (
+                              <Badge variant="secondary">Specific Section</Badge>
+                            ) : exam.classId ? (
+                              <Badge variant="default">Class-Wide</Badge>
+                            ) : (
+                              <Badge variant="outline">All Students</Badge>
+                            )}
                           </div>
                         </div>
                         <div>

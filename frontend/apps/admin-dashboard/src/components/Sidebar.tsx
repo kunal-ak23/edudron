@@ -107,6 +107,10 @@ const menuItems: MenuItem[] = [
     href: '/exams',
     icon: ClipboardList,
     requiresTenant: true,
+    children: [
+      { name: 'All Exams', href: '/exams', icon: ClipboardList },
+      { name: 'Exam Results', href: '/exams/results', icon: BarChart3 },
+    ]
   },
   {
     name: 'Enrollments',

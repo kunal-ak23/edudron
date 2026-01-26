@@ -115,6 +115,57 @@ public class ClassService {
             .collect(Collectors.toList());
     }
     
+    public List<ClassDTO> getClassesByCourse(String courseId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Get all enrollments for this course
+        List<com.datagami.edudron.student.domain.Enrollment> enrollments = 
+            enrollmentRepository.findByClientIdAndCourseId(clientId, courseId);
+        
+        // Get unique section IDs (batchId represents sectionId)
+        Set<String> sectionIds = enrollments.stream()
+            .map(com.datagami.edudron.student.domain.Enrollment::getBatchId)
+            .filter(batchId -> batchId != null && !batchId.isEmpty())
+            .collect(Collectors.toSet());
+        
+        if (sectionIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Get unique class IDs from these sections
+        Set<String> classIds = new HashSet<>();
+        for (String sectionId : sectionIds) {
+            sectionRepository.findByIdAndClientId(sectionId, clientId)
+                .ifPresent(section -> {
+                    if (section.getClassId() != null && !section.getClassId().isEmpty()) {
+                        classIds.add(section.getClassId());
+                    }
+                });
+        }
+        
+        if (classIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Fetch all classes
+        List<Class> classes = new ArrayList<>();
+        for (String classId : classIds) {
+            classRepository.findByIdAndClientId(classId, clientId)
+                .ifPresent(classes::add);
+        }
+        
+        // Sort by name
+        classes.sort(Comparator.comparing(Class::getName));
+        
+        return classes.stream()
+            .map(this::toDTO)
+            .collect(Collectors.toList());
+    }
+    
     public ClassDTO updateClass(String classId, CreateClassRequest request) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {

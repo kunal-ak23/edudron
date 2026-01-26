@@ -73,6 +73,13 @@ public class ClassController {
         ClassDTO classDTO = classService.getClass(id);
         return ResponseEntity.ok(classDTO);
     }
+    
+    @GetMapping("/classes/course/{courseId}")
+    @Operation(summary = "Get classes by course", description = "Get all classes for students enrolled in a specific course")
+    public ResponseEntity<List<ClassDTO>> getClassesByCourse(@PathVariable String courseId) {
+        List<ClassDTO> classes = classService.getClassesByCourse(courseId);
+        return ResponseEntity.ok(classes);
+    }
 
     @GetMapping("/classes/count")
     @Operation(summary = "Count classes", description = "Get class count for current tenant. Defaults to counting only active classes.")

@@ -19,6 +19,8 @@ interface Exam {
   endTime?: string
   courseId: string
   timeLimitSeconds?: number
+  maxAttempts?: number
+  attemptsTaken?: number
 }
 
 export const dynamic = 'force-dynamic'
@@ -183,9 +185,51 @@ export default function ExamsPage() {
     return acc
   }, [] as Exam[])
   
-  const liveExams = uniqueExams.filter(e => e.status === 'LIVE')
-  const scheduledExams = uniqueExams.filter(e => e.status === 'SCHEDULED')
-  const completedExams = uniqueExams.filter(e => e.status === 'COMPLETED')
+  // Filter with real-time checks based on actual time, not just status
+  const now = new Date()
+  
+  // Live exams: current time is between start and end time (regardless of status in DB)
+  const liveExams = uniqueExams.filter(e => {
+    // If no start/end time, fall back to status check
+    if (!e.startTime || !e.endTime) {
+      return e.status === 'LIVE'
+    }
+    
+    const startTime = new Date(e.startTime)
+    const endTime = new Date(e.endTime)
+    
+    // Real-time check: exam is live if current time is within the window
+    const isWithinTimeWindow = now >= startTime && now <= endTime
+    return isWithinTimeWindow
+  })
+  
+  // Scheduled exams: start time is in the future
+  const scheduledExams = uniqueExams.filter(e => {
+    // If no start/end time, fall back to status check
+    if (!e.startTime || !e.endTime) {
+      return e.status === 'SCHEDULED'
+    }
+    
+    const startTime = new Date(e.startTime)
+    const endTime = new Date(e.endTime)
+    
+    // Real-time check: exam is scheduled if start time is in future and hasn't ended
+    const isInFuture = now < startTime && now <= endTime
+    return isInFuture
+  })
+  
+  // Completed exams: end time has passed OR status is COMPLETED
+  const completedExams = uniqueExams.filter(e => {
+    if (e.status === 'COMPLETED') return true
+    
+    // Real-time check: exam is completed if end time has passed
+    if (e.endTime) {
+      const endTime = new Date(e.endTime)
+      return now > endTime
+    }
+    
+    return false
+  })
 
   if (loading) {
     return (
@@ -242,9 +286,24 @@ export default function ExamsPage() {
                               Duration: {Math.floor(exam.timeLimitSeconds / 60)} minutes
                             </div>
                           )}
+                          {exam.maxAttempts && exam.maxAttempts > 0 && (
+                            <div>
+                              Attempts: {exam.attemptsTaken || 0}/{exam.maxAttempts}
+                            </div>
+                          )}
                         </div>
-                        <Button onClick={() => router.push(`/exams/${exam.id}/take`)}>
-                          Take Exam
+                        <Button 
+                          onClick={() => router.push(`/exams/${exam.id}/take`)}
+                          disabled={
+                            (exam.endTime && new Date() > new Date(exam.endTime)) ||
+                            (exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts)
+                          }
+                        >
+                          {exam.endTime && new Date() > new Date(exam.endTime) 
+                            ? 'Exam Ended' 
+                            : exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts
+                            ? 'Max Attempts Reached'
+                            : 'Take Exam'}
                         </Button>
                       </div>
                     </CardContent>
@@ -297,17 +356,31 @@ export default function ExamsPage() {
                               </Badge>
                             )}
                           </div>
-                          {isAvailable ? (
-                            <Button onClick={() => {
-                              router.push(`/exams/${exam.id}/take`)
-                            }}>
-                              Take Exam
-                            </Button>
-                          ) : (
-                            <Button variant="outline" disabled>
-                              Not Available Yet
-                            </Button>
-                          )}
+                          {(() => {
+                            // Real-time check: has exam ended?
+                            const hasEnded = exam.endTime && new Date() > new Date(exam.endTime)
+                            if (hasEnded) {
+                              return (
+                                <Button variant="outline" disabled>
+                                  Exam Ended
+                                </Button>
+                              )
+                            }
+                            if (isAvailable) {
+                              return (
+                                <Button onClick={() => {
+                                  router.push(`/exams/${exam.id}/take`)
+                                }}>
+                                  Take Exam
+                                </Button>
+                              )
+                            }
+                            return (
+                              <Button variant="outline" disabled>
+                                Not Available Yet
+                              </Button>
+                            )
+                          })()}
                         </div>
                       </CardContent>
                     </Card>

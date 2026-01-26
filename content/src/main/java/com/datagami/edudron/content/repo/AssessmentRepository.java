@@ -45,6 +45,13 @@ public interface AssessmentRepository extends JpaRepository<Assessment, String> 
         @Param("statuses") List<Assessment.ExamStatus> statuses,
         @Param("clientId") UUID clientId
     );
+    
+    // Query for scheduled tasks that need to work across all tenants
+    @Query("SELECT a FROM Assessment a WHERE a.assessmentType = :assessmentType AND a.status IN :statuses AND a.startTime IS NOT NULL AND a.endTime IS NOT NULL ORDER BY a.startTime ASC")
+    List<Assessment> findByAssessmentTypeAndStatusInOrderByStartTimeAsc(
+        @Param("assessmentType") Assessment.AssessmentType assessmentType,
+        @Param("statuses") List<Assessment.ExamStatus> statuses
+    );
 }
 
 

@@ -69,6 +69,13 @@ public class SectionController {
         SectionDTO section = sectionService.getSection(id);
         return ResponseEntity.ok(section);
     }
+    
+    @GetMapping("/sections/course/{courseId}")
+    @Operation(summary = "Get sections by course", description = "Get all sections for students enrolled in a specific course")
+    public ResponseEntity<List<SectionDTO>> getSectionsByCourse(@PathVariable String courseId) {
+        List<SectionDTO> sections = sectionService.getSectionsByCourse(courseId);
+        return ResponseEntity.ok(sections);
+    }
 
     @GetMapping("/sections/count")
     @Operation(summary = "Count sections", description = "Get section count for current tenant. Defaults to counting only active sections.")

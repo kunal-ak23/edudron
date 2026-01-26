@@ -130,6 +130,17 @@ export default function TakeExamPage() {
       let exam = (examResponse as any)?.data || examResponse
       exam = exam as Exam
       
+      // Real-time check: if exam has ended, redirect to results
+      if ((exam as any).endTime) {
+        const endTime = new Date((exam as any).endTime)
+        const now = new Date()
+        if (now > endTime) {
+          console.log('Exam has ended, redirecting to results')
+          router.push(`/exams/${examId}/results`)
+          return
+        }
+      }
+      
       // Ensure questions is always an array
       const examWithQuestions = {
         ...exam,
@@ -210,6 +221,21 @@ export default function TakeExamPage() {
         } catch (startError: any) {
           console.error('Failed to start exam submission:', startError)
           console.error('Error details:', startError?.response || startError?.message)
+          
+          // Check if it's a max attempts error (409 Conflict)
+          if (startError?.response?.status === 409 || startError?.status === 409) {
+            alert('Maximum attempts reached for this exam. You cannot take it again.')
+            router.push('/exams')
+            return
+          }
+          
+          // Check if exam has ended (403 Forbidden)
+          if (startError?.response?.status === 403 || startError?.status === 403) {
+            alert('This exam is no longer available.')
+            router.push('/exams')
+            return
+          }
+          
           // Don't throw - let the page continue to load even if starting fails
         }
       }
@@ -235,6 +261,17 @@ export default function TakeExamPage() {
 
     // Auto-save every 15 seconds (more frequent)
     autoSaveIntervalRef.current = setInterval(() => {
+      // Check if exam has ended (real-time check every 15s)
+      if (exam && (exam as any).endTime) {
+        const endTime = new Date((exam as any).endTime)
+        const now = new Date()
+        if (now > endTime) {
+          console.log('Exam time expired, auto-submitting')
+          handleSubmit()
+          return
+        }
+      }
+      
       if (hasUnsavedChangesRef.current && submissionId) {
         saveProgress()
       }

@@ -271,6 +271,42 @@ public class SectionService {
         );
     }
     
+    public List<SectionDTO> getSectionsByCourse(String courseId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Get all enrollments for this course
+        List<com.datagami.edudron.student.domain.Enrollment> enrollments = 
+            enrollmentRepository.findByClientIdAndCourseId(clientId, courseId);
+        
+        // Get unique section IDs (batchId represents sectionId)
+        Set<String> sectionIds = enrollments.stream()
+            .map(com.datagami.edudron.student.domain.Enrollment::getBatchId)
+            .filter(batchId -> batchId != null && !batchId.isEmpty())
+            .collect(Collectors.toSet());
+        
+        if (sectionIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        // Fetch all sections
+        List<Section> sections = new ArrayList<>();
+        for (String sectionId : sectionIds) {
+            sectionRepository.findByIdAndClientId(sectionId, clientId)
+                .ifPresent(sections::add);
+        }
+        
+        // Sort by name
+        sections.sort(Comparator.comparing(Section::getName));
+        
+        return sections.stream()
+            .map(section -> toDTO(section, clientId))
+            .collect(Collectors.toList());
+    }
+    
     public SectionProgressDTO getSectionProgress(String sectionId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
