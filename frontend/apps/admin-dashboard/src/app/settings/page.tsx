@@ -102,6 +102,8 @@ export default function SettingsPage() {
         return 'Student Self-Enrollment'
       case TenantFeatureType.PSYCHOMETRIC_TEST:
         return 'Psychometric Test'
+      case TenantFeatureType.PROCTORED_EXAMS:
+        return 'Proctored Exams'
       default:
         return feature
     }
@@ -113,6 +115,8 @@ export default function SettingsPage() {
         return 'Allow students to enroll themselves in courses. When disabled, only admins and instructors can enroll students.'
       case TenantFeatureType.PSYCHOMETRIC_TEST:
         return 'Enable AI-powered psychometric test feature for students. This allows students to take a dynamic, chat-based test to discover their career and field inclinations.'
+      case TenantFeatureType.PROCTORED_EXAMS:
+        return 'Enable proctored exams with webcam monitoring, tab switch detection, copy-paste blocking, and identity verification. Instructors can configure proctoring settings per exam.'
       default:
         return ''
     }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { Button, Label, ProtectedRoute } from '@kunal-ak23/edudron-ui-components'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -16,8 +16,11 @@ import {
 } from '@/components/ui/dialog'
 import { ExamTimer } from '@/components/ExamTimer'
 import { StudentLayout } from '@/components/StudentLayout'
-import { Loader2, Save, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Loader2, Save, CheckCircle, AlertTriangle, Eye } from 'lucide-react'
 import { apiClient } from '@/lib/api'
+import { ProctoringSetupDialog } from '@/components/exams/ProctoringSetupDialog'
+import { WebcamMonitor } from '@/components/exams/WebcamMonitor'
+import { proctoringApi } from '@/lib/proctoring-api'
 
 interface Exam {
   id: string
@@ -26,6 +29,13 @@ interface Exam {
   timeLimitSeconds?: number
   courseId?: string
   questions: Question[]
+  enableProctoring?: boolean
+  proctoringMode?: 'DISABLED' | 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING'
+  photoIntervalSeconds?: number
+  requireIdentityVerification?: boolean
+  blockCopyPaste?: boolean
+  blockTabSwitch?: boolean
+  maxTabSwitchesAllowed?: number
 }
 
 interface Question {
@@ -49,7 +59,9 @@ export const dynamic = 'force-dynamic'
 export default function TakeExamPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const examId = params.id as string
+  const isPreviewMode = searchParams.get('preview') === 'true'
   const [exam, setExam] = useState<Exam | null>(null)
   const [submissionId, setSubmissionId] = useState<string | null>(null)
   const [answers, setAnswers] = useState<Record<string, any>>({})
@@ -64,11 +76,104 @@ export default function TakeExamPage() {
   const debounceSaveRef = useRef<NodeJS.Timeout | null>(null)
   const hasUnsavedChangesRef = useRef(false)
   const lastSaveTimeRef = useRef<number>(0)
+  
+  // Proctoring state
+  const [showProctoringSetup, setShowProctoringSetup] = useState(false)
+  const [proctoringComplete, setProctoringComplete] = useState(false)
+  const [tabSwitchCount, setTabSwitchCount] = useState(0)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Helper to log proctoring events
+  const logProctoringEvent = useCallback(async (
+    eventType: string,
+    severity: 'INFO' | 'WARNING' | 'VIOLATION',
+    metadata: Record<string, any> = {}
+  ) => {
+    if (!exam?.enableProctoring || !submissionId) return
+    
+    // In preview mode, just log to console instead of API
+    if (isPreviewMode) {
+      console.log('[PREVIEW] Proctoring Event:', {
+        eventType,
+        severity,
+        metadata,
+        timestamp: new Date().toISOString()
+      })
+      return
+    }
+    
+    try {
+      await proctoringApi.logEvent(examId, submissionId, {
+        eventType,
+        severity,
+        metadata: {
+          ...metadata,
+          timestamp: new Date().toISOString(),
+          userAgent: navigator.userAgent
+        }
+      })
+    } catch (err) {
+      console.error('Failed to log proctoring event:', err)
+    }
+  }, [exam, examId, submissionId])
 
   useEffect(() => {
     loadExam()
+  }, [examId])
+  
+  // Separate effect for visibility change detection (tab switching)
+  useEffect(() => {
+    if (!exam?.enableProctoring || isPreviewMode) return
     
-    // Save progress before leaving
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Save when user switches tabs or minimizes
+        if (hasUnsavedChangesRef.current && submissionId) {
+          saveProgress()
+        }
+        
+        // Log proctoring event for tab switch
+        setTabSwitchCount(prev => {
+          const newCount = prev + 1
+          
+          logProctoringEvent('TAB_SWITCH', 'WARNING', {
+            count: newCount,
+            maxAllowed: exam.maxTabSwitchesAllowed || 3
+          })
+          
+          // Check if max switches exceeded
+          if (exam.blockTabSwitch || (exam.maxTabSwitchesAllowed && newCount > exam.maxTabSwitchesAllowed)) {
+            logProctoringEvent('PROCTORING_VIOLATION', 'VIOLATION', {
+              reason: 'Maximum tab switches exceeded',
+              count: newCount,
+              maxAllowed: exam.maxTabSwitchesAllowed
+            })
+            
+            // Auto-submit if configured
+            if (exam.blockTabSwitch) {
+              alert('Tab switching is not allowed. Your exam will be auto-submitted.')
+              setTimeout(() => handleSubmit(), 1000)
+            } else if (exam.maxTabSwitchesAllowed && newCount >= exam.maxTabSwitchesAllowed) {
+              alert(`Warning: You have reached the maximum allowed tab switches (${exam.maxTabSwitchesAllowed}). Additional switches may result in penalties.`)
+            }
+          }
+          
+          return newCount
+        })
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [exam?.enableProctoring, exam?.blockTabSwitch, exam?.maxTabSwitchesAllowed, isPreviewMode, submissionId])
+  
+  // Handle before unload
+  useEffect(() => {
+    if (isPreviewMode) return
+    
     const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
       if (hasUnsavedChangesRef.current && submissionId) {
         // Try to save synchronously before leaving
@@ -92,20 +197,10 @@ export default function TakeExamPage() {
       }
     }
     
-    // Also save on visibility change (tab switch, minimize, etc.)
-    const handleVisibilityChange = () => {
-      if (document.hidden && hasUnsavedChangesRef.current && submissionId) {
-        // Save when user switches tabs or minimizes
-        saveProgress()
-      }
-    }
-    
     window.addEventListener('beforeunload', handleBeforeUnload)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
     
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (autoSaveIntervalRef.current) {
         clearInterval(autoSaveIntervalRef.current)
       }
@@ -117,18 +212,81 @@ export default function TakeExamPage() {
         saveProgress()
       }
     }
-  }, [examId])
+  }, [examId, isPreviewMode, submissionId, answers, timeRemaining])
+  
+  // Copy/Paste detection
+  useEffect(() => {
+    if (!exam?.enableProctoring || !exam?.blockCopyPaste) return
+    
+    const handleCopy = (e: ClipboardEvent) => {
+      e.preventDefault()
+      logProctoringEvent('COPY_ATTEMPT', 'WARNING')
+      alert('Copy action is blocked during this proctored exam')
+    }
+    
+    const handlePaste = (e: ClipboardEvent) => {
+      e.preventDefault()
+      logProctoringEvent('PASTE_ATTEMPT', 'WARNING')
+      alert('Paste action is blocked during this proctored exam')
+    }
+    
+    document.addEventListener('copy', handleCopy)
+    document.addEventListener('paste', handlePaste)
+    
+    return () => {
+      document.removeEventListener('copy', handleCopy)
+      document.removeEventListener('paste', handlePaste)
+    }
+  }, [exam, logProctoringEvent])
+  
+  // Window blur/focus detection
+  useEffect(() => {
+    if (!exam?.enableProctoring) return
+    
+    const handleBlur = () => {
+      logProctoringEvent('WINDOW_BLUR', 'WARNING')
+    }
+    
+    const handleFocus = () => {
+      logProctoringEvent('WINDOW_FOCUS', 'INFO')
+    }
+    
+    window.addEventListener('blur', handleBlur)
+    window.addEventListener('focus', handleFocus)
+    
+    return () => {
+      window.removeEventListener('blur', handleBlur)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [exam, logProctoringEvent])
 
   const loadExam = async () => {
     try {
       setLoading(true)
       
-      // Get exam details
-      const examResponse = await apiClient.get<Exam>(`/api/student/exams/${examId}`)
+      // Get exam details - use admin API in preview mode to get all proctoring settings
+      const endpoint = isPreviewMode 
+        ? `/api/exams/${examId}` // Admin endpoint with full exam details
+        : `/api/student/exams/${examId}` // Student endpoint
+      
+      const examResponse = await apiClient.get<Exam>(endpoint)
       
       // Handle response - apiClient might return data directly or wrapped
       let exam = (examResponse as any)?.data || examResponse
       exam = exam as Exam
+      
+      // Log proctoring settings for debugging in preview mode
+      if (isPreviewMode) {
+        console.log('[PREVIEW] Exam loaded with proctoring settings:', {
+          enableProctoring: exam.enableProctoring,
+          proctoringMode: exam.proctoringMode,
+          photoIntervalSeconds: exam.photoIntervalSeconds,
+          requireIdentityVerification: exam.requireIdentityVerification,
+          blockCopyPaste: exam.blockCopyPaste,
+          blockTabSwitch: exam.blockTabSwitch,
+          maxTabSwitchesAllowed: exam.maxTabSwitchesAllowed
+        })
+      }
       
       // Real-time check: if exam has ended, redirect to results
       if ((exam as any).endTime) {
@@ -150,7 +308,97 @@ export default function TakeExamPage() {
       if (examWithQuestions.questions.length === 0) {
       }
       
+      // In preview mode, replace real questions with dummy ones
+      if (isPreviewMode) {
+        const dummyQuestions: Question[] = [
+          {
+            id: 'preview-mcq-1',
+            questionText: 'This is a sample multiple choice question. What is 2 + 2?',
+            questionType: 'MULTIPLE_CHOICE',
+            points: 5,
+            sequence: 1,
+            options: [
+              { id: 'opt-1', optionText: '3', isCorrect: false, sequence: 1 },
+              { id: 'opt-2', optionText: '4', isCorrect: true, sequence: 2 },
+              { id: 'opt-3', optionText: '5', isCorrect: false, sequence: 3 },
+              { id: 'opt-4', optionText: '6', isCorrect: false, sequence: 4 }
+            ]
+          },
+          {
+            id: 'preview-short-1',
+            questionText: 'This is a sample short answer question. What is the capital of France?',
+            questionType: 'SHORT_ANSWER',
+            points: 3,
+            sequence: 2
+          },
+          {
+            id: 'preview-essay-1',
+            questionText: 'This is a sample essay question. Describe your learning goals for this course.',
+            questionType: 'ESSAY',
+            points: 10,
+            sequence: 3
+          },
+          {
+            id: 'preview-mcq-2',
+            questionText: 'Another sample multiple choice. Which color is the sky?',
+            questionType: 'MULTIPLE_CHOICE',
+            points: 5,
+            sequence: 4,
+            options: [
+              { id: 'opt-5', optionText: 'Red', isCorrect: false, sequence: 1 },
+              { id: 'opt-6', optionText: 'Blue', isCorrect: true, sequence: 2 },
+              { id: 'opt-7', optionText: 'Green', isCorrect: false, sequence: 3 }
+            ]
+          },
+          {
+            id: 'preview-tf-1',
+            questionText: 'Sample true/false question: The Earth is flat.',
+            questionType: 'TRUE_FALSE',
+            points: 2,
+            sequence: 5,
+            options: [
+              { id: 'opt-8', optionText: 'True', isCorrect: false, sequence: 1 },
+              { id: 'opt-9', optionText: 'False', isCorrect: true, sequence: 2 }
+            ]
+          }
+        ]
+        
+        const previewExam = {
+          ...examWithQuestions,
+          questions: dummyQuestions
+        }
+        
+        setExam(previewExam)
+        
+        // Set dummy submission ID for proctoring to work
+        setSubmissionId('preview-submission-' + Date.now())
+        
+        // Set initial time for display purposes
+        if (previewExam.timeLimitSeconds) {
+          setTimeRemaining(previewExam.timeLimitSeconds)
+        }
+        
+        // Show proctoring setup if enabled
+        if (previewExam.enableProctoring && !proctoringComplete) {
+          setShowProctoringSetup(true)
+        } else {
+          // No proctoring in preview - request fullscreen immediately
+          requestFullscreen()
+        }
+        
+        setLoading(false)
+        return
+      }
+      
       setExam(examWithQuestions)
+      
+      // Check if proctoring is enabled and show setup dialog
+      if (examWithQuestions.enableProctoring && !proctoringComplete) {
+        setShowProctoringSetup(true)
+      } else {
+        // No proctoring - request fullscreen immediately
+        requestFullscreen()
+      }
 
       // Check for existing submission or start new one
       let submissionIdValue: string | null = null
@@ -279,7 +527,7 @@ export default function TakeExamPage() {
   }
 
   const saveProgress = useCallback(async (silent = false) => {
-    if (!submissionId) {
+    if (isPreviewMode || !submissionId) {
       return
     }
 
@@ -333,6 +581,11 @@ export default function TakeExamPage() {
   }
 
   const handleSubmit = async () => {
+    // Prevent submission in preview mode
+    if (isPreviewMode) {
+      return
+    }
+    
     // Final save before submission
     if (hasUnsavedChangesRef.current && submissionId) {
       await saveProgress()
@@ -418,6 +671,39 @@ export default function TakeExamPage() {
     setShowSubmitDialog(true)
     handleSubmit()
   }
+  
+  // Request fullscreen mode
+  const requestFullscreen = async () => {
+    try {
+      const elem = document.documentElement
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen()
+        setIsFullscreen(true)
+      }
+    } catch (err) {
+      console.error('Fullscreen request failed:', err)
+    }
+  }
+  
+  // Handle fullscreen change
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+      
+      // Log if user exits fullscreen during proctored exam
+      if (!document.fullscreenElement && exam?.enableProctoring && !isPreviewMode) {
+        logProctoringEvent('FULLSCREEN_EXIT', 'WARNING', {
+          message: 'Student exited fullscreen mode'
+        })
+      }
+    }
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    }
+  }, [exam?.enableProctoring, isPreviewMode])
 
   // Ensure questions is always an array
   const questions = Array.isArray(exam?.questions) ? exam.questions : []
@@ -452,6 +738,84 @@ export default function TakeExamPage() {
   return (
     <ProtectedRoute>
       <StudentLayout>
+        {/* Preview Mode Banner */}
+        {isPreviewMode && (
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 shadow-lg border-b-4 border-blue-700">
+            <div className="max-w-7xl mx-auto">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 p-2 rounded-lg">
+                    <Eye className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-xl">Preview Mode - Testing User Flow</div>
+                    <div className="text-sm text-blue-100 mt-1">
+                      Experience the complete exam flow with dummy questions. Test proctoring settings, interface, and student experience. 
+                      <span className="font-semibold"> No responses saved.</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="ml-auto flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="bg-white text-blue-600 hover:bg-blue-50 border-0 font-semibold"
+                    onClick={() => window.close()}
+                  >
+                    Close Preview
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Proctoring Components */}
+        {exam?.enableProctoring && (
+          <>
+            {/* Proctoring Setup Dialog */}
+            <ProctoringSetupDialog
+              open={showProctoringSetup}
+              examId={examId}
+              submissionId={submissionId || ''}
+              examTitle={exam.title}
+              proctoringMode={(exam.proctoringMode !== 'DISABLED' ? exam.proctoringMode : 'BASIC_MONITORING') || 'BASIC_MONITORING'}
+              requireIdentityVerification={exam.requireIdentityVerification || false}
+              isPreview={isPreviewMode}
+              requestFullscreen={requestFullscreen}
+              onComplete={() => {
+                setShowProctoringSetup(false)
+                setProctoringComplete(true)
+              }}
+              onCancel={() => {
+                if (isPreviewMode) {
+                  window.close()
+                } else {
+                  router.push(`/exams/${examId}`)
+                }
+              }}
+            />
+            
+            {/* Webcam Monitor (during exam) */}
+            {proctoringComplete && 
+             exam.proctoringMode === 'WEBCAM_RECORDING' && 
+             submissionId && (
+              <WebcamMonitor
+                examId={examId}
+                submissionId={submissionId}
+                photoIntervalSeconds={exam.photoIntervalSeconds || 120}
+                isPreview={isPreviewMode}
+                onPhotoCapture={(timestamp) => {
+                  console.log(isPreviewMode ? '[PREVIEW] Photo simulated at:' : 'Photo captured at:', timestamp)
+                }}
+                onError={(error) => {
+                  console.error('Webcam error:', error)
+                }}
+              />
+            )}
+          </>
+        )}
+        
         <div className="flex h-full min-h-0 bg-white">
           {/* Left Sidebar - Questions Navigation */}
           <div className="w-80 border-r bg-white border-gray-200 overflow-hidden transition-all duration-300 flex-shrink-0 relative">
@@ -468,11 +832,23 @@ export default function TakeExamPage() {
               {/* Timer */}
               {exam.timeLimitSeconds && (
                 <div className="mb-4 pb-4 border-b border-gray-200">
-                  <ExamTimer
-                    timeRemainingSeconds={timeRemaining}
-                    onTimeUp={handleTimeUp}
-                    onUpdate={(remaining) => setTimeRemaining(remaining)}
-                  />
+                  {isPreviewMode ? (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="text-xs text-blue-600 font-semibold mb-1 text-center">⏱️ TIMER PREVIEW</div>
+                      <div className="text-sm text-blue-900 text-center">
+                        {Math.floor(exam.timeLimitSeconds / 60)} min {exam.timeLimitSeconds % 60} sec limit
+                      </div>
+                      <div className="text-xs text-blue-600 text-center mt-1">
+                        (Timer active for students)
+                      </div>
+                    </div>
+                  ) : (
+                    <ExamTimer
+                      timeRemainingSeconds={timeRemaining}
+                      onTimeUp={handleTimeUp}
+                      onUpdate={(remaining) => setTimeRemaining(remaining)}
+                    />
+                  )}
                 </div>
               )}
 
@@ -578,6 +954,53 @@ export default function TakeExamPage() {
             {/* Scrollable Content */}
             <div className="flex-1 bg-white overflow-y-auto pb-24">
               <div className="mx-[36px] p-8 pb-12">
+                {/* Preview Mode Question Notice */}
+                {isPreviewMode && (
+                  <div className="mb-6 bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <div className="bg-blue-100 rounded-full p-2">
+                          <Eye className="h-5 w-5 text-blue-600" />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-blue-900 mb-1">
+                          Sample Questions for Testing
+                        </div>
+                        <div className="text-sm text-blue-700">
+                          These are placeholder questions to demonstrate the exam flow. Your actual exam questions remain secure and are not shown in preview mode.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Fullscreen Warning */}
+                {!isFullscreen && exam?.enableProctoring && !isPreviewMode && (
+                  <div className="mb-6 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-yellow-900 mb-1">
+                          Fullscreen Mode Required
+                        </div>
+                        <div className="text-sm text-yellow-700 mb-2">
+                          This proctored exam must be taken in fullscreen mode. Exiting fullscreen may be logged as suspicious activity.
+                        </div>
+                        <Button 
+                          size="sm" 
+                          onClick={requestFullscreen}
+                          className="bg-yellow-600 hover:bg-yellow-700"
+                        >
+                          Enter Fullscreen
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 {questions.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-gray-500 text-lg">No questions available for this exam</p>
@@ -702,20 +1125,34 @@ export default function TakeExamPage() {
             {/* Fixed Footer */}
             <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0 shadow-sm">
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                {saving && (
+                {saving && !isPreviewMode && (
                   <>
                     <Save className="h-4 w-4 animate-pulse" />
                     <span>Saving...</span>
                   </>
                 )}
+                {isPreviewMode && (
+                  <div className="flex items-center gap-2 text-blue-600">
+                    <Eye className="h-4 w-4" />
+                    <span className="font-medium">Preview Mode - Answers not saved</span>
+                  </div>
+                )}
               </div>
               <div className="flex gap-4">
-                <Button variant="outline" onClick={() => setShowLeaveWarning(true)}>
-                  Save & Exit
-                </Button>
-                <Button onClick={() => setShowSubmitDialog(true)}>
-                  Submit Exam
-                </Button>
+                {!isPreviewMode ? (
+                  <>
+                    <Button variant="outline" onClick={() => setShowLeaveWarning(true)}>
+                      Save & Exit
+                    </Button>
+                    <Button onClick={() => setShowSubmitDialog(true)}>
+                      Submit Exam
+                    </Button>
+                  </>
+                ) : (
+                  <Button onClick={() => window.close()}>
+                    Close Preview
+                  </Button>
+                )}
               </div>
             </div>
           </div>

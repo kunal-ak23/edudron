@@ -15,7 +15,13 @@ public enum TenantFeatureType {
      * Controls whether psychometric test feature is available for students.
      * Default: false (psychometric test is disabled by default)
      */
-    PSYCHOMETRIC_TEST(false, "Enable psychometric test feature for students");
+    PSYCHOMETRIC_TEST(false, "Enable psychometric test feature for students"),
+
+    /**
+     * Controls whether proctored exams feature is available.
+     * Default: false (proctored exams are disabled by default)
+     */
+    PROCTORED_EXAMS(false, "Enable proctored exams with identity verification and monitoring");
 
     private final boolean defaultValue;
     private final String description;

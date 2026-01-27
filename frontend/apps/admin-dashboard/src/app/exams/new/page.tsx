@@ -10,7 +10,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Sparkles, Loader2, ArrowLeft } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Sparkles, Loader2, ArrowLeft, Shield } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, coursesApi } from '@/lib/api'
 import type { Course, Section, Chapter } from '@kunal-ak23/edudron-shared-utils'
@@ -47,7 +48,15 @@ export default function NewExamPage() {
     numberOfQuestions: 10,
     difficulty: 'INTERMEDIATE',
     randomizeQuestions: false,
-    randomizeMcqOptions: false
+    randomizeMcqOptions: false,
+    // Proctoring settings
+    enableProctoring: false,
+    proctoringMode: 'BASIC_MONITORING' as 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING',
+    photoIntervalSeconds: 30,
+    requireIdentityVerification: false,
+    blockCopyPaste: false,
+    blockTabSwitch: false,
+    maxTabSwitchesAllowed: 3
   })
 
   useEffect(() => {
@@ -128,7 +137,15 @@ export default function NewExamPage() {
         moduleIds: formData.moduleIds,
         reviewMethod: formData.reviewMethod,
         randomizeQuestions: formData.randomizeQuestions,
-        randomizeMcqOptions: formData.randomizeMcqOptions
+        randomizeMcqOptions: formData.randomizeMcqOptions,
+        // Proctoring settings
+        enableProctoring: formData.enableProctoring,
+        proctoringMode: formData.enableProctoring ? formData.proctoringMode : 'DISABLED',
+        photoIntervalSeconds: formData.photoIntervalSeconds,
+        requireIdentityVerification: formData.requireIdentityVerification,
+        blockCopyPaste: formData.blockCopyPaste,
+        blockTabSwitch: formData.blockTabSwitch,
+        maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed
       })
       const exam = (response as any)?.data || response
       
@@ -187,7 +204,15 @@ export default function NewExamPage() {
         classId: formData.assignmentType === 'class' ? formData.classId : null,
         sectionId: formData.assignmentType === 'section' ? formData.sectionId : null,
         randomizeQuestions: formData.randomizeQuestions,
-        randomizeMcqOptions: formData.randomizeMcqOptions
+        randomizeMcqOptions: formData.randomizeMcqOptions,
+        // Proctoring settings
+        enableProctoring: formData.enableProctoring,
+        proctoringMode: formData.enableProctoring ? formData.proctoringMode : 'DISABLED',
+        photoIntervalSeconds: formData.photoIntervalSeconds,
+        requireIdentityVerification: formData.requireIdentityVerification,
+        blockCopyPaste: formData.blockCopyPaste,
+        blockTabSwitch: formData.blockTabSwitch,
+        maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed
       })
       
       // Handle response - apiClient might return data directly or wrapped
@@ -505,6 +530,140 @@ export default function NewExamPage() {
                 </Select>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              <CardTitle>Proctoring Settings</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="enableProctoring">Enable Proctoring</Label>
+                <p className="text-sm text-gray-500">Monitor students during the exam</p>
+              </div>
+              <Switch
+                id="enableProctoring"
+                checked={formData.enableProctoring}
+                onCheckedChange={(checked) => 
+                  setFormData(prev => ({ ...prev, enableProctoring: checked }))
+                }
+              />
+            </div>
+
+            {formData.enableProctoring && (
+              <div className="space-y-4 pt-4 border-t">
+                <div>
+                  <Label htmlFor="proctoringMode">Proctoring Mode</Label>
+                  <Select 
+                    value={formData.proctoringMode} 
+                    onValueChange={(value: any) => 
+                      setFormData(prev => ({ ...prev, proctoringMode: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BASIC_MONITORING">Basic Monitoring (Events only)</SelectItem>
+                      <SelectItem value="WEBCAM_RECORDING">Webcam Recording</SelectItem>
+                      <SelectItem value="LIVE_PROCTORING">Live Proctoring (Future)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formData.proctoringMode === 'BASIC_MONITORING' && 'Logs events like tab switches and copy attempts'}
+                    {formData.proctoringMode === 'WEBCAM_RECORDING' && 'Captures periodic photos from student webcam'}
+                    {formData.proctoringMode === 'LIVE_PROCTORING' && 'Real-time monitoring (coming soon)'}
+                  </p>
+                </div>
+
+                {formData.proctoringMode === 'WEBCAM_RECORDING' && (
+                  <div>
+                    <Label htmlFor="photoInterval">Photo Capture Interval (seconds)</Label>
+                    <Input
+                      id="photoInterval"
+                      type="number"
+                      value={formData.photoIntervalSeconds}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        photoIntervalSeconds: parseInt(e.target.value) || 30 
+                      }))}
+                      min={10}
+                      max={300}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      How often to capture photos (recommended: 30-60 seconds)
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="requireIdentityVerification">Require Identity Verification</Label>
+                    <p className="text-sm text-gray-500">Student must take a photo before starting</p>
+                  </div>
+                  <Switch
+                    id="requireIdentityVerification"
+                    checked={formData.requireIdentityVerification}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, requireIdentityVerification: checked }))
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="blockCopyPaste">Block Copy & Paste</Label>
+                    <p className="text-sm text-gray-500">Prevent copying/pasting during exam</p>
+                  </div>
+                  <Switch
+                    id="blockCopyPaste"
+                    checked={formData.blockCopyPaste}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, blockCopyPaste: checked }))
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="blockTabSwitch">Auto-Submit on Tab Switch</Label>
+                    <p className="text-sm text-gray-500">Automatically submit exam if student switches tabs</p>
+                  </div>
+                  <Switch
+                    id="blockTabSwitch"
+                    checked={formData.blockTabSwitch}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, blockTabSwitch: checked }))
+                    }
+                  />
+                </div>
+
+                {!formData.blockTabSwitch && (
+                  <div>
+                    <Label htmlFor="maxTabSwitches">Maximum Tab Switches Allowed</Label>
+                    <Input
+                      id="maxTabSwitches"
+                      type="number"
+                      value={formData.maxTabSwitchesAllowed}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        maxTabSwitchesAllowed: parseInt(e.target.value) || 3 
+                      }))}
+                      min={0}
+                      max={20}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      How many times student can switch tabs before warning (0 = unlimited)
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

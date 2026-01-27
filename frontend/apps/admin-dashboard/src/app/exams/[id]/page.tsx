@@ -10,7 +10,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Loader2, Calendar, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ArrowLeft, Loader2, Calendar, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, questionsApi, type QuestionData } from '@/lib/api'
 import { QuestionEditor } from '@/components/exams/QuestionEditor'
@@ -40,6 +42,14 @@ interface Exam {
   sectionId?: string
   randomizeQuestions?: boolean
   randomizeMcqOptions?: boolean
+  // Proctoring fields
+  enableProctoring?: boolean
+  proctoringMode?: 'DISABLED' | 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING'
+  photoIntervalSeconds?: number
+  requireIdentityVerification?: boolean
+  blockCopyPaste?: boolean
+  blockTabSwitch?: boolean
+  maxTabSwitchesAllowed?: number
 }
 
 interface Question {
@@ -89,6 +99,25 @@ export default function ExamDetailPage() {
   const [showTentativeAnswerDialog, setShowTentativeAnswerDialog] = useState(false)
   const [showQuestionEditor, setShowQuestionEditor] = useState(false)
   const [isCreatingQuestion, setIsCreatingQuestion] = useState(false)
+  const [showProctoringDialog, setShowProctoringDialog] = useState(false)
+  const [proctoringForm, setProctoringForm] = useState({
+    enableProctoring: false,
+    proctoringMode: 'BASIC_MONITORING' as 'DISABLED' | 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING',
+    photoIntervalSeconds: 30,
+    requireIdentityVerification: false,
+    blockCopyPaste: false,
+    blockTabSwitch: false,
+    maxTabSwitchesAllowed: 3
+  })
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [editForm, setEditForm] = useState({
+    title: '',
+    description: '',
+    instructions: '',
+    reviewMethod: 'INSTRUCTOR' as 'INSTRUCTOR' | 'AI' | 'BOTH',
+    randomizeQuestions: false,
+    randomizeMcqOptions: false
+  })
 
   const loadExam = useCallback(async () => {
     try {
@@ -183,6 +212,92 @@ export default function ExamDetailPage() {
       toast({
         title: 'Error',
         description: 'Failed to update tentative answer',
+        variant: 'destructive'
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleOpenProctoringDialog = () => {
+    if (exam) {
+      // Initialize form with current exam proctoring settings
+      setProctoringForm({
+        enableProctoring: exam.enableProctoring || false,
+        proctoringMode: exam.proctoringMode || 'BASIC_MONITORING',
+        photoIntervalSeconds: exam.photoIntervalSeconds || 30,
+        requireIdentityVerification: exam.requireIdentityVerification || false,
+        blockCopyPaste: exam.blockCopyPaste || false,
+        blockTabSwitch: exam.blockTabSwitch || false,
+        maxTabSwitchesAllowed: exam.maxTabSwitchesAllowed || 3
+      })
+    }
+    setShowProctoringDialog(true)
+  }
+
+  const handleSaveProctoring = async () => {
+    setSaving(true)
+    try {
+      const response = await apiClient.put(`/api/exams/${examId}`, proctoringForm)
+      const updated = (response as any)?.data || response
+      setExam(updated as unknown as Exam)
+      setShowProctoringDialog(false)
+      toast({
+        title: 'Success',
+        description: 'Proctoring settings updated successfully'
+      })
+    } catch (error) {
+      console.error('Failed to update proctoring settings:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update proctoring settings',
+        variant: 'destructive'
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleOpenEditDialog = () => {
+    if (exam) {
+      // Initialize form with current exam data
+      setEditForm({
+        title: exam.title,
+        description: exam.description || '',
+        instructions: exam.instructions || '',
+        reviewMethod: exam.reviewMethod,
+        randomizeQuestions: exam.randomizeQuestions || false,
+        randomizeMcqOptions: exam.randomizeMcqOptions || false
+      })
+    }
+    setShowEditDialog(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editForm.title.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Exam title is required',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const response = await apiClient.put(`/api/exams/${examId}`, editForm)
+      const updated = (response as any)?.data || response
+      setExam(updated as unknown as Exam)
+      setShowEditDialog(false)
+      toast({
+        title: 'Success',
+        description: 'Exam details updated successfully'
+      })
+    } catch (error) {
+      console.error('Failed to update exam details:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update exam details',
         variant: 'destructive'
       })
     } finally {
@@ -286,9 +401,20 @@ export default function ExamDetailPage() {
                 {exam.status === 'SCHEDULED' ? 'Reschedule Exam' : 'Schedule Exam'}
               </Button>
             )}
-            <Button variant="outline" onClick={() => setEditing(!editing)}>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                // Open exam in preview mode in student portal (new tab)
+                const studentPortalUrl = process.env.NEXT_PUBLIC_STUDENT_PORTAL_URL || 'http://localhost:3001'
+                window.open(`${studentPortalUrl}/exams/${examId}/take?preview=true`, '_blank')
+              }}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              Preview
+            </Button>
+            <Button variant="outline" onClick={handleOpenEditDialog}>
               <Edit className="h-4 w-4 mr-2" />
-              {editing ? 'Cancel Edit' : 'Edit'}
+              Edit Details
             </Button>
           </div>
         )}
@@ -307,10 +433,28 @@ export default function ExamDetailPage() {
           <TabsContent value="details" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Exam Information</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Exam Information</CardTitle>
+                  {canManageExams && (
+                    <Button variant="outline" size="sm" onClick={handleOpenEditDialog}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Title</Label>
+                  <div className="mt-1 text-lg font-semibold">{exam.title}</div>
+                </div>
+                {exam.description && (
+                  <div>
+                    <Label>Description</Label>
+                    <div className="mt-1 text-gray-700">{exam.description}</div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
                   <div>
                     <Label>Status</Label>
                     <div className="mt-1">{getStatusBadge(exam.status)}</div>
@@ -319,16 +463,32 @@ export default function ExamDetailPage() {
                     <Label>Review Method</Label>
                     <div className="mt-1 font-medium">{exam.reviewMethod}</div>
                   </div>
-                  <div>
-                    <Label>Randomization</Label>
-                    <div className="mt-1">
+                  <div className="col-span-2">
+                    <Label className="flex items-center gap-2">
+                      <Shuffle className="h-4 w-4" />
+                      Randomization
+                    </Label>
+                    <div className="mt-2">
                       {exam.randomizeQuestions || exam.randomizeMcqOptions ? (
-                        <div className="space-y-1 text-sm">
-                          {exam.randomizeQuestions && <div>• Questions randomized</div>}
-                          {exam.randomizeMcqOptions && <div>• MCQ options randomized</div>}
+                        <div className="space-y-2">
+                          {exam.randomizeQuestions && (
+                            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                              <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                              <span className="text-sm font-medium text-blue-900">Questions appear in random order</span>
+                            </div>
+                          )}
+                          {exam.randomizeMcqOptions && (
+                            <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
+                              <CheckCircle2 className="h-4 w-4 text-purple-600 flex-shrink-0" />
+                              <span className="text-sm font-medium text-purple-900">Multiple choice options shuffled</span>
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <div className="text-sm text-gray-500">No randomization</div>
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                          <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                          <span className="text-sm text-gray-600">No randomization enabled</span>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -368,6 +528,83 @@ export default function ExamDetailPage() {
                     <div className="mt-1 text-gray-700 whitespace-pre-wrap">
                       {exam.instructions}
                     </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Proctoring Settings Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    <CardTitle>Proctoring Settings</CardTitle>
+                  </div>
+                  {canManageExams && (
+                    <Button variant="outline" size="sm" onClick={handleOpenProctoringDialog}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      Configure
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {exam.enableProctoring ? (
+                  <div className="space-y-4">
+                    {/* Proctoring Mode Badge */}
+                    <div>
+                      <Label className="text-xs text-gray-500 uppercase mb-2 block">Active Mode</Label>
+                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg">
+                        <Camera className="h-5 w-5 text-indigo-600" />
+                        <span className="font-semibold text-indigo-900">
+                          {exam.proctoringMode === 'BASIC_MONITORING' && 'Basic Monitoring'}
+                          {exam.proctoringMode === 'WEBCAM_RECORDING' && 'Webcam Recording'}
+                          {exam.proctoringMode === 'LIVE_PROCTORING' && 'Live Proctoring'}
+                        </span>
+                        {exam.proctoringMode === 'WEBCAM_RECORDING' && (
+                          <Badge variant="secondary" className="ml-2">
+                            <Clock className="h-3 w-3 mr-1" />
+                            {exam.photoIntervalSeconds}s interval
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Security Features */}
+                    <div>
+                      <Label className="text-xs text-gray-500 uppercase mb-2 block">Security Features</Label>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {exam.requireIdentityVerification && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                            <UserCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                            <span className="text-sm font-medium text-emerald-900">Identity Verification</span>
+                          </div>
+                        )}
+                        {exam.blockCopyPaste && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-teal-50 border border-teal-200 rounded-lg">
+                            <ClipboardX className="h-4 w-4 text-teal-600 flex-shrink-0" />
+                            <span className="text-sm font-medium text-teal-900">Copy/Paste Blocked</span>
+                          </div>
+                        )}
+                        {exam.blockTabSwitch ? (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                            <Lock className="h-4 w-4 text-red-600 flex-shrink-0" />
+                            <span className="text-sm font-medium text-red-900">Auto-Submit on Tab Switch</span>
+                          </div>
+                        ) : exam.maxTabSwitchesAllowed !== undefined && exam.maxTabSwitchesAllowed > 0 && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                            <TabletSmartphone className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                            <span className="text-sm font-medium text-amber-900">Max {exam.maxTabSwitchesAllowed} Tab Switches</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                    <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                    <span className="text-sm text-gray-600">Proctoring is disabled for this exam</span>
                   </div>
                 )}
               </CardContent>
@@ -696,6 +933,256 @@ export default function ExamDetailPage() {
                 setIsCreatingQuestion(false)
               }}
             />
+          </DialogContent>
+        </Dialog>
+
+        {/* Proctoring Settings Dialog */}
+        <Dialog open={showProctoringDialog} onOpenChange={setShowProctoringDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Configure Proctoring Settings
+                </div>
+              </DialogTitle>
+              <DialogDescription>
+                Configure how students will be monitored during this exam
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="enableProctoring">Enable Proctoring</Label>
+                  <p className="text-sm text-gray-500">Monitor students during the exam</p>
+                </div>
+                <Switch
+                  id="enableProctoring"
+                  checked={proctoringForm.enableProctoring}
+                  onCheckedChange={(checked) => 
+                    setProctoringForm(prev => ({ ...prev, enableProctoring: checked }))
+                  }
+                />
+              </div>
+
+              {proctoringForm.enableProctoring && (
+                <div className="space-y-4 pt-4 border-t">
+                  <div>
+                    <Label htmlFor="proctoringMode">Proctoring Mode</Label>
+                    <Select 
+                      value={proctoringForm.proctoringMode} 
+                      onValueChange={(value: any) => 
+                        setProctoringForm(prev => ({ ...prev, proctoringMode: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BASIC_MONITORING">Basic Monitoring (Events only)</SelectItem>
+                        <SelectItem value="WEBCAM_RECORDING">Webcam Recording</SelectItem>
+                        <SelectItem value="LIVE_PROCTORING">Live Proctoring (Future)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {proctoringForm.proctoringMode === 'WEBCAM_RECORDING' && (
+                    <div>
+                      <Label htmlFor="photoInterval">Photo Capture Interval (seconds)</Label>
+                      <Input
+                        id="photoInterval"
+                        type="number"
+                        value={proctoringForm.photoIntervalSeconds}
+                        onChange={(e) => setProctoringForm(prev => ({ 
+                          ...prev, 
+                          photoIntervalSeconds: parseInt(e.target.value) || 30 
+                        }))}
+                        min={10}
+                        max={300}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Between 10 and 300 seconds</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="requireIdentityVerification">Require Identity Verification</Label>
+                      <p className="text-sm text-gray-500">Student must take a photo before starting</p>
+                    </div>
+                    <Switch
+                      id="requireIdentityVerification"
+                      checked={proctoringForm.requireIdentityVerification}
+                      onCheckedChange={(checked) => 
+                        setProctoringForm(prev => ({ ...prev, requireIdentityVerification: checked }))
+                      }
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="blockCopyPaste">Block Copy & Paste</Label>
+                      <p className="text-sm text-gray-500">Prevent copying/pasting during exam</p>
+                    </div>
+                    <Switch
+                      id="blockCopyPaste"
+                      checked={proctoringForm.blockCopyPaste}
+                      onCheckedChange={(checked) => 
+                        setProctoringForm(prev => ({ ...prev, blockCopyPaste: checked }))
+                      }
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="blockTabSwitch">Auto-Submit on Tab Switch</Label>
+                      <p className="text-sm text-gray-500">Automatically submit exam if student switches tabs</p>
+                    </div>
+                    <Switch
+                      id="blockTabSwitch"
+                      checked={proctoringForm.blockTabSwitch}
+                      onCheckedChange={(checked) => 
+                        setProctoringForm(prev => ({ ...prev, blockTabSwitch: checked }))
+                      }
+                    />
+                  </div>
+
+                  {!proctoringForm.blockTabSwitch && (
+                    <div>
+                      <Label htmlFor="maxTabSwitches">Maximum Tab Switches Allowed</Label>
+                      <Input
+                        id="maxTabSwitches"
+                        type="number"
+                        value={proctoringForm.maxTabSwitchesAllowed}
+                        onChange={(e) => setProctoringForm(prev => ({ 
+                          ...prev, 
+                          maxTabSwitchesAllowed: parseInt(e.target.value) || 3 
+                        }))}
+                        min={0}
+                        max={20}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">0 = unlimited, 1-20 = max allowed</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowProctoringDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveProctoring} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Exam Details Dialog */}
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Exam Details</DialogTitle>
+              <DialogDescription>
+                Update exam information, review method, and randomization settings
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="editTitle">Exam Title *</Label>
+                <Input
+                  id="editTitle"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Enter exam title"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="editDescription">Description</Label>
+                <Textarea
+                  id="editDescription"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description of the exam"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="editInstructions">Instructions</Label>
+                <Textarea
+                  id="editInstructions"
+                  value={editForm.instructions}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, instructions: e.target.value }))}
+                  placeholder="Detailed instructions for students"
+                  rows={5}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="reviewMethod">Review Method</Label>
+                <Select 
+                  value={editForm.reviewMethod} 
+                  onValueChange={(value: any) => 
+                    setEditForm(prev => ({ ...prev, reviewMethod: value }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="INSTRUCTOR">Instructor Review Only</SelectItem>
+                    <SelectItem value="AI">AI Review Only</SelectItem>
+                    <SelectItem value="BOTH">AI + Instructor Review</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  How should answers be reviewed and graded?
+                </p>
+              </div>
+
+              <div className="space-y-3 pt-2 border-t">
+                <Label>Randomization Options</Label>
+                
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="randomizeQuestions">Randomize Question Order</Label>
+                    <p className="text-sm text-gray-500">Each student sees questions in different order</p>
+                  </div>
+                  <Switch
+                    id="randomizeQuestions"
+                    checked={editForm.randomizeQuestions}
+                    onCheckedChange={(checked) => 
+                      setEditForm(prev => ({ ...prev, randomizeQuestions: checked }))
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="randomizeMcqOptions">Randomize MCQ Options</Label>
+                    <p className="text-sm text-gray-500">Multiple choice options appear in random order</p>
+                  </div>
+                  <Switch
+                    id="randomizeMcqOptions"
+                    checked={editForm.randomizeMcqOptions}
+                    onCheckedChange={(checked) => 
+                      setEditForm(prev => ({ ...prev, randomizeMcqOptions: checked }))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Save Changes
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
     </div>

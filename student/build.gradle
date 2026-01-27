@@ -33,6 +33,10 @@ dependencies {
 	
 	// Apache Commons CSV
 	implementation 'org.apache.commons:commons-csv:1.11.0'
+	
+	// Azure Storage Blob for proctoring photo uploads
+	implementation 'com.azure:azure-storage-blob:12.25.0'
+	implementation 'com.azure:azure-identity:1.11.1'
 }
 
 def loadEnvFile() {
