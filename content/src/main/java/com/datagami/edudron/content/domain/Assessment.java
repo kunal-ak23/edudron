@@ -94,6 +94,10 @@ public class Assessment {
         INSTRUCTOR, AI, BOTH
     }
     
+    public enum ProctoringMode {
+        DISABLED, BASIC_MONITORING, WEBCAM_RECORDING, LIVE_PROCTORING
+    }
+    
     // Exam-specific fields
     @Column(name = "start_time")
     private OffsetDateTime startTime;
@@ -117,6 +121,29 @@ public class Assessment {
     
     @Column(name = "randomize_mcq_options", nullable = false)
     private Boolean randomizeMcqOptions = false;
+    
+    // Proctoring fields
+    @Column(name = "enable_proctoring", nullable = false)
+    private Boolean enableProctoring = false;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "proctoring_mode", length = 30)
+    private ProctoringMode proctoringMode;
+    
+    @Column(name = "photo_interval_seconds")
+    private Integer photoIntervalSeconds = 120; // default 2 minutes
+    
+    @Column(name = "require_identity_verification")
+    private Boolean requireIdentityVerification = false;
+    
+    @Column(name = "block_copy_paste")
+    private Boolean blockCopyPaste = false;
+    
+    @Column(name = "block_tab_switch")
+    private Boolean blockTabSwitch = false;
+    
+    @Column(name = "max_tab_switches_allowed")
+    private Integer maxTabSwitchesAllowed = 3;
 
     // Constructors
     public Assessment() {
@@ -211,6 +238,27 @@ public class Assessment {
     
     public Boolean getRandomizeMcqOptions() { return randomizeMcqOptions; }
     public void setRandomizeMcqOptions(Boolean randomizeMcqOptions) { this.randomizeMcqOptions = randomizeMcqOptions; }
+    
+    public Boolean getEnableProctoring() { return enableProctoring; }
+    public void setEnableProctoring(Boolean enableProctoring) { this.enableProctoring = enableProctoring; }
+    
+    public ProctoringMode getProctoringMode() { return proctoringMode; }
+    public void setProctoringMode(ProctoringMode proctoringMode) { this.proctoringMode = proctoringMode; }
+    
+    public Integer getPhotoIntervalSeconds() { return photoIntervalSeconds; }
+    public void setPhotoIntervalSeconds(Integer photoIntervalSeconds) { this.photoIntervalSeconds = photoIntervalSeconds; }
+    
+    public Boolean getRequireIdentityVerification() { return requireIdentityVerification; }
+    public void setRequireIdentityVerification(Boolean requireIdentityVerification) { this.requireIdentityVerification = requireIdentityVerification; }
+    
+    public Boolean getBlockCopyPaste() { return blockCopyPaste; }
+    public void setBlockCopyPaste(Boolean blockCopyPaste) { this.blockCopyPaste = blockCopyPaste; }
+    
+    public Boolean getBlockTabSwitch() { return blockTabSwitch; }
+    public void setBlockTabSwitch(Boolean blockTabSwitch) { this.blockTabSwitch = blockTabSwitch; }
+    
+    public Integer getMaxTabSwitchesAllowed() { return maxTabSwitchesAllowed; }
+    public void setMaxTabSwitchesAllowed(Integer maxTabSwitchesAllowed) { this.maxTabSwitchesAllowed = maxTabSwitchesAllowed; }
 
     @PreUpdate
     public void preUpdate() {

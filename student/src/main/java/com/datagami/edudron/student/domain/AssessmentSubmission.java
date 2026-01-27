@@ -80,8 +80,33 @@ public class AssessmentSubmission {
     @Column(nullable = false)
     private OffsetDateTime createdAt;
     
+    // Proctoring fields
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "proctoring_data", columnDefinition = "jsonb")
+    private JsonNode proctoringData;
+    
+    @Column(name = "tab_switch_count")
+    private Integer tabSwitchCount = 0;
+    
+    @Column(name = "copy_attempt_count")
+    private Integer copyAttemptCount = 0;
+    
+    @Column(name = "identity_verified")
+    private Boolean identityVerified = false;
+    
+    @Column(name = "identity_verification_photo_url", length = 500)
+    private String identityVerificationPhotoUrl;
+    
+    @Enumerated(EnumType.STRING)
+    @Column(name = "proctoring_status", length = 20)
+    private ProctoringStatus proctoringStatus;
+    
     public enum ReviewStatus {
         PENDING, AI_REVIEWED, INSTRUCTOR_REVIEWED, COMPLETED
+    }
+    
+    public enum ProctoringStatus {
+        CLEAR, FLAGGED, SUSPICIOUS, VIOLATION
     }
 
     // Constructors
@@ -153,6 +178,24 @@ public class AssessmentSubmission {
     
     public JsonNode getMcqOptionOrders() { return mcqOptionOrders; }
     public void setMcqOptionOrders(JsonNode mcqOptionOrders) { this.mcqOptionOrders = mcqOptionOrders; }
+    
+    public JsonNode getProctoringData() { return proctoringData; }
+    public void setProctoringData(JsonNode proctoringData) { this.proctoringData = proctoringData; }
+    
+    public Integer getTabSwitchCount() { return tabSwitchCount; }
+    public void setTabSwitchCount(Integer tabSwitchCount) { this.tabSwitchCount = tabSwitchCount; }
+    
+    public Integer getCopyAttemptCount() { return copyAttemptCount; }
+    public void setCopyAttemptCount(Integer copyAttemptCount) { this.copyAttemptCount = copyAttemptCount; }
+    
+    public Boolean getIdentityVerified() { return identityVerified; }
+    public void setIdentityVerified(Boolean identityVerified) { this.identityVerified = identityVerified; }
+    
+    public String getIdentityVerificationPhotoUrl() { return identityVerificationPhotoUrl; }
+    public void setIdentityVerificationPhotoUrl(String identityVerificationPhotoUrl) { this.identityVerificationPhotoUrl = identityVerificationPhotoUrl; }
+    
+    public ProctoringStatus getProctoringStatus() { return proctoringStatus; }
+    public void setProctoringStatus(ProctoringStatus proctoringStatus) { this.proctoringStatus = proctoringStatus; }
 }
 
 

@@ -90,7 +90,10 @@ public class ExamService {
     
     public Assessment createExam(String courseId, String title, String description, String instructions,
                                  List<String> moduleIds, Assessment.ReviewMethod reviewMethod, String classId, String sectionId,
-                                 Boolean randomizeQuestions, Boolean randomizeMcqOptions) {
+                                 Boolean randomizeQuestions, Boolean randomizeMcqOptions,
+                                 Boolean enableProctoring, Assessment.ProctoringMode proctoringMode,
+                                 Integer photoIntervalSeconds, Boolean requireIdentityVerification,
+                                 Boolean blockCopyPaste, Boolean blockTabSwitch, Integer maxTabSwitchesAllowed) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -126,6 +129,15 @@ public class ExamService {
         exam.setModuleIds(moduleIds != null ? moduleIds : List.of());
         exam.setRandomizeQuestions(randomizeQuestions != null ? randomizeQuestions : false);
         exam.setRandomizeMcqOptions(randomizeMcqOptions != null ? randomizeMcqOptions : false);
+        
+        // Set proctoring configuration
+        exam.setEnableProctoring(enableProctoring != null ? enableProctoring : false);
+        exam.setProctoringMode(proctoringMode);
+        exam.setPhotoIntervalSeconds(photoIntervalSeconds != null ? photoIntervalSeconds : 120);
+        exam.setRequireIdentityVerification(requireIdentityVerification != null ? requireIdentityVerification : false);
+        exam.setBlockCopyPaste(blockCopyPaste != null ? blockCopyPaste : false);
+        exam.setBlockTabSwitch(blockTabSwitch != null ? blockTabSwitch : false);
+        exam.setMaxTabSwitchesAllowed(maxTabSwitchesAllowed != null ? maxTabSwitchesAllowed : 3);
         
         Assessment saved = assessmentRepository.save(exam);
         String audience = sectionId != null ? "section: " + sectionId : 
@@ -383,7 +395,10 @@ public class ExamService {
     
     public Assessment updateExam(String examId, String title, String description, String instructions,
                                  List<String> moduleIds, Assessment.ReviewMethod reviewMethod, String classId, String sectionId,
-                                 Boolean randomizeQuestions, Boolean randomizeMcqOptions) {
+                                 Boolean randomizeQuestions, Boolean randomizeMcqOptions,
+                                 Boolean enableProctoring, Assessment.ProctoringMode proctoringMode,
+                                 Integer photoIntervalSeconds, Boolean requireIdentityVerification,
+                                 Boolean blockCopyPaste, Boolean blockTabSwitch, Integer maxTabSwitchesAllowed) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -417,6 +432,29 @@ public class ExamService {
         }
         if (randomizeMcqOptions != null) {
             exam.setRandomizeMcqOptions(randomizeMcqOptions);
+        }
+        
+        // Update proctoring configuration
+        if (enableProctoring != null) {
+            exam.setEnableProctoring(enableProctoring);
+        }
+        if (proctoringMode != null) {
+            exam.setProctoringMode(proctoringMode);
+        }
+        if (photoIntervalSeconds != null) {
+            exam.setPhotoIntervalSeconds(photoIntervalSeconds);
+        }
+        if (requireIdentityVerification != null) {
+            exam.setRequireIdentityVerification(requireIdentityVerification);
+        }
+        if (blockCopyPaste != null) {
+            exam.setBlockCopyPaste(blockCopyPaste);
+        }
+        if (blockTabSwitch != null) {
+            exam.setBlockTabSwitch(blockTabSwitch);
+        }
+        if (maxTabSwitchesAllowed != null) {
+            exam.setMaxTabSwitchesAllowed(maxTabSwitchesAllowed);
         }
         
         return assessmentRepository.save(exam);

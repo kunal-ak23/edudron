@@ -1,0 +1,53 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0019-add-proctoring-to-assessments
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: assessments
+                schemaName: content
+                columnName: enable_proctoring
+      changes:
+        - addColumn:
+            tableName: assessments
+            schemaName: content
+            columns:
+              - column:
+                  name: enable_proctoring
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+                  remarks: "Whether proctoring is enabled for this exam"
+              - column:
+                  name: proctoring_mode
+                  type: varchar(30)
+                  remarks: "Proctoring mode: DISABLED, BASIC_MONITORING, WEBCAM_RECORDING, LIVE_PROCTORING"
+              - column:
+                  name: photo_interval_seconds
+                  type: integer
+                  defaultValueNumeric: 120
+                  remarks: "Interval for webcam photo capture in seconds (default: 2 minutes)"
+              - column:
+                  name: require_identity_verification
+                  type: boolean
+                  defaultValueBoolean: false
+                  remarks: "Whether identity verification is required before exam start"
+              - column:
+                  name: block_copy_paste
+                  type: boolean
+                  defaultValueBoolean: false
+                  remarks: "Whether to block copy/paste actions during the exam"
+              - column:
+                  name: block_tab_switch
+                  type: boolean
+                  defaultValueBoolean: false
+                  remarks: "Whether to auto-submit exam on tab switch"
+              - column:
+                  name: max_tab_switches_allowed
+                  type: integer
+                  defaultValueNumeric: 3
+                  remarks: "Maximum number of tab switches allowed before violation"

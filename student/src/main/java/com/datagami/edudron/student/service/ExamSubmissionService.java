@@ -49,6 +49,9 @@ public class ExamSubmissionService {
     @Autowired
     private CommonEventService eventService;
     
+    @Autowired
+    private ProctoringService proctoringService;
+    
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     

@@ -60,4 +60,6 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0017-add-class-id-to-assessments.yaml
   - include:
       file: db/changelog/db.changelog-0018-add-randomization-to-assessments.yaml
+  - include:
+      file: db/changelog/db.changelog-0019-proctoring.yaml
 

@@ -29,4 +29,6 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0014-events.yaml
   - include:
       file: db/changelog/db.changelog-0015-add-randomization-to-submissions.yaml
+  - include:
+      file: db/changelog/db.changelog-0016-proctoring-submission.yaml
 

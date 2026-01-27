@@ -114,7 +114,31 @@ public class ExamController {
         Boolean randomizeMcqOptions = request.get("randomizeMcqOptions") != null ? 
             (Boolean) request.get("randomizeMcqOptions") : false;
         
-        Assessment exam = examService.createExam(courseId, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, randomizeQuestions, randomizeMcqOptions);
+        // Proctoring parameters
+        Boolean enableProctoring = request.get("enableProctoring") != null ? 
+            (Boolean) request.get("enableProctoring") : false;
+        Assessment.ProctoringMode proctoringMode = null;
+        if (request.get("proctoringMode") != null) {
+            try {
+                proctoringMode = Assessment.ProctoringMode.valueOf((String) request.get("proctoringMode"));
+            } catch (IllegalArgumentException e) {
+                proctoringMode = null;
+            }
+        }
+        Integer photoIntervalSeconds = request.get("photoIntervalSeconds") != null ? 
+            (Integer) request.get("photoIntervalSeconds") : 120;
+        Boolean requireIdentityVerification = request.get("requireIdentityVerification") != null ? 
+            (Boolean) request.get("requireIdentityVerification") : false;
+        Boolean blockCopyPaste = request.get("blockCopyPaste") != null ? 
+            (Boolean) request.get("blockCopyPaste") : false;
+        Boolean blockTabSwitch = request.get("blockTabSwitch") != null ? 
+            (Boolean) request.get("blockTabSwitch") : false;
+        Integer maxTabSwitchesAllowed = request.get("maxTabSwitchesAllowed") != null ? 
+            (Integer) request.get("maxTabSwitchesAllowed") : 3;
+        
+        Assessment exam = examService.createExam(courseId, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, 
+            randomizeQuestions, randomizeMcqOptions, enableProctoring, proctoringMode, photoIntervalSeconds, 
+            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed);
         return ResponseEntity.status(HttpStatus.CREATED).body(exam);
     }
     
@@ -221,7 +245,31 @@ public class ExamController {
         Boolean randomizeMcqOptions = request.get("randomizeMcqOptions") != null ? 
             (Boolean) request.get("randomizeMcqOptions") : null;
         
-        Assessment exam = examService.updateExam(id, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, randomizeQuestions, randomizeMcqOptions);
+        // Proctoring parameters
+        Boolean enableProctoring = request.get("enableProctoring") != null ? 
+            (Boolean) request.get("enableProctoring") : null;
+        Assessment.ProctoringMode proctoringMode = null;
+        if (request.get("proctoringMode") != null) {
+            try {
+                proctoringMode = Assessment.ProctoringMode.valueOf((String) request.get("proctoringMode"));
+            } catch (IllegalArgumentException e) {
+                // Ignore invalid proctoring mode
+            }
+        }
+        Integer photoIntervalSeconds = request.get("photoIntervalSeconds") != null ? 
+            (Integer) request.get("photoIntervalSeconds") : null;
+        Boolean requireIdentityVerification = request.get("requireIdentityVerification") != null ? 
+            (Boolean) request.get("requireIdentityVerification") : null;
+        Boolean blockCopyPaste = request.get("blockCopyPaste") != null ? 
+            (Boolean) request.get("blockCopyPaste") : null;
+        Boolean blockTabSwitch = request.get("blockTabSwitch") != null ? 
+            (Boolean) request.get("blockTabSwitch") : null;
+        Integer maxTabSwitchesAllowed = request.get("maxTabSwitchesAllowed") != null ? 
+            (Integer) request.get("maxTabSwitchesAllowed") : null;
+        
+        Assessment exam = examService.updateExam(id, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, 
+            randomizeQuestions, randomizeMcqOptions, enableProctoring, proctoringMode, photoIntervalSeconds, 
+            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed);
         return ResponseEntity.ok(exam);
     }
     

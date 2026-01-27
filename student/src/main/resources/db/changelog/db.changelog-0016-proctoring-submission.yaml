@@ -1,0 +1,119 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0016-add-proctoring-to-submissions
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: assessment_submissions
+                schemaName: student
+                columnName: proctoring_data
+      changes:
+        - addColumn:
+            tableName: assessment_submissions
+            schemaName: student
+            columns:
+              - column:
+                  name: proctoring_data
+                  type: jsonb
+                  remarks: "JSONB data storing proctoring events and metadata"
+              - column:
+                  name: tab_switch_count
+                  type: integer
+                  defaultValueNumeric: 0
+                  remarks: "Count of tab switches during the exam"
+              - column:
+                  name: copy_attempt_count
+                  type: integer
+                  defaultValueNumeric: 0
+                  remarks: "Count of copy attempts during the exam"
+              - column:
+                  name: identity_verified
+                  type: boolean
+                  defaultValueBoolean: false
+                  remarks: "Whether student identity was verified"
+              - column:
+                  name: identity_verification_photo_url
+                  type: varchar(500)
+                  remarks: "URL of identity verification photo"
+              - column:
+                  name: proctoring_status
+                  type: varchar(20)
+                  remarks: "Proctoring status: CLEAR, FLAGGED, SUSPICIOUS, VIOLATION"
+  
+  - changeSet:
+      id: student-0016-create-proctoring-events-table
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: proctoring_events
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: proctoring_events
+            schemaName: student
+            columns:
+              - column:
+                  name: id
+                  type: varchar(26)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: submission_id
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_type
+                  type: varchar(50)
+                  constraints:
+                    nullable: false
+                  remarks: "Type of proctoring event"
+              - column:
+                  name: severity
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+                  remarks: "Severity level: INFO, WARNING, VIOLATION"
+              - column:
+                  name: metadata
+                  type: jsonb
+                  remarks: "Additional event metadata"
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: proctoring_events
+            schemaName: student
+            indexName: idx_student_proctoring_events_client_id
+            columns:
+              - column:
+                  name: client_id
+        - createIndex:
+            tableName: proctoring_events
+            schemaName: student
+            indexName: idx_student_proctoring_events_submission_id
+            columns:
+              - column:
+                  name: submission_id
+        - createIndex:
+            tableName: proctoring_events
+            schemaName: student
+            indexName: idx_student_proctoring_events_severity
+            columns:
+              - column:
+                  name: severity
