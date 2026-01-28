@@ -6,6 +6,8 @@ import com.datagami.edudron.identity.repo.TenantBrandingRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,7 @@ public class TenantBrandingService {
     @Autowired
     private TenantBrandingRepository tenantBrandingRepository;
     
+    @Cacheable(value = "tenantBranding", key = "#clientId")
     @Transactional(readOnly = true)
     public TenantBrandingDTO getBrandingByClientId(UUID clientId) {
         log.info("Getting branding for client: {}", clientId);
@@ -28,6 +31,7 @@ public class TenantBrandingService {
             .orElse(getDefaultBranding(clientId));
     }
     
+    @CacheEvict(value = "tenantBranding", key = "#clientId")
     @Transactional
     public TenantBrandingDTO updateBranding(UUID clientId, TenantBrandingDTO brandingDTO) {
         log.info("Updating branding for client: {}", clientId);

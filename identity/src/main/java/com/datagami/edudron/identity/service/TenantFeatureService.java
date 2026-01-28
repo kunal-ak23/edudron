@@ -5,6 +5,8 @@ import com.datagami.edudron.identity.dto.TenantFeatureDto;
 import com.datagami.edudron.identity.entity.TenantFeature;
 import com.datagami.edudron.identity.repo.TenantFeatureRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,7 @@ public class TenantFeatureService {
      * Set a feature override for a tenant.
      * Creates a new override or updates existing one.
      */
+    @CacheEvict(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()")
     public TenantFeature setFeatureEnabled(UUID clientId, TenantFeatureType feature, Boolean enabled) {
         Optional<TenantFeature> existing = repository.findByClientIdAndFeature(clientId, feature);
         
@@ -60,6 +63,7 @@ public class TenantFeatureService {
     /**
      * Reset a feature to its default value by deleting the override.
      */
+    @CacheEvict(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()")
     public void resetFeatureToDefault(UUID clientId, TenantFeatureType feature) {
         repository.deleteByClientIdAndFeature(clientId, feature);
     }
@@ -115,6 +119,7 @@ public class TenantFeatureService {
     /**
      * Get a specific feature as DTO.
      */
+    @Cacheable(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()")
     public TenantFeatureDto getFeatureAsDto(UUID clientId, TenantFeatureType feature) {
         Optional<TenantFeature> override = repository.findByClientIdAndFeature(clientId, feature);
         boolean isOverridden = override.isPresent();
