@@ -472,15 +472,15 @@ export default function ExamDetailPage() {
                       {exam.randomizeQuestions || exam.randomizeMcqOptions ? (
                         <div className="space-y-2">
                           {exam.randomizeQuestions && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
-                              <CheckCircle2 className="h-4 w-4 text-blue-600 flex-shrink-0" />
-                              <span className="text-sm font-medium text-blue-900">Questions appear in random order</span>
+                            <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg">
+                              <CheckCircle2 className="h-4 w-4 text-primary-600 flex-shrink-0" />
+                              <span className="text-sm font-medium text-primary-900">Questions appear in random order</span>
                             </div>
                           )}
                           {exam.randomizeMcqOptions && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 border border-purple-200 rounded-lg">
-                              <CheckCircle2 className="h-4 w-4 text-purple-600 flex-shrink-0" />
-                              <span className="text-sm font-medium text-purple-900">Multiple choice options shuffled</span>
+                            <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg">
+                              <CheckCircle2 className="h-4 w-4 text-primary-600 flex-shrink-0" />
+                              <span className="text-sm font-medium text-primary-900">Multiple choice options shuffled</span>
                             </div>
                           )}
                         </div>
@@ -555,9 +555,9 @@ export default function ExamDetailPage() {
                     {/* Proctoring Mode Badge */}
                     <div>
                       <Label className="text-xs text-gray-500 uppercase mb-2 block">Active Mode</Label>
-                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 rounded-lg">
-                        <Camera className="h-5 w-5 text-indigo-600" />
-                        <span className="font-semibold text-indigo-900">
+                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-lg">
+                        <Camera className="h-5 w-5 text-primary-600" />
+                        <span className="font-semibold text-primary-900">
                           {exam.proctoringMode === 'BASIC_MONITORING' && 'Basic Monitoring'}
                           {exam.proctoringMode === 'WEBCAM_RECORDING' && 'Webcam Recording'}
                           {exam.proctoringMode === 'LIVE_PROCTORING' && 'Live Proctoring'}
@@ -1513,7 +1513,7 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
                                             ? 'bg-green-50 border-green-300'
                                             : 'bg-red-50 border-red-300'
                                           : option.isCorrect
-                                            ? 'bg-blue-50 border-blue-200'
+                                            ? 'bg-primary-50 border-primary-200'
                                             : 'bg-gray-50'
                                       }`}
                                     >
@@ -1564,7 +1564,7 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
                              (question.editedTentativeAnswer || question.tentativeAnswer) && (
                               <div>
                                 <Label className="text-sm font-medium text-gray-700">Expected Answer:</Label>
-                                <div className="mt-1 p-3 bg-blue-50 rounded border border-blue-200 text-sm">
+                                <div className="mt-1 p-3 bg-primary-50 rounded border border-primary-200 text-sm">
                                   {question.editedTentativeAnswer || question.tentativeAnswer}
                                 </div>
                               </div>

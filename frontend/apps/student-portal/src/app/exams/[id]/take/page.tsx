@@ -154,18 +154,33 @@ export default function TakeExamPage() {
         return
       }
       
-      // Ignore visibility changes during fullscreen transitions
-      if (isFullscreenTransitionRef.current) {
-        console.log('⏭️ Ignoring visibility change - fullscreen transition in progress')
-        return
-      }
-      
-      // Also ignore if this is likely a fullscreen toggle (not a real tab switch)
-      // When entering/exiting fullscreen, the document might briefly become "hidden"
-      // but we're still on the same page
-      if (!document.hidden && isCurrentlyFullscreen) {
-        console.log('⏭️ Ignoring visibility change - just entered fullscreen')
-        return
+      // Determine if this is a real tab switch
+      // A real tab switch means: document is hidden AND we're NOT in fullscreen
+      // If document is hidden but we ARE in fullscreen, it's a false positive from fullscreen transition
+      if (document.hidden) {
+        if (isCurrentlyFullscreen) {
+          // Can't be in fullscreen AND have switched away - this is a false positive
+          console.log('⏭️ Ignoring visibility change - document hidden but still in fullscreen (false positive)')
+          return
+        }
+        // Document is hidden AND not in fullscreen - this is a real tab switch
+        console.log('📋 Document is hidden and not in fullscreen - treating as real tab switch')
+      } else {
+        // Document is NOT hidden (user returned or is still on page)
+        
+        // Ignore visibility changes during fullscreen transitions when returning
+        if (isFullscreenTransitionRef.current) {
+          console.log('⏭️ Ignoring visibility change - fullscreen transition in progress (returning)')
+          return
+        }
+        
+        // Also ignore if this is likely a fullscreen toggle (not a real tab switch)
+        // When entering/exiting fullscreen, the document might briefly become "hidden"
+        // but we're still on the same page
+        if (isCurrentlyFullscreen) {
+          console.log('⏭️ Ignoring visibility change - just entered fullscreen')
+          return
+        }
       }
       
       if (document.hidden) {
@@ -220,6 +235,9 @@ export default function TakeExamPage() {
           const remaining = maxAllowed - tabSwitchCount
           
           console.log('📋 User returned to tab, showing warning:', { tabSwitchCount, remaining, maxAllowed })
+          
+          // Close fullscreen warning if open - tab switch warning takes priority
+          setShowFullscreenWarning(false)
           
           // If blockTabSwitch is enabled, auto-submit immediately (not in preview)
           if (exam.blockTabSwitch) {
@@ -893,7 +911,7 @@ export default function TakeExamPage() {
       <StudentLayout>
         {/* Preview Mode Banner */}
         {isPreviewMode && (
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 shadow-lg border-b-4 border-blue-700">
+          <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white px-6 py-4 shadow-lg border-b-4 border-primary-800">
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-3">
@@ -902,7 +920,7 @@ export default function TakeExamPage() {
                   </div>
                   <div>
                     <div className="font-bold text-xl">Preview Mode - Testing User Flow</div>
-                    <div className="text-sm text-blue-100 mt-1">
+                    <div className="text-sm text-primary-100 mt-1">
                       Experience the complete exam flow with dummy questions. Test proctoring settings, interface, and student experience. 
                       <span className="font-semibold"> No responses saved.</span>
                     </div>
@@ -912,7 +930,7 @@ export default function TakeExamPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="bg-white text-blue-600 hover:bg-blue-50 border-0 font-semibold"
+                    className="bg-white text-primary-600 hover:bg-primary-50 border-0 font-semibold"
                     onClick={() => window.close()}
                   >
                     Close Preview
@@ -993,12 +1011,12 @@ export default function TakeExamPage() {
               {exam.timeLimitSeconds && (
                 <div className="mb-4 pb-4 border-b border-gray-200">
                   {isPreviewMode ? (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <div className="text-xs text-blue-600 font-semibold mb-1 text-center">⏱️ TIMER PREVIEW</div>
-                      <div className="text-sm text-blue-900 text-center">
+                    <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
+                      <div className="text-xs text-primary-600 font-semibold mb-1 text-center">⏱️ TIMER PREVIEW</div>
+                      <div className="text-sm text-primary-900 text-center">
                         {Math.floor(exam.timeLimitSeconds / 60)} min {exam.timeLimitSeconds % 60} sec limit
                       </div>
-                      <div className="text-xs text-blue-600 text-center mt-1">
+                      <div className="text-xs text-primary-600 text-center mt-1">
                         (Timer active for students)
                       </div>
                     </div>
@@ -1116,18 +1134,18 @@ export default function TakeExamPage() {
               <div className="mx-[36px] p-8 pb-12">
                 {/* Preview Mode Question Notice */}
                 {isPreviewMode && (
-                  <div className="mb-6 bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                  <div className="mb-6 bg-primary-50 border-2 border-primary-200 rounded-lg p-4">
                     <div className="flex items-start gap-3">
                       <div className="flex-shrink-0">
-                        <div className="bg-blue-100 rounded-full p-2">
-                          <Eye className="h-5 w-5 text-blue-600" />
+                        <div className="bg-primary-100 rounded-full p-2">
+                          <Eye className="h-5 w-5 text-primary-600" />
                         </div>
                       </div>
                       <div>
-                        <div className="font-semibold text-blue-900 mb-1">
+                        <div className="font-semibold text-primary-900 mb-1">
                           Sample Questions for Testing
                         </div>
-                        <div className="text-sm text-blue-700">
+                        <div className="text-sm text-primary-700">
                           These are placeholder questions to demonstrate the exam flow. Your actual exam questions remain secure and are not shown in preview mode.
                         </div>
                       </div>
@@ -1292,7 +1310,7 @@ export default function TakeExamPage() {
                   </>
                 )}
                 {isPreviewMode && (
-                  <div className="flex items-center gap-2 text-blue-600">
+                  <div className="flex items-center gap-2 text-primary-600">
                     <Eye className="h-4 w-4" />
                     <span className="font-medium">Preview Mode - Answers not saved</span>
                   </div>
@@ -1410,8 +1428,8 @@ export default function TakeExamPage() {
                     </p>
                   </div>
                   {isPreviewMode ? (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <p className="text-blue-700 text-sm flex items-center gap-2">
+                    <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
+                      <p className="text-primary-700 text-sm flex items-center gap-2">
                         <Eye className="h-4 w-4" />
                         <span><strong>Preview Mode:</strong> In a real exam, the exam would be auto-submitted at this point.</span>
                       </p>
@@ -1463,25 +1481,25 @@ export default function TakeExamPage() {
         <Dialog open={showFullscreenWarning} onOpenChange={() => {
           // Don't allow closing by clicking outside - user must click the button
         }}>
-          <DialogContent className="border-purple-500 border-2" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogContent className="border-primary-500 border-2" onPointerDownOutside={(e) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-purple-600" />
+                <AlertTriangle className="h-5 w-5 text-primary-600" />
                 Fullscreen Mode Required
               </DialogTitle>
             </DialogHeader>
             <div className="py-4 space-y-4">
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <p className="text-purple-800 font-medium">
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+                <p className="text-primary-800 font-medium">
                   You have exited fullscreen mode.
                 </p>
-                <p className="text-purple-700 mt-2">
+                <p className="text-primary-700 mt-2">
                   This proctored exam must be taken in fullscreen mode. Please click the button below to continue your exam.
                 </p>
               </div>
               {isPreviewMode && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-blue-700 text-sm flex items-center gap-2">
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-3">
+                  <p className="text-primary-700 text-sm flex items-center gap-2">
                     <Eye className="h-4 w-4" />
                     <span><strong>Preview Mode:</strong> Testing fullscreen requirement behavior.</span>
                   </p>

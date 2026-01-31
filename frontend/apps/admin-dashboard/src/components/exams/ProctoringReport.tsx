@@ -64,7 +64,7 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
 
   const getSeverityBadge = (severity: string) => {
     const variants = {
-      INFO: { variant: 'default' as const, color: 'text-blue-600' },
+      INFO: { variant: 'default' as const, color: 'text-primary-600' },
       WARNING: { variant: 'secondary' as const, color: 'text-yellow-600' },
       VIOLATION: { variant: 'destructive' as const, color: 'text-red-600' }
     }

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
+import { Button } from '@kunal-ak23/edudron-ui-components'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Camera, CheckCircle, AlertCircle, Loader2, Clock, Monitor, Copy, Eye, Maximize, ChevronRight } from 'lucide-react'
 import { proctoringApi } from '@/lib/proctoring-api'
@@ -231,12 +231,12 @@ export function ProctoringSetupDialog({
           {/* Step 0: Instructions */}
           {step === 'instructions' && (
             <div className="space-y-5">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+              <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+                <h4 className="font-semibold text-primary-900 mb-2 flex items-center gap-2">
                   <Eye className="h-5 w-5" />
                   Important Exam Information
                 </h4>
-                <p className="text-blue-800 text-sm">
+                <p className="text-primary-800 text-sm">
                   Please read the following instructions carefully before starting your exam.
                 </p>
               </div>
@@ -246,8 +246,8 @@ export function ProctoringSetupDialog({
                 {/* Time Limit */}
                 {examSettings?.timeLimitSeconds && examSettings.timeLimitSeconds > 0 && (
                   <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="bg-blue-100 p-2 rounded-lg">
-                      <Clock className="h-5 w-5 text-blue-600" />
+                    <div className="bg-primary-100 p-2 rounded-lg">
+                      <Clock className="h-5 w-5 text-primary-600" />
                     </div>
                     <div>
                       <h5 className="font-medium text-gray-900">Time Limit</h5>
@@ -261,8 +261,8 @@ export function ProctoringSetupDialog({
 
                 {/* Fullscreen Mode */}
                 <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
-                  <div className="bg-purple-100 p-2 rounded-lg">
-                    <Maximize className="h-5 w-5 text-purple-600" />
+                  <div className="bg-primary-100 p-2 rounded-lg">
+                    <Maximize className="h-5 w-5 text-primary-600" />
                   </div>
                   <div>
                     <h5 className="font-medium text-gray-900">Fullscreen Mode</h5>
@@ -301,10 +301,9 @@ export function ProctoringSetupDialog({
                           Switching tabs or windows is NOT allowed. Your exam will be automatically submitted if you leave this page.
                         </span>
                       ) : examSettings?.maxTabSwitchesAllowed ? (
-                        <>
-                          You may switch tabs up to <span className="font-semibold">{examSettings.maxTabSwitchesAllowed} time{examSettings.maxTabSwitchesAllowed !== 1 ? 's' : ''}</span>. 
-                          After that, your exam will be automatically submitted.
-                        </>
+                        <span className="text-amber-700">
+                          <span className="font-medium">Warning:</span> Switching tabs more than <span className="font-semibold">{examSettings.maxTabSwitchesAllowed} time{examSettings.maxTabSwitchesAllowed !== 1 ? 's' : ''}</span> will automatically submit your exam.
+                        </span>
                       ) : (
                         'Tab and window switches will be monitored and logged. Stay on this page to avoid issues.'
                       )}

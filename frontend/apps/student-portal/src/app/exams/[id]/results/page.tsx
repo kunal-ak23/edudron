@@ -268,7 +268,7 @@ export default function ExamResultsPage() {
                           {review?.feedback && (
                             <div>
                               <Label className="text-sm font-medium">Feedback</Label>
-                              <div className="mt-1 p-3 bg-blue-50 rounded border border-blue-200">
+                              <div className="mt-1 p-3 bg-primary-50 rounded border border-primary-200">
                                 {review.feedback}
                               </div>
                             </div>
@@ -279,7 +279,7 @@ export default function ExamResultsPage() {
                       {question.questionType === 'TRUE_FALSE' && (
                         <div className="space-y-2">
                           <div className={`p-3 rounded border ${
-                            studentAnswer === true ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'
+                            studentAnswer === true ? 'bg-primary-50 border-primary-200' : 'bg-gray-50'
                           }`}>
                             Your Answer: {studentAnswer === true ? 'True' : 'False'}
                           </div>
