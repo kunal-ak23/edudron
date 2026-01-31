@@ -111,7 +111,7 @@ export default function CoursePreviewPage() {
               variant="outline"
               size="sm"
               onClick={() => router.push(`/courses/${courseId}`)}
-              className="text-amber-800 border-amber-300 hover:bg-amber-100"
+              className="text-primary border-primary/30 hover:bg-primary/10"
             >
               Exit Preview
             </Button>

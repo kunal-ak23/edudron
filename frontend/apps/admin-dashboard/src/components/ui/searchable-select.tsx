@@ -143,9 +143,9 @@ export function SearchableSelect({
                 key={option.value}
                 className={cn(
                   'relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none',
-                  'hover:bg-accent hover:text-accent-foreground',
-                  'focus:bg-accent focus:text-accent-foreground',
-                  (value || '') === option.value && 'bg-accent text-accent-foreground'
+                  'hover:bg-muted',
+                  'focus:bg-muted',
+                  (value || '') === option.value && 'bg-muted'
                 )}
                 onClick={() => handleSelect(option.value)}
               >

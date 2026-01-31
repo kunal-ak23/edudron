@@ -1338,7 +1338,7 @@ export default function CourseEditPage() {
               variant="ghost"
               size="sm"
               onClick={handleSave}
-              className="text-white hover:bg-amber-600 h-auto py-1"
+              className="text-white hover:bg-white/20 h-auto py-1"
             >
               Save Now
             </Button>

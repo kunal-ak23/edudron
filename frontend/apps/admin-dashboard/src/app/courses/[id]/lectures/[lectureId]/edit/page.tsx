@@ -1170,7 +1170,7 @@ export default function LectureEditPage() {
             size="sm"
             onClick={handleSave}
             disabled={saving || !formData.title.trim()}
-            className="text-white hover:bg-amber-600 h-auto py-1"
+            className="text-white hover:bg-white/20 h-auto py-1"
           >
             {saving && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
             Save Now
