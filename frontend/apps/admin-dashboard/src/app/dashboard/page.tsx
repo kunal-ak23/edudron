@@ -352,7 +352,7 @@ export default function DashboardPage() {
                     {recentCourses.map((course) => (
                       <div
                         key={course.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 hover:shadow-sm cursor-pointer transition-all"
                         onClick={() => router.push(`/courses/${course.id}`)}
                       >
                         <div className="flex-1">
