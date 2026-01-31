@@ -215,7 +215,7 @@ export default function UsersPage() {
         <div className="mb-6 flex gap-4">
           <Input
             ref={searchInputRef}
-            placeholder="Search users by name, email, or role..."
+            placeholder="Search users by name or email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="max-w-sm"

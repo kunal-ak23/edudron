@@ -301,15 +301,14 @@ public class UserService {
                 predicates.add(cb.like(cb.lower(root.get("email")), "%" + emailLower + "%"));
             }
             
-            // Apply search filter (searches email, name, role - contains match, case-insensitive)
+            // Apply search filter (searches email, name - contains match, case-insensitive)
+            // Note: Role filtering is handled by the explicit 'role' query parameter for better performance
             if (search != null && !search.trim().isEmpty()) {
                 String searchLower = search.trim().toLowerCase();
                 log.info("Adding search backend filter (contains): {}", search);
                 Predicate emailMatch = cb.like(cb.lower(root.get("email")), "%" + searchLower + "%");
                 Predicate nameMatch = cb.like(cb.lower(root.get("name")), "%" + searchLower + "%");
-                // Convert role enum to string for searching
-                Predicate roleMatch = cb.like(cb.lower(cb.function("CAST", String.class, root.get("role"))), "%" + searchLower + "%");
-                predicates.add(cb.or(emailMatch, nameMatch, roleMatch));
+                predicates.add(cb.or(emailMatch, nameMatch));
             }
             
             // If no predicates, return a true predicate (fetch all)
