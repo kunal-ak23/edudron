@@ -1,0 +1,284 @@
+databaseChangeLog:
+  # Create Question Bank table
+  - changeSet:
+      id: content-0020-create-question-bank
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: question_bank
+                schemaName: content
+      changes:
+        - createTable:
+            tableName: question_bank
+            schemaName: content
+            columns:
+              - column:
+                  name: id
+                  type: varchar(26)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: course_id
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+                  remarks: "Reference to the course this question belongs to"
+              - column:
+                  name: module_id
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+                  remarks: "Reference to the Section (module) this question is tagged to"
+              - column:
+                  name: sub_module_id
+                  type: varchar(26)
+                  remarks: "Optional reference to Lecture or sub-module for finer categorization"
+              - column:
+                  name: question_type
+                  type: varchar(20)
+                  constraints:
+                    nullable: false
+                  remarks: "Type: MULTIPLE_CHOICE, TRUE_FALSE, SHORT_ANSWER, ESSAY, MATCHING"
+              - column:
+                  name: question_text
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: default_points
+                  type: integer
+                  defaultValueNumeric: 1
+                  constraints:
+                    nullable: false
+              - column:
+                  name: difficulty_level
+                  type: varchar(10)
+                  remarks: "Difficulty: EASY, MEDIUM, HARD"
+              - column:
+                  name: explanation
+                  type: text
+                  remarks: "Explanation shown after answering"
+              - column:
+                  name: tags
+                  type: text[]
+                  remarks: "Tags for filtering and searching questions"
+              - column:
+                  name: is_active
+                  type: boolean
+                  defaultValueBoolean: true
+                  constraints:
+                    nullable: false
+              - column:
+                  name: tentative_answer
+                  type: text
+                  remarks: "Expected answer for subjective questions (SHORT_ANSWER, ESSAY)"
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: question_bank
+            schemaName: content
+            indexName: idx_question_bank_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: question_bank
+            schemaName: content
+            indexName: idx_question_bank_course_id
+            columns:
+              - column: { name: course_id }
+        - createIndex:
+            tableName: question_bank
+            schemaName: content
+            indexName: idx_question_bank_module_id
+            columns:
+              - column: { name: module_id }
+        - createIndex:
+            tableName: question_bank
+            schemaName: content
+            indexName: idx_question_bank_difficulty
+            columns:
+              - column: { name: difficulty_level }
+
+  # Create Question Bank Options table
+  - changeSet:
+      id: content-0020-create-question-bank-options
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: question_bank_options
+                schemaName: content
+      changes:
+        - createTable:
+            tableName: question_bank_options
+            schemaName: content
+            columns:
+              - column:
+                  name: id
+                  type: varchar(26)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: question_id
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_qbo_question
+                    references: content.question_bank(id)
+                    deleteCascade: true
+              - column:
+                  name: option_text
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: is_correct
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: sequence
+                  type: integer
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: question_bank_options
+            schemaName: content
+            indexName: idx_qbo_question_id
+            columns:
+              - column: { name: question_id }
+
+  # Create Exam Questions join table
+  - changeSet:
+      id: content-0020-create-exam-questions
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: exam_questions
+                schemaName: content
+      changes:
+        - createTable:
+            tableName: exam_questions
+            schemaName: content
+            columns:
+              - column:
+                  name: id
+                  type: varchar(26)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: exam_id
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_eq_exam
+                    references: content.assessments(id)
+                    deleteCascade: true
+                  remarks: "Reference to the exam (Assessment with type EXAM)"
+              - column:
+                  name: question_id
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_eq_question
+                    references: content.question_bank(id)
+                  remarks: "Reference to the question in the question bank"
+              - column:
+                  name: sequence
+                  type: integer
+                  constraints:
+                    nullable: false
+                  remarks: "Order of the question in the exam"
+              - column:
+                  name: points_override
+                  type: integer
+                  remarks: "Optional override for points (if null, uses question default)"
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - addUniqueConstraint:
+            tableName: exam_questions
+            schemaName: content
+            constraintName: uq_exam_question
+            columnNames: exam_id, question_id
+        - createIndex:
+            tableName: exam_questions
+            schemaName: content
+            indexName: idx_eq_exam_id
+            columns:
+              - column: { name: exam_id }
+        - createIndex:
+            tableName: exam_questions
+            schemaName: content
+            indexName: idx_eq_question_id
+            columns:
+              - column: { name: question_id }
+
+  # Add timing_mode column to assessments
+  - changeSet:
+      id: content-0020-add-timing-mode-to-assessments
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: assessments
+                schemaName: content
+                columnName: timing_mode
+      changes:
+        - addColumn:
+            tableName: assessments
+            schemaName: content
+            columns:
+              - column:
+                  name: timing_mode
+                  type: varchar(20)
+                  defaultValue: "FIXED_WINDOW"
+                  remarks: "Timing mode: FIXED_WINDOW (late joiners get less time) or FLEXIBLE_START (each student gets full duration from their start)"
