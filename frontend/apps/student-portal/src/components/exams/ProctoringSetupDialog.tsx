@@ -4,8 +4,16 @@ import { useState, useRef, useEffect } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Camera, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { Camera, CheckCircle, AlertCircle, Loader2, Clock, Monitor, Copy, Eye, Maximize, ChevronRight } from 'lucide-react'
 import { proctoringApi } from '@/lib/proctoring-api'
+
+interface ExamSettings {
+  blockCopyPaste?: boolean
+  blockTabSwitch?: boolean
+  maxTabSwitchesAllowed?: number
+  timeLimitSeconds?: number
+  instructions?: string
+}
 
 interface ProctoringSetupDialogProps {
   open: boolean
@@ -14,6 +22,7 @@ interface ProctoringSetupDialogProps {
   examTitle: string
   proctoringMode: 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING'
   requireIdentityVerification: boolean
+  examSettings?: ExamSettings
   onComplete: (identityPhotoUrl?: string) => void
   onCancel: () => void
   isPreview?: boolean
@@ -27,12 +36,13 @@ export function ProctoringSetupDialog({
   examTitle,
   proctoringMode,
   requireIdentityVerification,
+  examSettings,
   onComplete,
   onCancel,
   isPreview = false,
   requestFullscreen
 }: ProctoringSetupDialogProps) {
-  const [step, setStep] = useState<'permission' | 'preview' | 'capture' | 'complete'>('permission')
+  const [step, setStep] = useState<'instructions' | 'permission' | 'preview' | 'capture' | 'complete'>('instructions')
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -124,8 +134,10 @@ export function ProctoringSetupDialog({
 
   // Skip identity verification (for basic monitoring mode)
   const skipIdentityVerification = async () => {
-    // Request fullscreen before completing
-    if (requestFullscreen && !isPreview) {
+    console.log('⏭️ skipIdentityVerification called')
+    // Request fullscreen before completing (allow in preview too)
+    if (requestFullscreen) {
+      console.log('Requesting fullscreen before completing...')
       try {
         await requestFullscreen()
       } catch (err) {
@@ -137,15 +149,27 @@ export function ProctoringSetupDialog({
   
   // Start exam (with fullscreen)
   const startExam = async () => {
+    console.log('🚀 startExam() called in ProctoringSetupDialog')
+    console.log('isPreview:', isPreview)
+    console.log('requestFullscreen function exists:', !!requestFullscreen)
+    console.log('capturedPhoto exists:', !!capturedPhoto)
+    
     // Request fullscreen before completing (user gesture required)
-    if (requestFullscreen && !isPreview) {
+    // Allow fullscreen in both preview and real mode so preview can test it
+    if (requestFullscreen) {
+      console.log('✅ Calling requestFullscreen()...')
       try {
         await requestFullscreen()
+        console.log('✅ requestFullscreen() completed successfully')
       } catch (err) {
-        console.error('Fullscreen request failed:', err)
+        console.error('❌ Fullscreen request failed in startExam:', err)
         // Continue anyway - don't block exam start
       }
+    } else {
+      console.log('⚠️ Skipping fullscreen request - function not provided')
     }
+    
+    console.log('Calling onComplete with capturedPhoto')
     onComplete(capturedPhoto)
   }
 
@@ -204,29 +228,153 @@ export function ProctoringSetupDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Step 0: Instructions */}
+          {step === 'instructions' && (
+            <div className="space-y-5">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                  <Eye className="h-5 w-5" />
+                  Important Exam Information
+                </h4>
+                <p className="text-blue-800 text-sm">
+                  Please read the following instructions carefully before starting your exam.
+                </p>
+              </div>
+
+              {/* Exam Details */}
+              <div className="space-y-3">
+                {/* Time Limit */}
+                {examSettings?.timeLimitSeconds && examSettings.timeLimitSeconds > 0 && (
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="bg-blue-100 p-2 rounded-lg">
+                      <Clock className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-gray-900">Time Limit</h5>
+                      <p className="text-sm text-gray-600">
+                        You have <span className="font-semibold">{Math.floor(examSettings.timeLimitSeconds / 60)} minutes</span> to complete this exam. 
+                        The timer will start as soon as you begin.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Fullscreen Mode */}
+                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className="bg-purple-100 p-2 rounded-lg">
+                    <Maximize className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-900">Fullscreen Mode</h5>
+                    <p className="text-sm text-gray-600">
+                      The exam will open in fullscreen mode. Exiting fullscreen will be logged.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Webcam Monitoring */}
+                {needsWebcam && (
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="bg-green-100 p-2 rounded-lg">
+                      <Camera className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-gray-900">Webcam Monitoring</h5>
+                      <p className="text-sm text-gray-600">
+                        Your webcam will be active during the exam. Please ensure you are clearly visible and alone in the frame.
+                        {requireIdentityVerification && ' You will need to take an identity verification photo before starting.'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tab Switching */}
+                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                  <div className={`${examSettings?.blockTabSwitch ? 'bg-red-100' : 'bg-orange-100'} p-2 rounded-lg`}>
+                    <Monitor className={`h-5 w-5 ${examSettings?.blockTabSwitch ? 'text-red-600' : 'text-orange-600'}`} />
+                  </div>
+                  <div>
+                    <h5 className="font-medium text-gray-900">Tab/Window Switching</h5>
+                    <p className="text-sm text-gray-600">
+                      {examSettings?.blockTabSwitch ? (
+                        <span className="text-red-700 font-medium">
+                          Switching tabs or windows is NOT allowed. Your exam will be automatically submitted if you leave this page.
+                        </span>
+                      ) : examSettings?.maxTabSwitchesAllowed ? (
+                        <>
+                          You may switch tabs up to <span className="font-semibold">{examSettings.maxTabSwitchesAllowed} time{examSettings.maxTabSwitchesAllowed !== 1 ? 's' : ''}</span>. 
+                          After that, your exam will be automatically submitted.
+                        </>
+                      ) : (
+                        'Tab and window switches will be monitored and logged. Stay on this page to avoid issues.'
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Copy/Paste */}
+                {examSettings?.blockCopyPaste && (
+                  <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <div className="bg-red-100 p-2 rounded-lg">
+                      <Copy className="h-5 w-5 text-red-600" />
+                    </div>
+                    <div>
+                      <h5 className="font-medium text-gray-900">Copy/Paste Disabled</h5>
+                      <p className="text-sm text-gray-600">
+                        Copy and paste actions are blocked during this exam. Type your answers directly.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Custom Instructions */}
+              {examSettings?.instructions && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-amber-900 mb-2">Additional Instructions</h4>
+                  <p className="text-sm text-amber-800 whitespace-pre-wrap">{examSettings.instructions}</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={onCancel}>
+                  Cancel
+                </Button>
+                <Button onClick={() => setStep('permission')}>
+                  I Understand, Continue
+                  <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Step 1: Permission Request */}
           {step === 'permission' && (
             <div className="space-y-4">
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  This exam requires proctoring. You must complete the following before starting:
-                  <ul className="list-disc list-inside mt-2 space-y-1">
-                    {needsWebcam && <li>Allow camera access</li>}
-                    {requireIdentityVerification && <li>Capture identity verification photo</li>}
-                    <li>Acknowledge proctoring rules</li>
-                  </ul>
+                  {needsWebcam ? (
+                    <>
+                      Before you can start, we need to set up proctoring:
+                      <ul className="list-disc list-inside mt-2 space-y-1">
+                        <li>Allow camera access</li>
+                        {requireIdentityVerification && <li>Capture identity verification photo</li>}
+                      </ul>
+                    </>
+                  ) : (
+                    'Click Continue to start your proctored exam.'
+                  )}
                 </AlertDescription>
               </Alert>
 
               <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <h4 className="font-semibold">Proctoring Rules:</h4>
+                <h4 className="font-semibold">Quick Reminders:</h4>
                 <ul className="text-sm space-y-1 text-gray-700">
-                  <li>• You must remain visible on camera throughout the exam</li>
-                  <li>• Switching tabs or windows may be flagged as suspicious</li>
-                  <li>• Copy/paste actions are monitored</li>
-                  <li>• Only one person should be visible on camera</li>
-                  <li>• You must complete the exam in one sitting</li>
+                  {needsWebcam && <li>• Stay visible on camera throughout the exam</li>}
+                  <li>• Avoid switching tabs or windows</li>
+                  {examSettings?.blockCopyPaste && <li>• Copy/paste is disabled</li>}
+                  <li>• Complete the exam in one sitting</li>
                 </ul>
               </div>
 
@@ -238,8 +386,8 @@ export function ProctoringSetupDialog({
               )}
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={onCancel}>
-                  Cancel
+                <Button variant="outline" onClick={() => setStep('instructions')}>
+                  Back
                 </Button>
                 {needsWebcam ? (
                   <Button onClick={requestCameraPermission} disabled={loading}>
@@ -249,7 +397,7 @@ export function ProctoringSetupDialog({
                   </Button>
                 ) : (
                   <Button onClick={skipIdentityVerification}>
-                    Continue
+                    Start Exam
                   </Button>
                 )}
               </div>
@@ -298,11 +446,52 @@ export function ProctoringSetupDialog({
 
           {/* Step 3: Complete */}
           {step === 'complete' && (
-            <div className="space-y-6 text-center py-8">
-              <CheckCircle className="h-16 w-16 text-green-500 mx-auto" />
-              <div>
+            <div className="space-y-6 py-4">
+              <div className="flex items-center justify-center gap-3">
+                <CheckCircle className="h-8 w-8 text-green-500" />
                 <h3 className="text-lg font-semibold">Setup Complete</h3>
-                <p className="text-gray-600 mt-2">
+              </div>
+              
+              {/* Show captured identity photo */}
+              {capturedPhoto && (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600 text-center">Your identity verification photo:</p>
+                  <div className="flex justify-center">
+                    <div className="relative rounded-lg overflow-hidden border-2 border-green-200 shadow-md">
+                      <img 
+                        src={capturedPhoto} 
+                        alt="Identity verification photo" 
+                        className="w-64 h-48 object-cover"
+                      />
+                      <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                        <CheckCircle className="h-3 w-3" />
+                        Verified
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex justify-center">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={async () => {
+                        // Reset and go back to get new photo
+                        setCaptured(false)
+                        setCapturedPhoto(undefined)
+                        setError(null)
+                        // Re-request camera
+                        await requestCameraPermission()
+                      }}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      <Camera className="h-4 w-4 mr-1" />
+                      Retake Photo
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              <div className="text-center">
+                <p className="text-gray-600">
                   You&apos;re ready to start your proctored exam
                 </p>
                 {!isPreview && (
@@ -311,11 +500,19 @@ export function ProctoringSetupDialog({
                   </p>
                 )}
               </div>
-              <div className="flex justify-center gap-3">
+              
+              <div className="flex justify-center gap-3 pt-2">
                 <Button variant="outline" onClick={onCancel}>
                   Cancel
                 </Button>
-                <Button onClick={startExam} size="lg" className="px-8">
+                <Button 
+                  onClick={() => {
+                    console.log('🔘 Start Exam button clicked!')
+                    startExam()
+                  }} 
+                  size="lg" 
+                  className="px-8"
+                >
                   Start Exam
                 </Button>
               </div>

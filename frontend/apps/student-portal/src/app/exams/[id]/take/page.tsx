@@ -82,6 +82,18 @@ export default function TakeExamPage() {
   const [proctoringComplete, setProctoringComplete] = useState(false)
   const [tabSwitchCount, setTabSwitchCount] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [showTabSwitchWarning, setShowTabSwitchWarning] = useState(false)
+  const [tabSwitchWarningData, setTabSwitchWarningData] = useState<{count: number, remaining: number, isLastWarning: boolean} | null>(null)
+  const [showFullscreenWarning, setShowFullscreenWarning] = useState(false) // Dialog when user exits fullscreen
+  const isFullscreenTransitionRef = useRef(false) // Flag to ignore visibility changes during fullscreen transitions
+  const lastTabSwitchTimeRef = useRef<number>(0) // Debounce tab switches to prevent double counting
+  
+  // Log requestFullscreen availability on mount
+  useEffect(() => {
+    console.log('🔧 Component mounted - checking fullscreen support')
+    console.log('Browser supports fullscreen:', !!document.documentElement.requestFullscreen)
+    console.log('Document fullscreenEnabled:', document.fullscreenEnabled)
+  }, [])
 
   // Helper to log proctoring events
   const logProctoringEvent = useCallback(async (
@@ -123,43 +135,126 @@ export default function TakeExamPage() {
   
   // Separate effect for visibility change detection (tab switching)
   useEffect(() => {
-    if (!exam?.enableProctoring || isPreviewMode) return
+    if (!exam?.enableProctoring) return
     
     const handleVisibilityChange = () => {
+      const isCurrentlyFullscreen = !!document.fullscreenElement
+      
+      console.log('📋 Visibility change detected:', {
+        documentHidden: document.hidden,
+        isFullscreenTransition: isFullscreenTransitionRef.current,
+        isCurrentlyFullscreen,
+        proctoringComplete,
+        timestamp: new Date().toISOString()
+      })
+      
+      // Only count tab switches after proctoring setup is complete
+      if (!proctoringComplete) {
+        console.log('⏭️ Ignoring visibility change - proctoring setup not complete')
+        return
+      }
+      
+      // Ignore visibility changes during fullscreen transitions
+      if (isFullscreenTransitionRef.current) {
+        console.log('⏭️ Ignoring visibility change - fullscreen transition in progress')
+        return
+      }
+      
+      // Also ignore if this is likely a fullscreen toggle (not a real tab switch)
+      // When entering/exiting fullscreen, the document might briefly become "hidden"
+      // but we're still on the same page
+      if (!document.hidden && isCurrentlyFullscreen) {
+        console.log('⏭️ Ignoring visibility change - just entered fullscreen')
+        return
+      }
+      
       if (document.hidden) {
-        // Save when user switches tabs or minimizes
-        if (hasUnsavedChangesRef.current && submissionId) {
+        // Debounce: ignore if last tab switch was less than 500ms ago (prevents React Strict Mode double counting)
+        const now = Date.now()
+        if (now - lastTabSwitchTimeRef.current < 500) {
+          console.log('⏭️ Ignoring rapid consecutive visibility change (debounce)')
+          return
+        }
+        lastTabSwitchTimeRef.current = now
+        
+        console.log('🚨 TAB SWITCH DETECTED - document.hidden is true')
+        console.log('🚨 Current fullscreen transition flag:', isFullscreenTransitionRef.current)
+        
+        // Save when user switches tabs or minimizes (not in preview mode)
+        if (!isPreviewMode && hasUnsavedChangesRef.current && submissionId) {
           saveProgress()
         }
         
-        // Log proctoring event for tab switch
-        setTabSwitchCount(prev => {
-          const newCount = prev + 1
-          
-          logProctoringEvent('TAB_SWITCH', 'WARNING', {
-            count: newCount,
-            maxAllowed: exam.maxTabSwitchesAllowed || 3
-          })
-          
-          // Check if max switches exceeded
-          if (exam.blockTabSwitch || (exam.maxTabSwitchesAllowed && newCount > exam.maxTabSwitchesAllowed)) {
+        // Increment tab switch count directly (not using setState callback to avoid double execution)
+        const newCount = tabSwitchCount + 1
+        console.log(`🚨 TAB SWITCH COUNT INCREMENTED: ${tabSwitchCount} -> ${newCount}`)
+        setTabSwitchCount(newCount)
+        
+        const maxAllowed = exam.maxTabSwitchesAllowed || 3
+        
+        logProctoringEvent('TAB_SWITCH', 'WARNING', {
+          count: newCount,
+          maxAllowed: maxAllowed
+        })
+        
+        // Check if max switches exceeded (log only, not in preview)
+        if (!isPreviewMode) {
+          if (exam.blockTabSwitch) {
+            logProctoringEvent('PROCTORING_VIOLATION', 'VIOLATION', {
+              reason: 'Tab switching is blocked',
+              count: newCount
+            })
+          } else if (newCount > maxAllowed) {
             logProctoringEvent('PROCTORING_VIOLATION', 'VIOLATION', {
               reason: 'Maximum tab switches exceeded',
               count: newCount,
-              maxAllowed: exam.maxTabSwitchesAllowed
+              maxAllowed: maxAllowed
             })
-            
-            // Auto-submit if configured
-            if (exam.blockTabSwitch) {
-              alert('Tab switching is not allowed. Your exam will be auto-submitted.')
-              setTimeout(() => handleSubmit(), 1000)
-            } else if (exam.maxTabSwitchesAllowed && newCount >= exam.maxTabSwitchesAllowed) {
-              alert(`Warning: You have reached the maximum allowed tab switches (${exam.maxTabSwitchesAllowed}). Additional switches may result in penalties.`)
-            }
           }
+        }
+      } else {
+        // User has returned to the tab - show warning with count
+        // Use the current tabSwitchCount directly (not callback to avoid double execution)
+        if (tabSwitchCount > 0) {
+          const maxAllowed = exam.maxTabSwitchesAllowed || 3
+          const remaining = maxAllowed - tabSwitchCount
           
-          return newCount
-        })
+          console.log('📋 User returned to tab, showing warning:', { tabSwitchCount, remaining, maxAllowed })
+          
+          // If blockTabSwitch is enabled, auto-submit immediately (not in preview)
+          if (exam.blockTabSwitch) {
+            setTabSwitchWarningData({
+              count: tabSwitchCount,
+              remaining: 0,
+              isLastWarning: true
+            })
+            setShowTabSwitchWarning(true)
+            // Auto-submit after showing warning (not in preview mode)
+            if (!isPreviewMode) {
+              setTimeout(() => handleSubmit(), 2000)
+            }
+          } else if (remaining <= 0) {
+            // Max switches reached - auto-submit (not in preview)
+            setTabSwitchWarningData({
+              count: tabSwitchCount,
+              remaining: 0,
+              isLastWarning: true
+            })
+            setShowTabSwitchWarning(true)
+            // Auto-submit after showing warning (not in preview mode)
+            if (!isPreviewMode) {
+              setTimeout(() => handleSubmit(), 3000)
+            }
+          } else {
+            // Show warning with remaining count
+            setTabSwitchWarningData({
+              count: tabSwitchCount,
+              remaining: remaining,
+              isLastWarning: remaining === 1
+            })
+            setShowTabSwitchWarning(true)
+          }
+        }
       }
     }
     
@@ -168,7 +263,7 @@ export default function TakeExamPage() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [exam?.enableProctoring, exam?.blockTabSwitch, exam?.maxTabSwitchesAllowed, isPreviewMode, submissionId])
+  }, [exam?.enableProctoring, exam?.blockTabSwitch, exam?.maxTabSwitchesAllowed, isPreviewMode, submissionId, proctoringComplete, tabSwitchCount])
   
   // Handle before unload
   useEffect(() => {
@@ -674,28 +769,86 @@ export default function TakeExamPage() {
   
   // Request fullscreen mode
   const requestFullscreen = async () => {
+    console.log('🖥️ requestFullscreen() called')
+    console.log('Current fullscreen element:', document.fullscreenElement)
+    console.log('Fullscreen enabled:', document.fullscreenEnabled)
+    
+    // Set flag to ignore visibility changes during fullscreen transition
+    console.log('🚦 Setting fullscreen transition flag to TRUE')
+    isFullscreenTransitionRef.current = true
+    
     try {
       const elem = document.documentElement
-      if (elem.requestFullscreen) {
-        await elem.requestFullscreen()
-        setIsFullscreen(true)
+      console.log('Target element for fullscreen:', elem)
+      
+      // Check browser support
+      if (!elem.requestFullscreen) {
+        console.error('❌ requestFullscreen not supported by browser')
+        alert('Your browser does not support fullscreen mode')
+        console.log('🚦 Resetting fullscreen transition flag to FALSE (no support)')
+        isFullscreenTransitionRef.current = false
+        return
       }
-    } catch (err) {
-      console.error('Fullscreen request failed:', err)
+      
+      console.log('✅ requestFullscreen is supported, calling it now...')
+      await elem.requestFullscreen()
+      console.log('✅ Fullscreen request successful!')
+      setIsFullscreen(true)
+      
+      // Reset the flag after a longer delay to allow the transition to fully complete
+      setTimeout(() => {
+        console.log('🚦 Resetting fullscreen transition flag to FALSE (after timeout)')
+        isFullscreenTransitionRef.current = false
+      }, 1000) // Increased to 1 second
+    } catch (err: any) {
+      console.error('❌ Fullscreen request failed:', err)
+      console.error('Error name:', err?.name)
+      console.error('Error message:', err?.message)
+      console.error('Error stack:', err?.stack)
+      
+      // Reset the flag on error
+      isFullscreenTransitionRef.current = false
+      
+      // Show user-friendly error
+      if (err?.name === 'TypeError' && err?.message?.includes('fullscreen')) {
+        alert('Fullscreen request blocked. Please try clicking the "Start Exam" button again.')
+      }
     }
   }
   
   // Handle fullscreen change
   useEffect(() => {
+    console.log('📺 Fullscreen change listener initialized')
+    console.log('Document fullscreenEnabled:', document.fullscreenEnabled)
+    
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement)
+      const isNowFullscreen = !!document.fullscreenElement
+      console.log('📺 Fullscreen state changed:', isNowFullscreen)
       
-      // Log if user exits fullscreen during proctored exam
-      if (!document.fullscreenElement && exam?.enableProctoring && !isPreviewMode) {
-        logProctoringEvent('FULLSCREEN_EXIT', 'WARNING', {
-          message: 'Student exited fullscreen mode'
-        })
+      // Set transition flag to prevent false tab switch detection during fullscreen changes
+      console.log('🚦 Setting fullscreen transition flag to TRUE (fullscreen change event)')
+      isFullscreenTransitionRef.current = true
+      
+      setIsFullscreen(isNowFullscreen)
+      
+      // Show warning dialog if user exits fullscreen during proctored exam (after setup is complete)
+      if (!isNowFullscreen && exam?.enableProctoring && proctoringComplete) {
+        console.log('⚠️ User exited fullscreen during proctored exam - showing warning dialog')
+        setShowFullscreenWarning(true)
+        
+        // Log the event (not in preview mode)
+        if (!isPreviewMode) {
+          logProctoringEvent('FULLSCREEN_EXIT', 'WARNING', {
+            message: 'Student exited fullscreen mode'
+          })
+        }
       }
+      
+      // Reset the transition flag after a delay
+      setTimeout(() => {
+        console.log('🚦 Resetting fullscreen transition flag to FALSE (after fullscreen change)')
+        isFullscreenTransitionRef.current = false
+      }, 1000)
     }
     
     document.addEventListener('fullscreenchange', handleFullscreenChange)
@@ -703,7 +856,7 @@ export default function TakeExamPage() {
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }
-  }, [exam?.enableProctoring, isPreviewMode])
+  }, [exam?.enableProctoring, isPreviewMode, proctoringComplete])
 
   // Ensure questions is always an array
   const questions = Array.isArray(exam?.questions) ? exam.questions : []
@@ -781,6 +934,13 @@ export default function TakeExamPage() {
               examTitle={exam.title}
               proctoringMode={(exam.proctoringMode !== 'DISABLED' ? exam.proctoringMode : 'BASIC_MONITORING') || 'BASIC_MONITORING'}
               requireIdentityVerification={exam.requireIdentityVerification || false}
+              examSettings={{
+                blockCopyPaste: exam.blockCopyPaste,
+                blockTabSwitch: exam.blockTabSwitch,
+                maxTabSwitchesAllowed: exam.maxTabSwitchesAllowed,
+                timeLimitSeconds: exam.timeLimitSeconds,
+                instructions: exam.instructions
+              }}
               isPreview={isPreviewMode}
               requestFullscreen={requestFullscreen}
               onComplete={() => {
@@ -1216,6 +1376,142 @@ export default function TakeExamPage() {
                 router.push('/exams')
               }}>
                 Save & Exit
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Tab Switch Warning Dialog */}
+        <Dialog open={showTabSwitchWarning} onOpenChange={(open) => {
+          // Only allow closing if not auto-submitting (or in preview mode)
+          if (!open && (isPreviewMode || (tabSwitchWarningData && tabSwitchWarningData.remaining > 0))) {
+            setShowTabSwitchWarning(false)
+          }
+        }}>
+          <DialogContent className={`${tabSwitchWarningData?.remaining === 0 ? 'border-red-500 border-2' : tabSwitchWarningData?.isLastWarning ? 'border-orange-500 border-2' : 'border-yellow-500 border-2'}`}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className={`h-5 w-5 ${tabSwitchWarningData?.remaining === 0 ? 'text-red-600' : tabSwitchWarningData?.isLastWarning ? 'text-orange-600' : 'text-yellow-600'}`} />
+                {tabSwitchWarningData?.remaining === 0 ? 'Exam Will Be Auto-Submitted' : 'Tab Switch Detected'}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              {tabSwitchWarningData?.remaining === 0 ? (
+                <>
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-red-800 font-medium">
+                      You have switched tabs {tabSwitchWarningData.count} time{tabSwitchWarningData.count !== 1 ? 's' : ''}.
+                    </p>
+                    <p className="text-red-700 mt-2">
+                      {exam?.blockTabSwitch 
+                        ? 'Tab switching is not allowed during this exam.'
+                        : `You have exceeded the maximum allowed tab switches (${exam?.maxTabSwitchesAllowed || 3}).`
+                      }
+                    </p>
+                  </div>
+                  {isPreviewMode ? (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-blue-700 text-sm flex items-center gap-2">
+                        <Eye className="h-4 w-4" />
+                        <span><strong>Preview Mode:</strong> In a real exam, the exam would be auto-submitted at this point.</span>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-red-600">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="font-medium">Your exam will be automatically submitted...</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className={`${tabSwitchWarningData?.isLastWarning ? 'bg-orange-50 border-orange-200' : 'bg-yellow-50 border-yellow-200'} border rounded-lg p-4`}>
+                    <p className={`${tabSwitchWarningData?.isLastWarning ? 'text-orange-800' : 'text-yellow-800'} font-medium`}>
+                      You have switched tabs {tabSwitchWarningData?.count} time{tabSwitchWarningData?.count !== 1 ? 's' : ''}.
+                    </p>
+                    <p className={`${tabSwitchWarningData?.isLastWarning ? 'text-orange-700' : 'text-yellow-700'} mt-2`}>
+                      {tabSwitchWarningData?.remaining === 1 ? (
+                        <span className="font-semibold">⚠️ This is your last warning! If you switch tabs again, your exam will be automatically submitted.</span>
+                      ) : (
+                        <>You can switch tabs <span className="font-semibold">{tabSwitchWarningData?.remaining} more time{tabSwitchWarningData?.remaining !== 1 ? 's' : ''}</span> before your exam is automatically submitted.</>
+                      )}
+                    </p>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Please stay on this page to complete your exam. Switching tabs or windows is monitored as part of the proctoring process.
+                  </p>
+                </>
+              )}
+            </div>
+            {(tabSwitchWarningData?.remaining !== 0 || isPreviewMode) && (
+              <DialogFooter>
+                <Button onClick={() => {
+                  setShowTabSwitchWarning(false)
+                  // Request fullscreen again when user confirms
+                  if (exam?.enableProctoring && !document.fullscreenElement) {
+                    requestFullscreen()
+                  }
+                }}>
+                  {isPreviewMode && tabSwitchWarningData?.remaining === 0 ? 'Dismiss' : 'I Understand, Continue Exam'}
+                </Button>
+              </DialogFooter>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Fullscreen Exit Warning Dialog - Blocks exam until user re-enters fullscreen */}
+        <Dialog open={showFullscreenWarning} onOpenChange={() => {
+          // Don't allow closing by clicking outside - user must click the button
+        }}>
+          <DialogContent className="border-purple-500 border-2" onPointerDownOutside={(e) => e.preventDefault()}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-purple-600" />
+                Fullscreen Mode Required
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <p className="text-purple-800 font-medium">
+                  You have exited fullscreen mode.
+                </p>
+                <p className="text-purple-700 mt-2">
+                  This proctored exam must be taken in fullscreen mode. Please click the button below to continue your exam.
+                </p>
+              </div>
+              {isPreviewMode && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-blue-700 text-sm flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    <span><strong>Preview Mode:</strong> Testing fullscreen requirement behavior.</span>
+                  </p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button 
+                onClick={async () => {
+                  // Request fullscreen first (needs user gesture), then close dialog
+                  try {
+                    console.log('🖥️ Return to Fullscreen button clicked')
+                    const elem = document.documentElement
+                    if (elem.requestFullscreen) {
+                      isFullscreenTransitionRef.current = true
+                      await elem.requestFullscreen()
+                      console.log('✅ Fullscreen request successful from dialog')
+                      setIsFullscreen(true)
+                      setTimeout(() => {
+                        isFullscreenTransitionRef.current = false
+                      }, 1000)
+                    }
+                  } catch (err) {
+                    console.error('❌ Fullscreen request failed:', err)
+                  }
+                  setShowFullscreenWarning(false)
+                }}
+                className="w-full"
+              >
+                Return to Fullscreen
               </Button>
             </DialogFooter>
           </DialogContent>
