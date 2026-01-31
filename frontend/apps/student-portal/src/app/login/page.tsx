@@ -69,8 +69,11 @@ export default function LoginPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
             {/* Left illustration panel (desktop) */}
             <div className="hidden lg:flex flex-col items-center text-center">
-              <div className="text-2xl font-extrabold tracking-tight text-gray-900">
-                EduDron
+              <div className="flex items-center space-x-3">
+                <img src="/edudron-logo.png" alt="edudron" className="h-14 w-auto" />
+                <span className="text-2xl font-semibold tracking-tight text-primary-600" style={{ fontFamily: 'var(--font-brand)' }}>
+                  edudron
+                </span>
               </div>
 
               <div className="mt-6 w-full max-w-xl flex justify-center">
@@ -88,8 +91,11 @@ export default function LoginPage() {
             <div className="flex justify-center lg:justify-end">
               <div className="w-full max-w-md rounded-2xl bg-white shadow-lg border border-primary-100 p-8 sm:p-10">
                 {/* Mobile header */}
-                <div className="lg:hidden flex items-center justify-center mb-8 text-2xl font-extrabold tracking-tight text-gray-900">
-                  EduDron
+                <div className="lg:hidden flex items-center justify-center mb-8 space-x-2">
+                  <img src="/edudron-logo.png" alt="edudron" className="h-10 w-auto" />
+                  <span className="text-xl font-semibold tracking-tight text-primary-600" style={{ fontFamily: 'var(--font-brand)' }}>
+                    edudron
+                  </span>
                 </div>
 
                 <div className="space-y-1">

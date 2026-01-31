@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Manrope } from 'next/font/google'
 import '@kunal-ak23/edudron-ui-components/styles.css'
 import './globals.css'
 import { Providers } from './providers'
@@ -7,6 +7,11 @@ import { ConditionalLayout } from '@/components/ConditionalLayout'
 import { Toaster } from '@/components/ui/toaster'
 
 const inter = Inter({ subsets: ['latin'] })
+const manrope = Manrope({ 
+  subsets: ['latin'],
+  weight: ['600'],
+  variable: '--font-manrope'
+})
 
 export const metadata: Metadata = {
   title: 'EduDron Admin Dashboard',
@@ -41,7 +46,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} ${manrope.variable}`}>
         <Providers>
           <ConditionalLayout>
             {children}

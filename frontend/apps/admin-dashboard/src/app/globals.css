@@ -7,36 +7,47 @@
     /* Application scale - 20% reduction = 80% of original size */
     --app-scale: 0.8;
     
+    /* Brand font - uses the CSS variable from next/font */
+    --font-brand: var(--font-manrope), 'Manrope', sans-serif;
+    
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
+    
+    /* Primary: Deep Navy Blue #1E3A5F */
+    --primary: 214 52% 24.5%;
     --primary-foreground: 210 40% 98%;
-    /* Primary color shade scale */
-    --primary-50: 214 100% 97%;
-    --primary-100: 214 95% 93%;
-    --primary-200: 213 97% 87%;
-    --primary-300: 212 96% 78%;
-    --primary-400: 213 94% 68%;
-    --primary-500: 217 91% 60%;
-    --primary-600: 221 83% 53%;
-    --primary-700: 224 76% 48%;
-    --primary-800: 226 71% 40%;
-    --primary-900: 224 64% 33%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Primary color shade scale - Deep Navy Blue */
+    --primary-50: 214 52% 95%;
+    --primary-100: 214 52% 90%;
+    --primary-200: 214 52% 80%;
+    --primary-300: 214 52% 65%;
+    --primary-400: 214 52% 45%;
+    --primary-500: 214 52% 35%;
+    --primary-600: 214 52% 24.5%;
+    --primary-700: 214 52% 20%;
+    --primary-800: 214 52% 15%;
+    --primary-900: 214 52% 10%;
+    
+    /* Secondary: Tech Teal #0891B2 */
+    --secondary: 192 91% 36%;
+    --secondary-foreground: 210 40% 98%;
+    
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    
+    /* Accent: Vibrant Orange #F97316 */
+    --accent: 25 95% 53%;
+    --accent-foreground: 210 40% 98%;
+    
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 214 52% 24.5%;
     --radius: 0.5rem;
   }
 
@@ -47,19 +58,22 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
+    /* Primary: Deep Navy Blue - lighter for dark mode */
+    --primary: 214 52% 45%;
+    --primary-foreground: 214 52% 10%;
+    /* Secondary: Tech Teal #0891B2 */
+    --secondary: 192 91% 36%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
+    /* Accent: Vibrant Orange #F97316 */
+    --accent: 25 95% 53%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --ring: 214 52% 45%;
   }
 }
 

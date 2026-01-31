@@ -386,11 +386,9 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
             
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b flex-shrink-0 bg-primary/5">
-              <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-                  <span className="text-primary-foreground font-bold text-sm">E</span>
-                </div>
-                <span className="text-xl font-bold text-primary">EduDron</span>
+              <div className="flex items-center space-x-3">
+                <img src="/edudron-logo.png" alt="edudron" className="h-14 w-auto" />
+                <span className="text-2xl font-semibold text-primary" style={{ fontFamily: 'var(--font-brand)' }}>edudron</span>
               </div>
               <Button
                 variant="ghost"

@@ -118,9 +118,12 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                     />
                   </div>
                 ) : (
-                  <h1 className="text-3xl font-bold text-primary-600">
-                    {tenantName}
-                  </h1>
+                  <div className="flex items-center space-x-3">
+                    <img src="/edudron-logo.png" alt="edudron" className="h-12 w-auto" />
+                    <h1 className="text-2xl font-semibold text-primary-600" style={{ fontFamily: 'var(--font-brand)' }}>
+                      {tenantName || 'edudron'}
+                    </h1>
+                  </div>
                 )}
               </div>
               <nav className="hidden md:flex space-x-6">

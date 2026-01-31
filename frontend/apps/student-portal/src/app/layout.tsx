@@ -1,11 +1,16 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Manrope } from 'next/font/google'
 import '@kunal-ak23/edudron-ui-components/styles.css'
 import './globals.css'
 import { Providers } from './providers'
 import { DynamicHead } from '@/components/DynamicHead'
 
 const inter = Inter({ subsets: ['latin'] })
+const manrope = Manrope({ 
+  subsets: ['latin'],
+  weight: ['600'],
+  variable: '--font-manrope'
+})
 
 export const metadata: Metadata = {
   title: 'EduDron',
@@ -40,7 +45,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className={inter.className}>
+      <body className={`${inter.className} ${manrope.variable}`}>
         <Providers>
           <DynamicHead />
           {children}
