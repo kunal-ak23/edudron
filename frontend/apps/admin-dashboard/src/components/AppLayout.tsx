@@ -140,7 +140,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               {/* Notifications */}
               <Button variant="ghost" size="sm" className="relative hover:bg-primary/10 hover:text-primary transition-colors">
                 <Bell className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 h-3 w-3 bg-accent rounded-full text-xs flex items-center justify-center text-white">
+                <span className="absolute -top-1 -right-1 h-3 w-3 bg-primary rounded-full text-xs flex items-center justify-center text-white">
                   0
                 </span>
               </Button>
