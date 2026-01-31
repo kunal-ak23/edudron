@@ -1,0 +1,73 @@
+databaseChangeLog:
+  # Add new module_ids column (array)
+  - changeSet:
+      id: content-0021-add-module-ids-column
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: question_bank
+                schemaName: content
+                columnName: module_ids
+      changes:
+        - addColumn:
+            tableName: question_bank
+            schemaName: content
+            columns:
+              - column:
+                  name: module_ids
+                  type: text[]
+                  remarks: "Array of module (Section) IDs - supports multiple module tagging"
+
+  # Migrate existing data from module_id to module_ids
+  - changeSet:
+      id: content-0021-migrate-module-id-to-array
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - columnExists:
+            tableName: question_bank
+            schemaName: content
+            columnName: module_id
+      changes:
+        - sql:
+            sql: |
+              UPDATE content.question_bank 
+              SET module_ids = ARRAY[module_id] 
+              WHERE module_id IS NOT NULL AND (module_ids IS NULL OR module_ids = '{}');
+
+  # Drop the old module_id column
+  - changeSet:
+      id: content-0021-drop-module-id-column
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - columnExists:
+            tableName: question_bank
+            schemaName: content
+            columnName: module_id
+      changes:
+        - dropColumn:
+            tableName: question_bank
+            schemaName: content
+            columnName: module_id
+
+  # Create index on module_ids for efficient queries
+  - changeSet:
+      id: content-0021-create-module-ids-index
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - indexExists:
+                indexName: idx_question_bank_module_ids
+                schemaName: content
+      changes:
+        - sql:
+            sql: |
+              CREATE INDEX idx_question_bank_module_ids ON content.question_bank USING GIN (module_ids);
