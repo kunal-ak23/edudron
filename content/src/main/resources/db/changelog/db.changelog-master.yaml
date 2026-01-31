@@ -62,4 +62,7 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0018-add-randomization-to-assessments.yaml
   - include:
       file: db/changelog/db.changelog-0019-proctoring.yaml
-
+  - include:
+      file: db/changelog/db.changelog-0020-question-bank.yaml
+  - include:
+      file: db/changelog/db.changelog-0021-question-bank-multiple-modules.yaml

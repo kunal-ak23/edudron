@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Loader2, Save, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles, Download } from 'lucide-react'
+import { ArrowLeft, Loader2, Save, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles, Download, Database } from 'lucide-react'
 import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi, apiClient } from '@/lib/api'
 import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -1054,6 +1054,18 @@ export default function CourseEditPage() {
                                   <Badge variant={section.isPublished ? 'default' : 'secondary'}>
                                     {section.isPublished ? 'Published' : 'Draft'}
                                   </Badge>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      router.push(`/question-bank?moduleId=${section.id}&courseId=${courseId}`)
+                                    }}
+                                    className="h-8 w-8 p-0"
+                                    title="Question Bank"
+                                  >
+                                    <Database className="h-4 w-4" />
+                                  </Button>
                                   <Button
                                     variant="ghost"
                                     size="sm"

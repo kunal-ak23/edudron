@@ -98,6 +98,17 @@ public class Assessment {
         DISABLED, BASIC_MONITORING, WEBCAM_RECORDING, LIVE_PROCTORING
     }
     
+    /**
+     * Timing mode for exams:
+     * - FIXED_WINDOW: Exam ends at endTime for all students. Late joiners get less time.
+     *                 Time remaining = min(timeLimitSeconds, endTime - now)
+     * - FLEXIBLE_START: Each student gets full timeLimitSeconds from when they start.
+     *                   Time remaining = timeLimitSeconds - (now - startedAt)
+     */
+    public enum TimingMode {
+        FIXED_WINDOW, FLEXIBLE_START
+    }
+    
     // Exam-specific fields
     @Column(name = "start_time")
     private OffsetDateTime startTime;
@@ -144,6 +155,16 @@ public class Assessment {
     
     @Column(name = "max_tab_switches_allowed")
     private Integer maxTabSwitchesAllowed = 3;
+    
+    // Timing mode for exams
+    @Enumerated(EnumType.STRING)
+    @Column(name = "timing_mode", length = 20)
+    private TimingMode timingMode = TimingMode.FIXED_WINDOW;
+    
+    // Relationship to exam questions (from question bank)
+    @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sequence ASC")
+    private List<ExamQuestion> examQuestions = new ArrayList<>();
 
     // Constructors
     public Assessment() {
@@ -259,6 +280,12 @@ public class Assessment {
     
     public Integer getMaxTabSwitchesAllowed() { return maxTabSwitchesAllowed; }
     public void setMaxTabSwitchesAllowed(Integer maxTabSwitchesAllowed) { this.maxTabSwitchesAllowed = maxTabSwitchesAllowed; }
+    
+    public TimingMode getTimingMode() { return timingMode; }
+    public void setTimingMode(TimingMode timingMode) { this.timingMode = timingMode; }
+    
+    public List<ExamQuestion> getExamQuestions() { return examQuestions; }
+    public void setExamQuestions(List<ExamQuestion> examQuestions) { this.examQuestions = examQuestions; }
 
     @PreUpdate
     public void preUpdate() {

@@ -109,6 +109,7 @@ const menuItems: MenuItem[] = [
     requiresTenant: true,
     children: [
       { name: 'All Exams', href: '/exams', icon: ClipboardList },
+      { name: 'Question Bank', href: '/question-bank', icon: Database },
       { name: 'Exam Results', href: '/exams/results', icon: BarChart3 },
     ]
   },
@@ -247,7 +248,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
     if (path.startsWith('/super-admin')) return 'System Management'
     if (path.startsWith('/institutes')) return 'Institutes'
     if (path.startsWith('/courses')) return 'Courses'
-    if (path.startsWith('/exams')) return 'Exams'
+    if (path.startsWith('/exams') || path.startsWith('/question-bank')) return 'Exams'
     if (path.startsWith('/enrollments')) return 'Enrollments'
     if (path.startsWith('/analytics')) return 'Analytics'
     if (path.startsWith('/payments')) return 'Payments'

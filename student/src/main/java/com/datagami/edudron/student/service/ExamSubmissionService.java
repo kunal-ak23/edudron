@@ -28,6 +28,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -81,9 +82,37 @@ public class ExamSubmissionService {
     }
     
     /**
-     * Start an exam attempt - initialize with timer
+     * Timing mode for exams - mirrors the Assessment.TimingMode enum
      */
+    public enum TimingMode {
+        FIXED_WINDOW,    // Exam ends at endTime for all (late joiners get less time)
+        FLEXIBLE_START   // Each student gets full timeLimitSeconds from their start
+    }
+    
+    /**
+     * Start an exam attempt - initialize with timer
+     * @deprecated Use the overloaded method with timing mode parameters
+     */
+    @Deprecated
     public AssessmentSubmission startExam(String studentId, String courseId, String examId, Integer timeLimitSeconds, Integer maxAttempts) {
+        return startExam(studentId, courseId, examId, timeLimitSeconds, maxAttempts, TimingMode.FIXED_WINDOW, null);
+    }
+    
+    /**
+     * Start an exam attempt - initialize with timer based on timing mode
+     * 
+     * @param studentId The student's ID
+     * @param courseId The course ID
+     * @param examId The exam ID
+     * @param timeLimitSeconds The total time limit in seconds
+     * @param maxAttempts Maximum number of attempts allowed
+     * @param timingMode The timing mode (FIXED_WINDOW or FLEXIBLE_START)
+     * @param examEndTime The exam end time (required for FIXED_WINDOW mode)
+     * @return The created or resumed submission
+     */
+    public AssessmentSubmission startExam(String studentId, String courseId, String examId, 
+                                          Integer timeLimitSeconds, Integer maxAttempts,
+                                          TimingMode timingMode, OffsetDateTime examEndTime) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -111,8 +140,14 @@ public class ExamSubmissionService {
                 .orElse(null);
             
             if (submission != null) {
-                // Resume existing attempt
-                logger.info("Resuming exam attempt: {} for student: {}", examId, studentId);
+                // Resume existing attempt - recalculate time remaining based on timing mode
+                Integer updatedTimeRemaining = calculateTimeRemaining(submission, timingMode, timeLimitSeconds, examEndTime);
+                if (updatedTimeRemaining != null && updatedTimeRemaining != submission.getTimeRemainingSeconds()) {
+                    submission.setTimeRemainingSeconds(updatedTimeRemaining);
+                    submission = submissionRepository.save(submission);
+                }
+                logger.info("Resuming exam attempt: {} for student: {} with {} seconds remaining", 
+                    examId, studentId, submission.getTimeRemainingSeconds());
                 return submission;
             }
             
@@ -142,6 +177,9 @@ public class ExamSubmissionService {
             }
         }
         
+        // Calculate effective time limit based on timing mode
+        Integer effectiveTimeLimit = calculateEffectiveTimeLimit(timingMode, timeLimitSeconds, examEndTime);
+        
         // Create new submission
         submission = new AssessmentSubmission();
         submission.setId(UlidGenerator.nextUlid());
@@ -151,7 +189,7 @@ public class ExamSubmissionService {
         submission.setAssessmentId(examId);
         submission.setCourseId(courseId);
         submission.setStartedAt(OffsetDateTime.now());
-        submission.setTimeRemainingSeconds(timeLimitSeconds);
+        submission.setTimeRemainingSeconds(effectiveTimeLimit);
         submission.setReviewStatus(AssessmentSubmission.ReviewStatus.PENDING);
         
         // Initialize empty answers JSON
@@ -166,8 +204,81 @@ public class ExamSubmissionService {
         }
         
         AssessmentSubmission saved = submissionRepository.save(submission);
-        logger.info("Started exam attempt: {} for student: {}", examId, studentId);
+        logger.info("Started exam attempt: {} for student: {} with {} seconds (timingMode: {})", 
+            examId, studentId, effectiveTimeLimit, timingMode);
         return saved;
+    }
+    
+    /**
+     * Calculate the effective time limit when starting an exam based on timing mode.
+     * 
+     * - FIXED_WINDOW: Time is constrained by the exam end time. Late joiners get less time.
+     *                 Formula: min(timeLimitSeconds, endTime - now)
+     * - FLEXIBLE_START: Each student gets the full duration from when they start.
+     *                   Formula: timeLimitSeconds
+     */
+    private Integer calculateEffectiveTimeLimit(TimingMode timingMode, Integer timeLimitSeconds, OffsetDateTime examEndTime) {
+        if (timeLimitSeconds == null) {
+            return null; // No time limit
+        }
+        
+        if (timingMode == TimingMode.FLEXIBLE_START) {
+            // Student gets full duration regardless of when they start
+            return timeLimitSeconds;
+        }
+        
+        // FIXED_WINDOW mode - constrained by end time
+        if (examEndTime != null) {
+            long secondsToEnd = ChronoUnit.SECONDS.between(OffsetDateTime.now(), examEndTime);
+            if (secondsToEnd <= 0) {
+                return 0; // Exam has ended
+            }
+            return (int) Math.min(timeLimitSeconds, secondsToEnd);
+        }
+        
+        // No end time specified, use full time limit
+        return timeLimitSeconds;
+    }
+    
+    /**
+     * Calculate time remaining for a submission (used when resuming).
+     * 
+     * - FIXED_WINDOW: Time remaining is min(stored time, endTime - now)
+     * - FLEXIBLE_START: Time remaining is timeLimitSeconds - (now - startedAt)
+     */
+    public Integer calculateTimeRemaining(AssessmentSubmission submission, TimingMode timingMode, 
+                                         Integer timeLimitSeconds, OffsetDateTime examEndTime) {
+        if (submission.getStartedAt() == null) {
+            return submission.getTimeRemainingSeconds();
+        }
+        
+        OffsetDateTime now = OffsetDateTime.now();
+        
+        if (timingMode == TimingMode.FLEXIBLE_START) {
+            // Calculate based on elapsed time since start
+            if (timeLimitSeconds != null) {
+                long elapsed = ChronoUnit.SECONDS.between(submission.getStartedAt(), now);
+                int remaining = Math.max(0, timeLimitSeconds - (int) elapsed);
+                return remaining;
+            }
+            return submission.getTimeRemainingSeconds();
+        }
+        
+        // FIXED_WINDOW mode
+        if (examEndTime != null) {
+            long secondsToEnd = ChronoUnit.SECONDS.between(now, examEndTime);
+            if (secondsToEnd <= 0) {
+                return 0; // Exam has ended
+            }
+            // Return the minimum of stored time and time until end
+            Integer storedTime = submission.getTimeRemainingSeconds();
+            if (storedTime != null) {
+                return (int) Math.min(storedTime, secondsToEnd);
+            }
+            return (int) secondsToEnd;
+        }
+        
+        return submission.getTimeRemainingSeconds();
     }
     
     /**

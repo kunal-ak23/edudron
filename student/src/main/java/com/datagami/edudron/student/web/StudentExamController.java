@@ -385,23 +385,42 @@ public class StudentExamController {
             Integer maxAttempts = exam.has("maxAttempts") && !exam.get("maxAttempts").isNull() ? 
                 exam.get("maxAttempts").asInt() : null;
             
+            // Get timing mode (defaults to FIXED_WINDOW for backward compatibility)
+            String timingModeStr = exam.has("timingMode") && !exam.get("timingMode").isNull() ?
+                exam.get("timingMode").asText() : "FIXED_WINDOW";
+            ExamSubmissionService.TimingMode timingMode;
+            try {
+                timingMode = ExamSubmissionService.TimingMode.valueOf(timingModeStr);
+            } catch (IllegalArgumentException e) {
+                timingMode = ExamSubmissionService.TimingMode.FIXED_WINDOW;
+            }
+            
             if (courseId == null) {
                 return ResponseEntity.badRequest().build();
             }
+            
+            java.time.OffsetDateTime endTime = null;
+            java.time.OffsetDateTime startTime = null;
             
             // Real-time validation: Check if exam has ended
             if (exam.has("endTime") && !exam.get("endTime").isNull()) {
                 String endTimeStr = exam.get("endTime").asText();
                 try {
-                    java.time.OffsetDateTime endTime = java.time.OffsetDateTime.parse(endTimeStr);
+                    endTime = java.time.OffsetDateTime.parse(endTimeStr);
                     java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
                     
-                    if (now.isAfter(endTime)) {
-                        logger.warn("Student {} attempted to start exam {} after end time. End: {}, Now: {}", 
-                            studentId, id, endTime, now);
-                        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                            .body(null);
+                    // For FIXED_WINDOW mode, exam ends at endTime for everyone
+                    // For FLEXIBLE_START mode, students can still start if there's time for at least some portion
+                    if (timingMode == ExamSubmissionService.TimingMode.FIXED_WINDOW) {
+                        if (now.isAfter(endTime)) {
+                            logger.warn("Student {} attempted to start exam {} after end time. End: {}, Now: {}", 
+                                studentId, id, endTime, now);
+                            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                                .body(null);
+                        }
                     }
+                    // For FLEXIBLE_START, we don't block based on endTime at start
+                    // The student gets their full duration
                 } catch (Exception e) {
                     logger.error("Failed to parse exam end time: {}", endTimeStr, e);
                 }
@@ -411,7 +430,7 @@ public class StudentExamController {
             if (exam.has("startTime") && !exam.get("startTime").isNull()) {
                 String startTimeStr = exam.get("startTime").asText();
                 try {
-                    java.time.OffsetDateTime startTime = java.time.OffsetDateTime.parse(startTimeStr);
+                    startTime = java.time.OffsetDateTime.parse(startTimeStr);
                     java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
                     
                     if (now.isBefore(startTime)) {
@@ -426,7 +445,7 @@ public class StudentExamController {
             }
             
             AssessmentSubmission submission = examSubmissionService.startExam(
-                studentId, courseId, id, timeLimitSeconds, maxAttempts);
+                studentId, courseId, id, timeLimitSeconds, maxAttempts, timingMode, endTime);
             
             return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(toDTO(submission));
         } catch (IllegalStateException e) {
