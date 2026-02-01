@@ -29,20 +29,19 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
 
   useEffect(() => {
+    const loadReport = async () => {
+      try {
+        setLoading(true)
+        const data = await proctoringApi.getReport(examId, submissionId)
+        setReport(data)
+      } catch (err) {
+        console.error('Failed to load proctoring report:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
     loadReport()
   }, [examId, submissionId])
-
-  const loadReport = async () => {
-    try {
-      setLoading(true)
-      const data = await proctoringApi.getReport(examId, submissionId)
-      setReport(data)
-    } catch (err) {
-      console.error('Failed to load proctoring report:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const getStatusBadge = (status: string) => {
     const config = {

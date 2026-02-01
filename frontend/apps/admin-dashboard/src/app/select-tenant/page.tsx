@@ -16,17 +16,6 @@ export default function SelectTenantPage() {
   const [error, setError] = useState('')
   const [user, setUser] = useState<any>(null)
 
-  useEffect(() => {
-    // Get user from localStorage
-    const userStr = localStorage.getItem('user')
-    if (userStr) {
-      setUser(JSON.parse(userStr))
-    }
-
-    // Load available tenants
-    loadTenants()
-  }, [])
-
   const handleTenantSelect = useCallback(async (tenantId: string) => {
     if (submitting) return
 

@@ -43,6 +43,7 @@ export function SplitMarkdownEditor({
     if (content !== markdown) {
       setMarkdown(content || '')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content])
 
   const handleMarkdownChange = (value: string) => {

@@ -523,7 +523,7 @@ export default function NewExamPage() {
                   />
                   {generationMode === 'batch' && formData.title && (
                     <p className="text-xs text-gray-500 mt-1">
-                      Example: "{formData.title} - Section A"
+                      Example: &quot;{formData.title} - Section A&quot;
                     </p>
                   )}
                 </div>

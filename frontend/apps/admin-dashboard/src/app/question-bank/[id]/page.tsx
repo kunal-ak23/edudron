@@ -215,6 +215,7 @@ export default function EditQuestionPage() {
     } finally {
       setLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [questionId, toast, router, loadSections, loadLectures])
 
   useEffect(() => {

@@ -407,6 +407,7 @@ export function D3TreeView({
       )
     }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [institute, classes, sectionsByClass, copiedId, expandedIds])
 
   return (

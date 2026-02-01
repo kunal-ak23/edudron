@@ -35,20 +35,19 @@ export default function LectureAnalyticsPage() {
       router.push('/login')
       return
     }
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        const analyticsData = await analyticsApi.getLectureAnalytics(lectureId)
+        setAnalytics(analyticsData)
+      } catch (error) {
+        console.error('Failed to load analytics:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     loadData()
   }, [isAuthenticated, router, lectureId])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const analyticsData = await analyticsApi.getLectureAnalytics(lectureId)
-      setAnalytics(analyticsData)
-    } catch (error) {
-      console.error('Failed to load analytics:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)

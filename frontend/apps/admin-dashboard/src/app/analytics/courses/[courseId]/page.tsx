@@ -35,24 +35,23 @@ export default function CourseAnalyticsPage() {
       router.push('/login')
       return
     }
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        const [courseData, analyticsData] = await Promise.all([
+          coursesApi.getCourse(courseId).catch(() => null),
+          analyticsApi.getCourseAnalytics(courseId).catch(() => null)
+        ])
+        setCourse(courseData)
+        setAnalytics(analyticsData)
+      } catch (error) {
+        console.error('Failed to load data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     loadData()
   }, [isAuthenticated, router, courseId])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const [courseData, analyticsData] = await Promise.all([
-        coursesApi.getCourse(courseId).catch(() => null),
-        analyticsApi.getCourseAnalytics(courseId).catch(() => null)
-      ])
-      setCourse(courseData)
-      setAnalytics(analyticsData)
-    } catch (error) {
-      console.error('Failed to load data:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)

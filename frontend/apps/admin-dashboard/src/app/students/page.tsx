@@ -100,15 +100,14 @@ export default function StudentsPage() {
       params.append('size', pageSize.toString())
       
       // Add search filter if provided (use debounced value from dependency)
-      const searchToUse = debouncedSearchTerm || searchTerm
-      if (searchToUse.trim()) {
-        params.append('search', searchToUse.trim())
+      if (debouncedSearchTerm.trim()) {
+        params.append('search', debouncedSearchTerm.trim())
       }
 
       console.log('[StudentsPage] Loading students with filters:', { 
         page: currentPage, 
         size: pageSize, 
-        search: searchToUse.trim() || null 
+        search: debouncedSearchTerm.trim() || null 
       })
 
       // Use paginated endpoint with backend filtering

@@ -80,16 +80,15 @@ export default function UsersPage() {
       }
       
       // Add search filter if provided (use debounced value)
-      const searchToUse = debouncedSearchTerm || searchQuery
-      if (searchToUse.trim()) {
-        params.append('search', searchToUse.trim())
+      if (debouncedSearchTerm.trim()) {
+        params.append('search', debouncedSearchTerm.trim())
       }
 
       console.log('[UsersPage] Loading users with filters:', { 
         page: currentPage, 
         size: pageSize,
         role: roleFilter !== 'all' ? roleFilter : null,
-        search: searchToUse.trim() || null 
+        search: debouncedSearchTerm.trim() || null 
       })
 
       // Use paginated endpoint with backend filtering
@@ -121,8 +120,8 @@ export default function UsersPage() {
         }
         
         // Apply client-side filtering if we had to fall back
-        if (searchToUse.trim()) {
-          const query = searchToUse.toLowerCase()
+        if (debouncedSearchTerm.trim()) {
+          const query = debouncedSearchTerm.toLowerCase()
           usersData = usersData.filter(
             (user) =>
               user.name.toLowerCase().includes(query) ||

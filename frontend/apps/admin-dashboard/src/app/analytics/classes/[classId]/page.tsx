@@ -32,20 +32,19 @@ export default function ClassAnalyticsPage() {
       router.push('/login')
       return
     }
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        const analyticsData = await analyticsApi.getClassAnalytics(classId)
+        setAnalytics(analyticsData)
+      } catch (error) {
+        console.error('Failed to load class analytics:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     loadData()
   }, [isAuthenticated, router, classId])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const analyticsData = await analyticsApi.getClassAnalytics(classId)
-      setAnalytics(analyticsData)
-    } catch (error) {
-      console.error('Failed to load class analytics:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)

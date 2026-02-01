@@ -101,7 +101,7 @@ export default function InstituteTreePage() {
     } finally {
       setLoading(false)
     }
-  }, [instituteId, toast, isViewOnly, user?.id])
+  }, [instituteId, toast, isViewOnly, user?.id, router])
 
   useEffect(() => {
     if (instituteId) {

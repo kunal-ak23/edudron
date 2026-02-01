@@ -190,7 +190,7 @@ export function SectionMultiSelect({ courseId, selectedIds, onChange, disabled }
         
         {filteredSections.length === 0 && searchQuery && (
           <div className="text-center py-4 text-sm text-gray-500">
-            No sections match "{searchQuery}"
+            No sections match &quot;{searchQuery}&quot;
           </div>
         )}
       </div>

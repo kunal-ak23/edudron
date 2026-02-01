@@ -251,8 +251,14 @@ export default function QuestionBankPage() {
       let pageTotalPages = 0
       
       if (response && typeof response === 'object') {
-        if ('data' in response) {
-          const data = (response as any).data
+        const responseAny = response as any
+        if (Array.isArray(responseAny)) {
+          // Non-paginated response (direct array)
+          questions = responseAny
+          pageTotalElements = responseAny.length
+          pageTotalPages = 1
+        } else if ('data' in responseAny) {
+          const data = responseAny.data
           if (Array.isArray(data)) {
             // Non-paginated response (e.g., from moduleId filter)
             questions = data
@@ -264,17 +270,11 @@ export default function QuestionBankPage() {
             pageTotalElements = data.totalElements || 0
             pageTotalPages = data.totalPages || 0
           }
-        } else if (Array.isArray(response)) {
-          // Non-paginated response
-          questions = response
-          pageTotalElements = response.length
-          pageTotalPages = 1
-        } else if ('content' in response) {
+        } else if ('content' in responseAny) {
           // Paginated response direct
-          const paginatedResponse = response as PaginatedResponse<QuestionBank>
-          questions = paginatedResponse.content || []
-          pageTotalElements = paginatedResponse.totalElements || 0
-          pageTotalPages = paginatedResponse.totalPages || 0
+          questions = responseAny.content || []
+          pageTotalElements = responseAny.totalElements || 0
+          pageTotalPages = responseAny.totalPages || 0
         }
       }
       

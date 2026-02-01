@@ -45,6 +45,7 @@ interface Exam {
   // Timing fields
   timingMode?: 'FIXED_WINDOW' | 'FLEXIBLE_START'
   timeLimitSeconds?: number
+  passingScorePercentage?: number
   // Proctoring fields
   enableProctoring?: boolean
   proctoringMode?: 'DISABLED' | 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING'

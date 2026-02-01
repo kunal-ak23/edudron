@@ -33,20 +33,19 @@ export default function SectionAnalyticsPage() {
       router.push('/login')
       return
     }
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        const analyticsData = await analyticsApi.getSectionAnalytics(sectionId)
+        setAnalytics(analyticsData)
+      } catch (error) {
+        console.error('Failed to load section analytics:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
     loadData()
   }, [isAuthenticated, router, sectionId])
-
-  const loadData = async () => {
-    try {
-      setLoading(true)
-      const analyticsData = await analyticsApi.getSectionAnalytics(sectionId)
-      setAnalytics(analyticsData)
-    } catch (error) {
-      console.error('Failed to load section analytics:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)

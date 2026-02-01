@@ -101,7 +101,8 @@ export interface BatchExamGenerationResponse {
 
 export const examsApi = {
   batchGenerate: async (request: BatchExamGenerationRequest): Promise<BatchExamGenerationResponse> => {
-    return apiClient.post<BatchExamGenerationResponse>('/api/exams/batch-generate', request)
+    const response = await apiClient.post<BatchExamGenerationResponse>('/api/exams/batch-generate', request)
+    return response.data
   },
   
   create: async (examData: any) => {

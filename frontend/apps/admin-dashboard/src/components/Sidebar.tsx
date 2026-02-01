@@ -272,8 +272,10 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
   // Update expanded items when pathname changes
   useEffect(() => {
     const parentSection = getParentSection(pathname)
-    if (parentSection && !expandedItems.includes(parentSection)) {
-      setExpandedItems([...expandedItems, parentSection])
+    if (parentSection) {
+      setExpandedItems(prev => 
+        prev.includes(parentSection) ? prev : [...prev, parentSection]
+      )
     }
   }, [pathname])
 

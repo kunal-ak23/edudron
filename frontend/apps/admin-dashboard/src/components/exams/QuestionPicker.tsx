@@ -87,11 +87,12 @@ export function QuestionPicker({ examId, courseId, moduleIds, open, onClose, onQ
   const loadSections = useCallback(async () => {
     try {
       const response = await apiClient.get<any>(`/api/courses/${courseId}`)
-      if (response && response.sections) {
+      const courseData = response.data
+      if (courseData && courseData.sections) {
         // Filter to only show sections that are in moduleIds
         const filteredSections = moduleIds.length > 0
-          ? response.sections.filter((s: Section) => moduleIds.includes(s.id))
-          : response.sections
+          ? courseData.sections.filter((s: Section) => moduleIds.includes(s.id))
+          : courseData.sections
         setSections(filteredSections)
       }
     } catch (error) {
@@ -127,7 +128,7 @@ export function QuestionPicker({ examId, courseId, moduleIds, open, onClose, onQ
       
       const response = await apiClient.get<QuestionBank[]>(url)
       
-      let filteredQuestions = Array.isArray(response) ? response : []
+      let filteredQuestions: QuestionBank[] = Array.isArray(response.data) ? response.data : []
       
       // Filter by difficulty
       if (selectedDifficulty) {

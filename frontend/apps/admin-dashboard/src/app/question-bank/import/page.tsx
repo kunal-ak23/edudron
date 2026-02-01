@@ -593,7 +593,7 @@ export default function QuestionBankImportPage() {
                   <li><code className="bg-gray-100 px-1">moduleIds</code> - Module IDs (comma-separated for multiple)</li>
                   <li><code className="bg-gray-100 px-1">lectureId</code> - Optional lecture/sub-module ID</li>
                   <li><code className="bg-gray-100 px-1">explanation</code> - Answer explanation</li>
-                  <li><code className="bg-gray-100 px-1">tentativeAnswer</code> - Expected answer (for TRUE_FALSE use "true"/"false")</li>
+                  <li><code className="bg-gray-100 px-1">tentativeAnswer</code> - Expected answer (for TRUE_FALSE use &quot;true&quot;/&quot;false&quot;)</li>
                   <li><code className="bg-gray-100 px-1">option1-10</code> - Answer options (up to 10)</li>
                   <li><code className="bg-gray-100 px-1">option1Correct-option10Correct</code> - true/false for each option</li>
                 </ul>
@@ -606,8 +606,8 @@ export default function QuestionBankImportPage() {
                   <li>Export existing questions to get their IDs for updating</li>
                   <li>Use double quotes for text containing commas</li>
                   <li>For multiple modules, separate IDs with commas</li>
-                  <li>Mark correct options as "true" or "1"</li>
-                  <li>Enable "Update existing" to modify questions by ID</li>
+                  <li>Mark correct options as &quot;true&quot; or &quot;1&quot;</li>
+                  <li>Enable &quot;Update existing&quot; to modify questions by ID</li>
                 </ul>
               </div>
             </CardContent>

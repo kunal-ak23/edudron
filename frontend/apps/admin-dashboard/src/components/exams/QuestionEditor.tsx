@@ -49,6 +49,7 @@ export function QuestionEditor({ question, onSave, onCancel }: QuestionEditorPro
         { text: '', isCorrect: false }
       ])
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [question, questionType])
 
   const validate = (): boolean => {
