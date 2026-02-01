@@ -1,0 +1,138 @@
+---
+description: Backend Java/Spring Boot patterns
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Backend Java Patterns
+
+## Exception Handling
+
+Each microservice has a `GlobalExceptionHandler`. Throw exceptions and let it handle responses:
+
+```java
+// ❌ BAD - Manual error responses
+@GetMapping("/{id}")
+public ResponseEntity<?> get(@PathVariable String id) {
+    try {
+        return ResponseEntity.ok(service.find(id));
+    } catch (Exception e) {
+        return ResponseEntity.status(500).body("Error: " + e.getMessage());
+    }
+}
+
+// ✅ GOOD - Throw specific exceptions
+@GetMapping("/{id}")
+public ResponseEntity<Course> get(@PathVariable String id) {
+    Course course = service.findById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Course not found: " + id));
+    return ResponseEntity.ok(course);
+}
+```
+
+### Exception Types
+
+- `IllegalArgumentException` - Invalid input/validation (returns 400)
+- `IllegalStateException` - Business logic errors (returns 500)
+- `RuntimeException` - General errors (returns 500)
+- Custom exceptions extend `RuntimeException` with error codes
+
+## Controller Patterns
+
+```java
+@RestController
+@RequestMapping("/api/courses")
+@RequiredArgsConstructor
+public class CourseController {
+    
+    private final CourseService courseService;
+    
+    @GetMapping
+    public ResponseEntity<List<Course>> list() {
+        return ResponseEntity.ok(courseService.findAll());
+    }
+    
+    @GetMapping("/{id}")
+    public ResponseEntity<Course> get(@PathVariable String id) {
+        return courseService.findById(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+    
+    @PostMapping
+    public ResponseEntity<Course> create(@RequestBody @Valid CourseDTO dto) {
+        Course course = courseService.create(dto);
+        return ResponseEntity.status(HttpStatus.CREATED).body(course);
+    }
+    
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        courseService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+}
+```
+
+## Service Layer
+
+```java
+@Service
+@RequiredArgsConstructor
+public class CourseService {
+    
+    private final CourseRepository repository;
+    
+    // Read operations - use readOnly for performance
+    @Transactional(readOnly = true)
+    public List<Course> findAll() {
+        return repository.findAll();
+    }
+    
+    @Transactional(readOnly = true)
+    public Optional<Course> findById(String id) {
+        return repository.findById(id);
+    }
+    
+    // Write operations - default transactional
+    @Transactional
+    public Course create(CourseDTO dto) {
+        Course course = new Course();
+        // map fields
+        return repository.save(course);
+    }
+}
+```
+
+## Tenant Context
+
+Access current tenant via header extraction:
+
+```java
+// In controllers - get from request header
+@GetMapping
+public ResponseEntity<List<Course>> list(
+    @RequestHeader("X-Client-Id") String clientId) {
+    return ResponseEntity.ok(service.findByClientId(clientId));
+}
+```
+
+## Entity Patterns
+
+```java
+@Entity
+@Table(name = "courses")
+@Data
+public class Course {
+    @Id
+    private String id = UUID.randomUUID().toString();
+    
+    @Column(nullable = false)
+    private String clientId;
+    
+    @Column(nullable = false)
+    private String title;
+    
+    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime updatedAt = LocalDateTime.now();
+}
+```

@@ -1,0 +1,93 @@
+---
+description: Frontend API patterns for TypeScript/React
+globs: frontend/**/*.ts, frontend/**/*.tsx
+alwaysApply: false
+---
+
+# Frontend API Patterns
+
+## API Client Setup
+
+Each app has a centralized `lib/api.ts` that exports pre-configured clients:
+
+```typescript
+import { apiClient, coursesApi, enrollmentsApi } from '@/lib/api'
+```
+
+## Making API Calls
+
+### Using Typed API Wrappers (Preferred)
+
+```typescript
+// ✅ GOOD - Use typed wrappers for domain operations
+const courses = await coursesApi.listCourses()
+const course = await coursesApi.getCourse(id)
+await coursesApi.createCourse(data)
+```
+
+### Using ApiClient Directly
+
+```typescript
+// ✅ GOOD - For custom endpoints
+const response = await apiClient.get<User[]>('/idp/users')
+const users = response.data
+
+const response = await apiClient.post<Course>('/content/courses', payload)
+const course = response.data
+```
+
+## Response Format
+
+All responses are wrapped in `ApiResponse<T>`:
+
+```typescript
+interface ApiResponse<T> {
+  data: T
+  message?: string
+  status?: 'success' | 'error'
+}
+
+// Always access .data to get the actual content
+const response = await apiClient.get<Course[]>(url)
+const courses = response.data // This is Course[]
+```
+
+## File Operations
+
+```typescript
+// File upload
+const formData = new FormData()
+formData.append('file', file)
+const response = await apiClient.postForm<UploadResult>('/content/media/upload', formData)
+
+// File download
+const blob = await apiClient.downloadFile('/api/question-bank/export')
+const url = URL.createObjectURL(blob)
+```
+
+## Error Handling
+
+```typescript
+try {
+  const courses = await coursesApi.listCourses()
+} catch (error: any) {
+  // ApiClient handles 401/403 automatically (redirects to login)
+  // Handle other errors in UI
+  const message = error.response?.data?.error || 'An error occurred'
+  toast.error(message)
+}
+```
+
+## Available API Wrappers
+
+Import from `@/lib/api`:
+- `coursesApi` - Course CRUD, generation, publishing
+- `enrollmentsApi` - Student enrollments
+- `sectionsApi` - Class sections
+- `classesApi` - Classes management
+- `institutesApi` - Institutes
+- `studentsApi` - Student management
+- `analyticsApi` - Analytics data
+- `mediaApi` - Media uploads
+- `tenantsApi` - Tenant management
+- `lecturesApi` - Lecture content

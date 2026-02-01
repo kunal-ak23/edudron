@@ -1,0 +1,66 @@
+---
+description: Edudron project coding standards and patterns
+alwaysApply: true
+---
+
+# Edudron Project Standards
+
+## Architecture Overview
+
+Edudron is a multi-tenant microservices application with:
+- **Gateway** (8080): Routes all traffic, handles CORS, forwards auth headers
+- **Identity** (8081): Auth, users, tenants (`/auth/**`, `/idp/**`, `/api/tenant/**`)
+- **Content** (8082): Courses, exams, lectures (`/content/**`, `/api/exams/**`, `/api/question-bank/**`)
+- **Student** (8083): Enrollments, sections, institutes (`/api/institutes/**`, `/api/sections/**`, `/api/enrollments/**`)
+- **Payment** (8084): Payment processing (`/payment/**`, `/api/payment/**`)
+
+## Frontend API Calls
+
+ALWAYS use the centralized `ApiClient` from `@kunal-ak23/edudron-shared-utils`. NEVER use `fetch()` or raw `axios` directly.
+
+```typescript
+// ❌ BAD
+const response = await fetch('/api/courses')
+const response = await axios.get('/api/courses')
+
+// ✅ GOOD - Use ApiClient or typed API wrappers
+import { apiClient, coursesApi } from '@/lib/api'
+
+const response = await apiClient.get<Course[]>('/content/courses')
+const data = response.data
+
+// Or use typed wrappers (preferred)
+const courses = await coursesApi.listCourses()
+```
+
+## Backend Exception Handling
+
+Use `GlobalExceptionHandler` via `@RestControllerAdvice`. Throw specific exceptions:
+
+```java
+// ❌ BAD
+catch (Exception e) {
+    return ResponseEntity.status(500).body("Error");
+}
+
+// ✅ GOOD - Let GlobalExceptionHandler handle it
+throw new IllegalArgumentException("Course ID is required");
+throw new IllegalStateException("Cannot publish unpaid course");
+```
+
+## Backend Controller Responses
+
+Use `ResponseEntity<T>` with proper HTTP status codes:
+
+```java
+// ✅ GOOD patterns
+ResponseEntity.ok(data)                              // 200
+ResponseEntity.status(HttpStatus.CREATED).body(data) // 201
+ResponseEntity.noContent().build()                   // 204
+ResponseEntity.notFound().build()                    // 404
+ResponseEntity.badRequest().body("error")            // 400
+```
+
+## Multi-tenant Context
+
+The `X-Client-Id` header is automatically added by ApiClient from localStorage. Backend extracts tenant context from this header via `TenantContextFilter`.
