@@ -6,6 +6,8 @@ import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -13,8 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { ArrowLeft, Upload, Download, Loader2, FileText, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Upload, Download, Loader2, FileText, CheckCircle, XCircle, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, coursesApi } from '@/lib/api'
 
@@ -28,16 +38,25 @@ interface Section {
   title: string
 }
 
-interface ImportError {
-  row: number
-  message: string
+interface QuestionImportRowResult {
+  rowNumber: number
+  questionText: string
+  success: boolean
+  questionId?: string
+  errorMessage?: string
+  updated?: boolean
 }
 
 interface ImportResult {
-  successCount: number
-  errorCount: number
   totalRows: number
-  errors?: ImportError[]
+  successfulRows: number
+  failedRows: number
+  createdRows: number
+  updatedRows: number
+  rowResults?: QuestionImportRowResult[]
+  // For backward compatibility
+  successCount?: number
+  errorCount?: number
 }
 
 export const dynamic = 'force-dynamic'
@@ -58,6 +77,9 @@ export default function QuestionBankImportPage() {
   const [uploading, setUploading] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [options, setOptions] = useState({
+    upsertExisting: false,
+  })
   
   const canImport = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
 
@@ -166,19 +188,7 @@ export default function QuestionBankImportPage() {
 
   const handleDownloadTemplate = async () => {
     try {
-      const gatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080'
-      const response = await fetch(`${gatewayUrl}/api/question-bank/import/template`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-          'X-Client-Id': localStorage.getItem('tenant_id') || localStorage.getItem('clientId') || ''
-        }
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to download template')
-      }
-      
-      const blob = await response.blob()
+      const blob = await apiClient.downloadFile('/api/question-bank/import/template')
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -226,22 +236,35 @@ export default function QuestionBankImportPage() {
       if (selectedModule) {
         formData.append('moduleId', selectedModule)
       }
+      formData.append('upsertExisting', options.upsertExisting.toString())
       
       const response = await apiClient.post<ImportResult>('/api/question-bank/import', formData)
       
-      setImportResult(response as unknown as ImportResult)
+      const result = response as unknown as ImportResult
+      setImportResult(result)
       
-      if ((response as unknown as ImportResult).successCount > 0) {
+      const successCount = result.successfulRows || result.successCount || 0
+      const failedCount = result.failedRows || result.errorCount || 0
+      const createdCount = result.createdRows || 0
+      const updatedCount = result.updatedRows || 0
+      
+      if (successCount > 0 && failedCount === 0) {
         toast({
-          title: 'Import completed',
-          description: `Successfully imported ${(response as unknown as ImportResult).successCount} questions`
+          title: 'Import completed successfully',
+          description: updatedCount > 0 
+            ? `Created ${createdCount} and updated ${updatedCount} questions`
+            : `Successfully imported ${successCount} questions`
         })
-      }
-      
-      if ((response as unknown as ImportResult).errorCount > 0) {
+      } else if (successCount > 0 && failedCount > 0) {
         toast({
           title: 'Import completed with errors',
-          description: `${(response as unknown as ImportResult).errorCount} rows had errors. See details below.`,
+          description: `${successCount} successful, ${failedCount} failed. See details below.`,
+          variant: 'destructive'
+        })
+      } else if (failedCount > 0) {
+        toast({
+          title: 'Import failed',
+          description: `All ${failedCount} rows had errors. See details below.`,
           variant: 'destructive'
         })
       }
@@ -357,6 +380,27 @@ export default function QuestionBankImportPage() {
               </div>
             )}
 
+            {/* Import Options */}
+            <div className="space-y-3 p-3 bg-gray-50 rounded-lg">
+              <Label className="text-sm font-medium">Import Options</Label>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="upsertExisting"
+                  checked={options.upsertExisting}
+                  onCheckedChange={(checked) =>
+                    setOptions({ ...options, upsertExisting: checked as boolean })
+                  }
+                />
+                <Label htmlFor="upsertExisting" className="text-sm font-normal cursor-pointer">
+                  Update existing questions (match by ID from export)
+                </Label>
+              </div>
+              <p className="text-xs text-gray-500">
+                If enabled, questions with an ID in the file will be updated instead of creating new ones.
+                Export questions first to get their IDs.
+              </p>
+            </div>
+
             {/* File Upload */}
             <div>
               <Label>File</Label>
@@ -425,7 +469,7 @@ export default function QuestionBankImportPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  {importResult.errorCount === 0 ? (
+                  {(importResult.failedRows || importResult.errorCount || 0) === 0 ? (
                     <CheckCircle className="h-5 w-5 text-green-600" />
                   ) : (
                     <AlertCircle className="h-5 w-5 text-yellow-600" />
@@ -434,40 +478,91 @@ export default function QuestionBankImportPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4 mb-4">
+                {/* Summary Stats */}
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  <div className="text-center p-3 bg-gray-50 rounded-lg">
+                    <div className="text-2xl font-bold text-gray-900">
+                      {importResult.totalRows}
+                    </div>
+                    <div className="text-sm text-gray-600">Total</div>
+                  </div>
                   <div className="text-center p-3 bg-green-50 rounded-lg">
                     <div className="text-2xl font-bold text-green-600">
-                      {importResult.successCount}
+                      {importResult.createdRows || 0}
                     </div>
-                    <div className="text-sm text-green-700">Imported</div>
+                    <div className="text-sm text-green-700">Created</div>
+                  </div>
+                  <div className="text-center p-3 bg-blue-50 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {importResult.updatedRows || 0}
+                    </div>
+                    <div className="text-sm text-blue-700">Updated</div>
                   </div>
                   <div className="text-center p-3 bg-red-50 rounded-lg">
                     <div className="text-2xl font-bold text-red-600">
-                      {importResult.errorCount}
+                      {importResult.failedRows || importResult.errorCount || 0}
                     </div>
-                    <div className="text-sm text-red-700">Errors</div>
-                  </div>
-                  <div className="text-center p-3 bg-gray-50 rounded-lg">
-                    <div className="text-2xl font-bold text-gray-600">
-                      {importResult.totalRows}
-                    </div>
-                    <div className="text-sm text-gray-700">Total Rows</div>
+                    <div className="text-sm text-red-700">Failed</div>
                   </div>
                 </div>
 
-                {importResult.errors && importResult.errors.length > 0 && (
+                {/* Detailed Row Results */}
+                {importResult.rowResults && importResult.rowResults.length > 0 && (
                   <div>
-                    <h4 className="font-medium mb-2 text-red-700">Error Details:</h4>
-                    <div className="max-h-48 overflow-y-auto space-y-2">
-                      {importResult.errors.map((error, idx) => (
-                        <div key={idx} className="flex items-start gap-2 text-sm bg-red-50 p-2 rounded">
-                          <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <span className="font-medium">Row {error.row}:</span>{' '}
-                            {error.message}
-                          </div>
-                        </div>
-                      ))}
+                    <h4 className="font-medium mb-2">Detailed Results:</h4>
+                    <div className="border rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-16">Row</TableHead>
+                            <TableHead>Question</TableHead>
+                            <TableHead className="w-24">Status</TableHead>
+                            <TableHead>Details</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {importResult.rowResults.map((row, index) => (
+                            <TableRow key={index} className={row.success ? '' : 'bg-red-50'}>
+                              <TableCell className="font-medium">{row.rowNumber}</TableCell>
+                              <TableCell className="max-w-[200px]">
+                                <span className="truncate block" title={row.questionText}>
+                                  {row.questionText || '-'}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                {row.success ? (
+                                  row.updated ? (
+                                    <Badge className="bg-blue-500">
+                                      <RefreshCw className="mr-1 h-3 w-3" />
+                                      Updated
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-green-500">
+                                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                                      Created
+                                    </Badge>
+                                  )
+                                ) : (
+                                  <Badge variant="destructive">
+                                    <XCircle className="mr-1 h-3 w-3" />
+                                    Failed
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {row.success ? (
+                                  <span className="text-gray-600">ID: {row.questionId}</span>
+                                ) : (
+                                  <span className="text-red-600 flex items-center gap-1">
+                                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                                    {row.errorMessage}
+                                  </span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   </div>
                 )}
@@ -482,24 +577,19 @@ export default function QuestionBankImportPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <h4 className="font-medium mb-2">Required Columns:</h4>
+                <h4 className="font-medium mb-2">Columns:</h4>
                 <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
+                  <li><code className="bg-gray-100 px-1">id</code> - Question ID (leave empty for new, fill for update)</li>
                   <li><code className="bg-gray-100 px-1">questionType</code> - MULTIPLE_CHOICE, TRUE_FALSE, SHORT_ANSWER, or ESSAY</li>
                   <li><code className="bg-gray-100 px-1">questionText</code> - The question text</li>
-                  <li><code className="bg-gray-100 px-1">moduleIds</code> - Module IDs (comma-separated for multiple)</li>
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-medium mb-2">Optional Columns:</h4>
-                <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
                   <li><code className="bg-gray-100 px-1">points</code> - Points (default: 1)</li>
                   <li><code className="bg-gray-100 px-1">difficultyLevel</code> - EASY, MEDIUM, or HARD</li>
+                  <li><code className="bg-gray-100 px-1">moduleIds</code> - Module IDs (comma-separated for multiple)</li>
                   <li><code className="bg-gray-100 px-1">lectureId</code> - Optional lecture/sub-module ID</li>
                   <li><code className="bg-gray-100 px-1">option1-4</code> - Answer options</li>
                   <li><code className="bg-gray-100 px-1">option1Correct-option4Correct</code> - true/false</li>
                   <li><code className="bg-gray-100 px-1">explanation</code> - Answer explanation</li>
-                  <li><code className="bg-gray-100 px-1">tentativeAnswer</code> - Expected answer (for short answer/essay)</li>
+                  <li><code className="bg-gray-100 px-1">tentativeAnswer</code> - Expected answer</li>
                 </ul>
               </div>
 
@@ -507,9 +597,11 @@ export default function QuestionBankImportPage() {
                 <h4 className="font-medium mb-2">Tips:</h4>
                 <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
                   <li>Download the template for the correct format</li>
+                  <li>Export existing questions to get their IDs for updating</li>
                   <li>Use double quotes for text containing commas</li>
                   <li>For multiple modules, separate IDs with commas</li>
                   <li>Mark correct options as "true" or "1"</li>
+                  <li>Enable "Update existing" to modify questions by ID</li>
                 </ul>
               </div>
             </CardContent>

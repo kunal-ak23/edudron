@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Search, Edit, Trash2, Loader2, BookOpen, CheckCircle, Upload } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Loader2, BookOpen, CheckCircle, Upload, ChevronLeft, ChevronRight, Download, FileText } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, coursesApi } from '@/lib/api'
 
@@ -73,6 +73,16 @@ interface Section {
   courseId: string
 }
 
+interface PaginatedResponse<T> {
+  content: T[]
+  totalElements: number
+  totalPages: number
+  number: number
+  size: number
+  first: boolean
+  last: boolean
+}
+
 export const dynamic = 'force-dynamic'
 
 export default function QuestionBankPage() {
@@ -91,11 +101,18 @@ export default function QuestionBankPage() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('')
   const [searchKeyword, setSearchKeyword] = useState('')
   
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(0)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalElements, setTotalElements] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  
   // Dialog states
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [questionToDelete, setQuestionToDelete] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   
   // Form states for create dialog
   const [formData, setFormData] = useState({
@@ -154,20 +171,24 @@ export default function QuestionBankPage() {
       if (Array.isArray(courseSections)) {
         const mappedSections = courseSections.map(s => ({ id: s.id, title: s.title, courseId: s.courseId })) as Section[]
         setSections(mappedSections)
-        // Also update the allSections map for display purposes
-        const newMap = new Map(allSections)
-        mappedSections.forEach((s: Section) => newMap.set(s.id, s))
-        setAllSections(newMap)
+        // Also update the allSections map for display purposes using functional update to avoid infinite loop
+        setAllSections(prevMap => {
+          const newMap = new Map(prevMap)
+          mappedSections.forEach((s: Section) => newMap.set(s.id, s))
+          return newMap
+        })
       }
     } catch (error) {
       console.error('Failed to load sections:', error)
     }
-  }, [allSections])
+  }, [])
 
   // Load questions
   const loadQuestions = useCallback(async () => {
     if (!selectedCourse && !selectedModule) {
       setQuestions([])
+      setTotalElements(0)
+      setTotalPages(0)
       setLoading(false)
       return
     }
@@ -190,26 +211,47 @@ export default function QuestionBankPage() {
         url += `&keyword=${encodeURIComponent(searchKeyword)}`
       }
       
-      const response = await apiClient.get<QuestionBank[]>(url)
+      // Add pagination params
+      url += `&page=${currentPage}&size=${pageSize}`
+      
+      const response = await apiClient.get<PaginatedResponse<QuestionBank>>(url)
       
       // Handle the response - it might be wrapped in data or be direct
       let questions: QuestionBank[] = []
+      let pageTotalElements = 0
+      let pageTotalPages = 0
+      
       if (response && typeof response === 'object') {
         if ('data' in response) {
           const data = (response as any).data
           if (Array.isArray(data)) {
+            // Non-paginated response (e.g., from moduleId filter)
             questions = data
+            pageTotalElements = data.length
+            pageTotalPages = 1
           } else if (data && 'content' in data) {
+            // Paginated response wrapped in data
             questions = data.content || []
+            pageTotalElements = data.totalElements || 0
+            pageTotalPages = data.totalPages || 0
           }
         } else if (Array.isArray(response)) {
+          // Non-paginated response
           questions = response
+          pageTotalElements = response.length
+          pageTotalPages = 1
         } else if ('content' in response) {
-          questions = (response as any).content || []
+          // Paginated response direct
+          const paginatedResponse = response as PaginatedResponse<QuestionBank>
+          questions = paginatedResponse.content || []
+          pageTotalElements = paginatedResponse.totalElements || 0
+          pageTotalPages = paginatedResponse.totalPages || 0
         }
       }
       
       setQuestions(questions)
+      setTotalElements(pageTotalElements)
+      setTotalPages(pageTotalPages)
     } catch (error) {
       console.error('Failed to load questions:', error)
       toast({
@@ -218,10 +260,12 @@ export default function QuestionBankPage() {
         variant: 'destructive'
       })
       setQuestions([])
+      setTotalElements(0)
+      setTotalPages(0)
     } finally {
       setLoading(false)
     }
-  }, [selectedCourse, selectedModule, selectedDifficulty, searchKeyword, toast])
+  }, [selectedCourse, selectedModule, selectedDifficulty, searchKeyword, currentPage, pageSize, toast])
 
   useEffect(() => {
     loadCourses()
@@ -236,6 +280,11 @@ export default function QuestionBankPage() {
   useEffect(() => {
     loadQuestions()
   }, [loadQuestions])
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(0)
+  }, [selectedCourse, selectedModule, selectedDifficulty, searchKeyword, pageSize])
 
   const handleCreateQuestion = async () => {
     if (!selectedCourse) {
@@ -372,6 +421,79 @@ export default function QuestionBankPage() {
     })
   }
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const blob = await apiClient.downloadFile('/api/question-bank/import/template')
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'question-bank-template.csv'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      
+      toast({
+        title: 'Success',
+        description: 'Template downloaded successfully'
+      })
+    } catch (error) {
+      console.error('Failed to download template:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to download template',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const handleExport = async () => {
+    if (!selectedCourse) {
+      toast({
+        title: 'Error',
+        description: 'Please select a course first',
+        variant: 'destructive'
+      })
+      return
+    }
+    
+    setExporting(true)
+    try {
+      let url = `/api/question-bank/export?courseId=${selectedCourse}`
+      
+      if (selectedModule) {
+        url += `&moduleId=${selectedModule}`
+      }
+      if (selectedDifficulty) {
+        url += `&difficultyLevel=${selectedDifficulty}`
+      }
+      
+      const blob = await apiClient.downloadFile(url)
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = downloadUrl
+      a.download = `question-bank-export-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(downloadUrl)
+      
+      toast({
+        title: 'Success',
+        description: `Exported ${questions.length} questions successfully`
+      })
+    } catch (error) {
+      console.error('Failed to export questions:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to export questions',
+        variant: 'destructive'
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const getModuleNames = (question: QuestionBank): string => {
     const moduleIds = question.moduleIds || (question.moduleId ? [question.moduleId] : [])
     return moduleIds
@@ -427,25 +549,43 @@ export default function QuestionBankPage() {
           <p className="text-gray-500">Manage reusable questions for exams</p>
         </div>
         <div className="flex gap-2">
-          {canManageQuestions && selectedCourse && (
+          {canManageQuestions && (
             <>
-              <Button variant="outline" onClick={() => {
-                const params = new URLSearchParams()
-                if (selectedCourse) params.set('courseId', selectedCourse)
-                if (selectedModule) params.set('moduleId', selectedModule)
-                const queryString = params.toString()
-                router.push(`/question-bank/import${queryString ? '?' + queryString : ''}`)
-              }}>
-                <Upload className="h-4 w-4 mr-2" />
-                Import
+              <Button variant="outline" onClick={handleDownloadTemplate}>
+                <FileText className="h-4 w-4 mr-2" />
+                Template
               </Button>
-              <Button onClick={() => {
-                resetForm()
-                setShowCreateDialog(true)
-              }}>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Question
-              </Button>
+              {selectedCourse && questions.length > 0 && (
+                <Button variant="outline" onClick={handleExport} disabled={exporting}>
+                  {exporting ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Export
+                </Button>
+              )}
+              {selectedCourse && (
+                <>
+                  <Button variant="outline" onClick={() => {
+                    const params = new URLSearchParams()
+                    if (selectedCourse) params.set('courseId', selectedCourse)
+                    if (selectedModule) params.set('moduleId', selectedModule)
+                    const queryString = params.toString()
+                    router.push(`/question-bank/import${queryString ? '?' + queryString : ''}`)
+                  }}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import
+                  </Button>
+                  <Button onClick={() => {
+                    resetForm()
+                    setShowCreateDialog(true)
+                  }}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Question
+                  </Button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -628,14 +768,81 @@ export default function QuestionBankPage() {
                 ))}
               </TableBody>
             </Table>
+            
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between p-4 border-t">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm">Page size:</Label>
+                  <Select
+                    value={pageSize.toString()}
+                    onValueChange={(value) => {
+                      setPageSize(Number(value))
+                    }}
+                  >
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-sm text-gray-600">
+                    Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalElements)} of {totalElements.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(0)}
+                    disabled={currentPage === 0 || loading}
+                  >
+                    First
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(0, prev - 1))}
+                    disabled={currentPage === 0 || loading}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600 px-2">
+                    Page {currentPage + 1} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1))}
+                    disabled={currentPage >= totalPages - 1 || loading}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(totalPages - 1)}
+                    disabled={currentPage >= totalPages - 1 || loading}
+                  >
+                    Last
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
 
-      {/* Total count */}
-      {!loading && questions.length > 0 && (
+      {/* Total count - shown when there's only 1 page or for single-page results */}
+      {!loading && questions.length > 0 && totalPages <= 1 && (
         <p className="text-sm text-gray-500">
-          Showing {questions.length} question{questions.length !== 1 ? 's' : ''}
+          Showing {questions.length} question{questions.length !== 1 ? 's' : ''} of {totalElements.toLocaleString()} total
         </p>
       )}
 

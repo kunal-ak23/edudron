@@ -276,6 +276,18 @@ export class ApiClient {
     return { data: responseData } as ApiResponse<T>
   }
 
+  /**
+   * Download a file from the API.
+   * Handles authentication automatically and returns a Blob.
+   */
+  async downloadFile(url: string, config?: AxiosRequestConfig): Promise<Blob> {
+    const response: AxiosResponse<Blob> = await this.client.get(url, {
+      ...config,
+      responseType: 'blob',
+    })
+    return response.data
+  }
+
   setBaseURL(baseURL: string) {
     this.client.defaults.baseURL = baseURL
   }

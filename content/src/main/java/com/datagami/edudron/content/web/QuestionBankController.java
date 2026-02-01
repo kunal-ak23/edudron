@@ -325,33 +325,45 @@ public class QuestionBankController {
     }
     
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Import questions", description = "Import questions from CSV or Excel file")
+    @Operation(summary = "Import questions", description = "Import questions from CSV or Excel file with optional update support")
     public ResponseEntity<Map<String, Object>> importQuestions(
             @RequestParam String courseId,
             @RequestParam(required = false) String moduleId,
+            @RequestParam(required = false, defaultValue = "false") boolean upsertExisting,
             @RequestParam("file") MultipartFile file) {
         try {
             if (file.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "File is required"));
             }
             
-            QuestionBankImportService.ImportResult result = questionBankImportService.importQuestions(courseId, moduleId, file);
+            QuestionBankImportService.QuestionImportResult result = questionBankImportService.importQuestions(courseId, moduleId, file, upsertExisting);
             
             Map<String, Object> response = new HashMap<>();
+            response.put("totalRows", result.getTotalRows());
+            response.put("successfulRows", result.getSuccessfulRows());
+            response.put("failedRows", result.getFailedRows());
+            response.put("createdRows", result.getCreatedRows());
+            response.put("updatedRows", result.getUpdatedRows());
+            // For backward compatibility
             response.put("successCount", result.getSuccessCount());
             response.put("errorCount", result.getErrorCount());
-            response.put("totalRows", result.getTotalRows());
             
-            if (!result.getErrors().isEmpty()) {
-                List<Map<String, Object>> errors = new ArrayList<>();
-                for (QuestionBankImportService.ImportError error : result.getErrors()) {
-                    Map<String, Object> errorMap = new HashMap<>();
-                    errorMap.put("row", error.getRowNumber());
-                    errorMap.put("message", error.getMessage());
-                    errors.add(errorMap);
+            // Add detailed row results
+            List<Map<String, Object>> rowResults = new ArrayList<>();
+            for (QuestionBankImportService.QuestionImportRowResult rowResult : result.getRowResults()) {
+                Map<String, Object> rowMap = new HashMap<>();
+                rowMap.put("rowNumber", rowResult.getRowNumber());
+                rowMap.put("questionText", rowResult.getQuestionText());
+                rowMap.put("success", rowResult.isSuccess());
+                rowMap.put("updated", rowResult.isUpdated());
+                if (rowResult.isSuccess()) {
+                    rowMap.put("questionId", rowResult.getQuestionId());
+                } else {
+                    rowMap.put("errorMessage", rowResult.getErrorMessage());
                 }
-                response.put("errors", errors);
+                rowResults.add(rowMap);
             }
+            response.put("rowResults", rowResults);
             
             return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
@@ -361,6 +373,49 @@ public class QuestionBankController {
             logger.error("Error importing questions", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to import questions: " + e.getMessage()));
+        }
+    }
+    
+    @GetMapping("/export")
+    @Operation(summary = "Export questions", description = "Export questions to CSV file")
+    public ResponseEntity<byte[]> exportQuestions(
+            @RequestParam String courseId,
+            @RequestParam(required = false) String moduleId,
+            @RequestParam(required = false) String difficultyLevel) {
+        try {
+            List<QuestionBank> questions;
+            
+            if (moduleId != null && !moduleId.isEmpty()) {
+                if (difficultyLevel != null && !difficultyLevel.isEmpty()) {
+                    QuestionBank.DifficultyLevel difficulty = QuestionBank.DifficultyLevel.valueOf(difficultyLevel);
+                    questions = questionBankService.getQuestionsByModuleAndDifficulty(moduleId, difficulty);
+                } else {
+                    questions = questionBankService.getQuestionsByModule(moduleId);
+                }
+            } else {
+                // Get all questions for the course (without pagination for export)
+                Pageable pageable = PageRequest.of(0, 10000); // Large page size for export
+                Page<QuestionBank> page = questionBankService.getQuestionsByCourse(courseId, pageable);
+                questions = page.getContent();
+            }
+            
+            String csv = questionBankImportService.exportQuestionsToCsv(questions);
+            byte[] csvBytes = csv.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.parseMediaType("text/csv; charset=UTF-8"));
+            headers.setContentDispositionFormData("attachment", "question-bank-export.csv");
+            headers.setContentLength(csvBytes.length);
+            
+            return ResponseEntity.ok()
+                .headers(headers)
+                .body(csvBytes);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Bad request exporting questions: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            logger.error("Error exporting questions", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
     
