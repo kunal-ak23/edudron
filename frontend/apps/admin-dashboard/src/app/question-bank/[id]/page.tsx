@@ -66,6 +66,8 @@ export default function EditQuestionPage() {
   const searchParams = useSearchParams()
   const questionId = params.id as string
   const courseIdFromUrl = searchParams.get('courseId')
+  const moduleIdFromUrl = searchParams.get('moduleId')
+  const difficultyFromUrl = searchParams.get('difficulty')
   const { toast } = useToast()
   const { user } = useAuth()
   
@@ -94,11 +96,16 @@ export default function EditQuestionPage() {
   
   const canManageQuestions = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
 
-  // Get the URL to navigate back to question bank with course context
+  // Get the URL to navigate back to question bank with filter context
   const getBackUrl = useCallback(() => {
+    const params = new URLSearchParams()
     const courseId = question?.courseId || courseIdFromUrl
-    return courseId ? `/question-bank?courseId=${courseId}` : '/question-bank'
-  }, [question?.courseId, courseIdFromUrl])
+    if (courseId) params.set('courseId', courseId)
+    if (moduleIdFromUrl) params.set('moduleId', moduleIdFromUrl)
+    if (difficultyFromUrl) params.set('difficulty', difficultyFromUrl)
+    const queryString = params.toString()
+    return queryString ? `/question-bank?${queryString}` : '/question-bank'
+  }, [question?.courseId, courseIdFromUrl, moduleIdFromUrl, difficultyFromUrl])
 
   // Load sections for a course
   const loadSections = useCallback(async (courseId: string) => {
