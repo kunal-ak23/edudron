@@ -27,6 +27,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ArrowLeft, Upload, Download, Loader2, FileText, CheckCircle, XCircle, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, coursesApi } from '@/lib/api'
+import { CourseStructureTree } from '@/components/CourseStructureTree'
 
 interface Course {
   id: string
@@ -238,9 +239,9 @@ export default function QuestionBankImportPage() {
       }
       formData.append('upsertExisting', options.upsertExisting.toString())
       
-      const response = await apiClient.post<ImportResult>('/api/question-bank/import', formData)
+      const response = await apiClient.postForm<ImportResult>('/api/question-bank/import', formData)
       
-      const result = response as unknown as ImportResult
+      const result = response.data
       setImportResult(result)
       
       const successCount = result.successfulRows || result.successCount || 0
@@ -462,8 +463,13 @@ export default function QuestionBankImportPage() {
           </CardContent>
         </Card>
 
-        {/* Instructions & Results */}
+        {/* Course Structure & Results */}
         <div className="space-y-4">
+          {/* Course Structure Tree - shows when course is selected */}
+          {selectedCourse && (
+            <CourseStructureTree courseId={selectedCourse} />
+          )}
+
           {/* Import Results */}
           {importResult && (
             <Card>
@@ -577,7 +583,7 @@ export default function QuestionBankImportPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <h4 className="font-medium mb-2">Columns:</h4>
+                <h4 className="font-medium mb-2">Columns (in order):</h4>
                 <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
                   <li><code className="bg-gray-100 px-1">id</code> - Question ID (leave empty for new, fill for update)</li>
                   <li><code className="bg-gray-100 px-1">questionType</code> - MULTIPLE_CHOICE, TRUE_FALSE, SHORT_ANSWER, or ESSAY</li>
@@ -586,10 +592,10 @@ export default function QuestionBankImportPage() {
                   <li><code className="bg-gray-100 px-1">difficultyLevel</code> - EASY, MEDIUM, or HARD</li>
                   <li><code className="bg-gray-100 px-1">moduleIds</code> - Module IDs (comma-separated for multiple)</li>
                   <li><code className="bg-gray-100 px-1">lectureId</code> - Optional lecture/sub-module ID</li>
-                  <li><code className="bg-gray-100 px-1">option1-4</code> - Answer options</li>
-                  <li><code className="bg-gray-100 px-1">option1Correct-option4Correct</code> - true/false</li>
                   <li><code className="bg-gray-100 px-1">explanation</code> - Answer explanation</li>
-                  <li><code className="bg-gray-100 px-1">tentativeAnswer</code> - Expected answer</li>
+                  <li><code className="bg-gray-100 px-1">tentativeAnswer</code> - Expected answer (for TRUE_FALSE use "true"/"false")</li>
+                  <li><code className="bg-gray-100 px-1">option1-10</code> - Answer options (up to 10)</li>
+                  <li><code className="bg-gray-100 px-1">option1Correct-option10Correct</code> - true/false for each option</li>
                 </ul>
               </div>
 

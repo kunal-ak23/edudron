@@ -148,7 +148,7 @@ public class QuestionBankImportService {
                 }
                 
                 List<String> values = new ArrayList<>();
-                for (int i = 0; i < 17; i++) { // 17 expected columns (added ID column)
+                for (int i = 0; i < 29; i++) { // 29 expected columns (supports up to 10 options)
                     Cell cell = row.getCell(i);
                     values.add(getCellStringValue(cell));
                 }
@@ -211,8 +211,11 @@ public class QuestionBankImportService {
     private QuestionImportRowResult createOrUpdateQuestionFromRow(String courseId, String defaultModuleId, String[] row, UUID clientId, boolean upsertExisting) {
         // Expected columns (with ID column):
         // 0: id (optional), 1: questionType, 2: questionText, 3: points, 4: difficultyLevel, 5: moduleIds, 6: lectureId,
-        // 7: option1, 8: option1Correct, 9: option2, 10: option2Correct, 11: option3, 12: option3Correct,
-        // 13: option4, 14: option4Correct, 15: explanation, 16: tentativeAnswer
+        // 7: explanation, 8: tentativeAnswer,
+        // 9: option1, 10: option1Correct, 11: option2, 12: option2Correct, 13: option3, 14: option3Correct,
+        // 15: option4, 16: option4Correct, 17: option5, 18: option5Correct, 19: option6, 20: option6Correct,
+        // 21: option7, 22: option7Correct, 23: option8, 24: option8Correct, 25: option9, 26: option9Correct,
+        // 27: option10, 28: option10Correct
         
         if (row.length < 3) {
             throw new IllegalArgumentException("Row has insufficient columns");
@@ -225,8 +228,8 @@ public class QuestionBankImportService {
         String difficultyStr = getValue(row, 4);
         String moduleIdsStr = getValue(row, 5);
         String lectureId = getValue(row, 6);
-        String explanation = getValue(row, 15);
-        String tentativeAnswer = getValue(row, 16);
+        String explanation = getValue(row, 7);
+        String tentativeAnswer = getValue(row, 8);
         
         // Validate required fields
         if (questionTypeStr == null || questionTypeStr.isEmpty()) {
@@ -346,8 +349,8 @@ public class QuestionBankImportService {
         
         if (questionType == QuestionBank.QuestionType.TRUE_FALSE) {
             // For TRUE_FALSE, create True and False options based on tentativeAnswer
-            // Column 16 is tentativeAnswer (shifted by 1 due to ID column)
-            String tentativeAnswer = getValue(row, 16);
+            // Column 8 is tentativeAnswer
+            String tentativeAnswer = getValue(row, 8);
             boolean answerIsTrue = tentativeAnswer != null && 
                 (tentativeAnswer.equalsIgnoreCase("true") || tentativeAnswer.equalsIgnoreCase("TRUE"));
             
@@ -370,9 +373,9 @@ public class QuestionBankImportService {
             options.add(falseOption);
         } else {
             // For MULTIPLE_CHOICE, parse option pairs (option, isCorrect)
-            // Columns 7-14 are options (shifted by 1 due to ID column)
+            // Columns 9-28 are options (up to 10 options to match UI limit)
             int sequence = 1;
-            for (int i = 7; i <= 13; i += 2) {
+            for (int i = 9; i <= 27; i += 2) {
                 String optionText = getValue(row, i);
                 String correctStr = getValue(row, i + 1);
                 
@@ -476,10 +479,13 @@ public class QuestionBankImportService {
      * Includes ID column (empty for new questions, filled for updates).
      */
     public String generateCsvTemplate() {
-        return "id,questionType,questionText,points,difficultyLevel,moduleIds,lectureId,option1,option1Correct,option2,option2Correct,option3,option3Correct,option4,option4Correct,explanation,tentativeAnswer\n" +
-               ",MULTIPLE_CHOICE,\"What is 2+2?\",1,EASY,\"moduleId1,moduleId2\",,\"4\",true,\"3\",false,\"5\",false,\"6\",false,\"Basic arithmetic\",\n" +
-               ",TRUE_FALSE,\"The sky is blue\",1,EASY,moduleId1,lectureId1,,,,,,,,,\"\",true\n" +
-               ",SHORT_ANSWER,\"What is the capital of France?\",2,MEDIUM,moduleId1,,,,,,,,,,\"\",Paris\n";
+        return "id,questionType,questionText,points,difficultyLevel,moduleIds,lectureId,explanation,tentativeAnswer," +
+               "option1,option1Correct,option2,option2Correct,option3,option3Correct,option4,option4Correct," +
+               "option5,option5Correct,option6,option6Correct,option7,option7Correct,option8,option8Correct," +
+               "option9,option9Correct,option10,option10Correct\n" +
+               ",MULTIPLE_CHOICE,\"What is 2+2?\",1,EASY,\"moduleId1,moduleId2\",,\"Basic arithmetic\",,\"4\",true,\"3\",false,\"5\",false,\"6\",false,,,,,,,,,,,,\n" +
+               ",TRUE_FALSE,\"The sky is blue\",1,EASY,moduleId1,lectureId1,\"\",true,,,,,,,,,,,,,,,,,,,,\n" +
+               ",SHORT_ANSWER,\"What is the capital of France?\",2,MEDIUM,moduleId1,,,Paris,,,,,,,,,,,,,,,,,,,,\n";
     }
     
     /**
@@ -492,10 +498,12 @@ public class QuestionBankImportService {
     public String exportQuestionsToCsv(List<QuestionBank> questions) {
         StringBuilder csv = new StringBuilder();
         
-        // Header with ID column
-        csv.append("id,questionType,questionText,points,difficultyLevel,moduleIds,lectureId,");
+        // Header with ID column (supports up to 10 options to match UI)
+        // explanation and tentativeAnswer come before options for easier access
+        csv.append("id,questionType,questionText,points,difficultyLevel,moduleIds,lectureId,explanation,tentativeAnswer,");
         csv.append("option1,option1Correct,option2,option2Correct,option3,option3Correct,option4,option4Correct,");
-        csv.append("explanation,tentativeAnswer\n");
+        csv.append("option5,option5Correct,option6,option6Correct,option7,option7Correct,option8,option8Correct,");
+        csv.append("option9,option9Correct,option10,option10Correct\n");
         
         for (QuestionBank q : questions) {
             // ID
@@ -520,24 +528,28 @@ public class QuestionBankImportService {
             // Lecture ID (subModuleId)
             csv.append(escapeCsv(q.getSubModuleId())).append(",");
             
-            // Options (up to 4)
+            // Explanation (before options for easier access)
+            csv.append(escapeCsv(q.getExplanation())).append(",");
+            
+            // Tentative answer (before options for easier access)
+            csv.append(escapeCsv(q.getTentativeAnswer())).append(",");
+            
+            // Options (up to 10 to match UI limit)
             List<QuestionBankOption> options = q.getOptions();
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < 10; i++) {
                 if (options != null && i < options.size()) {
                     QuestionBankOption opt = options.get(i);
                     csv.append(escapeCsv(opt.getOptionText())).append(",");
-                    csv.append(opt.getIsCorrect() != null && opt.getIsCorrect() ? "true" : "false").append(",");
+                    csv.append(opt.getIsCorrect() != null && opt.getIsCorrect() ? "true" : "false");
                 } else {
                     csv.append(","); // Empty option text
-                    csv.append(","); // Empty option correct
+                    csv.append(""); // Empty option correct (no trailing comma for last column)
+                }
+                // Add comma separator between option pairs, but not after the last one
+                if (i < 9) {
+                    csv.append(",");
                 }
             }
-            
-            // Explanation
-            csv.append(escapeCsv(q.getExplanation())).append(",");
-            
-            // Tentative answer
-            csv.append(escapeCsv(q.getTentativeAnswer()));
             
             csv.append("\n");
         }
