@@ -135,18 +135,35 @@ export default function QuestionBankPage() {
   
   const canManageQuestions = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
 
-  // Initialize from URL params
+  // Initialize from URL params on mount
   useEffect(() => {
     const courseIdParam = searchParams.get('courseId')
     const moduleIdParam = searchParams.get('moduleId')
     
-    if (courseIdParam) {
+    if (courseIdParam && courseIdParam !== selectedCourse) {
       setSelectedCourse(courseIdParam)
     }
-    if (moduleIdParam) {
+    if (moduleIdParam && moduleIdParam !== selectedModule) {
       setSelectedModule(moduleIdParam)
     }
-  }, [searchParams])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // Only run on mount to initialize from URL
+
+  // Sync URL with filter state
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (selectedCourse) params.set('courseId', selectedCourse)
+    if (selectedModule) params.set('moduleId', selectedModule)
+    
+    const newUrl = params.toString() ? `?${params.toString()}` : '/question-bank'
+    const currentUrl = window.location.pathname + window.location.search
+    const targetUrl = `/question-bank${params.toString() ? '?' + params.toString() : ''}`
+    
+    // Only update URL if it's different to avoid unnecessary history entries
+    if (currentUrl !== targetUrl) {
+      router.replace(targetUrl, { scroll: false })
+    }
+  }, [selectedCourse, selectedModule, router])
 
   // Load courses
   const loadCourses = useCallback(async () => {
@@ -750,7 +767,7 @@ export default function QuestionBankPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => router.push(`/question-bank/${question.id}`)}
+                            onClick={() => router.push(`/question-bank/${question.id}?courseId=${selectedCourse}`)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>

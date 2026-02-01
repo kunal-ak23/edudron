@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,9 +15,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ArrowLeft, Save, Loader2, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { apiClient } from '@/lib/api'
+import { apiClient, coursesApi, lecturesApi } from '@/lib/api'
 
 interface QuestionBank {
   id: string
@@ -45,18 +46,35 @@ interface QuestionOption {
   sequence: number
 }
 
+interface Section {
+  id: string
+  title: string
+  courseId: string
+}
+
+interface Lecture {
+  id: string
+  title: string
+  sectionId: string
+}
+
 export const dynamic = 'force-dynamic'
 
 export default function EditQuestionPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const questionId = params.id as string
+  const courseIdFromUrl = searchParams.get('courseId')
   const { toast } = useToast()
   const { user } = useAuth()
   
   const [question, setQuestion] = useState<QuestionBank | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [sections, setSections] = useState<Section[]>([])
+  const [lectures, setLectures] = useState<Lecture[]>([])
+  const [loadingSections, setLoadingSections] = useState(false)
   
   const [formData, setFormData] = useState({
     questionText: '',
@@ -64,6 +82,8 @@ export default function EditQuestionPage() {
     difficultyLevel: 'MEDIUM' as 'EASY' | 'MEDIUM' | 'HARD',
     explanation: '',
     tentativeAnswer: '',
+    selectedModuleIds: [] as string[],
+    selectedLectureIds: [] as string[],
     options: [
       { text: '', correct: false },
       { text: '', correct: false },
@@ -73,6 +93,52 @@ export default function EditQuestionPage() {
   })
   
   const canManageQuestions = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
+
+  // Get the URL to navigate back to question bank with course context
+  const getBackUrl = useCallback(() => {
+    const courseId = question?.courseId || courseIdFromUrl
+    return courseId ? `/question-bank?courseId=${courseId}` : '/question-bank'
+  }, [question?.courseId, courseIdFromUrl])
+
+  // Load sections for a course
+  const loadSections = useCallback(async (courseId: string) => {
+    if (!courseId) return
+    setLoadingSections(true)
+    try {
+      const courseSections = await coursesApi.getSections(courseId)
+      if (Array.isArray(courseSections)) {
+        setSections(courseSections.map(s => ({ id: s.id, title: s.title, courseId: s.courseId })))
+      }
+    } catch (error) {
+      console.error('Failed to load sections:', error)
+    } finally {
+      setLoadingSections(false)
+    }
+  }, [])
+
+  // Load lectures for selected modules
+  const loadLectures = useCallback(async (moduleIds: string[]) => {
+    if (!moduleIds || moduleIds.length === 0) {
+      setLectures([])
+      return
+    }
+    try {
+      const allLectures: Lecture[] = []
+      for (const moduleId of moduleIds) {
+        try {
+          const response = await lecturesApi.getLecturesBySection(moduleId)
+          if (Array.isArray(response)) {
+            allLectures.push(...response.map((l: any) => ({ id: l.id, title: l.title, sectionId: moduleId })))
+          }
+        } catch (e) {
+          // Continue with other modules
+        }
+      }
+      setLectures(allLectures)
+    } catch (error) {
+      console.error('Failed to load lectures:', error)
+    }
+  }, [])
 
   const loadQuestion = useCallback(async () => {
     try {
@@ -87,6 +153,22 @@ export default function EditQuestionPage() {
       
       setQuestion(questionData)
       
+      // Load sections for this course
+      if (questionData.courseId) {
+        await loadSections(questionData.courseId)
+      }
+      
+      // Get module IDs (support both array and legacy single value)
+      const moduleIds = questionData.moduleIds || (questionData.moduleId ? [questionData.moduleId] : [])
+      
+      // Get lecture IDs (support both array and legacy single value)
+      const lectureIds = questionData.subModuleIds || (questionData.subModuleId ? [questionData.subModuleId] : [])
+      
+      // Load lectures for selected modules
+      if (moduleIds.length > 0) {
+        await loadLectures(moduleIds)
+      }
+      
       // Populate form
       setFormData({
         questionText: questionData.questionText || '',
@@ -94,6 +176,8 @@ export default function EditQuestionPage() {
         difficultyLevel: questionData.difficultyLevel || 'MEDIUM',
         explanation: questionData.explanation || '',
         tentativeAnswer: questionData.tentativeAnswer || '',
+        selectedModuleIds: moduleIds,
+        selectedLectureIds: lectureIds,
         options: questionData.options && questionData.options.length > 0 
           ? questionData.options.map((opt: QuestionOption) => ({ text: opt.optionText, correct: opt.isCorrect }))
           : [
@@ -110,11 +194,11 @@ export default function EditQuestionPage() {
         description: 'Failed to load question',
         variant: 'destructive'
       })
-      router.push('/question-bank')
+      router.push(getBackUrl())
     } finally {
       setLoading(false)
     }
-  }, [questionId, toast, router])
+  }, [questionId, toast, router, loadSections, loadLectures])
 
   useEffect(() => {
     loadQuestion()
@@ -130,6 +214,15 @@ export default function EditQuestionPage() {
       return
     }
     
+    if (formData.selectedModuleIds.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select at least one module',
+        variant: 'destructive'
+      })
+      return
+    }
+    
     setSaving(true)
     try {
       const payload: any = {
@@ -138,6 +231,8 @@ export default function EditQuestionPage() {
         difficultyLevel: formData.difficultyLevel,
         explanation: formData.explanation || null,
         tentativeAnswer: formData.tentativeAnswer || null,
+        moduleIds: formData.selectedModuleIds,
+        subModuleIds: formData.selectedLectureIds.length > 0 ? formData.selectedLectureIds : null,
       }
       
       if (question?.questionType === 'MULTIPLE_CHOICE') {
@@ -175,7 +270,8 @@ export default function EditQuestionPage() {
         description: 'Question updated successfully'
       })
       
-      router.push('/question-bank')
+      // Navigate back with course context preserved
+      router.push(getBackUrl())
     } catch (error) {
       console.error('Failed to update question:', error)
       toast({
@@ -201,7 +297,8 @@ export default function EditQuestionPage() {
         description: 'Question deleted successfully'
       })
       
-      router.push('/question-bank')
+      // Navigate back with course context preserved
+      router.push(getBackUrl())
     } catch (error) {
       console.error('Failed to delete question:', error)
       toast({
@@ -224,7 +321,7 @@ export default function EditQuestionPage() {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500">Question not found</p>
-        <Button variant="link" onClick={() => router.push('/question-bank')}>
+        <Button variant="link" onClick={() => router.push(getBackUrl())}>
           Back to Question Bank
         </Button>
       </div>
@@ -236,7 +333,7 @@ export default function EditQuestionPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => router.push('/question-bank')}>
+          <Button variant="ghost" onClick={() => router.push(getBackUrl())}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
@@ -279,6 +376,79 @@ export default function EditQuestionPage() {
               </Select>
             </div>
           </div>
+          
+          {/* Module Selection */}
+          <div>
+            <Label>Module(s) - Select one or more</Label>
+            <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2 mt-1">
+              {loadingSections ? (
+                <div className="flex items-center justify-center py-2">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <span className="text-sm text-gray-500">Loading modules...</span>
+                </div>
+              ) : sections.length === 0 ? (
+                <p className="text-sm text-gray-500">No modules available.</p>
+              ) : (
+                sections.map(section => (
+                  <div key={section.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`module-${section.id}`}
+                      checked={formData.selectedModuleIds.includes(section.id)}
+                      disabled={!canManageQuestions}
+                      onCheckedChange={(checked) => {
+                        const newModuleIds = checked
+                          ? [...formData.selectedModuleIds, section.id]
+                          : formData.selectedModuleIds.filter(id => id !== section.id)
+                        setFormData({
+                          ...formData,
+                          selectedModuleIds: newModuleIds
+                        })
+                        // Reload lectures when modules change
+                        loadLectures(newModuleIds)
+                      }}
+                    />
+                    <Label htmlFor={`module-${section.id}`} className="font-normal cursor-pointer">
+                      {section.title}
+                    </Label>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Lecture Selection */}
+          {lectures.length > 0 && (
+            <div>
+              <Label>Lecture(s) - Optional, select one or more</Label>
+              <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2 mt-1">
+                {lectures.map(lecture => (
+                  <div key={lecture.id} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`lecture-${lecture.id}`}
+                      checked={formData.selectedLectureIds.includes(lecture.id)}
+                      disabled={!canManageQuestions}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          setFormData({
+                            ...formData,
+                            selectedLectureIds: [...formData.selectedLectureIds, lecture.id]
+                          })
+                        } else {
+                          setFormData({
+                            ...formData,
+                            selectedLectureIds: formData.selectedLectureIds.filter(id => id !== lecture.id)
+                          })
+                        }
+                      }}
+                    />
+                    <Label htmlFor={`lecture-${lecture.id}`} className="font-normal cursor-pointer">
+                      {lecture.title}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           
           <div>
             <Label>Question Text</Label>
@@ -380,7 +550,7 @@ export default function EditQuestionPage() {
           
           {canManageQuestions && (
             <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => router.push('/question-bank')}>
+              <Button variant="outline" onClick={() => router.push(getBackUrl())}>
                 Cancel
               </Button>
               <Button onClick={handleSave} disabled={saving}>
