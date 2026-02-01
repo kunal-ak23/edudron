@@ -35,6 +35,9 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.springframework.data.domain.Page;
+import com.datagami.edudron.content.dto.PagedExamsResponse;
+
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -42,6 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/exams")
@@ -67,6 +71,9 @@ public class ExamController {
     
     @Autowired
     private AssessmentRepository assessmentRepository;
+    
+    @Autowired
+    private com.datagami.edudron.content.repo.ExamQuestionRepository examQuestionRepository;
     
     @Autowired
     private ObjectMapper objectMapper;
@@ -193,9 +200,40 @@ public class ExamController {
     }
     
     @GetMapping
-    @Operation(summary = "List exams", description = "Get all exams, optionally including archived ones")
-    public ResponseEntity<List<Assessment>> getAllExams(
-            @RequestParam(required = false, defaultValue = "false") boolean includeArchived) {
+    @Operation(summary = "List exams", description = "Get exams with optional pagination and filtering. If 'paged' is true, returns paginated response with filters.")
+    public ResponseEntity<?> getAllExams(
+            @RequestParam(required = false, defaultValue = "false") boolean includeArchived,
+            @RequestParam(required = false, defaultValue = "false") boolean paged,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String timingMode,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "10") int size) {
+        
+        // If paged=true, return paginated response with filters
+        if (paged) {
+            Page<Assessment> examsPage = examService.getExamsPaginated(status, timingMode, search, page, size);
+            
+            // Convert to DTOs
+            List<ExamDetailDTO> content = examsPage.getContent().stream()
+                .map(ExamDetailDTO::fromAssessment)
+                .collect(Collectors.toList());
+            
+            PagedExamsResponse response = new PagedExamsResponse(
+                content,
+                examsPage.getNumber(),
+                examsPage.getSize(),
+                examsPage.getTotalElements(),
+                examsPage.getTotalPages()
+            );
+            
+            // Add status counts for filter badges
+            response.setStatusCounts(examService.getExamCountsByStatus());
+            
+            return ResponseEntity.ok(response);
+        }
+        
+        // Legacy behavior: return all exams as a list
         List<Assessment> exams = examService.getAllExams(includeArchived);
         return ResponseEntity.ok(exams);
     }
@@ -996,10 +1034,12 @@ public class ExamController {
             
             // 2. Fetch submission from student service to get answers
             String submissionUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
+            HttpHeaders getHeaders = new HttpHeaders();
+            getHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
             ResponseEntity<JsonNode> submissionResponse = getRestTemplate().exchange(
                 submissionUrl,
                 HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
+                new HttpEntity<>(getHeaders),
                 JsonNode.class
             );
             
@@ -1011,12 +1051,9 @@ public class ExamController {
             JsonNode answersJson = submission.get("answersJson");
             JsonNode existingReviewFeedback = submission.get("aiReviewFeedback");
             
-            // 3. Get all questions for this exam (with options loaded)
-            List<QuizQuestion> questions = quizQuestionRepository.findByAssessmentIdAndClientIdWithOptions(examId, clientId);
-            
-            // 4. Get per-question grades from request (for subjective questions)
+            // 3. Get per-question grades from request (for subjective questions)
             @SuppressWarnings("unchecked")
-            Map<String, Map<String, Object>> questionGrades = request.containsKey("questionGrades") 
+            Map<String, Map<String, Object>> questionGradesInput = request.containsKey("questionGrades") 
                 ? (Map<String, Map<String, Object>>) request.get("questionGrades") 
                 : new java.util.HashMap<>();
             
@@ -1024,13 +1061,23 @@ public class ExamController {
                 ? (String) request.get("instructorFeedback") 
                 : null;
             
-            // 5. Grade each question
+            // 4. Grade each question
             double totalScore = 0.0;
             double maxScore = 0.0;
             ArrayNode questionReviews = objectMapper.createArrayNode();
             
-            for (QuizQuestion question : questions) {
-                int questionPoints = question.getPoints();
+            // 4a. Get questions from ExamQuestion (question bank linked questions)
+            List<com.datagami.edudron.content.domain.ExamQuestion> examQuestions = 
+                examQuestionRepository.findByExamIdAndClientIdWithQuestions(examId, clientId);
+            
+            logger.info("Found {} ExamQuestions for exam {}", examQuestions.size(), examId);
+            
+            for (com.datagami.edudron.content.domain.ExamQuestion eq : examQuestions) {
+                com.datagami.edudron.content.domain.QuestionBank qb = eq.getQuestion();
+                if (qb == null) continue;
+                
+                String questionId = eq.getId(); // The ID used in answersJson
+                int questionPoints = eq.getEffectivePoints();
                 maxScore += questionPoints;
                 
                 double pointsEarned = 0.0;
@@ -1038,14 +1085,14 @@ public class ExamController {
                 boolean isCorrect = false;
                 boolean isAutoGraded = false;
                 
-                JsonNode answerNode = answersJson != null ? answersJson.get(question.getId()) : null;
+                JsonNode answerNode = answersJson != null ? answersJson.get(questionId) : null;
                 
-                if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE ||
-                    question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
+                if (qb.getQuestionType() == com.datagami.edudron.content.domain.QuestionBank.QuestionType.MULTIPLE_CHOICE ||
+                    qb.getQuestionType() == com.datagami.edudron.content.domain.QuestionBank.QuestionType.TRUE_FALSE) {
                     // Auto-grade objective questions
                     isAutoGraded = true;
                     if (answerNode != null) {
-                        pointsEarned = gradeObjectiveQuestion(question, answerNode);
+                        pointsEarned = gradeQuestionBankQuestion(qb, answerNode, questionPoints);
                         isCorrect = pointsEarned == questionPoints;
                         feedback = isCorrect ? "Correct" : "Incorrect";
                     } else {
@@ -1053,22 +1100,20 @@ public class ExamController {
                     }
                 } else {
                     // Subjective questions - use provided grade or existing AI grade
-                    Map<String, Object> providedGrade = questionGrades.get(question.getId());
+                    Map<String, Object> providedGrade = questionGradesInput.get(questionId);
                     
                     if (providedGrade != null && providedGrade.containsKey("score")) {
-                        // Use instructor-provided grade
                         Object scoreObj = providedGrade.get("score");
                         pointsEarned = scoreObj instanceof Number ? ((Number) scoreObj).doubleValue() : 0.0;
-                        pointsEarned = Math.min(pointsEarned, questionPoints); // Cap at max points
+                        pointsEarned = Math.min(pointsEarned, questionPoints);
                         feedback = providedGrade.containsKey("feedback") 
                             ? (String) providedGrade.get("feedback") 
                             : "Manually graded";
-                        isCorrect = pointsEarned >= questionPoints * 0.7; // 70% threshold for "correct"
+                        isCorrect = pointsEarned >= questionPoints * 0.7;
                     } else if (existingReviewFeedback != null && existingReviewFeedback.has("questionReviews")) {
-                        // Fall back to existing AI review grade
                         JsonNode existingReviews = existingReviewFeedback.get("questionReviews");
                         for (JsonNode review : existingReviews) {
-                            if (question.getId().equals(review.get("questionId").asText())) {
+                            if (questionId.equals(review.get("questionId").asText())) {
                                 pointsEarned = review.has("pointsEarned") ? review.get("pointsEarned").asDouble() : 0.0;
                                 feedback = review.has("feedback") ? review.get("feedback").asText() : "From AI review";
                                 isCorrect = review.has("isCorrect") && review.get("isCorrect").asBoolean();
@@ -1085,9 +1130,76 @@ public class ExamController {
                 
                 totalScore += pointsEarned;
                 
-                // Create question review entry
                 ObjectNode review = objectMapper.createObjectNode();
-                review.put("questionId", question.getId());
+                review.put("questionId", questionId);
+                review.put("pointsEarned", pointsEarned);
+                review.put("maxPoints", questionPoints);
+                review.put("feedback", feedback);
+                review.put("isCorrect", isCorrect);
+                review.put("isAutoGraded", isAutoGraded);
+                questionReviews.add(review);
+            }
+            
+            // 4b. Fallback: Get questions from QuizQuestion (inline questions) for backward compatibility
+            List<QuizQuestion> quizQuestions = quizQuestionRepository.findByAssessmentIdAndClientIdWithOptions(examId, clientId);
+            
+            logger.info("Found {} QuizQuestions for exam {}", quizQuestions.size(), examId);
+            
+            for (QuizQuestion question : quizQuestions) {
+                String questionId = question.getId();
+                int questionPoints = question.getPoints();
+                maxScore += questionPoints;
+                
+                double pointsEarned = 0.0;
+                String feedback = "";
+                boolean isCorrect = false;
+                boolean isAutoGraded = false;
+                
+                JsonNode answerNode = answersJson != null ? answersJson.get(questionId) : null;
+                
+                if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE ||
+                    question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
+                    isAutoGraded = true;
+                    if (answerNode != null) {
+                        pointsEarned = gradeObjectiveQuestion(question, answerNode);
+                        isCorrect = pointsEarned == questionPoints;
+                        feedback = isCorrect ? "Correct" : "Incorrect";
+                    } else {
+                        feedback = "No answer provided";
+                    }
+                } else {
+                    Map<String, Object> providedGrade = questionGradesInput.get(questionId);
+                    
+                    if (providedGrade != null && providedGrade.containsKey("score")) {
+                        Object scoreObj = providedGrade.get("score");
+                        pointsEarned = scoreObj instanceof Number ? ((Number) scoreObj).doubleValue() : 0.0;
+                        pointsEarned = Math.min(pointsEarned, questionPoints);
+                        feedback = providedGrade.containsKey("feedback") 
+                            ? (String) providedGrade.get("feedback") 
+                            : "Manually graded";
+                        isCorrect = pointsEarned >= questionPoints * 0.7;
+                    } else if (existingReviewFeedback != null && existingReviewFeedback.has("questionReviews")) {
+                        JsonNode existingReviews = existingReviewFeedback.get("questionReviews");
+                        for (JsonNode review : existingReviews) {
+                            if (questionId.equals(review.get("questionId").asText())) {
+                                pointsEarned = review.has("pointsEarned") ? review.get("pointsEarned").asDouble() : 0.0;
+                                feedback = review.has("feedback") ? review.get("feedback").asText() : "From AI review";
+                                isCorrect = review.has("isCorrect") && review.get("isCorrect").asBoolean();
+                                break;
+                            }
+                        }
+                        if (feedback.isEmpty()) {
+                            feedback = "Requires grading";
+                        }
+                    } else {
+                        feedback = answerNode != null ? "Requires grading" : "No answer provided";
+                    }
+                }
+                
+                totalScore += pointsEarned;
+                
+                ObjectNode review = objectMapper.createObjectNode();
+                review.put("questionId", questionId);
                 review.put("pointsEarned", pointsEarned);
                 review.put("maxPoints", questionPoints);
                 review.put("feedback", feedback);
@@ -1119,6 +1231,7 @@ public class ExamController {
             updateRequest.put("score", totalScore);
             updateRequest.put("maxScore", maxScore);
             updateRequest.put("isPassed", isPassed);
+            updateRequest.set("aiReviewFeedback", reviewFeedback); // Include per-question reviews
             if (instructorFeedback != null) {
                 updateRequest.put("instructorFeedback", instructorFeedback);
             }
@@ -1126,6 +1239,7 @@ public class ExamController {
             String updateUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId + "/manual-grade";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
             
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
                 updateUrl,
@@ -1163,7 +1277,7 @@ public class ExamController {
     }
     
     /**
-     * Grade an objective question (MCQ or TRUE_FALSE)
+     * Grade an objective question (MCQ or TRUE_FALSE) from QuizQuestion
      */
     private double gradeObjectiveQuestion(QuizQuestion question, JsonNode answerNode) {
         if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE) {
@@ -1184,6 +1298,32 @@ public class ExamController {
                 }
             }
             return (studentAnswer == correctAnswer) ? question.getPoints() : 0.0;
+        }
+        return 0.0;
+    }
+    
+    /**
+     * Grade an objective question (MCQ or TRUE_FALSE) from QuestionBank
+     */
+    private double gradeQuestionBankQuestion(com.datagami.edudron.content.domain.QuestionBank qb, JsonNode answerNode, int points) {
+        if (qb.getQuestionType() == com.datagami.edudron.content.domain.QuestionBank.QuestionType.MULTIPLE_CHOICE) {
+            String selectedOptionId = answerNode.asText();
+            for (com.datagami.edudron.content.domain.QuestionBankOption option : qb.getOptions()) {
+                if (option.getId().equals(selectedOptionId) && option.getIsCorrect()) {
+                    return points;
+                }
+            }
+            return 0.0;
+        } else if (qb.getQuestionType() == com.datagami.edudron.content.domain.QuestionBank.QuestionType.TRUE_FALSE) {
+            boolean studentAnswer = answerNode.asBoolean();
+            boolean correctAnswer = false;
+            for (com.datagami.edudron.content.domain.QuestionBankOption option : qb.getOptions()) {
+                if (option.getIsCorrect()) {
+                    correctAnswer = Boolean.parseBoolean(option.getOptionText());
+                    break;
+                }
+            }
+            return (studentAnswer == correctAnswer) ? points : 0.0;
         }
         return 0.0;
     }

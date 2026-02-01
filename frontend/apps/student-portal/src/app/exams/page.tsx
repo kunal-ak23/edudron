@@ -189,11 +189,29 @@ export default function ExamsPage() {
     return acc
   }, [] as Exam[])
   
-  // Filter with real-time checks based on actual time, not just status
+  // Filter with real-time checks based on actual time AND student's completion status
   const now = new Date()
   
-  // Live exams: current time is between start and end time (regardless of status in DB)
+  // Helper: Check if student has completed this exam (used all attempts or has a submission)
+  const hasCompletedExam = (exam: Exam) => {
+    // If max attempts is set and student has reached it
+    if (exam.maxAttempts && exam.maxAttempts > 0 && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts) {
+      return true
+    }
+    // If student has taken at least one attempt (submitted the exam)
+    if (exam.attemptsTaken && exam.attemptsTaken > 0) {
+      return true
+    }
+    return false
+  }
+  
+  // Live exams: current time is between start and end time AND student hasn't completed it
   const liveExams = uniqueExams.filter(e => {
+    // If student has already completed this exam, don't show in Live
+    if (hasCompletedExam(e)) {
+      return false
+    }
+    
     // If no start/end time, fall back to status check
     if (!e.startTime || !e.endTime) {
       return e.status === 'LIVE'
@@ -207,8 +225,13 @@ export default function ExamsPage() {
     return isWithinTimeWindow
   })
   
-  // Scheduled exams: start time is in the future
+  // Scheduled exams: start time is in the future AND student hasn't completed it
   const scheduledExams = uniqueExams.filter(e => {
+    // If student has already completed this exam, don't show in Scheduled
+    if (hasCompletedExam(e)) {
+      return false
+    }
+    
     // If no start/end time, fall back to status check
     if (!e.startTime || !e.endTime) {
       return e.status === 'SCHEDULED'
@@ -222,8 +245,13 @@ export default function ExamsPage() {
     return isInFuture
   })
   
-  // Completed exams: end time has passed OR status is COMPLETED
+  // Completed exams: student has completed it OR end time has passed OR status is COMPLETED
   const completedExams = uniqueExams.filter(e => {
+    // Student has completed this exam (taken their attempts)
+    if (hasCompletedExam(e)) {
+      return true
+    }
+    
     if (e.status === 'COMPLETED') return true
     
     // Real-time check: exam is completed if end time has passed

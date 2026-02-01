@@ -29,6 +29,8 @@ public interface AssessmentSubmissionRepository extends JpaRepository<Assessment
     List<AssessmentSubmission> findByClientIdAndAssessmentId(UUID clientId, String assessmentId);
     
     Page<AssessmentSubmission> findByClientIdAndAssessmentId(UUID clientId, String assessmentId, Pageable pageable);
+    
+    long countByClientIdAndStudentIdAndAssessmentId(UUID clientId, String studentId, String assessmentId);
 }
 
 

@@ -365,18 +365,34 @@ public class StudentExamController {
                 .collect(Collectors.toList());
             
             logger.info("[ExamDebug] ========== RESULT: Returning {} filtered exams ==========", filteredExams.size());
+            
+            // Add attemptsTaken for each exam so frontend knows if student has completed it
+            List<Map<String, Object>> examsWithAttempts = new ArrayList<>();
             for (Object exam : filteredExams) {
                 try {
-                    JsonNode node = objectMapper.valueToTree(exam);
-                    logger.info("[ExamDebug] Returning exam: id={}, title={}", 
-                        node.path("id").asText("null"), node.path("title").asText("null"));
+                    Map<String, Object> examMap = objectMapper.convertValue(exam, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                    String examId = examMap.containsKey("id") ? String.valueOf(examMap.get("id")) : null;
+                    
+                    if (examId != null) {
+                        // Count submissions for this exam
+                        long attemptCount = submissionRepository.countByClientIdAndStudentIdAndAssessmentId(
+                            clientId, studentId, examId);
+                        examMap.put("attemptsTaken", (int) attemptCount);
+                        
+                        logger.info("[ExamDebug] Returning exam: id={}, title={}, attemptsTaken={}", 
+                            examId, examMap.get("title"), attemptCount);
+                    }
+                    examsWithAttempts.add(examMap);
                 } catch (Exception ex) {
-                    // ignore
+                    logger.warn("[ExamDebug] Could not add attemptsTaken to exam", ex);
+                    // Still include the exam even if we can't add attemptsTaken
+                    Map<String, Object> examMap = objectMapper.convertValue(exam, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                    examsWithAttempts.add(examMap);
                 }
             }
             logger.info("[ExamDebug] ========== getAvailableExams END ==========");
             
-            return ResponseEntity.ok(filteredExams);
+            return ResponseEntity.ok(examsWithAttempts);
         } catch (Exception e) {
             logger.error("Failed to fetch available exams", e);
             return ResponseEntity.ok(new ArrayList<>());
@@ -629,7 +645,7 @@ public class StudentExamController {
         return ResponseEntity.ok(toDTO(submission));
     }
     
-    @PutMapping("/submissions/{submissionId}/manual-grade")
+    @PutMapping(value = "/submissions/{submissionId}/manual-grade", produces = "application/json")
     @Operation(summary = "Manual grade submission", description = "Manually grade an exam submission")
     public ResponseEntity<AssessmentSubmissionDTO> manualGrade(
             @PathVariable String submissionId,
@@ -644,9 +660,11 @@ public class StudentExamController {
                 request.get("isPassed").asBoolean() : null;
             String instructorFeedback = request.has("instructorFeedback") && !request.get("instructorFeedback").isNull() ? 
                 request.get("instructorFeedback").asText() : null;
+            JsonNode aiReviewFeedback = request.has("aiReviewFeedback") && !request.get("aiReviewFeedback").isNull() ? 
+                request.get("aiReviewFeedback") : null;
             
             AssessmentSubmission submission = examSubmissionService.manualGrade(
-                submissionId, score, maxScore, isPassed, instructorFeedback);
+                submissionId, score, maxScore, isPassed, instructorFeedback, aiReviewFeedback);
             
             return ResponseEntity.ok(toDTO(submission));
         } catch (IllegalArgumentException e) {

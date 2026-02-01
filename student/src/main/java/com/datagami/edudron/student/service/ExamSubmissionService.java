@@ -407,7 +407,7 @@ public class ExamSubmissionService {
      * Manually grade a submission - allows instructors to set scores and feedback
      */
     public AssessmentSubmission manualGrade(String submissionId, Double score, Double maxScore, 
-                                           Boolean isPassed, String instructorFeedback) {
+                                           Boolean isPassed, String instructorFeedback, JsonNode aiReviewFeedback) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -447,10 +447,19 @@ public class ExamSubmissionService {
         submission.setReviewStatus(AssessmentSubmission.ReviewStatus.INSTRUCTOR_REVIEWED);
         submission.setGradedAt(OffsetDateTime.now());
         
-        // Store instructor feedback if provided
-        if (instructorFeedback != null && !instructorFeedback.isEmpty()) {
+        // Store aiReviewFeedback with per-question grades if provided
+        if (aiReviewFeedback != null) {
+            // If there's instructor feedback, merge it into the aiReviewFeedback
+            if (instructorFeedback != null && !instructorFeedback.isEmpty() && aiReviewFeedback.isObject()) {
+                ((com.fasterxml.jackson.databind.node.ObjectNode) aiReviewFeedback)
+                    .put("instructorFeedback", instructorFeedback);
+            }
+            ((com.fasterxml.jackson.databind.node.ObjectNode) aiReviewFeedback)
+                .put("manuallyGraded", true);
+            submission.setAiReviewFeedback(aiReviewFeedback);
+        } else if (instructorFeedback != null && !instructorFeedback.isEmpty()) {
+            // No aiReviewFeedback but there's instructor feedback - add it to existing or new
             try {
-                // Create or update instructor feedback in aiReviewFeedback JSON
                 JsonNode existingFeedback = submission.getAiReviewFeedback();
                 if (existingFeedback == null || existingFeedback.isNull()) {
                     existingFeedback = objectMapper.createObjectNode();

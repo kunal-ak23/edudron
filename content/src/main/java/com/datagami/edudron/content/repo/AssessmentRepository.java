@@ -1,6 +1,8 @@
 package com.datagami.edudron.content.repo;
 
 import com.datagami.edudron.content.domain.Assessment;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -68,6 +70,29 @@ public interface AssessmentRepository extends JpaRepository<Assessment, String> 
     List<Assessment> findByAssessmentTypeAndStatusInOrderByStartTimeAsc(
         @Param("assessmentType") Assessment.AssessmentType assessmentType,
         @Param("statuses") List<Assessment.ExamStatus> statuses
+    );
+    
+    // Paginated exam query with filters
+    @Query("SELECT a FROM Assessment a WHERE a.assessmentType = :assessmentType AND a.clientId = :clientId " +
+           "AND (a.archived = false OR a.archived IS NULL) " +
+           "AND (:status IS NULL OR a.status = :status) " +
+           "AND (:timingMode IS NULL OR a.timingMode = :timingMode) " +
+           "AND (:search IS NULL OR :search = '' OR LOWER(a.title) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(a.description) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Assessment> findExamsWithFilters(
+        @Param("assessmentType") Assessment.AssessmentType assessmentType,
+        @Param("clientId") UUID clientId,
+        @Param("status") Assessment.ExamStatus status,
+        @Param("timingMode") Assessment.TimingMode timingMode,
+        @Param("search") String search,
+        Pageable pageable
+    );
+    
+    // Count exams by status for filter badges
+    @Query("SELECT a.status, COUNT(a) FROM Assessment a WHERE a.assessmentType = :assessmentType AND a.clientId = :clientId " +
+           "AND (a.archived = false OR a.archived IS NULL) GROUP BY a.status")
+    List<Object[]> countExamsByStatus(
+        @Param("assessmentType") Assessment.AssessmentType assessmentType,
+        @Param("clientId") UUID clientId
     );
 }
 

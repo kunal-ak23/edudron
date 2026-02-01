@@ -31,8 +31,14 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -320,6 +326,90 @@ public class ExamService {
             Assessment.AssessmentType.EXAM,
             clientId
         );
+    }
+    
+    /**
+     * Get exams with pagination and filtering.
+     * @param status Filter by exam status (optional)
+     * @param timingMode Filter by timing mode (optional)
+     * @param search Search in title and description (optional)
+     * @param page Page number (0-based)
+     * @param size Page size
+     * @return Page of exams with filters applied
+     */
+    public Page<Assessment> getExamsPaginated(String status, String timingMode, String search, int page, int size) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Parse status filter
+        Assessment.ExamStatus examStatus = null;
+        if (status != null && !status.isEmpty() && !status.equalsIgnoreCase("all")) {
+            try {
+                examStatus = Assessment.ExamStatus.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                // Invalid status, ignore filter
+            }
+        }
+        
+        // Parse timing mode filter
+        Assessment.TimingMode examTimingMode = null;
+        if (timingMode != null && !timingMode.isEmpty() && !timingMode.equalsIgnoreCase("all")) {
+            try {
+                examTimingMode = Assessment.TimingMode.valueOf(timingMode.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                // Invalid timing mode, ignore filter
+            }
+        }
+        
+        // Normalize search
+        String searchTerm = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+        
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        
+        return assessmentRepository.findExamsWithFilters(
+            Assessment.AssessmentType.EXAM,
+            clientId,
+            examStatus,
+            examTimingMode,
+            searchTerm,
+            pageable
+        );
+    }
+    
+    /**
+     * Get exam counts by status for filter badges.
+     */
+    public Map<String, Long> getExamCountsByStatus() {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        List<Object[]> results = assessmentRepository.countExamsByStatus(
+            Assessment.AssessmentType.EXAM,
+            clientId
+        );
+        
+        Map<String, Long> counts = new HashMap<>();
+        long total = 0;
+        for (Object[] row : results) {
+            Assessment.ExamStatus status = (Assessment.ExamStatus) row[0];
+            Long count = (Long) row[1];
+            counts.put(status.name(), count);
+            total += count;
+        }
+        counts.put("all", total);
+        
+        // Ensure all statuses are present
+        for (Assessment.ExamStatus status : Assessment.ExamStatus.values()) {
+            counts.putIfAbsent(status.name(), 0L);
+        }
+        
+        return counts;
     }
     
     public Assessment getExamById(String examId) {

@@ -955,7 +955,7 @@ export default function ExamDetailPage() {
           </TabsContent>
 
           <TabsContent value="submissions">
-            <SubmissionsList examId={examId} questions={questions} reviewMethod={exam.reviewMethod} />
+            <SubmissionsList examId={examId} questions={questions} reviewMethod={exam.reviewMethod} passingScorePercentage={exam.passingScorePercentage || 70} />
           </TabsContent>
         </Tabs>
 
@@ -1664,7 +1664,7 @@ export default function ExamDetailPage() {
 }
 
 // Submissions List Component
-function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; questions: Question[]; reviewMethod?: string }) {
+function SubmissionsList({ examId, questions, reviewMethod, passingScorePercentage }: { examId: string; questions: Question[]; reviewMethod?: string; passingScorePercentage: number }) {
   const router = useRouter()
   const [submissions, setSubmissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -2078,10 +2078,9 @@ function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; 
                         setManualGrading(true)
                         // Initialize question grades from existing AI review or empty
                         const initialGrades: Record<string, { score: string; feedback: string }> = {}
-                        const examQuestions = selectedSubmission.examDetails?.questions || []
                         const existingReviews = selectedSubmission.aiReviewFeedback?.questionReviews || []
                         
-                        examQuestions.forEach((q: any) => {
+                        questions.forEach((q: any) => {
                           const existingReview = existingReviews.find((r: any) => r.questionId === q.id)
                           initialGrades[q.id] = {
                             score: existingReview?.pointsEarned?.toString() || '0',
@@ -2107,9 +2106,12 @@ function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; 
                   <div className="space-y-4">
                     {/* Per-Question Grading */}
                     {(() => {
-                      const examQuestions = selectedSubmission.examDetails?.questions || []
-                      const answersJson = selectedSubmission.answersJson || {}
-                      const passingPercentage = selectedSubmission.examDetails?.passingScorePercentage || 70
+                      const examQuestions = questions
+                      let answersJson = selectedSubmission.answersJson || {}
+                      if (typeof answersJson === 'string') {
+                        try { answersJson = JSON.parse(answersJson) } catch (e) { answersJson = {} }
+                      }
+                      const passingPercentage = passingScorePercentage
                       
                       // Calculate totals
                       let totalEarned = 0
@@ -2266,7 +2268,7 @@ function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; 
                           try {
                             setSavingGrade(true)
                             // Build questionGrades payload for subjective questions only
-                            const examQuestions = selectedSubmission.examDetails?.questions || []
+                            const examQuestions = questions
                             const subjectiveGrades: Record<string, { score: number; feedback?: string }> = {}
                             
                             examQuestions.forEach((q: any) => {
