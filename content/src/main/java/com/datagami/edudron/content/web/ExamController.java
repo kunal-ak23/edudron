@@ -201,10 +201,13 @@ public class ExamController {
             // Call student service to get sections
             String url = gatewayUrl + "/api/sections/course/" + courseId;
             
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            
             ResponseEntity<Object[]> response = getRestTemplate().exchange(
                 url,
                 HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
+                new HttpEntity<>(headers),
                 Object[].class
             );
             
@@ -231,10 +234,13 @@ public class ExamController {
             // Call student service to get classes
             String url = gatewayUrl + "/api/classes/course/" + courseId;
             
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            
             ResponseEntity<Object[]> response = getRestTemplate().exchange(
                 url,
                 HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
+                new HttpEntity<>(headers),
                 Object[].class
             );
             
@@ -453,10 +459,14 @@ public class ExamController {
             org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>> responseType = 
                 new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {};
             
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            
             ResponseEntity<List<Map<String, Object>>> response = getRestTemplate().exchange(
                 url,
                 HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
+                new HttpEntity<>(headers),
                 responseType
             );
             
@@ -492,10 +502,13 @@ public class ExamController {
             String url = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
             logger.info("Calling student service at: {}", url);
             
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
                 url,
                 HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
+                new HttpEntity<>(headers),
                 new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
             );
             
@@ -803,10 +816,13 @@ public class ExamController {
                     org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>> responseType = 
                         new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {};
                     
+                    HttpHeaders submissionHeaders = new HttpHeaders();
+                    submissionHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+                    
                     ResponseEntity<List<Map<String, Object>>> submissionsResponse = getRestTemplate().exchange(
                         submissionsUrl,
                         HttpMethod.GET,
-                        new HttpEntity<>(new HttpHeaders()),
+                        new HttpEntity<>(submissionHeaders),
                         responseType
                     );
                     

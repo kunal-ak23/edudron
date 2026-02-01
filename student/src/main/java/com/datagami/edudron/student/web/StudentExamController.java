@@ -154,10 +154,13 @@ public class StudentExamController {
             List<Object> exams = new ArrayList<>();
             try {
                 String url = gatewayUrl + "/api/exams/live";
+                HttpHeaders liveHeaders = new HttpHeaders();
+                liveHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+                
                 ResponseEntity<Object[]> response = getRestTemplate().exchange(
                     url,
                     HttpMethod.GET,
-                    new HttpEntity<>(new HttpHeaders()),
+                    new HttpEntity<>(liveHeaders),
                     Object[].class
                 );
                 
@@ -171,10 +174,13 @@ public class StudentExamController {
             // Get scheduled exams
             try {
                 String scheduledUrl = gatewayUrl + "/api/exams/scheduled";
+                HttpHeaders scheduledHeaders = new HttpHeaders();
+                scheduledHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+                
                 ResponseEntity<Object[]> scheduledResponse = getRestTemplate().exchange(
                     scheduledUrl,
                     HttpMethod.GET,
-                    new HttpEntity<>(new HttpHeaders()),
+                    new HttpEntity<>(scheduledHeaders),
                     Object[].class
                 );
                 
@@ -219,10 +225,13 @@ public class StudentExamController {
                 if (!existingExamIds.contains(examId)) {
                     try {
                         String examUrl = gatewayUrl + "/api/exams/" + examId;
+                        HttpHeaders examHeaders = new HttpHeaders();
+                        examHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+                        
                         ResponseEntity<Object> examResponse = getRestTemplate().exchange(
                             examUrl,
                             HttpMethod.GET,
-                            new HttpEntity<>(new HttpHeaders()),
+                            new HttpEntity<>(examHeaders),
                             Object.class
                         );
                         if (examResponse.getBody() != null) {
@@ -387,10 +396,13 @@ public class StudentExamController {
             
             // Fetch exam details first
             String url = gatewayUrl + "/api/exams/" + id;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            
             ResponseEntity<JsonNode> response = getRestTemplate().exchange(
                 url,
                 HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
+                new HttpEntity<>(headers),
                 JsonNode.class
             );
             
@@ -437,10 +449,13 @@ public class StudentExamController {
         try {
             // Fetch exam details to get courseId and timeLimitSeconds
             String examUrl = gatewayUrl + "/api/exams/" + id;
+            HttpHeaders examHeaders = new HttpHeaders();
+            examHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            
             ResponseEntity<JsonNode> examResponse = getRestTemplate().exchange(
                 examUrl,
                 HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
+                new HttpEntity<>(examHeaders),
                 JsonNode.class
             );
             
@@ -475,6 +490,7 @@ public class StudentExamController {
             // Real-time validation: Check if exam has ended
             if (exam.has("endTime") && !exam.get("endTime").isNull()) {
                 String endTimeStr = exam.get("endTime").asText();
+                if (endTimeStr != null && !endTimeStr.isBlank()) {
                 try {
                     endTime = java.time.OffsetDateTime.parse(endTimeStr);
                     java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
@@ -494,11 +510,13 @@ public class StudentExamController {
                 } catch (Exception e) {
                     logger.error("Failed to parse exam end time: {}", endTimeStr, e);
                 }
+                }
             }
             
             // Also check if exam has started
             if (exam.has("startTime") && !exam.get("startTime").isNull()) {
                 String startTimeStr = exam.get("startTime").asText();
+                if (startTimeStr != null && !startTimeStr.isBlank()) {
                 try {
                     startTime = java.time.OffsetDateTime.parse(startTimeStr);
                     java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
@@ -511,6 +529,7 @@ public class StudentExamController {
                     }
                 } catch (Exception e) {
                     logger.error("Failed to parse exam start time: {}", startTimeStr, e);
+                }
                 }
             }
             
@@ -559,6 +578,8 @@ public class StudentExamController {
         String submissionId = request.has("submissionId") ? 
             request.get("submissionId").asText() : null;
         JsonNode answers = request.has("answers") ? request.get("answers") : null;
+        String reviewMethod = request.has("reviewMethod") ? 
+            request.get("reviewMethod").asText() : null;
         
         if (submissionId == null || answers == null) {
             return ResponseEntity.badRequest().build();
@@ -566,17 +587,23 @@ public class StudentExamController {
         
         AssessmentSubmission submission = examSubmissionService.submitExam(submissionId, answers);
         
-        // Trigger AI review if exam uses AI review
-        try {
-            String reviewUrl = gatewayUrl + "/api/exams/" + id + "/submissions/" + submissionId + "/review";
-            getRestTemplate().exchange(
-                reviewUrl,
-                HttpMethod.POST,
-                new HttpEntity<>(new HttpHeaders()),
-                Void.class
-            );
-        } catch (Exception e) {
-            logger.warn("Failed to trigger AI review, but submission was successful", e);
+        // Only trigger AI review if review method is AI (not INSTRUCTOR)
+        if (reviewMethod == null || !"INSTRUCTOR".equalsIgnoreCase(reviewMethod)) {
+            try {
+                String reviewUrl = gatewayUrl + "/api/exams/" + id + "/submissions/" + submissionId + "/review";
+                HttpHeaders headers = new HttpHeaders();
+                headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+                headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+                
+                getRestTemplate().exchange(
+                    reviewUrl,
+                    HttpMethod.POST,
+                    new HttpEntity<>(headers),
+                    Void.class
+                );
+            } catch (Exception e) {
+                logger.warn("Failed to trigger AI review, but submission was successful", e);
+            }
         }
         
         return ResponseEntity.ok(toDTO(submission));

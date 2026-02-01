@@ -37,6 +37,7 @@ interface Exam {
   blockCopyPaste?: boolean
   blockTabSwitch?: boolean
   maxTabSwitchesAllowed?: number
+  reviewMethod?: 'AI' | 'INSTRUCTOR'
 }
 
 interface Question {
@@ -79,6 +80,7 @@ export default function TakeExamPage() {
   const hasUnsavedChangesRef = useRef(false)
   const lastSaveTimeRef = useRef<number>(0)
   const isSubmittingRef = useRef(false) // Synchronous guard to prevent double submission
+  const isLoadingExamRef = useRef(false) // Guard to prevent double loading from React Strict Mode
   
   // Proctoring state
   const [showProctoringSetup, setShowProctoringSetup] = useState(false)
@@ -385,6 +387,13 @@ export default function TakeExamPage() {
   }, [exam, logProctoringEvent])
 
   const loadExam = async () => {
+    // Guard against double loading from React Strict Mode
+    if (isLoadingExamRef.current) {
+      console.log('Already loading exam, skipping duplicate call')
+      return
+    }
+    isLoadingExamRef.current = true
+    
     try {
       setLoading(true)
       
@@ -541,6 +550,7 @@ export default function TakeExamPage() {
         }
         
         setLoading(false)
+        isLoadingExamRef.current = false
         return
       }
       
@@ -608,6 +618,51 @@ export default function TakeExamPage() {
           setSubmissionId(submissionIdValue)
           setTimeRemaining(submission?.timeRemainingSeconds || examWithQuestions.timeLimitSeconds || 0)
           
+          // Re-fetch exam details to get randomized question/option order
+          // The backend applies randomization based on the submission
+          try {
+            const refreshedExamResponse = await apiClient.get<Exam>(`/api/student/exams/${examId}`)
+            let refreshedExam = (refreshedExamResponse as any)?.data || refreshedExamResponse
+            refreshedExam = refreshedExam as Exam
+            
+            // Normalize questions array
+            let refreshedQuestions: Question[] = []
+            if (Array.isArray(refreshedExam?.questions)) {
+              refreshedQuestions = refreshedExam.questions
+            } else if (refreshedExam?.questions && typeof refreshedExam.questions === 'object') {
+              if (Array.isArray((refreshedExam.questions as any).questions)) {
+                refreshedQuestions = (refreshedExam.questions as any).questions
+              } else {
+                refreshedQuestions = [refreshedExam.questions as Question]
+              }
+            }
+            
+            // Normalize options for each question
+            refreshedQuestions = refreshedQuestions.map(q => {
+              let normalizedOptions: Option[] | undefined = undefined
+              if (q.options) {
+                if (Array.isArray(q.options)) {
+                  normalizedOptions = q.options
+                } else if (typeof q.options === 'object' && Array.isArray((q.options as any).options)) {
+                  normalizedOptions = (q.options as any).options
+                } else if (typeof q.options === 'object') {
+                  normalizedOptions = [q.options as Option]
+                }
+              }
+              return { ...q, options: normalizedOptions }
+            })
+            
+            const refreshedExamWithQuestions = {
+              ...refreshedExam,
+              questions: refreshedQuestions
+            }
+            
+            setExam(refreshedExamWithQuestions)
+            console.log('Exam refreshed with randomized order after start')
+          } catch (refreshError) {
+            console.warn('Could not refresh exam after start, continuing with original order:', refreshError)
+          }
+          
           // Immediately save empty answers to ensure submission exists
           if (submissionIdValue) {
             try {
@@ -661,6 +716,7 @@ export default function TakeExamPage() {
       console.error('Failed to load exam:', error)
     } finally {
       setLoading(false)
+      isLoadingExamRef.current = false
     }
   }
 
@@ -818,7 +874,8 @@ export default function TakeExamPage() {
     try {
       const response = await apiClient.post(`/api/student/exams/${examId}/submit`, {
         submissionId,
-        answers
+        answers,
+        reviewMethod: exam?.reviewMethod
       })
       
       // Clear unsaved changes flag

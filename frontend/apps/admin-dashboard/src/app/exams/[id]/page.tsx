@@ -955,7 +955,7 @@ export default function ExamDetailPage() {
           </TabsContent>
 
           <TabsContent value="submissions">
-            <SubmissionsList examId={examId} questions={questions} />
+            <SubmissionsList examId={examId} questions={questions} reviewMethod={exam.reviewMethod} />
           </TabsContent>
         </Tabs>
 
@@ -1664,7 +1664,7 @@ export default function ExamDetailPage() {
 }
 
 // Submissions List Component
-function SubmissionsList({ examId, questions }: { examId: string; questions: Question[] }) {
+function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; questions: Question[]; reviewMethod?: string }) {
   const router = useRouter()
   const [submissions, setSubmissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -1816,7 +1816,7 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
                       View
                     </Button>
                     {/* Only show AI Review button if review method allows AI (AI or BOTH) */}
-                    {exam?.reviewMethod !== 'INSTRUCTOR' && submission.reviewStatus !== 'AI_REVIEWED' && submission.reviewStatus !== 'COMPLETED' && (
+                    {reviewMethod !== 'INSTRUCTOR' && submission.reviewStatus !== 'AI_REVIEWED' && submission.reviewStatus !== 'COMPLETED' && (
                       <Button variant="outline" size="sm" onClick={async () => {
                         setReviewing(true)
                         try {

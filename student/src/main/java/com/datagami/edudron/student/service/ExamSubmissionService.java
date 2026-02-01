@@ -480,10 +480,13 @@ public class ExamSubmissionService {
         try {
             // Fetch exam details from content service
             String examUrl = gatewayUrl + "/api/exams/" + examId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            
             ResponseEntity<JsonNode> examResponse = getRestTemplate().exchange(
                 examUrl,
                 HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
+                new HttpEntity<>(headers),
                 JsonNode.class
             );
             
