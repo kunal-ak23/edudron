@@ -2,13 +2,6 @@ databaseChangeLog:
   - changeSet:
       id: student-0017-instructor-assignments
       author: edudron
-      preConditions:
-        - onFail: HALT
-        - onError: HALT
-        - not:
-            - tableExists:
-                tableName: instructor_assignments
-                schemaName: student
       changes:
         - createTable:
             tableName: instructor_assignments
@@ -56,7 +49,6 @@ databaseChangeLog:
             indexName: idx_instructor_assignments_course_id
             columns:
               - column: { name: course_id }
-        # Unique constraint to prevent duplicate assignments
         - createIndex:
             tableName: instructor_assignments
             schemaName: student
@@ -69,3 +61,4 @@ databaseChangeLog:
               - column: { name: section_id }
               - column: { name: course_id }
             unique: true
+

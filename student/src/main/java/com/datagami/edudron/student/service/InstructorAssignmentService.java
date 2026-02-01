@@ -1,6 +1,7 @@
 package com.datagami.edudron.student.service;
 
 import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.InstructorAssignment;
@@ -18,9 +19,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -40,11 +45,33 @@ public class InstructorAssignmentService {
     @Autowired
     private ClassRepository classRepository;
     
-    @Autowired
     private RestTemplate restTemplate;
     
-    @Value("${gateway.url:http://localhost:8080}")
+    @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
+    
+    private RestTemplate getRestTemplate() {
+        if (restTemplate == null) {
+            restTemplate = new RestTemplate();
+            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+            interceptors.add(new TenantContextRestTemplateInterceptor());
+            interceptors.add((request, body, execution) -> {
+                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                if (attributes != null) {
+                    HttpServletRequest currentRequest = attributes.getRequest();
+                    String authHeader = currentRequest.getHeader("Authorization");
+                    if (authHeader != null && !authHeader.isBlank()) {
+                        if (!request.getHeaders().containsKey("Authorization")) {
+                            request.getHeaders().add("Authorization", authHeader);
+                        }
+                    }
+                }
+                return execution.execute(request, body);
+            });
+            restTemplate.setInterceptors(interceptors);
+        }
+        return restTemplate;
+    }
     
     // ==================== CRUD Operations ====================
     
@@ -338,7 +365,7 @@ public class InstructorAssignmentService {
             headers.set("X-Client-Id", TenantContext.getClientId());
             
             HttpEntity<?> entity = new HttpEntity<>(headers);
-            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
                 url,
                 HttpMethod.GET,
                 entity,
