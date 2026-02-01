@@ -7,16 +7,23 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
-import { Sparkles, Loader2, ArrowLeft, Shield } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Sparkles, Loader2, ArrowLeft, Shield, FileStack, File, CheckCircle, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { apiClient, coursesApi } from '@/lib/api'
-import type { Course, Section, Chapter } from '@kunal-ak23/edudron-shared-utils'
+import { apiClient, coursesApi, examsApi, type BatchExamGenerationRequest } from '@/lib/api'
+import { SectionMultiSelect } from '@/components/exams/SectionMultiSelect'
+import { QuestionPreview } from '@/components/exams/QuestionPreview'
+import type { Course, Chapter } from '@kunal-ak23/edudron-shared-utils'
 
 export const dynamic = 'force-dynamic'
+
+type GenerationMode = 'single' | 'batch'
+type DifficultyLevel = 'EASY' | 'MEDIUM' | 'HARD' | 'ANY'
 
 export default function NewExamPage() {
   const router = useRouter()
@@ -35,6 +42,12 @@ export default function NewExamPage() {
   const [sections, setSections] = useState<Chapter[]>([])
   const [batches, setBatches] = useState<any[]>([]) // Student sections/batches
   const [classes, setClasses] = useState<any[]>([]) // Student classes
+  
+  // Generation mode state
+  const [generationMode, setGenerationMode] = useState<GenerationMode>('single')
+  const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([])
+  const [batchResult, setBatchResult] = useState<any>(null)
+  
   const [formData, setFormData] = useState({
     courseId: '',
     title: '',
@@ -42,11 +55,11 @@ export default function NewExamPage() {
     instructions: '',
     moduleIds: [] as string[],
     reviewMethod: 'INSTRUCTOR' as 'INSTRUCTOR' | 'AI' | 'BOTH',
-    assignmentType: 'all' as 'all' | 'class' | 'section', // How to assign exam
+    assignmentType: 'all' as 'all' | 'class' | 'section', // How to assign exam (single mode)
     classId: '',
     sectionId: '',
     numberOfQuestions: 10,
-    difficulty: 'INTERMEDIATE',
+    difficulty: 'ANY' as DifficultyLevel,
     randomizeQuestions: false,
     randomizeMcqOptions: false,
     // Proctoring settings
@@ -56,7 +69,9 @@ export default function NewExamPage() {
     requireIdentityVerification: false,
     blockCopyPaste: false,
     blockTabSwitch: false,
-    maxTabSwitchesAllowed: 3
+    maxTabSwitchesAllowed: 3,
+    // Timing mode
+    timingMode: 'FIXED_WINDOW' as 'FIXED_WINDOW' | 'FLEXIBLE_START'
   })
 
   useEffect(() => {
@@ -125,8 +140,6 @@ export default function NewExamPage() {
       return
     }
 
-    // Modules are optional - only required for AI generation
-
     setLoading(true)
     try {
       const response = await apiClient.post<any>('/api/exams', {
@@ -136,22 +149,23 @@ export default function NewExamPage() {
         instructions: formData.instructions,
         moduleIds: formData.moduleIds,
         reviewMethod: formData.reviewMethod,
+        classId: formData.assignmentType === 'class' ? formData.classId : null,
+        sectionId: formData.assignmentType === 'section' ? formData.sectionId : null,
         randomizeQuestions: formData.randomizeQuestions,
         randomizeMcqOptions: formData.randomizeMcqOptions,
-        // Proctoring settings
         enableProctoring: formData.enableProctoring,
         proctoringMode: formData.enableProctoring ? formData.proctoringMode : 'DISABLED',
         photoIntervalSeconds: formData.photoIntervalSeconds,
         requireIdentityVerification: formData.requireIdentityVerification,
         blockCopyPaste: formData.blockCopyPaste,
         blockTabSwitch: formData.blockTabSwitch,
-        maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed
+        maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed,
+        timingMode: formData.timingMode
       })
       const exam = (response as any)?.data || response
       
       if (!exam || !exam.id) {
-        console.error('Invalid exam response:', response)
-        throw new Error(`Failed to get exam ID from response. Response: ${JSON.stringify(response)}`)
+        throw new Error('Failed to get exam ID from response')
       }
       
       toast({
@@ -190,10 +204,8 @@ export default function NewExamPage() {
       return
     }
 
-    // First create the exam, then generate questions
     setGenerating(true)
     try {
-      // Create exam
       const response = await apiClient.post<any>('/api/exams', {
         courseId: formData.courseId,
         title: formData.title,
@@ -205,28 +217,25 @@ export default function NewExamPage() {
         sectionId: formData.assignmentType === 'section' ? formData.sectionId : null,
         randomizeQuestions: formData.randomizeQuestions,
         randomizeMcqOptions: formData.randomizeMcqOptions,
-        // Proctoring settings
         enableProctoring: formData.enableProctoring,
         proctoringMode: formData.enableProctoring ? formData.proctoringMode : 'DISABLED',
         photoIntervalSeconds: formData.photoIntervalSeconds,
         requireIdentityVerification: formData.requireIdentityVerification,
         blockCopyPaste: formData.blockCopyPaste,
         blockTabSwitch: formData.blockTabSwitch,
-        maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed
+        maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed,
+        timingMode: formData.timingMode
       })
       
-      // Handle response - apiClient might return data directly or wrapped
       const exam = (response as any)?.data || response
       
       if (!exam || !exam.id) {
-        console.error('Invalid exam response:', { response, exam })
-        throw new Error(`Failed to get exam ID from response. Response: ${JSON.stringify(response)}`)
+        throw new Error('Failed to get exam ID from response')
       }
 
-      // Generate questions with AI
       await apiClient.post(`/api/exams/${exam.id}/generate`, {
         numberOfQuestions: formData.numberOfQuestions,
-        difficulty: formData.difficulty
+        difficulty: formData.difficulty === 'ANY' ? 'INTERMEDIATE' : formData.difficulty
       })
 
       toast({
@@ -239,6 +248,94 @@ export default function NewExamPage() {
       toast({
         title: 'Error',
         description: 'Failed to generate exam',
+        variant: 'destructive'
+      })
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const handleBatchGenerate = async () => {
+    if (!formData.courseId || !formData.title) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fill in course and title',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (formData.moduleIds.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select at least one module for question selection',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (selectedSectionIds.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select at least one section for batch generation',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    setGenerating(true)
+    setBatchResult(null)
+    
+    try {
+      const request: BatchExamGenerationRequest = {
+        courseId: formData.courseId,
+        title: formData.title,
+        description: formData.description,
+        instructions: formData.instructions,
+        sectionIds: selectedSectionIds,
+        moduleIds: formData.moduleIds,
+        generationCriteria: {
+          numberOfQuestions: formData.numberOfQuestions,
+          difficultyLevel: formData.difficulty === 'ANY' ? undefined : formData.difficulty,
+          randomize: true,
+          uniquePerSection: true
+        },
+        examSettings: {
+          reviewMethod: formData.reviewMethod,
+          randomizeQuestions: formData.randomizeQuestions,
+          randomizeMcqOptions: formData.randomizeMcqOptions,
+          enableProctoring: formData.enableProctoring,
+          proctoringMode: formData.enableProctoring ? formData.proctoringMode : 'DISABLED',
+          photoIntervalSeconds: formData.photoIntervalSeconds,
+          requireIdentityVerification: formData.requireIdentityVerification,
+          blockCopyPaste: formData.blockCopyPaste,
+          blockTabSwitch: formData.blockTabSwitch,
+          maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed,
+          timingMode: formData.timingMode
+        }
+      }
+
+      const response = await examsApi.batchGenerate(request)
+      const result = (response as any)?.data || response
+      setBatchResult(result)
+
+      if (result.totalCreated > 0) {
+        toast({
+          title: 'Batch Generation Complete',
+          description: `Created ${result.totalCreated} exam(s) for ${result.totalCreated} section(s)`
+        })
+      } else {
+        toast({
+          title: 'Batch Generation Failed',
+          description: result.errors?.join(', ') || 'No exams were created',
+          variant: 'destructive'
+        })
+      }
+    } catch (error: any) {
+      console.error('Failed to batch generate exams:', error)
+      toast({
+        title: 'Error',
+        description: error?.message || 'Failed to batch generate exams',
         variant: 'destructive'
       })
     } finally {
@@ -276,410 +373,568 @@ export default function NewExamPage() {
     )
   }
 
+  // If batch result is available, show success page
+  if (batchResult && batchResult.totalCreated > 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={() => router.push('/exams')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Exams
+          </Button>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+              Batch Generation Complete
+            </CardTitle>
+            <CardDescription>
+              Created {batchResult.totalCreated} of {batchResult.totalRequested} requested exams
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {batchResult.exams?.map((exam: any) => (
+                <div 
+                  key={exam.examId} 
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <div>
+                    <div className="font-medium">{exam.title}</div>
+                    <div className="text-sm text-gray-500">
+                      {exam.sectionName} - {exam.questionCount} questions
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => router.push(`/exams/${exam.examId}`)}
+                  >
+                    View Exam
+                  </Button>
+                </div>
+              ))}
+              
+              {batchResult.errors?.length > 0 && (
+                <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-800 font-medium mb-2">
+                    <AlertCircle className="h-4 w-4" />
+                    Some sections had errors
+                  </div>
+                  <ul className="text-sm text-yellow-700 list-disc list-inside">
+                    {batchResult.errors.map((error: string, idx: number) => (
+                      <li key={idx}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-6 flex gap-3">
+              <Button onClick={() => router.push('/exams')}>
+                View All Exams
+              </Button>
+              <Button variant="outline" onClick={() => setBatchResult(null)}>
+                Create More Exams
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-4">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
         <Button variant="ghost" onClick={() => router.back()}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
       </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Exam Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="course">Course *</Label>
-                <Select value={formData.courseId} onValueChange={(value) => 
-                  setFormData(prev => ({ ...prev, courseId: value, moduleIds: [] }))}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a course" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {courses.map(course => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      {/* Generation Mode Tabs */}
+      <Tabs value={generationMode} onValueChange={(v) => setGenerationMode(v as GenerationMode)}>
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="single" className="flex items-center gap-2">
+            <File className="h-4 w-4" />
+            Single Exam
+          </TabsTrigger>
+          <TabsTrigger value="batch" className="flex items-center gap-2">
+            <FileStack className="h-4 w-4" />
+            Batch Generate
+          </TabsTrigger>
+        </TabsList>
 
-              <div>
-                <Label htmlFor="title">Title *</Label>
-                <Input
-                  id="title"
-                  value={formData.title}
-                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Enter exam title"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Enter exam description"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="instructions">Instructions</Label>
-                <Textarea
-                  id="instructions"
-                  value={formData.instructions}
-                  onChange={(e) => setFormData(prev => ({ ...prev, instructions: e.target.value }))}
-                  placeholder="Enter exam instructions"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="reviewMethod">Review Method</Label>
-                <Select value={formData.reviewMethod} onValueChange={(value: any) => 
-                  setFormData(prev => ({ ...prev, reviewMethod: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="INSTRUCTOR">Instructor Review</SelectItem>
-                    <SelectItem value="AI">AI Review</SelectItem>
-                    <SelectItem value="BOTH">Both (AI + Instructor)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-3 border-t pt-3">
-                <Label>Randomization Settings</Label>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="randomizeQuestions"
-                    checked={formData.randomizeQuestions}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, randomizeQuestions: checked === true }))
-                    }
-                  />
-                  <label
-                    htmlFor="randomizeQuestions"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    Randomize question order
-                  </label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="randomizeMcqOptions"
-                    checked={formData.randomizeMcqOptions}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, randomizeMcqOptions: checked === true }))
-                    }
-                  />
-                  <label
-                    htmlFor="randomizeMcqOptions"
-                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                  >
-                    Randomize MCQ options
-                  </label>
-                </div>
-                <p className="text-xs text-gray-500">
-                  Each student will see questions/options in a different random order
+        <div className="mt-4">
+          {generationMode === 'batch' && (
+            <Card className="mb-4 border-blue-200 bg-blue-50">
+              <CardContent className="py-3">
+                <p className="text-sm text-blue-800">
+                  <strong>Batch Mode:</strong> Create separate exams for multiple sections at once. 
+                  Each section will get a different randomized question selection from the question bank.
                 </p>
-              </div>
-
-              <div>
-                <Label htmlFor="assignmentType">Student Audience</Label>
-                <Select value={formData.assignmentType} onValueChange={(value: any) => 
-                  setFormData(prev => ({ ...prev, assignmentType: value, classId: '', sectionId: '' }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Students in Course</SelectItem>
-                    <SelectItem value="class">Specific Class</SelectItem>
-                    <SelectItem value="section">Specific Section/Batch</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500 mt-1">
-                  Choose who can access this exam
-                </p>
-              </div>
-
-              {formData.assignmentType === 'class' && (
-                <div>
-                  <Label htmlFor="class">Select Class</Label>
-                  <Select value={formData.classId} onValueChange={(value) => 
-                    setFormData(prev => ({ ...prev, classId: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a class" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {classes.length === 0 ? (
-                        <SelectItem value="__none__" disabled>No classes found</SelectItem>
-                      ) : (
-                        classes.map(cls => (
-                          <SelectItem key={cls.id} value={cls.id}>
-                            {cls.name} ({cls.code})
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Exam will be visible to all sections in this class
-                  </p>
-                </div>
-              )}
-
-              {formData.assignmentType === 'section' && (
-                <div>
-                  <Label htmlFor="section">Select Section/Batch</Label>
-                  <Select value={formData.sectionId} onValueChange={(value) => 
-                    setFormData(prev => ({ ...prev, sectionId: value }))}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choose a section" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {batches.length === 0 ? (
-                        <SelectItem value="__none__" disabled>No sections found</SelectItem>
-                      ) : (
-                        batches.map(batch => (
-                          <SelectItem key={batch.id} value={batch.id}>
-                            {batch.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Exam will be visible only to this specific section
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Select Modules (Optional)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
-                Modules are only required if you plan to generate questions with AI. You can create an empty exam and add questions manually.
-              </p>
-              {!formData.courseId ? (
-                <p className="text-gray-500 text-sm">Please select a course first</p>
-              ) : sections.length === 0 ? (
-                <p className="text-gray-500 text-sm">No modules found for this course</p>
-              ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {sections.map(section => (
-                    <div key={section.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={formData.moduleIds.includes(section.id)}
-                        onCheckedChange={() => toggleModule(section.id)}
-                      />
-                      <Label className="flex-1 cursor-pointer" onClick={() => toggleModule(section.id)}>
-                        {section.title}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>AI Generation Options</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="numberOfQuestions">Number of Questions</Label>
-                <Input
-                  id="numberOfQuestions"
-                  type="number"
-                  value={formData.numberOfQuestions}
-                  onChange={(e) => setFormData(prev => ({ 
-                    ...prev, 
-                    numberOfQuestions: parseInt(e.target.value) || 10 
-                  }))}
-                  min={1}
-                  max={100}
-                />
-              </div>
-              <div>
-                <Label htmlFor="difficulty">Difficulty</Label>
-                <Select value={formData.difficulty} onValueChange={(value) => 
-                  setFormData(prev => ({ ...prev, difficulty: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BEGINNER">Beginner</SelectItem>
-                    <SelectItem value="INTERMEDIATE">Intermediate</SelectItem>
-                    <SelectItem value="ADVANCED">Advanced</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              <CardTitle>Proctoring Settings</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="enableProctoring">Enable Proctoring</Label>
-                <p className="text-sm text-gray-500">Monitor students during the exam</p>
-              </div>
-              <Switch
-                id="enableProctoring"
-                checked={formData.enableProctoring}
-                onCheckedChange={(checked) => 
-                  setFormData(prev => ({ ...prev, enableProctoring: checked }))
-                }
-              />
-            </div>
-
-            {formData.enableProctoring && (
-              <div className="space-y-4 pt-4 border-t">
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Left Column - Exam Details */}
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Exam Details</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="proctoringMode">Proctoring Mode</Label>
-                  <Select 
-                    value={formData.proctoringMode} 
-                    onValueChange={(value: any) => 
-                      setFormData(prev => ({ ...prev, proctoringMode: value }))
-                    }
-                  >
+                  <Label htmlFor="course">Course *</Label>
+                  <Select value={formData.courseId} onValueChange={(value) => {
+                    setFormData(prev => ({ ...prev, courseId: value, moduleIds: [] }))
+                    setSelectedSectionIds([])
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a course" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {courses.map(course => (
+                        <SelectItem key={course.id} value={course.id}>
+                          {course.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="title">Title *</Label>
+                  <Input
+                    id="title"
+                    value={formData.title}
+                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder={generationMode === 'batch' ? "Base title (section name will be appended)" : "Enter exam title"}
+                  />
+                  {generationMode === 'batch' && formData.title && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Example: "{formData.title} - Section A"
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Enter exam description"
+                    rows={2}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="instructions">Instructions</Label>
+                  <Textarea
+                    id="instructions"
+                    value={formData.instructions}
+                    onChange={(e) => setFormData(prev => ({ ...prev, instructions: e.target.value }))}
+                    placeholder="Enter exam instructions"
+                    rows={2}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="reviewMethod">Review Method</Label>
+                  <Select value={formData.reviewMethod} onValueChange={(value: any) => 
+                    setFormData(prev => ({ ...prev, reviewMethod: value }))}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="BASIC_MONITORING">Basic Monitoring (Events only)</SelectItem>
-                      <SelectItem value="WEBCAM_RECORDING">Webcam Recording</SelectItem>
-                      <SelectItem value="LIVE_PROCTORING">Live Proctoring (Future)</SelectItem>
+                      <SelectItem value="INSTRUCTOR">Instructor Review</SelectItem>
+                      <SelectItem value="AI">AI Review</SelectItem>
+                      <SelectItem value="BOTH">Both (AI + Instructor)</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {formData.proctoringMode === 'BASIC_MONITORING' && 'Logs events like tab switches and copy attempts'}
-                    {formData.proctoringMode === 'WEBCAM_RECORDING' && 'Captures periodic photos from student webcam'}
-                    {formData.proctoringMode === 'LIVE_PROCTORING' && 'Real-time monitoring (coming soon)'}
+                </div>
+
+                <div>
+                  <Label htmlFor="timingMode">Timing Mode</Label>
+                  <Select value={formData.timingMode} onValueChange={(value: any) => 
+                    setFormData(prev => ({ ...prev, timingMode: value }))}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FIXED_WINDOW">Fixed Window</SelectItem>
+                      <SelectItem value="FLEXIBLE_START">Flexible Start</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Fixed Window: Exam ends at scheduled time for all. Flexible Start: Each student gets full duration from when they start.
                   </p>
                 </div>
 
-                {formData.proctoringMode === 'WEBCAM_RECORDING' && (
-                  <div>
-                    <Label htmlFor="photoInterval">Photo Capture Interval (seconds)</Label>
-                    <Input
-                      id="photoInterval"
-                      type="number"
-                      value={formData.photoIntervalSeconds}
-                      onChange={(e) => setFormData(prev => ({ 
-                        ...prev, 
-                        photoIntervalSeconds: parseInt(e.target.value) || 30 
-                      }))}
-                      min={10}
-                      max={300}
+                <div className="space-y-3 border-t pt-3">
+                  <Label>Randomization Settings</Label>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="randomizeQuestions"
+                      checked={formData.randomizeQuestions}
+                      onCheckedChange={(checked) => 
+                        setFormData(prev => ({ ...prev, randomizeQuestions: checked === true }))
+                      }
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      How often to capture photos (recommended: 30-60 seconds)
-                    </p>
+                    <label htmlFor="randomizeQuestions" className="text-sm">
+                      Randomize question order
+                    </label>
                   </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="randomizeMcqOptions"
+                      checked={formData.randomizeMcqOptions}
+                      onCheckedChange={(checked) => 
+                        setFormData(prev => ({ ...prev, randomizeMcqOptions: checked === true }))
+                      }
+                    />
+                    <label htmlFor="randomizeMcqOptions" className="text-sm">
+                      Randomize MCQ options
+                    </label>
+                  </div>
+                </div>
+
+                {/* Single mode - Student Audience */}
+                {generationMode === 'single' && (
+                  <>
+                    <div>
+                      <Label htmlFor="assignmentType">Student Audience</Label>
+                      <Select value={formData.assignmentType} onValueChange={(value: any) => 
+                        setFormData(prev => ({ ...prev, assignmentType: value, classId: '', sectionId: '' }))}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Students in Course</SelectItem>
+                          <SelectItem value="class">Specific Class</SelectItem>
+                          <SelectItem value="section">Specific Section/Batch</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.assignmentType === 'class' && (
+                      <div>
+                        <Label>Select Class</Label>
+                        <Select value={formData.classId} onValueChange={(value) => 
+                          setFormData(prev => ({ ...prev, classId: value }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a class" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {classes.length === 0 ? (
+                              <SelectItem value="__none__" disabled>No classes found</SelectItem>
+                            ) : (
+                              classes.map(cls => (
+                                <SelectItem key={cls.id} value={cls.id}>
+                                  {cls.name} ({cls.code})
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {formData.assignmentType === 'section' && (
+                      <div>
+                        <Label>Select Section/Batch</Label>
+                        <Select value={formData.sectionId} onValueChange={(value) => 
+                          setFormData(prev => ({ ...prev, sectionId: value }))}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a section" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {batches.length === 0 ? (
+                              <SelectItem value="__none__" disabled>No sections found</SelectItem>
+                            ) : (
+                              batches.map(batch => (
+                                <SelectItem key={batch.id} value={batch.id}>
+                                  {batch.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </>
                 )}
 
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="requireIdentityVerification">Require Identity Verification</Label>
-                    <p className="text-sm text-gray-500">Student must take a photo before starting</p>
-                  </div>
-                  <Switch
-                    id="requireIdentityVerification"
-                    checked={formData.requireIdentityVerification}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, requireIdentityVerification: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="blockCopyPaste">Block Copy & Paste</Label>
-                    <p className="text-sm text-gray-500">Prevent copying/pasting during exam</p>
-                  </div>
-                  <Switch
-                    id="blockCopyPaste"
-                    checked={formData.blockCopyPaste}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, blockCopyPaste: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="blockTabSwitch">Auto-Submit on Tab Switch</Label>
-                    <p className="text-sm text-gray-500">Automatically submit exam if student switches tabs</p>
-                  </div>
-                  <Switch
-                    id="blockTabSwitch"
-                    checked={formData.blockTabSwitch}
-                    onCheckedChange={(checked) => 
-                      setFormData(prev => ({ ...prev, blockTabSwitch: checked }))
-                    }
-                  />
-                </div>
-
-                {!formData.blockTabSwitch && (
+                {/* Batch mode - Multi-section selection */}
+                {generationMode === 'batch' && (
                   <div>
-                    <Label htmlFor="maxTabSwitches">Maximum Tab Switches Allowed</Label>
-                    <Input
-                      id="maxTabSwitches"
-                      type="number"
-                      value={formData.maxTabSwitchesAllowed}
-                      onChange={(e) => setFormData(prev => ({ 
-                        ...prev, 
-                        maxTabSwitchesAllowed: parseInt(e.target.value) || 3 
-                      }))}
-                      min={0}
-                      max={20}
+                    <Label className="mb-2 block">Select Sections *</Label>
+                    <SectionMultiSelect
+                      courseId={formData.courseId}
+                      selectedIds={selectedSectionIds}
+                      onChange={setSelectedSectionIds}
+                      disabled={generating}
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      How many times student can switch tabs before warning (0 = unlimited)
-                    </p>
                   </div>
                 )}
-              </div>
+              </CardContent>
+            </Card>
+
+            {/* Proctoring Settings */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  <CardTitle>Proctoring Settings</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="enableProctoring">Enable Proctoring</Label>
+                    <p className="text-sm text-gray-500">Monitor students during the exam</p>
+                  </div>
+                  <Switch
+                    id="enableProctoring"
+                    checked={formData.enableProctoring}
+                    onCheckedChange={(checked) => 
+                      setFormData(prev => ({ ...prev, enableProctoring: checked }))
+                    }
+                  />
+                </div>
+
+                {formData.enableProctoring && (
+                  <div className="space-y-4 pt-4 border-t">
+                    <div>
+                      <Label>Proctoring Mode</Label>
+                      <Select 
+                        value={formData.proctoringMode} 
+                        onValueChange={(value: any) => 
+                          setFormData(prev => ({ ...prev, proctoringMode: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="BASIC_MONITORING">Basic Monitoring</SelectItem>
+                          <SelectItem value="WEBCAM_RECORDING">Webcam Recording</SelectItem>
+                          <SelectItem value="LIVE_PROCTORING">Live Proctoring</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.proctoringMode === 'WEBCAM_RECORDING' && (
+                      <div>
+                        <Label>Photo Capture Interval (seconds)</Label>
+                        <Input
+                          type="number"
+                          value={formData.photoIntervalSeconds}
+                          onChange={(e) => setFormData(prev => ({ 
+                            ...prev, 
+                            photoIntervalSeconds: parseInt(e.target.value) || 30 
+                          }))}
+                          min={10}
+                          max={300}
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <Label>Require Identity Verification</Label>
+                      <Switch
+                        checked={formData.requireIdentityVerification}
+                        onCheckedChange={(checked) => 
+                          setFormData(prev => ({ ...prev, requireIdentityVerification: checked }))
+                        }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label>Block Copy & Paste</Label>
+                      <Switch
+                        checked={formData.blockCopyPaste}
+                        onCheckedChange={(checked) => 
+                          setFormData(prev => ({ ...prev, blockCopyPaste: checked }))
+                        }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <Label>Auto-Submit on Tab Switch</Label>
+                      <Switch
+                        checked={formData.blockTabSwitch}
+                        onCheckedChange={(checked) => 
+                          setFormData(prev => ({ ...prev, blockTabSwitch: checked }))
+                        }
+                      />
+                    </div>
+
+                    {!formData.blockTabSwitch && (
+                      <div>
+                        <Label>Max Tab Switches Allowed</Label>
+                        <Input
+                          type="number"
+                          value={formData.maxTabSwitchesAllowed}
+                          onChange={(e) => setFormData(prev => ({ 
+                            ...prev, 
+                            maxTabSwitchesAllowed: parseInt(e.target.value) || 3 
+                          }))}
+                          min={0}
+                          max={20}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column - Modules and Question Settings */}
+          <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Select Modules {generationMode === 'batch' ? '*' : '(Optional)'}
+                </CardTitle>
+                <CardDescription>
+                  {generationMode === 'batch' 
+                    ? 'Questions will be selected from these modules for each section'
+                    : 'Required for AI generation. You can create an empty exam and add questions manually.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!formData.courseId ? (
+                  <p className="text-gray-500 text-sm">Please select a course first</p>
+                ) : sections.length === 0 ? (
+                  <p className="text-gray-500 text-sm">No modules found for this course</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {sections.map(section => (
+                      <div key={section.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={formData.moduleIds.includes(section.id)}
+                          onCheckedChange={() => toggleModule(section.id)}
+                        />
+                        <Label className="flex-1 cursor-pointer" onClick={() => toggleModule(section.id)}>
+                          {section.title}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {formData.moduleIds.length > 0 && (
+                  <div className="mt-3 pt-3 border-t">
+                    <Badge variant="secondary">
+                      {formData.moduleIds.length} module(s) selected
+                    </Badge>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Question Generation Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Question Generation</CardTitle>
+                <CardDescription>
+                  {generationMode === 'batch' 
+                    ? 'Configure how questions are selected from the bank for each section'
+                    : 'Settings for AI question generation'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label>Number of Questions</Label>
+                  <Input
+                    type="number"
+                    value={formData.numberOfQuestions}
+                    onChange={(e) => setFormData(prev => ({ 
+                      ...prev, 
+                      numberOfQuestions: parseInt(e.target.value) || 10 
+                    }))}
+                    min={1}
+                    max={100}
+                  />
+                </div>
+                <div>
+                  <Label>Difficulty Level</Label>
+                  <Select 
+                    value={formData.difficulty} 
+                    onValueChange={(value: DifficultyLevel) => 
+                      setFormData(prev => ({ ...prev, difficulty: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Any difficulty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ANY">Any Difficulty</SelectItem>
+                      <SelectItem value="EASY">Easy</SelectItem>
+                      <SelectItem value="MEDIUM">Medium</SelectItem>
+                      <SelectItem value="HARD">Hard</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Question Bank Preview (Batch mode only) */}
+            {generationMode === 'batch' && (
+              <QuestionPreview
+                courseId={formData.courseId}
+                moduleIds={formData.moduleIds}
+                numberOfQuestions={formData.numberOfQuestions}
+                difficultyLevel={formData.difficulty === 'ANY' ? undefined : formData.difficulty}
+              />
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <div className="flex gap-4">
-          <Button onClick={handleSubmit} disabled={loading || generating}>
-            {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-            Create Exam
-          </Button>
-          {canUseAI && (
-            <Button onClick={handleGenerateWithAI} disabled={loading || generating} variant="default">
-              {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
-               <Sparkles className="h-4 w-4 mr-2" />}
-              Create & Generate with AI
+        {/* Action Buttons */}
+        <div className="flex gap-4 mt-6">
+          {generationMode === 'single' ? (
+            <>
+              <Button onClick={handleSubmit} disabled={loading || generating}>
+                {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Create Exam
+              </Button>
+              {canUseAI && (
+                <Button onClick={handleGenerateWithAI} disabled={loading || generating} variant="default">
+                  {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
+                   <Sparkles className="h-4 w-4 mr-2" />}
+                  Create & Generate with AI
+                </Button>
+              )}
+            </>
+          ) : (
+            <Button 
+              onClick={handleBatchGenerate} 
+              disabled={loading || generating || selectedSectionIds.length === 0 || formData.moduleIds.length === 0}
+              className="min-w-[200px]"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <FileStack className="h-4 w-4 mr-2" />
+                  Generate {selectedSectionIds.length} Paper{selectedSectionIds.length !== 1 ? 's' : ''}
+                </>
+              )}
             </Button>
           )}
         </div>
+      </Tabs>
     </div>
   )
 }

@@ -4,6 +4,10 @@ import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.content.domain.Assessment;
+import com.datagami.edudron.content.domain.ExamQuestion;
+import com.datagami.edudron.content.domain.QuestionBank;
+import com.datagami.edudron.content.dto.BatchExamGenerationRequest;
+import com.datagami.edudron.content.dto.BatchExamGenerationResponse;
 import com.datagami.edudron.content.repo.AssessmentRepository;
 import com.datagami.edudron.content.repo.CourseRepository;
 import org.slf4j.Logger;
@@ -47,6 +51,9 @@ public class ExamService {
     
     @Autowired
     private ExamGenerationService examGenerationService;
+    
+    @Autowired
+    private ExamPaperGenerationService examPaperGenerationService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -93,7 +100,8 @@ public class ExamService {
                                  Boolean randomizeQuestions, Boolean randomizeMcqOptions,
                                  Boolean enableProctoring, Assessment.ProctoringMode proctoringMode,
                                  Integer photoIntervalSeconds, Boolean requireIdentityVerification,
-                                 Boolean blockCopyPaste, Boolean blockTabSwitch, Integer maxTabSwitchesAllowed) {
+                                 Boolean blockCopyPaste, Boolean blockTabSwitch, Integer maxTabSwitchesAllowed,
+                                 String timingMode) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -138,6 +146,9 @@ public class ExamService {
         exam.setBlockCopyPaste(blockCopyPaste != null ? blockCopyPaste : false);
         exam.setBlockTabSwitch(blockTabSwitch != null ? blockTabSwitch : false);
         exam.setMaxTabSwitchesAllowed(maxTabSwitchesAllowed != null ? maxTabSwitchesAllowed : 3);
+        
+        // Set timing mode
+        exam.setTimingMode(parseTimingMode(timingMode));
         
         Assessment saved = assessmentRepository.save(exam);
         String audience = sectionId != null ? "section: " + sectionId : 
@@ -475,6 +486,200 @@ public class ExamService {
         
         assessmentRepository.delete(exam);
         logger.info("Deleted exam: {}", examId);
+    }
+    
+    /**
+     * Batch generate exams for multiple sections with randomized question selection.
+     * Each section gets a separate exam with different question order/selection.
+     */
+    public BatchExamGenerationResponse batchGenerateExamsForSections(BatchExamGenerationRequest request) {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create exams
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot create exams");
+        }
+        
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Verify course exists
+        courseRepository.findByIdAndClientId(request.getCourseId(), clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Course not found: " + request.getCourseId()));
+        
+        // Validate that modules are specified for question generation
+        if (request.getModuleIds() == null || request.getModuleIds().isEmpty()) {
+            throw new IllegalArgumentException("At least one module must be selected for question generation");
+        }
+        
+        BatchExamGenerationResponse response = new BatchExamGenerationResponse(request.getSectionIds().size());
+        
+        // Fetch section names for better exam titles
+        Map<String, String> sectionNames = fetchSectionNames(request.getSectionIds());
+        
+        // Create an exam for each section
+        for (String sectionId : request.getSectionIds()) {
+            try {
+                String sectionName = sectionNames.getOrDefault(sectionId, "Section " + sectionId.substring(0, 8));
+                String examTitle = request.getTitle() + " - " + sectionName;
+                
+                // Create the exam
+                Assessment exam = createExamForBatch(request, sectionId, examTitle, clientId);
+                
+                // Generate questions from question bank
+                int questionCount = generateQuestionsForExam(exam.getId(), request, clientId);
+                
+                response.addExam(exam, sectionName, questionCount);
+                logger.info("Created exam {} for section {} with {} questions", exam.getId(), sectionId, questionCount);
+                
+            } catch (Exception e) {
+                logger.error("Failed to create exam for section {}: {}", sectionId, e.getMessage());
+                response.addError("Section " + sectionId + ": " + e.getMessage());
+            }
+        }
+        
+        return response;
+    }
+    
+    private Assessment createExamForBatch(BatchExamGenerationRequest request, String sectionId, String title, UUID clientId) {
+        // Get next sequence
+        Integer maxSequence = assessmentRepository.findMaxSequenceByCourseIdAndClientId(request.getCourseId(), clientId);
+        int nextSequence = (maxSequence != null ? maxSequence : 0) + 1;
+        
+        Assessment exam = new Assessment();
+        exam.setId(UlidGenerator.nextUlid());
+        exam.setClientId(clientId);
+        exam.setCourseId(request.getCourseId());
+        exam.setSectionId(sectionId);
+        exam.setAssessmentType(Assessment.AssessmentType.EXAM);
+        exam.setTitle(title);
+        exam.setDescription(request.getDescription());
+        exam.setInstructions(request.getInstructions());
+        exam.setSequence(nextSequence);
+        exam.setStatus(Assessment.ExamStatus.DRAFT);
+        exam.setModuleIds(request.getModuleIds());
+        
+        // Apply exam settings
+        BatchExamGenerationRequest.ExamSettings settings = request.getExamSettings();
+        if (settings != null) {
+            exam.setReviewMethod(parseReviewMethod(settings.getReviewMethod()));
+            exam.setTimeLimitSeconds(settings.getTimeLimitSeconds());
+            exam.setPassingScorePercentage(settings.getPassingScorePercentage() != null ? settings.getPassingScorePercentage() : 70);
+            exam.setRandomizeQuestions(settings.isRandomizeQuestions());
+            exam.setRandomizeMcqOptions(settings.isRandomizeMcqOptions());
+            exam.setEnableProctoring(settings.isEnableProctoring());
+            exam.setProctoringMode(parseProctoringMode(settings.getProctoringMode()));
+            exam.setPhotoIntervalSeconds(settings.getPhotoIntervalSeconds() != null ? settings.getPhotoIntervalSeconds() : 120);
+            exam.setRequireIdentityVerification(settings.isRequireIdentityVerification());
+            exam.setBlockCopyPaste(settings.isBlockCopyPaste());
+            exam.setBlockTabSwitch(settings.isBlockTabSwitch());
+            exam.setMaxTabSwitchesAllowed(settings.getMaxTabSwitchesAllowed() != null ? settings.getMaxTabSwitchesAllowed() : 3);
+            exam.setTimingMode(parseTimingMode(settings.getTimingMode()));
+        } else {
+            exam.setReviewMethod(Assessment.ReviewMethod.INSTRUCTOR);
+            exam.setTimingMode(Assessment.TimingMode.FIXED_WINDOW);
+        }
+        
+        return assessmentRepository.save(exam);
+    }
+    
+    private int generateQuestionsForExam(String examId, BatchExamGenerationRequest request, UUID clientId) {
+        BatchExamGenerationRequest.GenerationCriteria criteria = request.getGenerationCriteria();
+        
+        ExamPaperGenerationService.GenerationCriteria genCriteria = new ExamPaperGenerationService.GenerationCriteria();
+        genCriteria.setModuleIds(request.getModuleIds());
+        genCriteria.setRandomize(true); // Always randomize for batch generation to ensure variety
+        genCriteria.setClearExisting(true); // Start fresh
+        
+        if (criteria != null) {
+            genCriteria.setNumberOfQuestions(criteria.getNumberOfQuestions() != null ? criteria.getNumberOfQuestions() : 10);
+            
+            if (criteria.getDifficultyLevel() != null) {
+                genCriteria.setDifficultyLevel(QuestionBank.DifficultyLevel.valueOf(criteria.getDifficultyLevel()));
+            }
+            
+            if (criteria.getQuestionTypes() != null && !criteria.getQuestionTypes().isEmpty()) {
+                List<QuestionBank.QuestionType> types = criteria.getQuestionTypes().stream()
+                    .map(QuestionBank.QuestionType::valueOf)
+                    .toList();
+                genCriteria.setQuestionTypes(types);
+            }
+            
+            if (criteria.getDifficultyDistribution() != null && !criteria.getDifficultyDistribution().isEmpty()) {
+                Map<QuestionBank.DifficultyLevel, Integer> distribution = new java.util.HashMap<>();
+                for (Map.Entry<String, Integer> entry : criteria.getDifficultyDistribution().entrySet()) {
+                    distribution.put(QuestionBank.DifficultyLevel.valueOf(entry.getKey()), entry.getValue());
+                }
+                genCriteria.setDifficultyDistribution(distribution);
+            }
+        } else {
+            genCriteria.setNumberOfQuestions(10);
+        }
+        
+        List<ExamQuestion> generated = examPaperGenerationService.generateExamPaper(examId, genCriteria);
+        return generated.size();
+    }
+    
+    private Map<String, String> fetchSectionNames(List<String> sectionIds) {
+        Map<String, String> sectionNames = new java.util.HashMap<>();
+        
+        try {
+            for (String sectionId : sectionIds) {
+                String url = gatewayUrl + "/api/sections/" + sectionId;
+                ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(new HttpHeaders()),
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                );
+                
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    Object name = response.getBody().get("name");
+                    if (name != null) {
+                        sectionNames.put(sectionId, name.toString());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to fetch section names: {}", e.getMessage());
+        }
+        
+        return sectionNames;
+    }
+    
+    private Assessment.ReviewMethod parseReviewMethod(String reviewMethod) {
+        if (reviewMethod == null) {
+            return Assessment.ReviewMethod.INSTRUCTOR;
+        }
+        try {
+            return Assessment.ReviewMethod.valueOf(reviewMethod);
+        } catch (IllegalArgumentException e) {
+            return Assessment.ReviewMethod.INSTRUCTOR;
+        }
+    }
+    
+    private Assessment.ProctoringMode parseProctoringMode(String proctoringMode) {
+        if (proctoringMode == null) {
+            return Assessment.ProctoringMode.DISABLED;
+        }
+        try {
+            return Assessment.ProctoringMode.valueOf(proctoringMode);
+        } catch (IllegalArgumentException e) {
+            return Assessment.ProctoringMode.DISABLED;
+        }
+    }
+    
+    private Assessment.TimingMode parseTimingMode(String timingMode) {
+        if (timingMode == null) {
+            return Assessment.TimingMode.FIXED_WINDOW;
+        }
+        try {
+            return Assessment.TimingMode.valueOf(timingMode);
+        } catch (IllegalArgumentException e) {
+            return Assessment.TimingMode.FIXED_WINDOW;
+        }
     }
     
     /**

@@ -2,6 +2,8 @@ package com.datagami.edudron.content.web;
 
 import com.datagami.edudron.content.domain.Assessment;
 import com.datagami.edudron.content.domain.QuizQuestion;
+import com.datagami.edudron.content.dto.BatchExamGenerationRequest;
+import com.datagami.edudron.content.dto.BatchExamGenerationResponse;
 import com.datagami.edudron.content.repo.QuizQuestionRepository;
 import com.datagami.edudron.content.service.ExamService;
 import com.datagami.edudron.content.service.ExamReviewService;
@@ -136,10 +138,43 @@ public class ExamController {
         Integer maxTabSwitchesAllowed = request.get("maxTabSwitchesAllowed") != null ? 
             (Integer) request.get("maxTabSwitchesAllowed") : 3;
         
+        // Timing mode parameter
+        String timingMode = (String) request.get("timingMode");
+        
         Assessment exam = examService.createExam(courseId, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, 
             randomizeQuestions, randomizeMcqOptions, enableProctoring, proctoringMode, photoIntervalSeconds, 
-            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed);
+            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed, timingMode);
         return ResponseEntity.status(HttpStatus.CREATED).body(exam);
+    }
+    
+    @PostMapping("/batch-generate")
+    @Operation(summary = "Batch generate exams", description = "Create separate exams for each selected section with randomized question selection from the question bank")
+    public ResponseEntity<BatchExamGenerationResponse> batchGenerateExams(
+            @RequestBody @jakarta.validation.Valid BatchExamGenerationRequest request) {
+        try {
+            logger.info("Batch generating exams for course {} with {} sections", 
+                request.getCourseId(), request.getSectionIds().size());
+            
+            BatchExamGenerationResponse response = examService.batchGenerateExamsForSections(request);
+            
+            if (response.getTotalCreated() == 0 && !response.getErrors().isEmpty()) {
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            logger.info("Successfully created {} exams out of {} requested", 
+                response.getTotalCreated(), response.getTotalRequested());
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Bad request for batch generate: {}", e.getMessage());
+            BatchExamGenerationResponse errorResponse = new BatchExamGenerationResponse(request.getSectionIds().size());
+            errorResponse.addError(e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        } catch (Exception e) {
+            logger.error("Failed to batch generate exams", e);
+            BatchExamGenerationResponse errorResponse = new BatchExamGenerationResponse(request.getSectionIds().size());
+            errorResponse.addError("Internal server error: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
     
     @GetMapping

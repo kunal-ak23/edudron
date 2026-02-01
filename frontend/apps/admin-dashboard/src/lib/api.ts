@@ -50,3 +50,90 @@ export const questionsApi = {
   }
 }
 
+// Batch exam generation types
+export interface BatchExamGenerationRequest {
+  courseId: string
+  title: string
+  description?: string
+  instructions?: string
+  sectionIds: string[]
+  moduleIds: string[]
+  generationCriteria?: {
+    numberOfQuestions?: number
+    difficultyLevel?: 'EASY' | 'MEDIUM' | 'HARD'
+    difficultyDistribution?: Record<string, number>
+    questionTypes?: string[]
+    randomize?: boolean
+    uniquePerSection?: boolean
+  }
+  examSettings?: {
+    reviewMethod?: 'INSTRUCTOR' | 'AI' | 'BOTH'
+    timeLimitSeconds?: number
+    passingScorePercentage?: number
+    randomizeQuestions?: boolean
+    randomizeMcqOptions?: boolean
+    enableProctoring?: boolean
+    proctoringMode?: 'DISABLED' | 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING'
+    photoIntervalSeconds?: number
+    requireIdentityVerification?: boolean
+    blockCopyPaste?: boolean
+    blockTabSwitch?: boolean
+    maxTabSwitchesAllowed?: number
+    timingMode?: 'FIXED_WINDOW' | 'FLEXIBLE_START'
+  }
+}
+
+export interface GeneratedExam {
+  examId: string
+  title: string
+  sectionId: string
+  sectionName: string
+  questionCount: number
+  status: string
+}
+
+export interface BatchExamGenerationResponse {
+  totalRequested: number
+  totalCreated: number
+  exams: GeneratedExam[]
+  errors: string[]
+}
+
+export const examsApi = {
+  batchGenerate: async (request: BatchExamGenerationRequest): Promise<BatchExamGenerationResponse> => {
+    return apiClient.post<BatchExamGenerationResponse>('/api/exams/batch-generate', request)
+  },
+  
+  create: async (examData: any) => {
+    return apiClient.post<any>('/api/exams', examData)
+  },
+  
+  getById: async (examId: string) => {
+    return apiClient.get<any>(`/api/exams/${examId}`)
+  },
+  
+  list: async () => {
+    return apiClient.get<any[]>('/api/exams')
+  },
+  
+  update: async (examId: string, examData: any) => {
+    return apiClient.put<any>(`/api/exams/${examId}`, examData)
+  },
+  
+  delete: async (examId: string) => {
+    return apiClient.delete(`/api/exams/${examId}`)
+  },
+  
+  schedule: async (examId: string, startTime: string, endTime: string) => {
+    return apiClient.put<any>(`/api/exams/${examId}/schedule`, { startTime, endTime })
+  },
+  
+  getCourseSections: async (courseId: string) => {
+    return apiClient.get<any[]>(`/api/exams/courses/${courseId}/sections`)
+  },
+  
+  getCourseClasses: async (courseId: string) => {
+    return apiClient.get<any[]>(`/api/exams/courses/${courseId}/classes`)
+  }
+}
+
