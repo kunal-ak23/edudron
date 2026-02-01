@@ -128,6 +128,9 @@ export default function ExamResultsPage() {
     )
   }
 
+  // Check if the submission has been graded
+  const isGraded = submission.score !== null && submission.score !== undefined
+
   return (
     <ProtectedRoute>
       <StudentLayout>
@@ -149,51 +152,62 @@ export default function ExamResultsPage() {
               <CardTitle>Your Score</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-4xl font-bold">
-                    {submission.score !== null && submission.score !== undefined 
-                      ? submission.score 
-                      : 'N/A'} / {submission.maxScore !== null && submission.maxScore !== undefined 
-                      ? submission.maxScore 
-                      : 'N/A'}
-                  </div>
-                  <div className="text-2xl font-semibold mt-2">
-                    {(() => {
-                      // Calculate percentage if not available
-                      let percentage = submission.percentage
-                      if (percentage === null || percentage === undefined) {
-                        if (submission.score !== null && submission.score !== undefined && 
-                            submission.maxScore !== null && submission.maxScore !== undefined && 
-                            submission.maxScore > 0) {
-                          percentage = (submission.score / submission.maxScore) * 100
-                        } else {
-                          return 'Not Graded'
+              {isGraded ? (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-4xl font-bold">
+                      {submission.score} / {submission.maxScore}
+                    </div>
+                    <div className="text-2xl font-semibold mt-2">
+                      {(() => {
+                        let percentage = submission.percentage
+                        if (percentage === null || percentage === undefined) {
+                          if (submission.maxScore && submission.maxScore > 0) {
+                            percentage = (submission.score! / submission.maxScore) * 100
+                          } else {
+                            return '0%'
+                          }
                         }
-                      }
-                      return `${percentage.toFixed(1)}%`
-                    })()}
+                        return `${percentage.toFixed(1)}%`
+                      })()}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {submission.isPassed ? (
+                      <Badge className="bg-green-500 text-white text-lg px-4 py-2">
+                        <CheckCircle className="h-5 w-5 mr-2" />
+                        Passed
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive" className="text-lg px-4 py-2">
+                        <XCircle className="h-5 w-5 mr-2" />
+                        Not Passed
+                      </Badge>
+                    )}
                   </div>
                 </div>
-                <div className="text-right">
-                  {submission.isPassed ? (
-                    <Badge className="bg-green-500 text-white text-lg px-4 py-2">
-                      <CheckCircle className="h-5 w-5 mr-2" />
-                      Passed
-                    </Badge>
-                  ) : (
-                    <Badge variant="destructive" className="text-lg px-4 py-2">
-                      <XCircle className="h-5 w-5 mr-2" />
-                      Not Passed
-                    </Badge>
-                  )}
+              ) : (
+                <div className="text-center py-8">
+                  <div className="text-6xl mb-4">📝</div>
+                  <div className="text-2xl font-semibold text-gray-700 mb-2">
+                    Awaiting Review
+                  </div>
+                  <p className="text-gray-500">
+                    Your exam has been submitted and is pending review by the instructor.
+                  </p>
+                  <p className="text-gray-500 mt-2">
+                    You will be able to see your results once the exam has been graded.
+                  </p>
+                  <Badge variant="outline" className="mt-4 text-lg px-4 py-2">
+                    {submission.reviewStatus || 'PENDING'}
+                  </Badge>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Question Reviews */}
-          {exam.questions && exam.questions.length > 0 && (
+          {/* Question Reviews - Only show if graded */}
+          {isGraded && exam.questions && exam.questions.length > 0 && (
             <div className="space-y-4">
               <h2 className="text-2xl font-semibold">Question Review</h2>
               {exam.questions.map((question, index) => {

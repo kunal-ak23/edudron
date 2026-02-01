@@ -1155,8 +1155,8 @@ export default function TakeExamPage() {
         
         <div className="flex h-full min-h-0 bg-white">
           {/* Left Sidebar - Questions Navigation */}
-          <div className="w-80 border-r bg-white border-gray-200 overflow-hidden transition-all duration-300 flex-shrink-0 relative">
-            <div className="p-4 overflow-y-auto h-full">
+          <div className="w-80 border-r bg-white border-gray-200 transition-all duration-300 flex-shrink-0 relative flex flex-col">
+            <div className="p-4 flex-1 overflow-y-auto">
               <div className="mb-4">
                 <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                   Exam
