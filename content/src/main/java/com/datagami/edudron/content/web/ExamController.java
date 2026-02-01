@@ -11,7 +11,12 @@ import com.datagami.edudron.content.service.ExamReviewService;
 import com.datagami.edudron.content.service.QuestionService;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
+import com.datagami.edudron.content.domain.QuizOption;
+import com.datagami.edudron.content.repo.AssessmentRepository;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
@@ -56,6 +61,15 @@ public class ExamController {
     
     @Autowired
     private QuestionService questionService;
+    
+    @Autowired
+    private com.datagami.edudron.content.service.ExamPaperGenerationService examPaperService;
+    
+    @Autowired
+    private AssessmentRepository assessmentRepository;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -961,34 +975,216 @@ public class ExamController {
     }
     
     @PutMapping("/{examId}/submissions/{submissionId}/manual-grade")
-    @Operation(summary = "Manual grade submission", description = "Manually grade an exam submission by updating scores")
+    @Operation(summary = "Manual grade submission", 
+        description = "Grade submission with per-question grades. MCQ/TRUE_FALSE are auto-graded. " +
+                      "Send questionGrades: { questionId: { score: number, feedback?: string } } for subjective questions. " +
+                      "Total score and pass/fail are auto-calculated.")
     public ResponseEntity<Map<String, Object>> manualGrade(
             @PathVariable String examId,
             @PathVariable String submissionId,
             @RequestBody Map<String, Object> request) {
         try {
-            // Delegate to student service via REST call
-            String url = gatewayUrl + "/api/student/submissions/" + submissionId + "/manual-grade";
+            String clientIdStr = TenantContext.getClientId();
+            if (clientIdStr == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            UUID clientId = UUID.fromString(clientIdStr);
             
+            // 1. Fetch the exam
+            Assessment exam = assessmentRepository.findByIdAndClientId(examId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Exam not found: " + examId));
+            
+            // 2. Fetch submission from student service to get answers
+            String submissionUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
+            ResponseEntity<JsonNode> submissionResponse = getRestTemplate().exchange(
+                submissionUrl,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                JsonNode.class
+            );
+            
+            if (!submissionResponse.getStatusCode().is2xxSuccessful() || submissionResponse.getBody() == null) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            JsonNode submission = submissionResponse.getBody();
+            JsonNode answersJson = submission.get("answersJson");
+            JsonNode existingReviewFeedback = submission.get("aiReviewFeedback");
+            
+            // 3. Get all questions for this exam (with options loaded)
+            List<QuizQuestion> questions = quizQuestionRepository.findByAssessmentIdAndClientIdWithOptions(examId, clientId);
+            
+            // 4. Get per-question grades from request (for subjective questions)
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, Object>> questionGrades = request.containsKey("questionGrades") 
+                ? (Map<String, Map<String, Object>>) request.get("questionGrades") 
+                : new java.util.HashMap<>();
+            
+            String instructorFeedback = request.containsKey("instructorFeedback") 
+                ? (String) request.get("instructorFeedback") 
+                : null;
+            
+            // 5. Grade each question
+            double totalScore = 0.0;
+            double maxScore = 0.0;
+            ArrayNode questionReviews = objectMapper.createArrayNode();
+            
+            for (QuizQuestion question : questions) {
+                int questionPoints = question.getPoints();
+                maxScore += questionPoints;
+                
+                double pointsEarned = 0.0;
+                String feedback = "";
+                boolean isCorrect = false;
+                boolean isAutoGraded = false;
+                
+                JsonNode answerNode = answersJson != null ? answersJson.get(question.getId()) : null;
+                
+                if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE ||
+                    question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
+                    // Auto-grade objective questions
+                    isAutoGraded = true;
+                    if (answerNode != null) {
+                        pointsEarned = gradeObjectiveQuestion(question, answerNode);
+                        isCorrect = pointsEarned == questionPoints;
+                        feedback = isCorrect ? "Correct" : "Incorrect";
+                    } else {
+                        feedback = "No answer provided";
+                    }
+                } else {
+                    // Subjective questions - use provided grade or existing AI grade
+                    Map<String, Object> providedGrade = questionGrades.get(question.getId());
+                    
+                    if (providedGrade != null && providedGrade.containsKey("score")) {
+                        // Use instructor-provided grade
+                        Object scoreObj = providedGrade.get("score");
+                        pointsEarned = scoreObj instanceof Number ? ((Number) scoreObj).doubleValue() : 0.0;
+                        pointsEarned = Math.min(pointsEarned, questionPoints); // Cap at max points
+                        feedback = providedGrade.containsKey("feedback") 
+                            ? (String) providedGrade.get("feedback") 
+                            : "Manually graded";
+                        isCorrect = pointsEarned >= questionPoints * 0.7; // 70% threshold for "correct"
+                    } else if (existingReviewFeedback != null && existingReviewFeedback.has("questionReviews")) {
+                        // Fall back to existing AI review grade
+                        JsonNode existingReviews = existingReviewFeedback.get("questionReviews");
+                        for (JsonNode review : existingReviews) {
+                            if (question.getId().equals(review.get("questionId").asText())) {
+                                pointsEarned = review.has("pointsEarned") ? review.get("pointsEarned").asDouble() : 0.0;
+                                feedback = review.has("feedback") ? review.get("feedback").asText() : "From AI review";
+                                isCorrect = review.has("isCorrect") && review.get("isCorrect").asBoolean();
+                                break;
+                            }
+                        }
+                        if (feedback.isEmpty()) {
+                            feedback = "Requires grading";
+                        }
+                    } else {
+                        feedback = answerNode != null ? "Requires grading" : "No answer provided";
+                    }
+                }
+                
+                totalScore += pointsEarned;
+                
+                // Create question review entry
+                ObjectNode review = objectMapper.createObjectNode();
+                review.put("questionId", question.getId());
+                review.put("pointsEarned", pointsEarned);
+                review.put("maxPoints", questionPoints);
+                review.put("feedback", feedback);
+                review.put("isCorrect", isCorrect);
+                review.put("isAutoGraded", isAutoGraded);
+                questionReviews.add(review);
+            }
+            
+            // 6. Calculate percentage and pass/fail
+            double percentage = maxScore > 0 ? (totalScore / maxScore) * 100.0 : 0.0;
+            boolean isPassed = percentage >= exam.getPassingScorePercentage();
+            
+            logger.info("Manual grading: exam={}, submission={}, score={}/{}, percentage={}%, passed={}", 
+                examId, submissionId, totalScore, maxScore, String.format("%.1f", percentage), isPassed);
+            
+            // 7. Build review feedback JSON
+            ObjectNode reviewFeedback = objectMapper.createObjectNode();
+            reviewFeedback.set("questionReviews", questionReviews);
+            reviewFeedback.put("totalScore", totalScore);
+            reviewFeedback.put("maxScore", maxScore);
+            reviewFeedback.put("percentage", percentage);
+            reviewFeedback.put("isPassed", isPassed);
+            if (instructorFeedback != null && !instructorFeedback.isEmpty()) {
+                reviewFeedback.put("instructorFeedback", instructorFeedback);
+            }
+            
+            // 8. Update submission via student service
+            ObjectNode updateRequest = objectMapper.createObjectNode();
+            updateRequest.put("score", totalScore);
+            updateRequest.put("maxScore", maxScore);
+            updateRequest.put("isPassed", isPassed);
+            if (instructorFeedback != null) {
+                updateRequest.put("instructorFeedback", instructorFeedback);
+            }
+            
+            String updateUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId + "/manual-grade";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
             
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
-                url,
+                updateUrl,
                 HttpMethod.PUT,
-                new HttpEntity<>(request, headers),
+                new HttpEntity<>(objectMapper.writeValueAsString(updateRequest), headers),
                 new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
             );
             
             if (response.getStatusCode().is2xxSuccessful()) {
-                logger.info("Manually graded submission {} for exam {}", submissionId, examId);
-                return ResponseEntity.ok(response.getBody());
+                // Return the complete grading result including per-question details
+                Map<String, Object> result = new java.util.HashMap<>();
+                result.put("submissionId", submissionId);
+                result.put("totalScore", totalScore);
+                result.put("maxScore", maxScore);
+                result.put("percentage", percentage);
+                result.put("isPassed", isPassed);
+                result.put("passingThreshold", exam.getPassingScorePercentage());
+                result.put("questionReviews", objectMapper.convertValue(questionReviews, List.class));
+                if (instructorFeedback != null) {
+                    result.put("instructorFeedback", instructorFeedback);
+                }
+                
+                logger.info("Successfully graded submission {} for exam {}", submissionId, examId);
+                return ResponseEntity.ok(result);
             } else {
                 return ResponseEntity.status(response.getStatusCode()).build();
             }
+        } catch (IllegalArgumentException e) {
+            logger.warn("Invalid request for manual grading: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             logger.error("Failed to manually grade submission: {} for exam: {}", submissionId, examId, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+    
+    /**
+     * Grade an objective question (MCQ or TRUE_FALSE)
+     */
+    private double gradeObjectiveQuestion(QuizQuestion question, JsonNode answerNode) {
+        if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE) {
+            String selectedOptionId = answerNode.asText();
+            for (QuizOption option : question.getOptions()) {
+                if (option.getId().equals(selectedOptionId) && option.getIsCorrect()) {
+                    return question.getPoints();
+                }
+            }
+            return 0.0;
+        } else if (question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
+            boolean studentAnswer = answerNode.asBoolean();
+            boolean correctAnswer = false;
+            for (QuizOption option : question.getOptions()) {
+                if (option.getIsCorrect()) {
+                    correctAnswer = Boolean.parseBoolean(option.getOptionText());
+                    break;
+                }
+            }
+            return (studentAnswer == correctAnswer) ? question.getPoints() : 0.0;
+        }
+        return 0.0;
     }
 }

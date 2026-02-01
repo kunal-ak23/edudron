@@ -1679,6 +1679,8 @@ function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; 
     isPassed: false,
     instructorFeedback: ''
   })
+  const [questionGrades, setQuestionGrades] = useState<Record<string, { score: string; feedback: string }>>({})
+  const [savingGrade, setSavingGrade] = useState(false)
   const { toast } = useToast()
 
   const loadSubmissions = useCallback(async () => {
@@ -2067,13 +2069,26 @@ function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; 
               {/* Manual Grading Section */}
               <div className="border-t pt-4 mt-4">
                 <div className="flex items-center justify-between mb-4">
-                  <Label className="text-lg font-semibold">Manual Grading</Label>
+                  <Label className="text-lg font-semibold">Grade Submission</Label>
                   {!manualGrading && (
                     <Button 
                       variant="outline" 
                       size="sm"
                       onClick={() => {
                         setManualGrading(true)
+                        // Initialize question grades from existing AI review or empty
+                        const initialGrades: Record<string, { score: string; feedback: string }> = {}
+                        const examQuestions = selectedSubmission.examDetails?.questions || []
+                        const existingReviews = selectedSubmission.aiReviewFeedback?.questionReviews || []
+                        
+                        examQuestions.forEach((q: any) => {
+                          const existingReview = existingReviews.find((r: any) => r.questionId === q.id)
+                          initialGrades[q.id] = {
+                            score: existingReview?.pointsEarned?.toString() || '0',
+                            feedback: existingReview?.feedback || ''
+                          }
+                        })
+                        setQuestionGrades(initialGrades)
                         setManualGradeData({
                           score: selectedSubmission.score?.toString() || '',
                           maxScore: selectedSubmission.maxScore?.toString() || '',
@@ -2083,82 +2098,195 @@ function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; 
                       }}
                     >
                       <Edit className="h-4 w-4 mr-2" />
-                      Edit Grade
+                      Grade Answers
                     </Button>
                   )}
                 </div>
                 
                 {manualGrading ? (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="manualScore">Score</Label>
-                        <Input
-                          id="manualScore"
-                          type="number"
-                          step="0.1"
-                          value={manualGradeData.score}
-                          onChange={(e) => setManualGradeData(prev => ({ ...prev, score: e.target.value }))}
-                          placeholder="Enter score"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="manualMaxScore">Max Score</Label>
-                        <Input
-                          id="manualMaxScore"
-                          type="number"
-                          step="0.1"
-                          value={manualGradeData.maxScore}
-                          onChange={(e) => setManualGradeData(prev => ({ ...prev, maxScore: e.target.value }))}
-                          placeholder="Enter max score"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        id="manualIsPassed"
-                        checked={manualGradeData.isPassed}
-                        onChange={(e) => setManualGradeData(prev => ({ ...prev, isPassed: e.target.checked }))}
-                      />
-                      <Label htmlFor="manualIsPassed">Passed</Label>
-                    </div>
-                    <div>
-                      <Label htmlFor="instructorFeedback">Instructor Feedback</Label>
-                      <Textarea
-                        id="instructorFeedback"
-                        rows={4}
-                        value={manualGradeData.instructorFeedback}
-                        onChange={(e) => setManualGradeData(prev => ({ ...prev, instructorFeedback: e.target.value }))}
-                        placeholder="Add feedback for the student..."
-                      />
-                    </div>
-                    <div className="flex gap-2">
+                    {/* Per-Question Grading */}
+                    {(() => {
+                      const examQuestions = selectedSubmission.examDetails?.questions || []
+                      const answersJson = selectedSubmission.answersJson || {}
+                      const passingPercentage = selectedSubmission.examDetails?.passingScorePercentage || 70
+                      
+                      // Calculate totals
+                      let totalEarned = 0
+                      let totalMax = 0
+                      examQuestions.forEach((q: any) => {
+                        totalMax += q.points || 1
+                        const isObjective = q.questionType === 'MULTIPLE_CHOICE' || q.questionType === 'TRUE_FALSE'
+                        if (isObjective) {
+                          // Auto-grade MCQ
+                          const answer = answersJson[q.id]
+                          if (answer && q.questionType === 'MULTIPLE_CHOICE') {
+                            const selectedOption = q.options?.find((o: any) => o.id === answer)
+                            if (selectedOption?.isCorrect) {
+                              totalEarned += q.points || 1
+                            }
+                          } else if (q.questionType === 'TRUE_FALSE') {
+                            // TRUE_FALSE grading logic
+                            const correctOption = q.options?.find((o: any) => o.isCorrect)
+                            if (correctOption && String(answer) === correctOption.optionText) {
+                              totalEarned += q.points || 1
+                            }
+                          }
+                        } else {
+                          // Use entered grade for subjective
+                          const grade = questionGrades[q.id]
+                          if (grade?.score) {
+                            totalEarned += Math.min(parseFloat(grade.score) || 0, q.points || 1)
+                          }
+                        }
+                      })
+                      
+                      const percentage = totalMax > 0 ? (totalEarned / totalMax) * 100 : 0
+                      const willPass = percentage >= passingPercentage
+                      
+                      return (
+                        <>
+                          <div className="bg-gray-50 p-4 rounded-lg mb-4">
+                            <div className="grid grid-cols-3 gap-4 text-center">
+                              <div>
+                                <p className="text-2xl font-bold">{totalEarned.toFixed(1)} / {totalMax}</p>
+                                <p className="text-sm text-gray-500">Total Score</p>
+                              </div>
+                              <div>
+                                <p className="text-2xl font-bold">{percentage.toFixed(1)}%</p>
+                                <p className="text-sm text-gray-500">Percentage</p>
+                              </div>
+                              <div>
+                                <Badge className={willPass ? 'bg-green-600' : 'bg-red-600'}>
+                                  {willPass ? 'WILL PASS' : 'WILL FAIL'}
+                                </Badge>
+                                <p className="text-sm text-gray-500 mt-1">Threshold: {passingPercentage}%</p>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                            {examQuestions.map((question: any, index: number) => {
+                              const isObjective = question.questionType === 'MULTIPLE_CHOICE' || question.questionType === 'TRUE_FALSE'
+                              const answer = answersJson[question.id]
+                              
+                              // Calculate auto-grade for objective questions
+                              let autoScore = 0
+                              let isCorrect = false
+                              if (isObjective && answer) {
+                                if (question.questionType === 'MULTIPLE_CHOICE') {
+                                  const selectedOption = question.options?.find((o: any) => o.id === answer)
+                                  if (selectedOption?.isCorrect) {
+                                    autoScore = question.points || 1
+                                    isCorrect = true
+                                  }
+                                } else if (question.questionType === 'TRUE_FALSE') {
+                                  const correctOption = question.options?.find((o: any) => o.isCorrect)
+                                  if (correctOption && String(answer) === correctOption.optionText) {
+                                    autoScore = question.points || 1
+                                    isCorrect = true
+                                  }
+                                }
+                              }
+                              
+                              return (
+                                <div key={question.id} className="border rounded p-3 bg-white">
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">
+                                        Q{index + 1}: {question.questionText?.substring(0, 60)}...
+                                      </p>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <Badge variant="outline" className="text-xs">{question.questionType}</Badge>
+                                        <span className="text-xs text-gray-500">Max: {question.points || 1} pts</span>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {isObjective ? (
+                                        // Read-only auto-graded score
+                                        <div className="text-right">
+                                          <Badge className={isCorrect ? 'bg-green-600' : 'bg-red-600'}>
+                                            {autoScore} / {question.points || 1}
+                                          </Badge>
+                                          <p className="text-xs text-gray-500 mt-1">Auto-graded</p>
+                                        </div>
+                                      ) : (
+                                        // Editable score for subjective
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            type="number"
+                                            step="0.5"
+                                            min="0"
+                                            max={question.points || 1}
+                                            className="w-20 h-8 text-sm"
+                                            value={questionGrades[question.id]?.score || '0'}
+                                            onChange={(e) => {
+                                              const val = Math.min(
+                                                parseFloat(e.target.value) || 0, 
+                                                question.points || 1
+                                              )
+                                              setQuestionGrades(prev => ({
+                                                ...prev,
+                                                [question.id]: {
+                                                  ...prev[question.id],
+                                                  score: val.toString()
+                                                }
+                                              }))
+                                            }}
+                                          />
+                                          <span className="text-sm text-gray-500">/ {question.points || 1}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          
+                          <div>
+                            <Label htmlFor="instructorFeedback">Overall Feedback (Optional)</Label>
+                            <Textarea
+                              id="instructorFeedback"
+                              rows={3}
+                              className="mt-1"
+                              value={manualGradeData.instructorFeedback}
+                              onChange={(e) => setManualGradeData(prev => ({ ...prev, instructorFeedback: e.target.value }))}
+                              placeholder="Add overall feedback for the student..."
+                            />
+                          </div>
+                        </>
+                      )
+                    })()}
+                    
+                    <div className="flex gap-2 pt-2">
                       <Button 
+                        disabled={savingGrade}
                         onClick={async () => {
                           try {
-                            const score = parseFloat(manualGradeData.score)
-                            const maxScore = parseFloat(manualGradeData.maxScore)
+                            setSavingGrade(true)
+                            // Build questionGrades payload for subjective questions only
+                            const examQuestions = selectedSubmission.examDetails?.questions || []
+                            const subjectiveGrades: Record<string, { score: number; feedback?: string }> = {}
                             
-                            if (isNaN(score) || isNaN(maxScore)) {
-                              toast({
-                                title: 'Invalid Input',
-                                description: 'Please enter valid numbers for score and max score',
-                                variant: 'destructive'
-                              })
-                              return
-                            }
+                            examQuestions.forEach((q: any) => {
+                              const isObjective = q.questionType === 'MULTIPLE_CHOICE' || q.questionType === 'TRUE_FALSE'
+                              if (!isObjective && questionGrades[q.id]) {
+                                subjectiveGrades[q.id] = {
+                                  score: parseFloat(questionGrades[q.id].score) || 0,
+                                  feedback: questionGrades[q.id].feedback || undefined
+                                }
+                              }
+                            })
                             
                             await apiClient.put(`/api/exams/${examId}/submissions/${selectedSubmission.id}/manual-grade`, {
-                              score,
-                              maxScore,
-                              isPassed: manualGradeData.isPassed,
-                              instructorFeedback: manualGradeData.instructorFeedback
+                              questionGrades: subjectiveGrades,
+                              instructorFeedback: manualGradeData.instructorFeedback || undefined
                             })
                             
                             toast({
                               title: 'Success',
-                              description: 'Grade updated successfully'
+                              description: 'Submission graded successfully'
                             })
                             
                             setManualGrading(false)
@@ -2166,21 +2294,28 @@ function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; 
                             setShowReviewDialog(false)
                             setSelectedSubmission(null)
                           } catch (error) {
-                            console.error('Failed to update grade:', error)
+                            console.error('Failed to grade submission:', error)
                             toast({
                               title: 'Error',
-                              description: 'Failed to update grade',
+                              description: 'Failed to save grades',
                               variant: 'destructive'
                             })
+                          } finally {
+                            setSavingGrade(false)
                           }
                         }}
                       >
-                        <Save className="h-4 w-4 mr-2" />
-                        Save Grade
+                        {savingGrade ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        Save Grades
                       </Button>
                       <Button 
                         variant="outline"
                         onClick={() => setManualGrading(false)}
+                        disabled={savingGrade}
                       >
                         Cancel
                       </Button>
@@ -2191,10 +2326,13 @@ function SubmissionsList({ examId, questions, reviewMethod }: { examId: string; 
                     <p>Current Score: {selectedSubmission.score !== null && selectedSubmission.score !== undefined 
                       ? `${selectedSubmission.score} / ${selectedSubmission.maxScore} (${selectedSubmission.percentage?.toFixed(1)}%)` 
                       : 'Not graded'}</p>
-                    <p>Status: {selectedSubmission.isPassed ? 'Passed' : 'Not Passed'}</p>
+                    <p>Status: {selectedSubmission.isPassed ? 
+                      <Badge className="bg-green-600 ml-2">Passed</Badge> : 
+                      <Badge className="bg-red-600 ml-2">Not Passed</Badge>}
+                    </p>
                     {selectedSubmission.aiReviewFeedback?.instructorFeedback && (
                       <div className="mt-2">
-                        <Label className="text-sm font-medium">Previous Instructor Feedback:</Label>
+                        <Label className="text-sm font-medium">Instructor Feedback:</Label>
                         <p className="mt-1 italic">{selectedSubmission.aiReviewFeedback.instructorFeedback}</p>
                       </div>
                     )}
