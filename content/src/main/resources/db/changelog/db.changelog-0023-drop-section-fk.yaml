@@ -1,0 +1,23 @@
+databaseChangeLog:
+  # Drop the foreign key constraint on section_id in assessments table
+  # The section_id in assessments references student sections (from student service),
+  # not content sections (course chapters). These are different entities in different schemas.
+  - changeSet:
+      id: content-0023-drop-assessments-section-fk
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - foreignKeyConstraintExists:
+            schemaName: content
+            foreignKeyTableName: assessments
+            foreignKeyName: fk_assessments_section
+      changes:
+        - dropForeignKeyConstraint:
+            baseTableName: assessments
+            baseTableSchemaName: content
+            constraintName: fk_assessments_section
+      comment: >
+        Dropping fk_assessments_section because section_id in assessments refers to
+        student sections (batches) from the student service, not content sections (chapters).
+        These are stored in different schemas and should not have a cross-service FK constraint.
