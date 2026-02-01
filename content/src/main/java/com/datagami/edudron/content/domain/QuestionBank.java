@@ -27,8 +27,8 @@ public class QuestionBank {
     @Column(name = "module_ids", columnDefinition = "text[]")
     private List<String> moduleIds = new ArrayList<>(); // Maps to Section(s) - supports multiple modules
 
-    @Column(name = "sub_module_id")
-    private String subModuleId; // Optional - maps to Lecture for finer categorization
+    @Column(name = "sub_module_ids", columnDefinition = "text[]")
+    private List<String> subModuleIds = new ArrayList<>(); // Optional - maps to Lecture(s) for finer categorization
 
     @Enumerated(EnumType.STRING)
     @Column(name = "question_type", nullable = false, length = 20)
@@ -102,8 +102,8 @@ public class QuestionBank {
     public List<String> getModuleIds() { return moduleIds; }
     public void setModuleIds(List<String> moduleIds) { this.moduleIds = moduleIds != null ? moduleIds : new ArrayList<>(); }
 
-    public String getSubModuleId() { return subModuleId; }
-    public void setSubModuleId(String subModuleId) { this.subModuleId = subModuleId; }
+    public List<String> getSubModuleIds() { return subModuleIds; }
+    public void setSubModuleIds(List<String> subModuleIds) { this.subModuleIds = subModuleIds != null ? subModuleIds : new ArrayList<>(); }
 
     public QuestionType getQuestionType() { return questionType; }
     public void setQuestionType(QuestionType questionType) { this.questionType = questionType; }

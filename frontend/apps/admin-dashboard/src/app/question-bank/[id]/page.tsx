@@ -24,7 +24,8 @@ interface QuestionBank {
   courseId: string
   moduleIds?: string[]
   moduleId?: string // Legacy support
-  subModuleId?: string
+  subModuleIds?: string[] // Supports multiple lectures
+  subModuleId?: string // Legacy support
   questionType: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'ESSAY' | 'MATCHING'
   questionText: string
   defaultPoints: number

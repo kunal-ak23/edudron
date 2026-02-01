@@ -42,7 +42,8 @@ interface QuestionBank {
   courseId: string
   moduleIds?: string[] // Updated to array
   moduleId?: string // Legacy support
-  subModuleId?: string
+  subModuleIds?: string[] // Updated to array - supports multiple lectures
+  subModuleId?: string // Legacy support
   questionType: 'MULTIPLE_CHOICE' | 'TRUE_FALSE' | 'SHORT_ANSWER' | 'ESSAY' | 'MATCHING'
   questionText: string
   defaultPoints: number
@@ -502,10 +503,12 @@ export default function QuestionBankPage() {
   }
 
   const getLectureName = (question: QuestionBank): string => {
-    if (!question.subModuleId) return '-'
-    // For now, we'll just show the ID. In a real implementation,
+    // Support both array (new) and single value (legacy)
+    const subModuleIds = question.subModuleIds || (question.subModuleId ? [question.subModuleId] : [])
+    if (subModuleIds.length === 0) return '-'
+    // For now, we'll just show the IDs. In a real implementation,
     // you'd need to fetch lecture names as well
-    return question.subModuleId
+    return subModuleIds.join(', ')
   }
 
   const getDifficultyBadge = (difficulty?: string) => {

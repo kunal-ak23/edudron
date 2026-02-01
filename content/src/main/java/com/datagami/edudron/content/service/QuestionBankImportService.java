@@ -48,7 +48,7 @@ public class QuestionBankImportService {
      * Import questions from a CSV or Excel file.
      * 
      * Expected format (with ID column for updates):
-     * id,questionType,questionText,points,difficultyLevel,moduleIds,lectureId,option1,option1Correct,option2,option2Correct,option3,option3Correct,option4,option4Correct,explanation,tentativeAnswer
+     * id,questionType,questionText,points,difficultyLevel,moduleIds,lectureIds,explanation,tentativeAnswer,option1,option1Correct,...
      * 
      * @param courseId The course to import questions into
      * @param defaultModuleId Optional default module ID - if provided and a row doesn't have moduleIds, this will be used
@@ -63,7 +63,9 @@ public class QuestionBankImportService {
      * Import questions from a CSV or Excel file with optional upsert support.
      * 
      * Expected format (with ID column for updates):
-     * id,questionType,questionText,points,difficultyLevel,moduleIds,lectureId,option1,option1Correct,option2,option2Correct,option3,option3Correct,option4,option4Correct,explanation,tentativeAnswer
+     * id,questionType,questionText,points,difficultyLevel,moduleIds,lectureIds,explanation,tentativeAnswer,option1,option1Correct,...
+     * 
+     * Both moduleIds and lectureIds support comma-separated values for multiple entries.
      * 
      * @param courseId The course to import questions into
      * @param defaultModuleId Optional default module ID - if provided and a row doesn't have moduleIds, this will be used
@@ -210,12 +212,13 @@ public class QuestionBankImportService {
     
     private QuestionImportRowResult createOrUpdateQuestionFromRow(String courseId, String defaultModuleId, String[] row, UUID clientId, boolean upsertExisting) {
         // Expected columns (with ID column):
-        // 0: id (optional), 1: questionType, 2: questionText, 3: points, 4: difficultyLevel, 5: moduleIds, 6: lectureId,
+        // 0: id (optional), 1: questionType, 2: questionText, 3: points, 4: difficultyLevel, 5: moduleIds, 6: lectureIds,
         // 7: explanation, 8: tentativeAnswer,
         // 9: option1, 10: option1Correct, 11: option2, 12: option2Correct, 13: option3, 14: option3Correct,
         // 15: option4, 16: option4Correct, 17: option5, 18: option5Correct, 19: option6, 20: option6Correct,
         // 21: option7, 22: option7Correct, 23: option8, 24: option8Correct, 25: option9, 26: option9Correct,
         // 27: option10, 28: option10Correct
+        // Both moduleIds and lectureIds support comma-separated values for multiple entries.
         
         if (row.length < 3) {
             throw new IllegalArgumentException("Row has insufficient columns");
@@ -227,7 +230,7 @@ public class QuestionBankImportService {
         String pointsStr = getValue(row, 3);
         String difficultyStr = getValue(row, 4);
         String moduleIdsStr = getValue(row, 5);
-        String lectureId = getValue(row, 6);
+        String lectureIdsStr = getValue(row, 6);
         String explanation = getValue(row, 7);
         String tentativeAnswer = getValue(row, 8);
         
@@ -315,10 +318,19 @@ public class QuestionBankImportService {
             question.setClientId(clientId);
         }
         
+        // Parse lecture IDs (comma-separated)
+        List<String> lectureIds = new ArrayList<>();
+        if (lectureIdsStr != null && !lectureIdsStr.isEmpty()) {
+            lectureIds = Arrays.stream(lectureIdsStr.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toList());
+        }
+        
         // Set/update fields
         question.setCourseId(courseId);
         question.setModuleIds(moduleIds);
-        question.setSubModuleId(lectureId != null && !lectureId.isEmpty() ? lectureId : null);
+        question.setSubModuleIds(lectureIds);
         question.setQuestionType(questionType);
         question.setQuestionText(questionText);
         question.setDefaultPoints(points);
@@ -477,14 +489,15 @@ public class QuestionBankImportService {
     /**
      * Generate a CSV template for import.
      * Includes ID column (empty for new questions, filled for updates).
+     * lectureIds supports comma-separated values for multiple lectures.
      */
     public String generateCsvTemplate() {
-        return "id,questionType,questionText,points,difficultyLevel,moduleIds,lectureId,explanation,tentativeAnswer," +
+        return "id,questionType,questionText,points,difficultyLevel,moduleIds,lectureIds,explanation,tentativeAnswer," +
                "option1,option1Correct,option2,option2Correct,option3,option3Correct,option4,option4Correct," +
                "option5,option5Correct,option6,option6Correct,option7,option7Correct,option8,option8Correct," +
                "option9,option9Correct,option10,option10Correct\n" +
                ",MULTIPLE_CHOICE,\"What is 2+2?\",1,EASY,\"moduleId1,moduleId2\",,\"Basic arithmetic\",,\"4\",true,\"3\",false,\"5\",false,\"6\",false,,,,,,,,,,,,\n" +
-               ",TRUE_FALSE,\"The sky is blue\",1,EASY,moduleId1,lectureId1,\"\",true,,,,,,,,,,,,,,,,,,,,\n" +
+               ",TRUE_FALSE,\"The sky is blue\",1,EASY,moduleId1,\"lectureId1,lectureId2\",\"\",true,,,,,,,,,,,,,,,,,,,,\n" +
                ",SHORT_ANSWER,\"What is the capital of France?\",2,MEDIUM,moduleId1,,,Paris,,,,,,,,,,,,,,,,,,,,\n";
     }
     
@@ -500,7 +513,7 @@ public class QuestionBankImportService {
         
         // Header with ID column (supports up to 10 options to match UI)
         // explanation and tentativeAnswer come before options for easier access
-        csv.append("id,questionType,questionText,points,difficultyLevel,moduleIds,lectureId,explanation,tentativeAnswer,");
+        csv.append("id,questionType,questionText,points,difficultyLevel,moduleIds,lectureIds,explanation,tentativeAnswer,");
         csv.append("option1,option1Correct,option2,option2Correct,option3,option3Correct,option4,option4Correct,");
         csv.append("option5,option5Correct,option6,option6Correct,option7,option7Correct,option8,option8Correct,");
         csv.append("option9,option9Correct,option10,option10Correct\n");
@@ -525,8 +538,9 @@ public class QuestionBankImportService {
             String moduleIds = q.getModuleIds() != null ? String.join(",", q.getModuleIds()) : "";
             csv.append(escapeCsv(moduleIds)).append(",");
             
-            // Lecture ID (subModuleId)
-            csv.append(escapeCsv(q.getSubModuleId())).append(",");
+            // Lecture IDs (subModuleIds - comma-separated, wrapped in quotes)
+            String lectureIds = q.getSubModuleIds() != null ? String.join(",", q.getSubModuleIds()) : "";
+            csv.append(escapeCsv(lectureIds)).append(",");
             
             // Explanation (before options for easier access)
             csv.append(escapeCsv(q.getExplanation())).append(",");

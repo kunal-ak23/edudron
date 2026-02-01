@@ -90,7 +90,7 @@ public class QuestionBankService {
     /**
      * Create a new question in the question bank with multiple module support.
      */
-    public QuestionBank createQuestion(String courseId, List<String> moduleIds, String subModuleId,
+    public QuestionBank createQuestion(String courseId, List<String> moduleIds, List<String> subModuleIds,
                                        QuestionBank.QuestionType questionType, String questionText,
                                        Integer points, QuestionBank.DifficultyLevel difficultyLevel,
                                        String explanation, List<String> tags,
@@ -121,7 +121,7 @@ public class QuestionBankService {
         question.setClientId(clientId);
         question.setCourseId(courseId);
         question.setModuleIds(moduleIds);
-        question.setSubModuleId(subModuleId);
+        question.setSubModuleIds(subModuleIds != null ? subModuleIds : new ArrayList<>());
         question.setQuestionType(questionType);
         question.setQuestionText(questionText);
         question.setDefaultPoints(points != null ? points : 1);
@@ -151,12 +151,12 @@ public class QuestionBankService {
     /**
      * Legacy create method for single module (backward compatibility)
      */
-    public QuestionBank createQuestion(String courseId, String moduleId, String subModuleId,
+    public QuestionBank createQuestion(String courseId, String moduleId, List<String> subModuleIds,
                                        QuestionBank.QuestionType questionType, String questionText,
                                        Integer points, QuestionBank.DifficultyLevel difficultyLevel,
                                        String explanation, List<String> tags,
                                        List<OptionData> options, String tentativeAnswer) {
-        return createQuestion(courseId, List.of(moduleId), subModuleId, questionType, questionText,
+        return createQuestion(courseId, List.of(moduleId), subModuleIds, questionType, questionText,
             points, difficultyLevel, explanation, tags, options, tentativeAnswer);
     }
     
@@ -166,7 +166,7 @@ public class QuestionBankService {
     public QuestionBank updateQuestion(String questionId, String questionText, Integer points,
                                        QuestionBank.DifficultyLevel difficultyLevel, String explanation,
                                        List<String> tags, List<OptionData> options, String tentativeAnswer,
-                                       String subModuleId, List<String> moduleIds) {
+                                       List<String> subModuleIds, List<String> moduleIds) {
         validateWriteAccess();
         UUID clientId = getClientId();
         
@@ -191,8 +191,8 @@ public class QuestionBankService {
         if (tentativeAnswer != null) {
             question.setTentativeAnswer(tentativeAnswer);
         }
-        if (subModuleId != null) {
-            question.setSubModuleId(subModuleId);
+        if (subModuleIds != null) {
+            question.setSubModuleIds(subModuleIds);
         }
         if (moduleIds != null && !moduleIds.isEmpty()) {
             // Verify all modules exist
@@ -226,9 +226,9 @@ public class QuestionBankService {
     public QuestionBank updateQuestion(String questionId, String questionText, Integer points,
                                        QuestionBank.DifficultyLevel difficultyLevel, String explanation,
                                        List<String> tags, List<OptionData> options, String tentativeAnswer,
-                                       String subModuleId) {
+                                       List<String> subModuleIds) {
         return updateQuestion(questionId, questionText, points, difficultyLevel, explanation,
-            tags, options, tentativeAnswer, subModuleId, null);
+            tags, options, tentativeAnswer, subModuleIds, null);
     }
     
     /**
@@ -316,11 +316,11 @@ public class QuestionBankService {
     }
     
     /**
-     * Get questions by sub-module (Lecture) ID.
+     * Get questions that contain a specific sub-module (Lecture) ID in their subModuleIds.
      */
     public List<QuestionBank> getQuestionsBySubModule(String subModuleId) {
         UUID clientId = getClientId();
-        return questionBankRepository.findBySubModuleIdAndClientIdAndIsActiveTrueOrderByCreatedAtDesc(subModuleId, clientId);
+        return questionBankRepository.findBySubModuleIdContainedAndClientIdAndIsActiveTrue(subModuleId, clientId);
     }
     
     /**
@@ -375,7 +375,7 @@ public class QuestionBankService {
             List<String> questionModuleIds = data.getModuleIds() != null && !data.getModuleIds().isEmpty() 
                 ? data.getModuleIds() : moduleIds;
             question.setModuleIds(questionModuleIds);
-            question.setSubModuleId(data.getSubModuleId());
+            question.setSubModuleIds(data.getSubModuleIds() != null ? data.getSubModuleIds() : new ArrayList<>());
             question.setQuestionType(data.getQuestionType());
             question.setQuestionText(data.getQuestionText());
             question.setDefaultPoints(data.getPoints() != null ? data.getPoints() : 1);
@@ -519,7 +519,7 @@ public class QuestionBankService {
         private List<String> tags;
         private List<OptionData> options;
         private String tentativeAnswer;
-        private String subModuleId;
+        private List<String> subModuleIds; // Support for multiple sub-modules (lectures) per question
         private List<String> moduleIds; // Support for multiple modules per question
         
         public QuestionBank.QuestionType getQuestionType() { return questionType; }
@@ -538,8 +538,8 @@ public class QuestionBankService {
         public void setOptions(List<OptionData> options) { this.options = options; }
         public String getTentativeAnswer() { return tentativeAnswer; }
         public void setTentativeAnswer(String tentativeAnswer) { this.tentativeAnswer = tentativeAnswer; }
-        public String getSubModuleId() { return subModuleId; }
-        public void setSubModuleId(String subModuleId) { this.subModuleId = subModuleId; }
+        public List<String> getSubModuleIds() { return subModuleIds; }
+        public void setSubModuleIds(List<String> subModuleIds) { this.subModuleIds = subModuleIds; }
         public List<String> getModuleIds() { return moduleIds; }
         public void setModuleIds(List<String> moduleIds) { this.moduleIds = moduleIds; }
     }

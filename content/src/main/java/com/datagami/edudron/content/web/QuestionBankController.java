@@ -52,7 +52,18 @@ public class QuestionBankController {
                 }
             }
             
-            String subModuleId = (String) request.get("subModuleId");
+            // Support both subModuleId (legacy) and subModuleIds (new)
+            @SuppressWarnings("unchecked")
+            List<String> subModuleIds = (List<String>) request.get("subModuleIds");
+            if (subModuleIds == null || subModuleIds.isEmpty()) {
+                String subModuleId = (String) request.get("subModuleId");
+                if (subModuleId != null && !subModuleId.isEmpty()) {
+                    subModuleIds = List.of(subModuleId);
+                } else {
+                    subModuleIds = new ArrayList<>();
+                }
+            }
+            
             String questionTypeStr = (String) request.get("questionType");
             String questionText = (String) request.get("questionText");
             Integer points = request.get("points") != null ? ((Number) request.get("points")).intValue() : 1;
@@ -77,7 +88,7 @@ public class QuestionBankController {
             List<QuestionBankService.OptionData> options = parseOptions(optionsData);
             
             QuestionBank question = questionBankService.createQuestion(
-                courseId, moduleIds, subModuleId, questionType, questionText,
+                courseId, moduleIds, subModuleIds, questionType, questionText,
                 points, difficulty, explanation, tags, options, tentativeAnswer);
             
             return ResponseEntity.status(HttpStatus.CREATED).body(question);
@@ -177,7 +188,16 @@ public class QuestionBankController {
             String difficultyStr = (String) request.get("difficultyLevel");
             String explanation = (String) request.get("explanation");
             String tentativeAnswer = (String) request.get("tentativeAnswer");
-            String subModuleId = (String) request.get("subModuleId");
+            
+            // Support both subModuleId (legacy) and subModuleIds (new)
+            @SuppressWarnings("unchecked")
+            List<String> subModuleIds = (List<String>) request.get("subModuleIds");
+            if (subModuleIds == null) {
+                String subModuleId = (String) request.get("subModuleId");
+                if (subModuleId != null && !subModuleId.isEmpty()) {
+                    subModuleIds = List.of(subModuleId);
+                }
+            }
             
             // Support moduleIds array for updating multiple module associations
             @SuppressWarnings("unchecked")
@@ -195,7 +215,7 @@ public class QuestionBankController {
             List<QuestionBankService.OptionData> options = parseOptions(optionsData);
             
             QuestionBank question = questionBankService.updateQuestion(
-                id, questionText, points, difficulty, explanation, tags, options, tentativeAnswer, subModuleId, moduleIds);
+                id, questionText, points, difficulty, explanation, tags, options, tentativeAnswer, subModuleIds, moduleIds);
             
             return ResponseEntity.ok(question);
         } catch (IllegalArgumentException e) {
@@ -274,7 +294,17 @@ public class QuestionBankController {
                 
                 qd.setExplanation((String) data.get("explanation"));
                 qd.setTentativeAnswer((String) data.get("tentativeAnswer"));
-                qd.setSubModuleId((String) data.get("subModuleId"));
+                
+                // Support both subModuleId (legacy) and subModuleIds (new)
+                @SuppressWarnings("unchecked")
+                List<String> questionSubModuleIds = (List<String>) data.get("subModuleIds");
+                if (questionSubModuleIds == null || questionSubModuleIds.isEmpty()) {
+                    String subModuleId = (String) data.get("subModuleId");
+                    if (subModuleId != null && !subModuleId.isEmpty()) {
+                        questionSubModuleIds = List.of(subModuleId);
+                    }
+                }
+                qd.setSubModuleIds(questionSubModuleIds);
                 
                 // Support per-question moduleIds override
                 @SuppressWarnings("unchecked")

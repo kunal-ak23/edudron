@@ -104,10 +104,12 @@ public interface QuestionBankRepository extends JpaRepository<QuestionBank, Stri
     List<QuestionBank> searchByQuestionText(@Param("courseId") String courseId, @Param("clientId") UUID clientId, @Param("keyword") String keyword);
     
     /**
-     * Find questions by sub-module (Lecture) ID
+     * Find questions that contain a specific sub-module (Lecture) ID in their subModuleIds array
+     * Uses native query with PostgreSQL array contains operator
      */
-    List<QuestionBank> findBySubModuleIdAndClientIdAndIsActiveTrueOrderByCreatedAtDesc(
-        String subModuleId, UUID clientId);
+    @Query(value = "SELECT * FROM content.question_bank WHERE :subModuleId = ANY(sub_module_ids) AND client_id = :clientId AND is_active = true ORDER BY created_at DESC", nativeQuery = true)
+    List<QuestionBank> findBySubModuleIdContainedAndClientIdAndIsActiveTrue(
+        @Param("subModuleId") String subModuleId, @Param("clientId") UUID clientId);
     
     /**
      * Find all questions for a course with pagination (for table view)

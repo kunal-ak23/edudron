@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: add-sub-module-ids-array
+      author: system
+      changes:
+        - addColumn:
+            tableName: question_bank
+            schemaName: content
+            columns:
+              - column:
+                  name: sub_module_ids
+                  type: text[]
+                  remarks: "Array of Lecture IDs - supports multiple lecture tagging"
+        - sql:
+            sql: |
+              UPDATE content.question_bank 
+              SET sub_module_ids = ARRAY[sub_module_id] 
+              WHERE sub_module_id IS NOT NULL;
+        - sql:
+            sql: |
+              CREATE INDEX idx_question_bank_sub_module_ids 
+              ON content.question_bank USING GIN (sub_module_ids);
+        - dropColumn:
+            tableName: question_bank
+            schemaName: content
+            columnName: sub_module_id

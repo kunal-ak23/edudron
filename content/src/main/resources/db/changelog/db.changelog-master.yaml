@@ -66,3 +66,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0020-question-bank.yaml
   - include:
       file: db/changelog/db.changelog-0021-question-bank-multiple-modules.yaml
+  - include:
+      file: db/changelog/db.changelog-0022-sub-module-ids-array.yaml

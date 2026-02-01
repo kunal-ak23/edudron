@@ -20,7 +20,8 @@ export interface QuestionBank {
   courseId: string
   moduleIds: string[] // Supports multiple modules
   moduleId?: string // Legacy - kept for backward compatibility
-  subModuleId?: string
+  subModuleIds?: string[] // Supports multiple sub-modules (lectures)
+  subModuleId?: string // Legacy - kept for backward compatibility
   questionType: QuestionType
   questionText: string
   defaultPoints: number
@@ -49,7 +50,8 @@ export interface CreateQuestionRequest {
   courseId: string
   moduleIds?: string[] // Supports multiple modules
   moduleId?: string // Legacy - kept for backward compatibility
-  subModuleId?: string
+  subModuleIds?: string[] // Supports multiple sub-modules (lectures)
+  subModuleId?: string // Legacy - kept for backward compatibility
   questionType: QuestionType
   questionText: string
   points?: number
@@ -67,7 +69,8 @@ export interface UpdateQuestionRequest {
   explanation?: string
   tags?: string[]
   tentativeAnswer?: string
-  subModuleId?: string
+  subModuleIds?: string[] // Supports multiple sub-modules (lectures)
+  subModuleId?: string // Legacy - kept for backward compatibility
   moduleIds?: string[] // Supports updating module associations
   options?: Array<{ text: string; correct: boolean }>
 }
