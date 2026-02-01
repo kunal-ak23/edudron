@@ -101,6 +101,7 @@ export default function QuestionBankPage() {
   const [selectedModule, setSelectedModule] = useState<string>('')
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('')
   const [searchKeyword, setSearchKeyword] = useState('')
+  const [isInitialized, setIsInitialized] = useState(false)
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(0)
@@ -141,26 +142,31 @@ export default function QuestionBankPage() {
     const moduleIdParam = searchParams.get('moduleId')
     const difficultyParam = searchParams.get('difficulty')
     
-    if (courseIdParam && courseIdParam !== selectedCourse) {
+    if (courseIdParam) {
       setSelectedCourse(courseIdParam)
     }
-    if (moduleIdParam && moduleIdParam !== selectedModule) {
+    if (moduleIdParam) {
       setSelectedModule(moduleIdParam)
     }
-    if (difficultyParam && difficultyParam !== selectedDifficulty) {
+    if (difficultyParam) {
       setSelectedDifficulty(difficultyParam)
     }
+    
+    // Mark as initialized after setting values
+    setIsInitialized(true)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // Only run on mount to initialize from URL
 
-  // Sync URL with filter state
+  // Sync URL with filter state (only after initialization)
   useEffect(() => {
+    // Don't sync URL until we've initialized from URL params
+    if (!isInitialized) return
+    
     const params = new URLSearchParams()
     if (selectedCourse) params.set('courseId', selectedCourse)
     if (selectedModule) params.set('moduleId', selectedModule)
     if (selectedDifficulty) params.set('difficulty', selectedDifficulty)
     
-    const newUrl = params.toString() ? `?${params.toString()}` : '/question-bank'
     const currentUrl = window.location.pathname + window.location.search
     const targetUrl = `/question-bank${params.toString() ? '?' + params.toString() : ''}`
     
@@ -168,7 +174,7 @@ export default function QuestionBankPage() {
     if (currentUrl !== targetUrl) {
       router.replace(targetUrl, { scroll: false })
     }
-  }, [selectedCourse, selectedModule, selectedDifficulty, router])
+  }, [selectedCourse, selectedModule, selectedDifficulty, router, isInitialized])
 
   // Load courses
   const loadCourses = useCallback(async () => {
