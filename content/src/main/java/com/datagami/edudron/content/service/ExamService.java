@@ -58,39 +58,46 @@ public class ExamService {
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     private RestTemplate getRestTemplate() {
+        // Double-checked locking for thread-safe lazy initialization
         if (restTemplate == null) {
-            logger.debug("Initializing RestTemplate for identity service calls. Gateway URL: {}", gatewayUrl);
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            // Add interceptor to forward JWT token (Authorization header)
-            interceptors.add((request, body, execution) -> {
-                // Get current request to extract Authorization header
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        // Only add if not already present
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
-                            logger.debug("Propagated Authorization header (JWT token) to identity service: {}", request.getURI());
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    logger.debug("Initializing RestTemplate for identity service calls. Gateway URL: {}", gatewayUrl);
+                    RestTemplate newTemplate = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    // Add interceptor to forward JWT token (Authorization header)
+                    interceptors.add((request, body, execution) -> {
+                        // Get current request to extract Authorization header
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                // Only add if not already present
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                    logger.debug("Propagated Authorization header (JWT token) to identity service: {}", request.getURI());
+                                } else {
+                                    logger.debug("Authorization header already present in request to {}", request.getURI());
+                                }
+                            } else {
+                                logger.debug("No Authorization header found in current request");
+                            }
                         } else {
-                            logger.debug("Authorization header already present in request to {}", request.getURI());
+                            logger.debug("No ServletRequestAttributes found - cannot forward JWT token");
                         }
-                    } else {
-                        logger.debug("No Authorization header found in current request");
-                    }
-                } else {
-                    logger.debug("No ServletRequestAttributes found - cannot forward JWT token");
+                        return execution.execute(request, body);
+                    });
+                    newTemplate.setInterceptors(interceptors);
+                    logger.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
+                    restTemplate = newTemplate;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
-            logger.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
+            }
         }
         return restTemplate;
     }
@@ -258,8 +265,15 @@ public class ExamService {
             clientId
         ).stream()
         .filter(exam -> {
+            // FLEXIBLE_START exams with LIVE status are always available
+            if (exam.getTimingMode() == Assessment.TimingMode.FLEXIBLE_START) {
+                return exam.getStatus() == Assessment.ExamStatus.LIVE;
+            }
+            
+            // FIXED_WINDOW exams need time-based filtering
             if (exam.getStartTime() == null || exam.getEndTime() == null) {
-                return false;
+                // If no times set but exam is LIVE, include it
+                return exam.getStatus() == Assessment.ExamStatus.LIVE;
             }
             return !now.isBefore(exam.getStartTime()) && !now.isAfter(exam.getEndTime());
         })
@@ -281,13 +295,28 @@ public class ExamService {
     }
     
     public List<Assessment> getAllExams() {
+        return getAllExams(false);
+    }
+    
+    /**
+     * Get all exams, optionally including archived ones.
+     * @param includeArchived whether to include archived exams
+     */
+    public List<Assessment> getAllExams(boolean includeArchived) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        return assessmentRepository.findByAssessmentTypeAndClientIdOrderByCreatedAtDesc(
+        if (includeArchived) {
+            return assessmentRepository.findAllByAssessmentTypeAndClientIdIncludingArchivedOrderByCreatedAtDesc(
+                Assessment.AssessmentType.EXAM,
+                clientId
+            );
+        }
+        
+        return assessmentRepository.findActiveByAssessmentTypeAndClientIdOrderByCreatedAtDesc(
             Assessment.AssessmentType.EXAM,
             clientId
         );
@@ -300,15 +329,26 @@ public class ExamService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        // Use JOIN FETCH to eagerly load questions
-        Assessment exam = assessmentRepository.findByIdAndClientIdWithQuestions(examId, clientId)
+        // Use JOIN FETCH to eagerly load exam questions (from question bank)
+        Assessment exam = assessmentRepository.findByIdAndClientIdWithExamQuestions(examId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Exam not found: " + examId));
         
         if (exam.getAssessmentType() != Assessment.AssessmentType.EXAM) {
             throw new IllegalArgumentException("Assessment is not an exam: " + examId);
         }
         
-        // Ensure questions are initialized (in case of lazy loading)
+        // Ensure examQuestions are initialized (in case of lazy loading)
+        if (exam.getExamQuestions() != null) {
+            exam.getExamQuestions().size(); // Force initialization
+            // Also ensure each question's options are initialized
+            for (ExamQuestion eq : exam.getExamQuestions()) {
+                if (eq.getQuestion() != null && eq.getQuestion().getOptions() != null) {
+                    eq.getQuestion().getOptions().size(); // Force initialization
+                }
+            }
+        }
+        
+        // Also load regular questions if any (for backward compatibility)
         if (exam.getQuestions() != null) {
             exam.getQuestions().size(); // Force initialization
         }
@@ -409,7 +449,8 @@ public class ExamService {
                                  Boolean randomizeQuestions, Boolean randomizeMcqOptions,
                                  Boolean enableProctoring, Assessment.ProctoringMode proctoringMode,
                                  Integer photoIntervalSeconds, Boolean requireIdentityVerification,
-                                 Boolean blockCopyPaste, Boolean blockTabSwitch, Integer maxTabSwitchesAllowed) {
+                                 Boolean blockCopyPaste, Boolean blockTabSwitch, Integer maxTabSwitchesAllowed,
+                                 Assessment.TimingMode timingMode, Integer timeLimitSeconds) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -468,10 +509,25 @@ public class ExamService {
             exam.setMaxTabSwitchesAllowed(maxTabSwitchesAllowed);
         }
         
+        // Update timing mode
+        if (timingMode != null) {
+            exam.setTimingMode(timingMode);
+        }
+        if (timeLimitSeconds != null) {
+            exam.setTimeLimitSeconds(timeLimitSeconds);
+        }
+        
         return assessmentRepository.save(exam);
     }
     
-    public void deleteExam(String examId) {
+    /**
+     * Delete or archive an exam based on submission count.
+     * - No submissions: permanently delete
+     * - Has submissions: archive (soft delete)
+     * 
+     * @return true if deleted, false if archived
+     */
+    public boolean deleteExam(String examId) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot delete exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -484,8 +540,163 @@ public class ExamService {
             throw new IllegalStateException("Cannot delete a live exam");
         }
         
-        assessmentRepository.delete(exam);
-        logger.info("Deleted exam: {}", examId);
+        // Check if there are any submissions for this exam
+        int submissionCount = getSubmissionCount(examId);
+        
+        if (submissionCount > 0) {
+            // Archive the exam instead of deleting
+            exam.setArchived(true);
+            assessmentRepository.save(exam);
+            logger.info("Archived exam {} with {} submissions", examId, submissionCount);
+            return false; // indicates archived, not deleted
+        } else {
+            // No submissions, safe to delete
+            assessmentRepository.delete(exam);
+            logger.info("Deleted exam: {}", examId);
+            return true; // indicates deleted
+        }
+    }
+    
+    /**
+     * Publish an exam (make it live/available to students).
+     * For FIXED_WINDOW: requires start/end times to be set
+     * For FLEXIBLE_START: immediately goes LIVE
+     */
+    public Assessment publishExam(String examId) {
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot publish exams");
+        }
+        
+        Assessment exam = getExamById(examId);
+        
+        if (exam.getStatus() == Assessment.ExamStatus.LIVE) {
+            throw new IllegalStateException("Exam is already live");
+        }
+        
+        if (exam.getStatus() == Assessment.ExamStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot publish a completed exam");
+        }
+        
+        // For FIXED_WINDOW, check if start/end times are set
+        if (exam.getTimingMode() == Assessment.TimingMode.FIXED_WINDOW) {
+            if (exam.getStartTime() == null || exam.getEndTime() == null) {
+                throw new IllegalStateException("Start and end times must be set for Fixed Window exams before publishing");
+            }
+            
+            OffsetDateTime now = OffsetDateTime.now();
+            if (now.isBefore(exam.getStartTime())) {
+                exam.setStatus(Assessment.ExamStatus.SCHEDULED);
+                logger.info("Exam {} scheduled (starts in future)", examId);
+            } else if (now.isAfter(exam.getEndTime())) {
+                throw new IllegalStateException("Cannot publish an exam whose end time has already passed");
+            } else {
+                exam.setStatus(Assessment.ExamStatus.LIVE);
+                logger.info("Exam {} is now LIVE", examId);
+            }
+        } else {
+            // FLEXIBLE_START - immediately go live
+            exam.setStatus(Assessment.ExamStatus.LIVE);
+            logger.info("Exam {} (Flexible Start) is now LIVE", examId);
+        }
+        
+        return assessmentRepository.save(exam);
+    }
+    
+    /**
+     * Complete an exam (end it and prevent further submissions).
+     */
+    public Assessment completeExam(String examId) {
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot complete exams");
+        }
+        
+        Assessment exam = getExamById(examId);
+        
+        if (exam.getStatus() == Assessment.ExamStatus.COMPLETED) {
+            throw new IllegalStateException("Exam is already completed");
+        }
+        
+        if (exam.getStatus() == Assessment.ExamStatus.DRAFT) {
+            throw new IllegalStateException("Cannot complete a draft exam. Publish it first.");
+        }
+        
+        exam.setStatus(Assessment.ExamStatus.COMPLETED);
+        Assessment updated = assessmentRepository.save(exam);
+        logger.info("Exam {} marked as COMPLETED", examId);
+        return updated;
+    }
+    
+    /**
+     * Archive an exam (soft delete).
+     */
+    public void archiveExam(String examId) {
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot archive exams");
+        }
+        
+        Assessment exam = getExamById(examId);
+        
+        if (exam.getStatus() == Assessment.ExamStatus.LIVE) {
+            throw new IllegalStateException("Cannot archive a live exam");
+        }
+        
+        exam.setArchived(true);
+        assessmentRepository.save(exam);
+        logger.info("Archived exam: {}", examId);
+    }
+    
+    /**
+     * Unarchive an exam (restore from soft delete).
+     */
+    public void unarchiveExam(String examId) {
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot unarchive exams");
+        }
+        
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        // Find exam including archived ones
+        Assessment exam = assessmentRepository.findByIdAndClientId(examId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Exam not found: " + examId));
+        
+        if (exam.getAssessmentType() != Assessment.AssessmentType.EXAM) {
+            throw new IllegalArgumentException("Assessment is not an exam: " + examId);
+        }
+        
+        exam.setArchived(false);
+        assessmentRepository.save(exam);
+        logger.info("Unarchived exam: {}", examId);
+    }
+    
+    /**
+     * Get submission count for an exam by calling the student service.
+     */
+    public int getSubmissionCount(String examId) {
+        try {
+            String url = gatewayUrl + "/api/assessments/" + examId + "/submissions";
+            ResponseEntity<List<Map<String, Object>>> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody().size();
+            }
+            return 0;
+        } catch (Exception e) {
+            logger.warn("Failed to get submission count for exam {}: {}", examId, e.getMessage());
+            return 0; // Assume no submissions if we can't check
+        }
     }
     
     /**

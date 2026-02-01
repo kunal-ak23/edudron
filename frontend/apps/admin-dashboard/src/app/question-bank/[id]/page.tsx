@@ -16,9 +16,17 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ArrowLeft, Save, Loader2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, Trash2, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, coursesApi, lecturesApi } from '@/lib/api'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface QuestionBank {
   id: string
@@ -74,6 +82,8 @@ export default function EditQuestionPage() {
   const [question, setQuestion] = useState<QuestionBank | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [sections, setSections] = useState<Section[]>([])
   const [lectures, setLectures] = useState<Lecture[]>([])
   const [loadingSections, setLoadingSections] = useState(false)
@@ -292,10 +302,7 @@ export default function EditQuestionPage() {
   }
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this question?')) {
-      return
-    }
-    
+    setDeleting(true)
     try {
       await apiClient.delete(`/api/question-bank/${questionId}`)
       
@@ -313,6 +320,9 @@ export default function EditQuestionPage() {
         description: 'Failed to delete question',
         variant: 'destructive'
       })
+    } finally {
+      setDeleting(false)
+      setShowDeleteDialog(false)
     }
   }
 
@@ -347,7 +357,7 @@ export default function EditQuestionPage() {
           <h1 className="text-2xl font-bold">Edit Question</h1>
         </div>
         {canManageQuestions && (
-          <Button variant="destructive" onClick={handleDelete}>
+          <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
@@ -569,6 +579,47 @@ export default function EditQuestionPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Delete Question
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this question? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {question && (
+            <div className="py-4">
+              <div className="p-4 bg-gray-50 border rounded-lg">
+                <p className="text-sm text-gray-600 line-clamp-3">
+                  {question.questionText}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteDialog(false)} 
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDelete} 
+              disabled={deleting}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              {deleting ? 'Deleting...' : 'Delete Question'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

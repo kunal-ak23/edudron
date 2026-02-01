@@ -4,6 +4,7 @@ import com.datagami.edudron.content.domain.Assessment;
 import com.datagami.edudron.content.domain.QuizQuestion;
 import com.datagami.edudron.content.dto.BatchExamGenerationRequest;
 import com.datagami.edudron.content.dto.BatchExamGenerationResponse;
+import com.datagami.edudron.content.dto.ExamDetailDTO;
 import com.datagami.edudron.content.repo.QuizQuestionRepository;
 import com.datagami.edudron.content.service.ExamService;
 import com.datagami.edudron.content.service.ExamReviewService;
@@ -178,17 +179,19 @@ public class ExamController {
     }
     
     @GetMapping
-    @Operation(summary = "List exams", description = "Get all exams")
-    public ResponseEntity<List<Assessment>> getAllExams() {
-        List<Assessment> exams = examService.getAllExams();
+    @Operation(summary = "List exams", description = "Get all exams, optionally including archived ones")
+    public ResponseEntity<List<Assessment>> getAllExams(
+            @RequestParam(required = false, defaultValue = "false") boolean includeArchived) {
+        List<Assessment> exams = examService.getAllExams(includeArchived);
         return ResponseEntity.ok(exams);
     }
     
     @GetMapping("/{id}")
-    @Operation(summary = "Get exam", description = "Get exam details by ID")
-    public ResponseEntity<Assessment> getExam(@PathVariable String id) {
+    @Operation(summary = "Get exam", description = "Get exam details by ID with unified questions")
+    public ResponseEntity<ExamDetailDTO> getExam(@PathVariable String id) {
         Assessment exam = examService.getExamById(id);
-        return ResponseEntity.ok(exam);
+        ExamDetailDTO dto = ExamDetailDTO.fromAssessment(exam);
+        return ResponseEntity.ok(dto);
     }
     
     @GetMapping("/courses/{courseId}/sections")
@@ -253,7 +256,7 @@ public class ExamController {
     
     @PutMapping("/{id}")
     @Operation(summary = "Update exam", description = "Update an existing exam")
-    public ResponseEntity<Assessment> updateExam(
+    public ResponseEntity<ExamDetailDTO> updateExam(
             @PathVariable String id,
             @RequestBody Map<String, Object> request) {
         
@@ -302,15 +305,32 @@ public class ExamController {
         Integer maxTabSwitchesAllowed = request.get("maxTabSwitchesAllowed") != null ? 
             (Integer) request.get("maxTabSwitchesAllowed") : null;
         
-        Assessment exam = examService.updateExam(id, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, 
+        // Timing mode
+        Assessment.TimingMode timingMode = null;
+        if (request.get("timingMode") != null) {
+            try {
+                timingMode = Assessment.TimingMode.valueOf((String) request.get("timingMode"));
+            } catch (IllegalArgumentException e) {
+                // Ignore invalid timing mode
+            }
+        }
+        Integer timeLimitSeconds = request.get("timeLimitSeconds") != null ? 
+            ((Number) request.get("timeLimitSeconds")).intValue() : null;
+        
+        // Update the exam
+        examService.updateExam(id, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, 
             randomizeQuestions, randomizeMcqOptions, enableProctoring, proctoringMode, photoIntervalSeconds, 
-            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed);
-        return ResponseEntity.ok(exam);
+            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed, timingMode, timeLimitSeconds);
+        
+        // Reload the exam with questions to return complete data
+        Assessment exam = examService.getExamById(id);
+        ExamDetailDTO dto = ExamDetailDTO.fromAssessment(exam);
+        return ResponseEntity.ok(dto);
     }
     
     @PostMapping("/{id}/generate")
     @Operation(summary = "Generate exam with AI", description = "Generate exam questions using AI based on selected modules. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features.")
-    public ResponseEntity<Assessment> generateExamWithAI(
+    public ResponseEntity<ExamDetailDTO> generateExamWithAI(
             @PathVariable String id,
             @RequestBody Map<String, Object> request) {
         
@@ -325,13 +345,16 @@ public class ExamController {
             ((Number) request.get("numberOfQuestions")).intValue() : 10;
         String difficulty = (String) request.get("difficulty");
         
-        Assessment exam = examService.generateExamWithAI(id, numberOfQuestions, difficulty);
-        return ResponseEntity.ok(exam);
+        examService.generateExamWithAI(id, numberOfQuestions, difficulty);
+        // Reload with questions
+        Assessment exam = examService.getExamById(id);
+        ExamDetailDTO dto = ExamDetailDTO.fromAssessment(exam);
+        return ResponseEntity.ok(dto);
     }
     
     @PutMapping("/{id}/schedule")
     @Operation(summary = "Schedule exam", description = "Schedule an exam with start and end times")
-    public ResponseEntity<Assessment> scheduleExam(
+    public ResponseEntity<ExamDetailDTO> scheduleExam(
             @PathVariable String id,
             @RequestBody Map<String, String> request) {
         
@@ -366,12 +389,15 @@ public class ExamController {
             }
         }
         
-        Assessment exam = examService.scheduleExam(id, startTime, endTime);
-        return ResponseEntity.ok(exam);
+        examService.scheduleExam(id, startTime, endTime);
+        // Reload with questions
+        Assessment exam = examService.getExamById(id);
+        ExamDetailDTO dto = ExamDetailDTO.fromAssessment(exam);
+        return ResponseEntity.ok(dto);
     }
     
-    @PutMapping("/{id}/questions/{questionId}/tentative-answer")
-    @Operation(summary = "Update tentative answer", description = "Update the tentative answer for a subjective question")
+    @PutMapping("/{id}/inline-questions/{questionId}/tentative-answer")
+    @Operation(summary = "Update tentative answer", description = "Update the tentative answer for an inline subjective question")
     public ResponseEntity<QuizQuestion> updateTentativeAnswer(
             @PathVariable String id,
             @PathVariable String questionId,
@@ -572,8 +598,8 @@ public class ExamController {
         }
     }
     
-    @PostMapping("/{id}/questions")
-    @Operation(summary = "Create question", description = "Create a new question for an exam")
+    @PostMapping("/{id}/inline-questions")
+    @Operation(summary = "Create inline question", description = "Create a new inline quiz question for an exam")
     public ResponseEntity<QuizQuestion> createQuestion(
             @PathVariable String id,
             @RequestBody Map<String, Object> request) {
@@ -602,9 +628,9 @@ public class ExamController {
         return ResponseEntity.status(HttpStatus.CREATED).body(question);
     }
     
-    @PutMapping("/{id}/questions/{questionId}")
-    @Operation(summary = "Update question", description = "Update an existing question")
-    public ResponseEntity<QuizQuestion> updateQuestion(
+    @PutMapping("/{id}/inline-questions/{questionId}")
+    @Operation(summary = "Update inline question", description = "Update an existing inline quiz question (not from question bank)")
+    public ResponseEntity<QuizQuestion> updateInlineQuestion(
             @PathVariable String id,
             @PathVariable String questionId,
             @RequestBody Map<String, Object> request) {
@@ -631,17 +657,17 @@ public class ExamController {
         return ResponseEntity.ok(question);
     }
     
-    @DeleteMapping("/{id}/questions/{questionId}")
-    @Operation(summary = "Delete question", description = "Delete a question from an exam")
-    public ResponseEntity<Void> deleteQuestion(
+    @DeleteMapping("/{id}/inline-questions/{questionId}")
+    @Operation(summary = "Delete inline question", description = "Delete an inline quiz question from an exam (not from question bank)")
+    public ResponseEntity<Void> deleteInlineQuestion(
             @PathVariable String id,
             @PathVariable String questionId) {
         questionService.deleteQuestion(questionId);
         return ResponseEntity.noContent().build();
     }
     
-    @PostMapping("/{id}/questions/reorder")
-    @Operation(summary = "Reorder questions", description = "Reorder questions in an exam")
+    @PostMapping("/{id}/inline-questions/reorder")
+    @Operation(summary = "Reorder inline questions", description = "Reorder inline quiz questions in an exam")
     public ResponseEntity<Void> reorderQuestions(
             @PathVariable String id,
             @RequestBody Map<String, Object> request) {
@@ -657,9 +683,49 @@ public class ExamController {
     }
     
     @DeleteMapping("/{id}")
-    @Operation(summary = "Delete exam", description = "Delete an exam")
-    public ResponseEntity<Void> deleteExam(@PathVariable String id) {
-        examService.deleteExam(id);
+    @Operation(summary = "Delete or archive exam", description = "Delete an exam if no submissions, otherwise archive it")
+    public ResponseEntity<Map<String, Object>> deleteExam(@PathVariable String id) {
+        boolean wasDeleted = examService.deleteExam(id);
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("examId", id);
+        response.put("action", wasDeleted ? "deleted" : "archived");
+        response.put("message", wasDeleted 
+            ? "Exam was permanently deleted" 
+            : "Exam was archived because it has submissions");
+        return ResponseEntity.ok(response);
+    }
+    
+    @PutMapping("/{id}/publish")
+    @Operation(summary = "Publish exam", description = "Publish an exam to make it available to students")
+    public ResponseEntity<ExamDetailDTO> publishExam(@PathVariable String id) {
+        examService.publishExam(id);
+        // Reload with questions
+        Assessment exam = examService.getExamById(id);
+        ExamDetailDTO dto = ExamDetailDTO.fromAssessment(exam);
+        return ResponseEntity.ok(dto);
+    }
+    
+    @PutMapping("/{id}/complete")
+    @Operation(summary = "Complete exam", description = "Mark an exam as completed to prevent further submissions")
+    public ResponseEntity<ExamDetailDTO> completeExam(@PathVariable String id) {
+        examService.completeExam(id);
+        // Reload with questions
+        Assessment exam = examService.getExamById(id);
+        ExamDetailDTO dto = ExamDetailDTO.fromAssessment(exam);
+        return ResponseEntity.ok(dto);
+    }
+    
+    @PutMapping("/{id}/archive")
+    @Operation(summary = "Archive exam", description = "Archive an exam (soft delete)")
+    public ResponseEntity<Void> archiveExam(@PathVariable String id) {
+        examService.archiveExam(id);
+        return ResponseEntity.noContent().build();
+    }
+    
+    @PutMapping("/{id}/unarchive")
+    @Operation(summary = "Unarchive exam", description = "Restore an archived exam")
+    public ResponseEntity<Void> unarchiveExam(@PathVariable String id) {
+        examService.unarchiveExam(id);
         return ResponseEntity.noContent().build();
     }
     

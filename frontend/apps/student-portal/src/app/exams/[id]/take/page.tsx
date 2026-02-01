@@ -18,6 +18,7 @@ import { ExamTimer } from '@/components/ExamTimer'
 import { StudentLayout } from '@/components/StudentLayout'
 import { Loader2, Save, CheckCircle, AlertTriangle, Eye } from 'lucide-react'
 import { apiClient } from '@/lib/api'
+import { useToast } from '@/hooks/use-toast'
 import { ProctoringSetupDialog } from '@/components/exams/ProctoringSetupDialog'
 import { WebcamMonitor } from '@/components/exams/WebcamMonitor'
 import { proctoringApi } from '@/lib/proctoring-api'
@@ -60,6 +61,7 @@ export default function TakeExamPage() {
   const router = useRouter()
   const params = useParams()
   const searchParams = useSearchParams()
+  const { toast } = useToast()
   const examId = params.id as string
   const isPreviewMode = searchParams.get('preview') === 'true'
   const [exam, setExam] = useState<Exam | null>(null)
@@ -76,6 +78,7 @@ export default function TakeExamPage() {
   const debounceSaveRef = useRef<NodeJS.Timeout | null>(null)
   const hasUnsavedChangesRef = useRef(false)
   const lastSaveTimeRef = useRef<number>(0)
+  const isSubmittingRef = useRef(false) // Synchronous guard to prevent double submission
   
   // Proctoring state
   const [showProctoringSetup, setShowProctoringSetup] = useState(false)
@@ -334,13 +337,21 @@ export default function TakeExamPage() {
     const handleCopy = (e: ClipboardEvent) => {
       e.preventDefault()
       logProctoringEvent('COPY_ATTEMPT', 'WARNING')
-      alert('Copy action is blocked during this proctored exam')
+      toast({
+        title: 'Action Blocked',
+        description: 'Copy action is blocked during this proctored exam',
+        variant: 'warning'
+      })
     }
     
     const handlePaste = (e: ClipboardEvent) => {
       e.preventDefault()
       logProctoringEvent('PASTE_ATTEMPT', 'WARNING')
-      alert('Paste action is blocked during this proctored exam')
+      toast({
+        title: 'Action Blocked',
+        description: 'Paste action is blocked during this proctored exam',
+        variant: 'warning'
+      })
     }
     
     document.addEventListener('copy', handleCopy)
@@ -413,9 +424,39 @@ export default function TakeExamPage() {
       }
       
       // Ensure questions is always an array
+      // Handle both: direct array, nested { questions: [...] }, or single question object
+      let questionsArray: Question[] = []
+      if (Array.isArray(exam?.questions)) {
+        questionsArray = exam.questions
+      } else if (exam?.questions && typeof exam.questions === 'object') {
+        // Check if questions is an object with a nested questions array (e.g., { questions: [...] })
+        if (Array.isArray((exam.questions as any).questions)) {
+          questionsArray = (exam.questions as any).questions
+        } else {
+          // Single question object
+          questionsArray = [exam.questions as Question]
+        }
+      }
+      
+      // Normalize options for each question (handle nested { options: [...] } structure)
+      questionsArray = questionsArray.map(q => {
+        let normalizedOptions: Option[] | undefined = undefined
+        if (q.options) {
+          if (Array.isArray(q.options)) {
+            normalizedOptions = q.options
+          } else if (typeof q.options === 'object' && Array.isArray((q.options as any).options)) {
+            normalizedOptions = (q.options as any).options
+          } else if (typeof q.options === 'object') {
+            // Single option object
+            normalizedOptions = [q.options as Option]
+          }
+        }
+        return { ...q, options: normalizedOptions }
+      })
+      
       const examWithQuestions = {
         ...exam,
-        questions: Array.isArray(exam?.questions) ? exam.questions : (exam?.questions ? [exam.questions] : [])
+        questions: questionsArray
       }
       
       if (examWithQuestions.questions.length === 0) {
@@ -585,14 +626,22 @@ export default function TakeExamPage() {
           
           // Check if it's a max attempts error (409 Conflict)
           if (startError?.response?.status === 409 || startError?.status === 409) {
-            alert('Maximum attempts reached for this exam. You cannot take it again.')
+            toast({
+              title: 'Maximum Attempts Reached',
+              description: 'You cannot take this exam again.',
+              variant: 'destructive'
+            })
             router.push('/exams')
             return
           }
           
           // Check if exam has ended (403 Forbidden)
           if (startError?.response?.status === 403 || startError?.status === 403) {
-            alert('This exam is no longer available.')
+            toast({
+              title: 'Exam Unavailable',
+              description: 'This exam is no longer available.',
+              variant: 'destructive'
+            })
             router.push('/exams')
             return
           }
@@ -699,6 +748,13 @@ export default function TakeExamPage() {
       return
     }
     
+    // Synchronous guard to prevent multiple submission attempts
+    if (isSubmittingRef.current) {
+      console.log('Submission already in progress, ignoring duplicate call')
+      return
+    }
+    isSubmittingRef.current = true
+    
     // Final save before submission
     if (hasUnsavedChangesRef.current && submissionId) {
       await saveProgress()
@@ -708,7 +764,12 @@ export default function TakeExamPage() {
       console.error('No submission ID available')
       // Try to create submission if it doesn't exist
       if (!exam) {
-        alert('Error: Exam data not loaded. Please refresh the page and try again.')
+        toast({
+          title: 'Error',
+          description: 'Exam data not loaded. Please refresh the page and try again.',
+          variant: 'destructive'
+        })
+        isSubmittingRef.current = false
         return
       }
       try {
@@ -727,19 +788,29 @@ export default function TakeExamPage() {
             answers,
             timeRemainingSeconds: timeRemaining
           })
-          // Retry submission with new ID
+          // Retry submission with new ID (don't reset ref, recursive call)
           return handleSubmit()
         }
       } catch (createError) {
         console.error('Failed to create submission:', createError)
       }
-      alert('Error: No submission found. Please refresh the page and try again.')
+      toast({
+        title: 'Error',
+        description: 'No submission found. Please refresh the page and try again.',
+        variant: 'destructive'
+      })
+      isSubmittingRef.current = false
       return
     }
 
     if (!examId) {
       console.error('No exam ID available')
-      alert('Error: Exam ID is missing. Please refresh the page and try again.')
+      toast({
+        title: 'Error',
+        description: 'Exam ID is missing. Please refresh the page and try again.',
+        variant: 'destructive'
+      })
+      isSubmittingRef.current = false
       return
     }
 
@@ -769,14 +840,37 @@ export default function TakeExamPage() {
         data: error?.response?.data
       })
       
-      // Keep dialog open on error so user can try again or cancel
       const errorMessage = error?.response?.data?.message || 
                           error?.response?.data?.error || 
-                          error?.message || 
-                          `Failed to submit exam (${error?.response?.status || 'Unknown error'}). Please try again.`
-      alert(errorMessage)
+                          error?.message || ''
+      
+      // Check if exam was already submitted - redirect to results instead of showing error
+      const isAlreadySubmitted = errorMessage.toLowerCase().includes('already') && 
+                                 (errorMessage.toLowerCase().includes('submitted') || 
+                                  errorMessage.toLowerCase().includes('completed'))
+      
+      if (isAlreadySubmitted) {
+        toast({
+          title: 'Exam Submitted',
+          description: 'Your exam has already been submitted. Redirecting to results...',
+        })
+        setShowSubmitDialog(false)
+        setShowTabSwitchWarning(false)
+        setTimeout(() => {
+          router.push(`/exams/${examId}/results`)
+        }, 1000)
+        return
+      }
+      
+      // Keep dialog open on error so user can try again or cancel
+      toast({
+        title: 'Submission Failed',
+        description: errorMessage || `Failed to submit exam (${error?.response?.status || 'Unknown error'}). Please try again.`,
+        variant: 'destructive'
+      })
     } finally {
       setSubmitting(false)
+      isSubmittingRef.current = false
     }
   }
 
@@ -802,7 +896,11 @@ export default function TakeExamPage() {
       // Check browser support
       if (!elem.requestFullscreen) {
         console.error('❌ requestFullscreen not supported by browser')
-        alert('Your browser does not support fullscreen mode')
+        toast({
+          title: 'Browser Not Supported',
+          description: 'Your browser does not support fullscreen mode',
+          variant: 'destructive'
+        })
         console.log('🚦 Resetting fullscreen transition flag to FALSE (no support)')
         isFullscreenTransitionRef.current = false
         return
@@ -829,7 +927,11 @@ export default function TakeExamPage() {
       
       // Show user-friendly error
       if (err?.name === 'TypeError' && err?.message?.includes('fullscreen')) {
-        alert('Fullscreen request blocked. Please try clicking the "Start Exam" button again.')
+        toast({
+          title: 'Fullscreen Blocked',
+          description: 'Please try clicking the "Start Exam" button again.',
+          variant: 'warning'
+        })
       }
     }
   }

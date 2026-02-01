@@ -56,27 +56,34 @@ public class ExamSubmissionService {
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     private RestTemplate getRestTemplate() {
+        // Double-checked locking for thread-safe lazy initialization
         if (restTemplate == null) {
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            interceptors.add((request, body, execution) -> {
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    RestTemplate newTemplate = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    interceptors.add((request, body, execution) -> {
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                }
+                            }
                         }
-                    }
+                        return execution.execute(request, body);
+                    });
+                    newTemplate.setInterceptors(interceptors);
+                    restTemplate = newTemplate;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
+            }
         }
         return restTemplate;
     }

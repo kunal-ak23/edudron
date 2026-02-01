@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Card, CardHeader, CardTitle, CardContent } from '@kunal-ak23/edudron-ui-components'
 import { Badge } from '@/components/ui/badge'
-import { Clock, Calendar, CheckCircle, Loader2 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Clock, Calendar, CheckCircle, Loader2, PlayCircle, ClipboardList, ChevronLeft, ChevronRight } from 'lucide-react'
 import { StudentLayout } from '@/components/StudentLayout'
 import { ProtectedRoute } from '@kunal-ak23/edudron-ui-components'
 import { apiClient } from '@/lib/api'
@@ -21,6 +22,7 @@ interface Exam {
   timeLimitSeconds?: number
   maxAttempts?: number
   attemptsTaken?: number
+  timingMode?: 'FIXED_WINDOW' | 'FLEXIBLE_START'
 }
 
 export const dynamic = 'force-dynamic'
@@ -31,6 +33,8 @@ export default function ExamsPage() {
   const [exams, setExams] = useState<Exam[]>([])
   const [loading, setLoading] = useState(true)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [completedPage, setCompletedPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
 
   const loadExams = async (showLoader = false) => {
     try {
@@ -255,76 +259,42 @@ export default function ExamsPage() {
               <p className="text-gray-600 mt-1">View and take your exams</p>
             </div>
 
-          {liveExams.length > 0 && (
-            <div>
-              <h2 className="text-xl font-semibold mb-4">Live Exams</h2>
-              <div className="grid gap-4">
-                {liveExams.map((exam) => (
-                  <Card key={exam.id} className="border-green-200">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-xl">{exam.title}</CardTitle>
-                          {exam.description && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              {exam.description}
-                            </p>
-                          )}
-                        </div>
-                        {getStatusBadge(exam.status)}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4" />
-                            <span>Ends: {formatDate(exam.endTime)}</span>
-                          </div>
-                          {exam.timeLimitSeconds && (
-                            <div>
-                              Duration: {Math.floor(exam.timeLimitSeconds / 60)} minutes
-                            </div>
-                          )}
-                          {exam.maxAttempts && exam.maxAttempts > 0 && (
-                            <div>
-                              Attempts: {exam.attemptsTaken || 0}/{exam.maxAttempts}
-                            </div>
-                          )}
-                        </div>
-                        <Button 
-                          onClick={() => router.push(`/exams/${exam.id}/take`)}
-                          disabled={
-                            !!(exam.endTime && new Date() > new Date(exam.endTime)) ||
-                            !!(exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts)
-                          }
-                        >
-                          {exam.endTime && new Date() > new Date(exam.endTime) 
-                            ? 'Exam Ended' 
-                            : exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts
-                            ? 'Max Attempts Reached'
-                            : 'Take Exam'}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
+          <Tabs defaultValue={liveExams.length > 0 ? "live" : scheduledExams.length > 0 ? "upcoming" : "completed"} className="w-full">
+            <TabsList className="bg-transparent p-0 gap-2">
+              <TabsTrigger value="live" className="flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-primary/5">
+                <PlayCircle className="h-4 w-4 flex-shrink-0" />
+                <span>Live</span>
+                {liveExams.length > 0 && (
+                  <Badge variant="secondary" className="bg-green-100 text-green-700">
+                    {liveExams.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="upcoming" className="flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-primary/5">
+                <Clock className="h-4 w-4 flex-shrink-0" />
+                <span>Upcoming</span>
+                {scheduledExams.length > 0 && (
+                  <Badge variant="secondary">
+                    {scheduledExams.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="completed" className="flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-primary/5">
+                <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                <span>Completed</span>
+                {completedExams.length > 0 && (
+                  <Badge variant="secondary">
+                    {completedExams.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
 
-          {scheduledExams.length > 0 && (
-            <div>
-              <h2 className="text-xl font-semibold mb-4">Upcoming Exams</h2>
-              <div className="grid gap-4">
-                {scheduledExams.map((exam) => {
-                  const timeUntil = getTimeUntilStart(exam.startTime)
-                  const now = new Date().getTime()
-                  const startTime = exam.startTime ? new Date(exam.startTime).getTime() : null
-                  const isAvailable = startTime !== null && now >= startTime
-                  
-                  return (
-                    <Card key={exam.id}>
+            <TabsContent value="live" className="mt-6">
+              {liveExams.length > 0 ? (
+                <div className="grid gap-4">
+                  {liveExams.map((exam) => (
+                    <Card key={exam.id} className="border-green-200">
                       <CardHeader>
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
@@ -335,104 +305,221 @@ export default function ExamsPage() {
                               </p>
                             )}
                           </div>
-                          {getStatusBadge(exam.status)}
+                          {getStatusBadge('LIVE')}
                         </div>
                       </CardHeader>
                       <CardContent>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4" />
-                              <span>Starts: {formatDate(exam.startTime)}</span>
-                            </div>
-                            {timeUntil && (
-                              <Badge variant="outline">
-                                Starts in {timeUntil}
-                              </Badge>
+                            {/* Only show "Ends" for FIXED_WINDOW exams */}
+                            {exam.timingMode !== 'FLEXIBLE_START' && exam.endTime && (
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                <span>Ends: {formatDate(exam.endTime)}</span>
+                              </div>
                             )}
-                            {!timeUntil && !isAvailable && (
-                              <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
-                                Starting soon...
-                              </Badge>
+                            {exam.timeLimitSeconds && (
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4" />
+                                <span>Duration: {Math.floor(exam.timeLimitSeconds / 60)} minutes</span>
+                              </div>
+                            )}
+                            {exam.maxAttempts && exam.maxAttempts > 0 && (
+                              <div>
+                                Attempts: {exam.attemptsTaken || 0}/{exam.maxAttempts}
+                              </div>
                             )}
                           </div>
-                          {(() => {
-                            // Real-time check: has exam ended?
-                            const hasEnded = exam.endTime && new Date() > new Date(exam.endTime)
-                            if (hasEnded) {
-                              return (
-                                <Button variant="outline" disabled>
-                                  Exam Ended
-                                </Button>
-                              )
+                          <Button 
+                            onClick={() => router.push(`/exams/${exam.id}/take`)}
+                            disabled={
+                              !!(exam.timingMode !== 'FLEXIBLE_START' && exam.endTime && new Date() > new Date(exam.endTime)) ||
+                              !!(exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts)
                             }
-                            if (isAvailable) {
-                              return (
-                                <Button onClick={() => {
-                                  router.push(`/exams/${exam.id}/take`)
-                                }}>
-                                  Take Exam
-                                </Button>
-                              )
-                            }
-                            return (
-                              <Button variant="outline" disabled>
-                                Not Available Yet
-                              </Button>
-                            )
-                          })()}
+                          >
+                            {exam.timingMode !== 'FLEXIBLE_START' && exam.endTime && new Date() > new Date(exam.endTime) 
+                              ? 'Exam Ended' 
+                              : exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts
+                              ? 'Max Attempts Reached'
+                              : 'Take Exam'}
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+                  ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <PlayCircle className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500">No live exams at the moment</p>
+                    <p className="text-sm text-gray-400 mt-1">Check the Upcoming tab for scheduled exams</p>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
 
-          {completedExams.length > 0 && (
-            <div>
-              <h2 className="text-xl font-semibold mb-4">Completed Exams</h2>
-              <div className="grid gap-4">
-                {completedExams.map((exam) => (
-                  <Card key={exam.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-xl">{exam.title}</CardTitle>
-                          {exam.description && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              {exam.description}
-                            </p>
-                          )}
-                        </div>
-                        {getStatusBadge(exam.status)}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-600">
-                          Completed: {formatDate(exam.endTime)}
-                        </div>
-                        <Button variant="outline" onClick={() => router.push(`/exams/${exam.id}/results`)}>
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          View Results
+            <TabsContent value="upcoming" className="mt-6">
+              {scheduledExams.length > 0 ? (
+                <div className="grid gap-4">
+                  {scheduledExams.map((exam) => {
+                    const timeUntil = getTimeUntilStart(exam.startTime)
+                    const now = new Date().getTime()
+                    const startTime = exam.startTime ? new Date(exam.startTime).getTime() : null
+                    const isAvailable = startTime !== null && now >= startTime
+                    
+                    return (
+                      <Card key={exam.id}>
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="text-xl">{exam.title}</CardTitle>
+                              {exam.description && (
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {exam.description}
+                                </p>
+                              )}
+                            </div>
+                            {getStatusBadge(exam.status)}
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4" />
+                                <span>Starts: {formatDate(exam.startTime)}</span>
+                              </div>
+                              {timeUntil && (
+                                <Badge variant="outline">
+                                  Starts in {timeUntil}
+                                </Badge>
+                              )}
+                              {!timeUntil && !isAvailable && (
+                                <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+                                  Starting soon...
+                                </Badge>
+                              )}
+                            </div>
+                            {(() => {
+                              // Real-time check: has exam ended?
+                              const hasEnded = exam.endTime && new Date() > new Date(exam.endTime)
+                              if (hasEnded) {
+                                return (
+                                  <Button variant="outline" disabled>
+                                    Exam Ended
+                                  </Button>
+                                )
+                              }
+                              if (isAvailable) {
+                                return (
+                                  <Button onClick={() => {
+                                    router.push(`/exams/${exam.id}/take`)
+                                  }}>
+                                    Take Exam
+                                  </Button>
+                                )
+                              }
+                              return (
+                                <Button variant="outline" disabled>
+                                  Not Available Yet
+                                </Button>
+                              )
+                            })()}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <Clock className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500">No upcoming exams scheduled</p>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="completed" className="mt-6">
+              {completedExams.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="grid gap-4">
+                    {completedExams
+                      .slice((completedPage - 1) * ITEMS_PER_PAGE, completedPage * ITEMS_PER_PAGE)
+                      .map((exam) => (
+                      <Card key={exam.id}>
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="text-xl">{exam.title}</CardTitle>
+                              {exam.description && (
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {exam.description}
+                                </p>
+                              )}
+                            </div>
+                            {getStatusBadge('COMPLETED')}
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm text-gray-600">
+                              Completed: {formatDate(exam.endTime)}
+                            </div>
+                            <Button variant="outline" onClick={() => router.push(`/exams/${exam.id}/results`)}>
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              View Results
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  
+                  {/* Pagination */}
+                  {completedExams.length > ITEMS_PER_PAGE && (
+                    <div className="flex items-center justify-between border-t pt-4">
+                      <p className="text-sm text-gray-600">
+                        Showing {((completedPage - 1) * ITEMS_PER_PAGE) + 1} - {Math.min(completedPage * ITEMS_PER_PAGE, completedExams.length)} of {completedExams.length} exams
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCompletedPage(p => Math.max(1, p - 1))}
+                          disabled={completedPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          Previous
+                        </Button>
+                        <span className="text-sm text-gray-600 px-2">
+                          Page {completedPage} of {Math.ceil(completedExams.length / ITEMS_PER_PAGE)}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCompletedPage(p => Math.min(Math.ceil(completedExams.length / ITEMS_PER_PAGE), p + 1))}
+                          disabled={completedPage >= Math.ceil(completedExams.length / ITEMS_PER_PAGE)}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-1" />
                         </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {uniqueExams.length === 0 && !loading && (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <p className="text-gray-500">No exams available</p>
-              </CardContent>
-            </Card>
-          )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <ClipboardList className="h-12 w-12 mx-auto text-gray-300 mb-4" />
+                    <p className="text-gray-500">No completed exams yet</p>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
           </div>
         </main>
       </StudentLayout>

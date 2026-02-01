@@ -53,27 +53,34 @@ public class ExamPaperGenerationService {
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     private RestTemplate getRestTemplate() {
+        // Double-checked locking for thread-safe lazy initialization
         if (restTemplate == null) {
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            interceptors.add((request, body, execution) -> {
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    RestTemplate newTemplate = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    interceptors.add((request, body, execution) -> {
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                }
+                            }
                         }
-                    }
+                        return execution.execute(request, body);
+                    });
+                    newTemplate.setInterceptors(interceptors);
+                    restTemplate = newTemplate;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
+            }
         }
         return restTemplate;
     }
@@ -163,13 +170,13 @@ public class ExamPaperGenerationService {
     }
     
     /**
-     * Remove a question from an exam.
+     * Remove a question from an exam by QuestionBank ID.
      */
-    public void removeQuestionFromExam(String examId, String questionId) {
+    public void removeQuestionFromExam(String examId, String questionBankId) {
         validateWriteAccess();
         UUID clientId = getClientId();
         
-        ExamQuestion examQuestion = examQuestionRepository.findByExamIdAndQuestionIdAndClientId(examId, questionId, clientId)
+        ExamQuestion examQuestion = examQuestionRepository.findByExamIdAndQuestionIdAndClientId(examId, questionBankId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Question not found in exam"));
         
         int deletedSequence = examQuestion.getSequence();
@@ -179,7 +186,32 @@ public class ExamPaperGenerationService {
         // Update sequences of remaining questions
         examQuestionRepository.decrementSequencesAfter(examId, clientId, deletedSequence);
         
-        logger.info("Removed question {} from exam {}", questionId, examId);
+        logger.info("Removed question {} from exam {}", questionBankId, examId);
+    }
+    
+    /**
+     * Remove a question from an exam by ExamQuestion ID (the link ID).
+     */
+    public void removeExamQuestionById(String examId, String examQuestionId) {
+        validateWriteAccess();
+        UUID clientId = getClientId();
+        
+        ExamQuestion examQuestion = examQuestionRepository.findByIdAndClientId(examQuestionId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Exam question not found: " + examQuestionId));
+        
+        // Verify it belongs to the specified exam
+        if (!examQuestion.getExamId().equals(examId)) {
+            throw new IllegalArgumentException("Question does not belong to the specified exam");
+        }
+        
+        int deletedSequence = examQuestion.getSequence();
+        
+        examQuestionRepository.delete(examQuestion);
+        
+        // Update sequences of remaining questions
+        examQuestionRepository.decrementSequencesAfter(examId, clientId, deletedSequence);
+        
+        logger.info("Removed exam question {} from exam {}", examQuestionId, examId);
     }
     
     /**

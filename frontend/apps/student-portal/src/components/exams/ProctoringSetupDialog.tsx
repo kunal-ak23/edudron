@@ -223,7 +223,7 @@ export function ProctoringSetupDialog({
         <DialogHeader>
           <DialogTitle>Proctored Exam Setup</DialogTitle>
           <DialogDescription>
-            {examTitle} - {proctoringMode.replace(/_/g, ' ')} Mode
+            {examTitle}
           </DialogDescription>
         </DialogHeader>
 

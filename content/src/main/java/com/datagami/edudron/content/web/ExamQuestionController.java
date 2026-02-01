@@ -90,13 +90,20 @@ public class ExamQuestionController {
     }
     
     @DeleteMapping("/{questionId}")
-    @Operation(summary = "Remove question from exam", description = "Remove a question from the exam")
+    @Operation(summary = "Remove question from exam", description = "Remove a question from the exam. Accepts either ExamQuestion ID or QuestionBank ID.")
     public ResponseEntity<Void> removeQuestion(
             @PathVariable String examId,
             @PathVariable String questionId) {
         try {
-            examPaperService.removeQuestionFromExam(examId, questionId);
-            return ResponseEntity.noContent().build();
+            // First try to delete by ExamQuestion ID (the link ID returned by ExamDetailDTO)
+            try {
+                examPaperService.removeExamQuestionById(examId, questionId);
+                return ResponseEntity.noContent().build();
+            } catch (IllegalArgumentException e) {
+                // If not found by ExamQuestion ID, try by QuestionBank ID (for backward compatibility)
+                examPaperService.removeQuestionFromExam(examId, questionId);
+                return ResponseEntity.noContent().build();
+            }
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
         } catch (Exception e) {

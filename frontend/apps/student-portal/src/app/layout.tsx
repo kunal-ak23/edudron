@@ -4,6 +4,7 @@ import '@kunal-ak23/edudron-ui-components/styles.css'
 import './globals.css'
 import { Providers } from './providers'
 import { DynamicHead } from '@/components/DynamicHead'
+import { Toaster } from '@/components/ui/toaster'
 
 const inter = Inter({ subsets: ['latin'] })
 const manrope = Manrope({ 
@@ -49,6 +50,7 @@ export default function RootLayout({
         <Providers>
           <DynamicHead />
           {children}
+          <Toaster />
         </Providers>
       </body>
     </html>

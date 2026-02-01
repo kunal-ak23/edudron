@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Loader2, Calendar, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone } from 'lucide-react'
+import { ArrowLeft, Loader2, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone, Play, Square } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, questionsApi, type QuestionData } from '@/lib/api'
 import { QuestionEditor } from '@/components/exams/QuestionEditor'
@@ -42,6 +42,9 @@ interface Exam {
   sectionId?: string
   randomizeQuestions?: boolean
   randomizeMcqOptions?: boolean
+  // Timing fields
+  timingMode?: 'FIXED_WINDOW' | 'FLEXIBLE_START'
+  timeLimitSeconds?: number
   // Proctoring fields
   enableProctoring?: boolean
   proctoringMode?: 'DISABLED' | 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING'
@@ -50,6 +53,8 @@ interface Exam {
   blockCopyPaste?: boolean
   blockTabSwitch?: boolean
   maxTabSwitchesAllowed?: number
+  // Archive status
+  archived?: boolean
 }
 
 interface Question {
@@ -90,11 +95,6 @@ export default function ExamDetailPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [showScheduleDialog, setShowScheduleDialog] = useState(false)
-  const [scheduleData, setScheduleData] = useState({
-    startTime: '',
-    endTime: ''
-  })
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null)
   const [showTentativeAnswerDialog, setShowTentativeAnswerDialog] = useState(false)
   const [showQuestionEditor, setShowQuestionEditor] = useState(false)
@@ -110,14 +110,34 @@ export default function ExamDetailPage() {
     maxTabSwitchesAllowed: 3
   })
   const [showEditDialog, setShowEditDialog] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [showDeleteQuestionDialog, setShowDeleteQuestionDialog] = useState(false)
+  const [questionToDelete, setQuestionToDelete] = useState<Question | null>(null)
+  const [deletingQuestion, setDeletingQuestion] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const [showPublishDialog, setShowPublishDialog] = useState(false)
+  const [showCompleteDialog, setShowCompleteDialog] = useState(false)
   const [editForm, setEditForm] = useState({
     title: '',
     description: '',
     instructions: '',
     reviewMethod: 'INSTRUCTOR' as 'INSTRUCTOR' | 'AI' | 'BOTH',
     randomizeQuestions: false,
-    randomizeMcqOptions: false
+    randomizeMcqOptions: false,
+    timingMode: 'FIXED_WINDOW' as 'FIXED_WINDOW' | 'FLEXIBLE_START',
+    durationMinutes: 60,
+    startTime: '',
+    endTime: '',
+    assignmentType: 'all' as 'all' | 'class' | 'section',
+    classId: '',
+    sectionId: ''
   })
+  
+  // State for classes and sections (for assignment editing)
+  const [classes, setClasses] = useState<any[]>([])
+  const [sections, setSections] = useState<any[]>([])
 
   const loadExam = useCallback(async () => {
     try {
@@ -142,57 +162,35 @@ export default function ExamDetailPage() {
     }
   }, [examId, toast])
 
+  // Load classes and sections for assignment editing
+  const loadClassesAndSections = useCallback(async (courseId: string) => {
+    try {
+      // Load sections/batches
+      const sectionsResponse = await apiClient.get(`/api/exams/courses/${courseId}/sections`)
+      const sectionsData = Array.isArray(sectionsResponse) ? sectionsResponse : (sectionsResponse as any)?.data || []
+      setSections(sectionsData)
+      
+      // Load classes
+      const classesResponse = await apiClient.get(`/api/exams/courses/${courseId}/classes`)
+      const classesData = Array.isArray(classesResponse) ? classesResponse : (classesResponse as any)?.data || []
+      setClasses(classesData)
+    } catch (error) {
+      console.error('Failed to load classes/sections:', error)
+      setSections([])
+      setClasses([])
+    }
+  }, [])
+
   useEffect(() => {
     loadExam()
   }, [examId, loadExam])
 
-  const handleSchedule = async () => {
-    if (!scheduleData.startTime || !scheduleData.endTime) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please provide both start and end times',
-        variant: 'destructive'
-      })
-      return
+  // Load classes and sections when exam is loaded
+  useEffect(() => {
+    if (exam?.courseId) {
+      loadClassesAndSections(exam.courseId)
     }
-
-    setSaving(true)
-    try {
-      // Convert datetime-local values to ISO 8601 format with timezone
-      // This preserves the user's local timezone so students in different timezones see correct times
-      const startTimeISO = convertToISOWithTimezone(scheduleData.startTime)
-      const endTimeISO = convertToISOWithTimezone(scheduleData.endTime)
-      
-      const response = await apiClient.put<any>(`/api/exams/${examId}/schedule`, {
-        startTime: startTimeISO,
-        endTime: endTimeISO
-      })
-      // Handle response - apiClient might return data directly or wrapped
-      let updated = response
-      if (response && typeof response === 'object' && 'data' in response && !('id' in response)) {
-        // Response is wrapped in { data: {...} }
-        updated = (response as any).data
-      }
-      setExam(updated as unknown as Exam)
-      setShowScheduleDialog(false)
-      const examStatus = (updated as any)?.status || 'DRAFT'
-      toast({
-        title: 'Success',
-        description: examStatus === 'SCHEDULED' 
-          ? 'Exam schedule updated successfully'
-          : 'Exam scheduled successfully'
-      })
-    } catch (error) {
-      console.error('Failed to schedule exam:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to schedule exam',
-        variant: 'destructive'
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
+  }, [exam?.courseId, loadClassesAndSections])
 
   const handleUpdateTentativeAnswer = async (questionId: string, editedAnswer: string) => {
     setSaving(true)
@@ -260,6 +258,28 @@ export default function ExamDetailPage() {
 
   const handleOpenEditDialog = () => {
     if (exam) {
+      // Determine assignment type from classId/sectionId
+      let assignmentType: 'all' | 'class' | 'section' = 'all'
+      if (exam.sectionId) {
+        assignmentType = 'section'
+      } else if (exam.classId) {
+        assignmentType = 'class'
+      }
+      
+      // Convert ISO datetime to datetime-local format for the input
+      let startTimeLocal = ''
+      let endTimeLocal = ''
+      if (exam.startTime) {
+        const startDate = new Date(exam.startTime)
+        startTimeLocal = new Date(startDate.getTime() - startDate.getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 16)
+      }
+      if (exam.endTime) {
+        const endDate = new Date(exam.endTime)
+        endTimeLocal = new Date(endDate.getTime() - endDate.getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 16)
+      }
+      
       // Initialize form with current exam data
       setEditForm({
         title: exam.title,
@@ -267,7 +287,14 @@ export default function ExamDetailPage() {
         instructions: exam.instructions || '',
         reviewMethod: exam.reviewMethod,
         randomizeQuestions: exam.randomizeQuestions || false,
-        randomizeMcqOptions: exam.randomizeMcqOptions || false
+        randomizeMcqOptions: exam.randomizeMcqOptions || false,
+        timingMode: exam.timingMode || 'FIXED_WINDOW',
+        durationMinutes: exam.timeLimitSeconds ? Math.round(exam.timeLimitSeconds / 60) : 60,
+        startTime: startTimeLocal,
+        endTime: endTimeLocal,
+        assignmentType,
+        classId: exam.classId || '',
+        sectionId: exam.sectionId || ''
       })
     }
     setShowEditDialog(true)
@@ -282,11 +309,65 @@ export default function ExamDetailPage() {
       })
       return
     }
+    
+    // Validate based on timing mode
+    if (editForm.timingMode === 'FLEXIBLE_START' && (!editForm.durationMinutes || editForm.durationMinutes < 1)) {
+      toast({
+        title: 'Validation Error',
+        description: 'Duration is required for Flexible Start mode',
+        variant: 'destructive'
+      })
+      return
+    }
+    
+    if (editForm.timingMode === 'FIXED_WINDOW' && editForm.startTime && editForm.endTime) {
+      const start = new Date(editForm.startTime)
+      const end = new Date(editForm.endTime)
+      if (end <= start) {
+        toast({
+          title: 'Validation Error',
+          description: 'End time must be after start time',
+          variant: 'destructive'
+        })
+        return
+      }
+    }
 
     setSaving(true)
     try {
-      const response = await apiClient.put(`/api/exams/${examId}`, editForm)
-      const updated = (response as any)?.data || response
+      // Update basic exam details
+      const updateData: any = {
+        title: editForm.title,
+        description: editForm.description,
+        instructions: editForm.instructions,
+        reviewMethod: editForm.reviewMethod,
+        randomizeQuestions: editForm.randomizeQuestions,
+        randomizeMcqOptions: editForm.randomizeMcqOptions,
+        timingMode: editForm.timingMode,
+        classId: editForm.assignmentType === 'class' ? editForm.classId : null,
+        sectionId: editForm.assignmentType === 'section' ? editForm.sectionId : null
+      }
+      
+      // Only include duration for FLEXIBLE_START mode
+      if (editForm.timingMode === 'FLEXIBLE_START') {
+        updateData.timeLimitSeconds = editForm.durationMinutes * 60
+      }
+      
+      const response = await apiClient.put(`/api/exams/${examId}`, updateData)
+      let updated = (response as any)?.data || response
+      
+      // If FIXED_WINDOW mode and times are set, also schedule the exam
+      if (editForm.timingMode === 'FIXED_WINDOW' && editForm.startTime && editForm.endTime) {
+        const startTimeISO = convertToISOWithTimezone(editForm.startTime)
+        const endTimeISO = convertToISOWithTimezone(editForm.endTime)
+        
+        const scheduleResponse = await apiClient.put(`/api/exams/${examId}/schedule`, {
+          startTime: startTimeISO,
+          endTime: endTimeISO
+        })
+        updated = (scheduleResponse as any)?.data || scheduleResponse
+      }
+      
       setExam(updated as unknown as Exam)
       setShowEditDialog(false)
       toast({
@@ -302,6 +383,84 @@ export default function ExamDetailPage() {
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeleteExam = async () => {
+    setDeleting(true)
+    try {
+      const response = await apiClient.delete<{ action: string; message: string }>(`/api/exams/${examId}`)
+      const result = (response as any)?.data || response
+      
+      toast({
+        title: result.action === 'deleted' ? 'Exam Deleted' : 'Exam Archived',
+        description: result.message || (result.action === 'deleted' 
+          ? 'The exam has been permanently deleted'
+          : 'The exam has been archived because it has submissions'),
+      })
+      
+      router.push('/exams')
+    } catch (error) {
+      console.error('Failed to delete exam:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to delete exam',
+        variant: 'destructive'
+      })
+    } finally {
+      setDeleting(false)
+      setShowDeleteDialog(false)
+    }
+  }
+
+  const handlePublishExam = async () => {
+    setPublishing(true)
+    try {
+      const response = await apiClient.put<Exam>(`/api/exams/${examId}/publish`)
+      const updated = (response as any)?.data || response
+      setExam(updated as unknown as Exam)
+      setShowPublishDialog(false)
+      
+      const newStatus = (updated as any)?.status
+      toast({
+        title: newStatus === 'SCHEDULED' ? 'Exam Scheduled' : 'Exam Published',
+        description: newStatus === 'SCHEDULED' 
+          ? 'The exam is scheduled and will go live at the start time'
+          : 'The exam is now live and available to students',
+      })
+    } catch (error: any) {
+      console.error('Failed to publish exam:', error)
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.message || error?.message || 'Failed to publish exam',
+        variant: 'destructive'
+      })
+    } finally {
+      setPublishing(false)
+    }
+  }
+
+  const handleCompleteExam = async () => {
+    setCompleting(true)
+    try {
+      const response = await apiClient.put<Exam>(`/api/exams/${examId}/complete`)
+      const updated = (response as any)?.data || response
+      setExam(updated as unknown as Exam)
+      setShowCompleteDialog(false)
+      
+      toast({
+        title: 'Exam Completed',
+        description: 'The exam has been marked as completed. No further submissions will be accepted.',
+      })
+    } catch (error: any) {
+      console.error('Failed to complete exam:', error)
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.message || error?.message || 'Failed to complete exam',
+        variant: 'destructive'
+      })
+    } finally {
+      setCompleting(false)
     }
   }
 
@@ -377,28 +536,24 @@ export default function ExamDetailPage() {
         </div>
         {canManageExams && (
           <div className="flex gap-2">
-            {(exam.status === 'DRAFT' || exam.status === 'SCHEDULED') && (
-              <Button onClick={() => {
-                // Pre-populate with existing times if rescheduling
-                if (exam.startTime && exam.endTime) {
-                  // Convert ISO datetime to datetime-local format
-                  const startDate = new Date(exam.startTime)
-                  const endDate = new Date(exam.endTime)
-                  const startLocal = new Date(startDate.getTime() - startDate.getTimezoneOffset() * 60000)
-                    .toISOString().slice(0, 16)
-                  const endLocal = new Date(endDate.getTime() - endDate.getTimezoneOffset() * 60000)
-                    .toISOString().slice(0, 16)
-                  setScheduleData({
-                    startTime: startLocal,
-                    endTime: endLocal
-                  })
-                } else {
-                  setScheduleData({ startTime: '', endTime: '' })
-                }
-                setShowScheduleDialog(true)
-              }}>
-                <Calendar className="h-4 w-4 mr-2" />
-                {exam.status === 'SCHEDULED' ? 'Reschedule Exam' : 'Schedule Exam'}
+            {/* Publish button - only for DRAFT exams */}
+            {exam.status === 'DRAFT' && (
+              <Button 
+                onClick={() => setShowPublishDialog(true)}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Publish Exam
+              </Button>
+            )}
+            {/* Complete button - for LIVE exams (especially useful for FLEXIBLE_START) */}
+            {exam.status === 'LIVE' && (
+              <Button 
+                onClick={() => setShowCompleteDialog(true)}
+                variant="secondary"
+              >
+                <Square className="h-4 w-4 mr-2" />
+                Complete Exam
               </Button>
             )}
             <Button 
@@ -416,6 +571,12 @@ export default function ExamDetailPage() {
               <Edit className="h-4 w-4 mr-2" />
               Edit Details
             </Button>
+            {exam.status !== 'LIVE' && (
+              <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </Button>
+            )}
           </div>
         )}
         {!canManageExams && (
@@ -463,6 +624,32 @@ export default function ExamDetailPage() {
                     <Label>Review Method</Label>
                     <div className="mt-1 font-medium">{exam.reviewMethod}</div>
                   </div>
+                  <div>
+                    <Label className="flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Timing Mode
+                    </Label>
+                    <div className="mt-1">
+                      <Badge variant={exam.timingMode === 'FLEXIBLE_START' ? 'default' : 'secondary'}>
+                        {exam.timingMode === 'FLEXIBLE_START' ? 'Flexible Start' : 'Fixed Window'}
+                      </Badge>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {exam.timingMode === 'FLEXIBLE_START' 
+                          ? 'Each student gets full duration from when they start'
+                          : 'Exam runs between scheduled start and end times'}
+                      </p>
+                    </div>
+                  </div>
+                  {exam.timingMode === 'FLEXIBLE_START' && (
+                    <div>
+                      <Label>Duration</Label>
+                      <div className="mt-1 font-medium">
+                        {exam.timeLimitSeconds 
+                          ? `${Math.floor(exam.timeLimitSeconds / 60)} minutes`
+                          : 'Not set'}
+                      </div>
+                    </div>
+                  )}
                   <div className="col-span-2">
                     <Label className="flex items-center gap-2">
                       <Shuffle className="h-4 w-4" />
@@ -651,24 +838,9 @@ export default function ExamDetailPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={async () => {
-                                  if (confirm('Are you sure you want to delete this question?')) {
-                                    try {
-                                      await questionsApi.delete(examId, question.id)
-                                      await loadExam()
-                                      toast({
-                                        title: 'Success',
-                                        description: 'Question deleted successfully'
-                                      })
-                                    } catch (error) {
-                                      console.error('Failed to delete question:', error)
-                                      toast({
-                                        title: 'Error',
-                                        description: 'Failed to delete question',
-                                        variant: 'destructive'
-                                      })
-                                    }
-                                  }
+                                onClick={() => {
+                                  setQuestionToDelete(question)
+                                  setShowDeleteQuestionDialog(true)
                                 }}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -786,51 +958,6 @@ export default function ExamDetailPage() {
             <SubmissionsList examId={examId} questions={questions} />
           </TabsContent>
         </Tabs>
-
-        {/* Schedule Dialog */}
-        <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {exam.status === 'SCHEDULED' ? 'Reschedule Exam' : 'Schedule Exam'}
-              </DialogTitle>
-              <DialogDescription>
-                {exam.status === 'SCHEDULED' 
-                  ? 'Update the start and end time for this exam'
-                  : 'Set the start and end time for this exam'}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="startTime">Start Time</Label>
-                <Input
-                  id="startTime"
-                  type="datetime-local"
-                  value={scheduleData.startTime}
-                  onChange={(e) => setScheduleData(prev => ({ ...prev, startTime: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label htmlFor="endTime">End Time</Label>
-                <Input
-                  id="endTime"
-                  type="datetime-local"
-                  value={scheduleData.endTime}
-                  onChange={(e) => setScheduleData(prev => ({ ...prev, endTime: e.target.value }))}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowScheduleDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSchedule} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                {exam.status === 'SCHEDULED' ? 'Update Schedule' : 'Schedule'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* Tentative Answer Edit Dialog */}
         <Dialog open={showTentativeAnswerDialog} onOpenChange={setShowTentativeAnswerDialog}>
@@ -1080,14 +1207,14 @@ export default function ExamDetailPage() {
 
         {/* Edit Exam Details Dialog */}
         <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Edit Exam Details</DialogTitle>
               <DialogDescription>
                 Update exam information, review method, and randomization settings
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-4 pt-4">
               <div>
                 <Label htmlFor="editTitle">Exam Title *</Label>
                 <Input
@@ -1143,6 +1270,157 @@ export default function ExamDetailPage() {
               </div>
 
               <div className="space-y-3 pt-2 border-t">
+                <Label>Timing Settings</Label>
+                
+                <div>
+                  <Label htmlFor="editTimingMode">Timing Mode</Label>
+                  <Select 
+                    value={editForm.timingMode} 
+                    onValueChange={(value: any) => 
+                      setEditForm(prev => ({ ...prev, timingMode: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FIXED_WINDOW">Fixed Window</SelectItem>
+                      <SelectItem value="FLEXIBLE_START">Flexible Start</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {editForm.timingMode === 'FIXED_WINDOW' 
+                      ? 'Exam has a fixed start and end time. All students must complete within this window.'
+                      : 'Each student gets a fixed duration from when they start the exam.'}
+                  </p>
+                </div>
+
+                {editForm.timingMode === 'FLEXIBLE_START' ? (
+                  <div>
+                    <Label htmlFor="editDurationMinutes">
+                      Exam Duration (minutes) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="editDurationMinutes"
+                      type="number"
+                      value={editForm.durationMinutes}
+                      onChange={(e) => setEditForm(prev => ({ 
+                        ...prev, 
+                        durationMinutes: parseInt(e.target.value) || 60 
+                      }))}
+                      min={1}
+                      max={480}
+                      placeholder="60"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Each student gets this many minutes from when they start.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="editStartTime">Start Time</Label>
+                      <Input
+                        id="editStartTime"
+                        type="datetime-local"
+                        value={editForm.startTime}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, startTime: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="editEndTime">End Time</Label>
+                      <Input
+                        id="editEndTime"
+                        type="datetime-local"
+                        value={editForm.endTime}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, endTime: e.target.value }))}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      The exam will be available between these times. Duration is calculated automatically.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3 pt-2 border-t">
+                <Label>Student Assignment</Label>
+                
+                <div>
+                  <Label htmlFor="editAssignmentType">Assign To</Label>
+                  <Select 
+                    value={editForm.assignmentType} 
+                    onValueChange={(value: any) => 
+                      setEditForm(prev => ({ ...prev, assignmentType: value, classId: '', sectionId: '' }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Students in Course</SelectItem>
+                      <SelectItem value="class">Specific Class</SelectItem>
+                      <SelectItem value="section">Specific Section/Batch</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {editForm.assignmentType === 'class' && (
+                  <div>
+                    <Label htmlFor="editClassId">Select Class</Label>
+                    <Select 
+                      value={editForm.classId} 
+                      onValueChange={(value) => 
+                        setEditForm(prev => ({ ...prev, classId: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a class" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {classes.length === 0 ? (
+                          <SelectItem value="__none__" disabled>No classes found</SelectItem>
+                        ) : (
+                          classes.map((cls: any) => (
+                            <SelectItem key={cls.id} value={cls.id}>
+                              {cls.name} {cls.code ? `(${cls.code})` : ''}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {editForm.assignmentType === 'section' && (
+                  <div>
+                    <Label htmlFor="editSectionId">Select Section/Batch</Label>
+                    <Select 
+                      value={editForm.sectionId} 
+                      onValueChange={(value) => 
+                        setEditForm(prev => ({ ...prev, sectionId: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a section" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sections.length === 0 ? (
+                          <SelectItem value="__none__" disabled>No sections found</SelectItem>
+                        ) : (
+                          sections.map((section: any) => (
+                            <SelectItem key={section.id} value={section.id}>
+                              {section.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3 pt-2 border-t">
                 <Label>Randomization Options</Label>
                 
                 <div className="flex items-center justify-between">
@@ -1181,6 +1459,202 @@ export default function ExamDetailPage() {
               <Button onClick={handleSaveEdit} disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-5 w-5" />
+                Delete Exam
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete &quot;{exam.title}&quot;?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  <strong>Note:</strong> If this exam has student submissions, it will be 
+                  <strong> archived</strong> instead of permanently deleted. Archived exams 
+                  can be restored later. Exams without submissions will be permanently deleted.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteExam} disabled={deleting}>
+                {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                {deleting ? 'Deleting...' : 'Delete Exam'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Publish Confirmation Dialog */}
+        <Dialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-green-600">
+                <Play className="h-5 w-5" />
+                Publish Exam
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to publish &quot;{exam.title}&quot;?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              {exam.timingMode === 'FIXED_WINDOW' ? (
+                <div className="space-y-3">
+                  {exam.startTime && exam.endTime ? (
+                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm text-green-800">
+                        <strong>Fixed Window Exam</strong><br />
+                        Start: {new Date(exam.startTime).toLocaleString()}<br />
+                        End: {new Date(exam.endTime).toLocaleString()}
+                      </p>
+                      <p className="text-sm text-green-700 mt-2">
+                        {new Date() < new Date(exam.startTime) 
+                          ? 'The exam will be scheduled and go live at the start time.'
+                          : 'The exam will go live immediately.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <p className="text-sm text-amber-800">
+                        <strong>Warning:</strong> Start and end times are not set. 
+                        Please edit the exam details to set the schedule before publishing.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Flexible Start Exam</strong><br />
+                    Duration: {exam.timeLimitSeconds ? `${Math.floor(exam.timeLimitSeconds / 60)} minutes` : 'Not set'}
+                  </p>
+                  <p className="text-sm text-blue-700 mt-2">
+                    The exam will go live immediately. Each student will get the full duration from when they start.
+                  </p>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowPublishDialog(false)} disabled={publishing}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handlePublishExam} 
+                disabled={publishing || (exam.timingMode === 'FIXED_WINDOW' && (!exam.startTime || !exam.endTime))}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
+                {publishing ? 'Publishing...' : 'Publish Exam'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Complete Confirmation Dialog */}
+        <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Square className="h-5 w-5" />
+                Complete Exam
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to mark &quot;{exam.title}&quot; as completed?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  <strong>Warning:</strong> Once completed, no more students will be able to 
+                  start or submit the exam. This action cannot be undone easily.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowCompleteDialog(false)} disabled={completing}>
+                Cancel
+              </Button>
+              <Button onClick={handleCompleteExam} disabled={completing} variant="secondary">
+                {completing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Square className="h-4 w-4 mr-2" />}
+                {completing ? 'Completing...' : 'Complete Exam'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Question Confirmation Dialog */}
+        <Dialog open={showDeleteQuestionDialog} onOpenChange={setShowDeleteQuestionDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-5 w-5" />
+                Delete Question
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this question from the exam?
+              </DialogDescription>
+            </DialogHeader>
+            {questionToDelete && (
+              <div className="py-4">
+                <div className="p-4 bg-gray-50 border rounded-lg">
+                  <p className="text-sm text-gray-600 line-clamp-3">
+                    {questionToDelete.questionText}
+                  </p>
+                </div>
+              </div>
+            )}
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowDeleteQuestionDialog(false)
+                  setQuestionToDelete(null)
+                }} 
+                disabled={deletingQuestion}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={async () => {
+                  if (!questionToDelete) return
+                  setDeletingQuestion(true)
+                  try {
+                    await questionsApi.delete(examId, questionToDelete.id)
+                    await loadExam()
+                    toast({
+                      title: 'Success',
+                      description: 'Question deleted successfully'
+                    })
+                    setShowDeleteQuestionDialog(false)
+                    setQuestionToDelete(null)
+                  } catch (error) {
+                    console.error('Failed to delete question:', error)
+                    toast({
+                      title: 'Error',
+                      description: 'Failed to delete question',
+                      variant: 'destructive'
+                    })
+                  } finally {
+                    setDeletingQuestion(false)
+                  }
+                }} 
+                disabled={deletingQuestion}
+              >
+                {deletingQuestion ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+                {deletingQuestion ? 'Deleting...' : 'Delete Question'}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1341,7 +1815,8 @@ function SubmissionsList({ examId, questions }: { examId: string; questions: Que
                       )}
                       View
                     </Button>
-                    {submission.reviewStatus !== 'AI_REVIEWED' && submission.reviewStatus !== 'COMPLETED' && (
+                    {/* Only show AI Review button if review method allows AI (AI or BOTH) */}
+                    {exam?.reviewMethod !== 'INSTRUCTOR' && submission.reviewStatus !== 'AI_REVIEWED' && submission.reviewStatus !== 'COMPLETED' && (
                       <Button variant="outline" size="sm" onClick={async () => {
                         setReviewing(true)
                         try {

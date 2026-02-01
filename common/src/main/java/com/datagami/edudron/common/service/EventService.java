@@ -60,17 +60,17 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("HTTP_REQUEST");
-            event.setHttpMethod(method);
-            event.setHttpPath(path);
+            event.setHttpMethod(truncate(method, 10));
+            event.setHttpPath(truncate(path, 500));
             event.setHttpStatus(status);
             event.setDurationMs(durationMs);
-            event.setTraceId(traceId);
-            event.setRequestId(requestId);
-            event.setUserAgent(userAgent);
-            event.setIpAddress(ipAddress);
-            event.setUserId(userId);
-            event.setUserEmail(userEmail);
-            event.setEndpoint(path);
+            event.setTraceId(truncate(traceId, 100));
+            event.setRequestId(truncate(requestId, 100));
+            event.setUserAgent(truncate(userAgent, 500));
+            event.setIpAddress(truncate(ipAddress, 50));
+            event.setUserId(truncate(userId, 26));
+            event.setUserEmail(truncate(userEmail, 100));
+            event.setEndpoint(truncate(path, 100)); // Endpoint has 100 char limit
             
             if (additionalData != null && !additionalData.isEmpty()) {
                 event.setEventData(objectMapper.writeValueAsString(additionalData));
@@ -92,9 +92,9 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("USER_ACTION");
-            event.setUserId(userId);
-            event.setUserEmail(userEmail);
-            event.setEndpoint(endpoint);
+            event.setUserId(truncate(userId, 26));
+            event.setUserEmail(truncate(userEmail, 100));
+            event.setEndpoint(truncate(endpoint, 100));
             
             Map<String, Object> eventDataMap = Map.of(
                 "actionType", actionType,
@@ -117,11 +117,11 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("LOGIN");
-            event.setUserId(userId);
-            event.setUserEmail(userEmail);
-            event.setIpAddress(ipAddress);
-            event.setUserAgent(userAgent);
-            event.setSessionId(sessionId);
+            event.setUserId(truncate(userId, 26));
+            event.setUserEmail(truncate(userEmail, 100));
+            event.setIpAddress(truncate(ipAddress, 50));
+            event.setUserAgent(truncate(userAgent, 500));
+            event.setSessionId(truncate(sessionId, 100));
             event.setEndpoint("/auth/login");
             
             if (loginData != null && !loginData.isEmpty()) {
@@ -143,9 +143,9 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("LOGOUT");
-            event.setUserId(userId);
-            event.setUserEmail(userEmail);
-            event.setSessionId(sessionId);
+            event.setUserId(truncate(userId, 26));
+            event.setUserEmail(truncate(userEmail, 100));
+            event.setSessionId(truncate(sessionId, 100));
             event.setEndpoint("/auth/logout");
             
             if (logoutData != null && !logoutData.isEmpty()) {
@@ -168,8 +168,8 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("VIDEO_WATCH_PROGRESS");
-            event.setUserId(userId);
-            event.setEndpoint("/api/lectures/" + lectureId + "/progress");
+            event.setUserId(truncate(userId, 26));
+            event.setEndpoint(truncate("/api/lectures/" + lectureId + "/progress", 100));
             
             Map<String, Object> eventDataMap = new java.util.HashMap<>();
             eventDataMap.put("courseId", courseId);
@@ -197,8 +197,8 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("ASSESSMENT_SUBMITTED");
-            event.setUserId(userId);
-            event.setEndpoint("/api/assessments/" + assessmentId + "/submit");
+            event.setUserId(truncate(userId, 26));
+            event.setEndpoint(truncate("/api/assessments/" + assessmentId + "/submit", 100));
             
             Map<String, Object> eventDataMap = new java.util.HashMap<>();
             eventDataMap.put("assessmentId", assessmentId);
@@ -226,7 +226,7 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("SEARCH_QUERY");
-            event.setUserId(userId);
+            event.setUserId(truncate(userId, 26));
             event.setDurationMs(durationMs);
             event.setEndpoint("/api/search");
             
@@ -254,7 +254,7 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("FILE_UPLOADED");
-            event.setUserId(userId);
+            event.setUserId(truncate(userId, 26));
             event.setEndpoint("/api/upload");
             
             Map<String, Object> eventDataMap = new java.util.HashMap<>();
@@ -282,8 +282,8 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("LECTURE_COMPLETED");
-            event.setUserId(userId);
-            event.setEndpoint("/api/lectures/" + lectureId + "/complete");
+            event.setUserId(truncate(userId, 26));
+            event.setEndpoint(truncate("/api/lectures/" + lectureId + "/complete", 100));
             
             Map<String, Object> eventDataMap = new java.util.HashMap<>();
             eventDataMap.put("courseId", courseId);
@@ -309,11 +309,11 @@ public abstract class EventService {
         try {
             Event event = createBaseEvent();
             event.setEventType("ERROR");
-            event.setErrorMessage(errorMessage);
-            event.setErrorStackTrace(stackTrace);
-            event.setEndpoint(endpoint);
-            event.setUserId(userId);
-            event.setTraceId(traceId);
+            event.setErrorMessage(errorMessage); // TEXT type, no limit
+            event.setErrorStackTrace(stackTrace); // TEXT type, no limit
+            event.setEndpoint(truncate(endpoint, 100));
+            event.setUserId(truncate(userId, 26));
+            event.setTraceId(truncate(traceId, 100));
             
             Map<String, Object> errorData = Map.of(
                 "errorType", errorType != null ? errorType : "UNKNOWN"
@@ -373,6 +373,17 @@ public abstract class EventService {
         }
         // For SYSTEM_ADMIN, use a placeholder UUID
         return UUID.fromString("00000000-0000-0000-0000-000000000000");
+    }
+    
+    /**
+     * Truncate a string to fit within the specified max length.
+     * Returns null if input is null.
+     */
+    protected String truncate(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() > maxLength ? value.substring(0, maxLength) : value;
     }
     
     /**

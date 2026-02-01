@@ -22,6 +22,9 @@ public interface AssessmentRepository extends JpaRepository<Assessment, String> 
     @Query("SELECT DISTINCT a FROM Assessment a LEFT JOIN FETCH a.questions WHERE a.id = :id AND a.clientId = :clientId")
     Optional<Assessment> findByIdAndClientIdWithQuestions(@Param("id") String id, @Param("clientId") UUID clientId);
     
+    @Query("SELECT DISTINCT a FROM Assessment a LEFT JOIN FETCH a.examQuestions eq LEFT JOIN FETCH eq.question WHERE a.id = :id AND a.clientId = :clientId")
+    Optional<Assessment> findByIdAndClientIdWithExamQuestions(@Param("id") String id, @Param("clientId") UUID clientId);
+    
     @Query("SELECT MAX(a.sequence) FROM Assessment a WHERE a.courseId = :courseId AND a.clientId = :clientId")
     Integer findMaxSequenceByCourseIdAndClientId(@Param("courseId") String courseId, @Param("clientId") UUID clientId);
     
@@ -31,6 +34,20 @@ public interface AssessmentRepository extends JpaRepository<Assessment, String> 
     
     // Exam-specific queries
     List<Assessment> findByAssessmentTypeAndClientIdOrderByCreatedAtDesc(Assessment.AssessmentType assessmentType, UUID clientId);
+    
+    // Exam queries excluding archived
+    @Query("SELECT a FROM Assessment a WHERE a.assessmentType = :assessmentType AND a.clientId = :clientId AND (a.archived = false OR a.archived IS NULL) ORDER BY a.createdAt DESC")
+    List<Assessment> findActiveByAssessmentTypeAndClientIdOrderByCreatedAtDesc(
+        @Param("assessmentType") Assessment.AssessmentType assessmentType,
+        @Param("clientId") UUID clientId
+    );
+    
+    // Include archived exams when explicitly requested
+    @Query("SELECT a FROM Assessment a WHERE a.assessmentType = :assessmentType AND a.clientId = :clientId ORDER BY a.createdAt DESC")
+    List<Assessment> findAllByAssessmentTypeAndClientIdIncludingArchivedOrderByCreatedAtDesc(
+        @Param("assessmentType") Assessment.AssessmentType assessmentType,
+        @Param("clientId") UUID clientId
+    );
     
     @Query("SELECT a FROM Assessment a WHERE a.assessmentType = :assessmentType AND a.clientId = :clientId AND a.status = :status ORDER BY a.startTime ASC")
     List<Assessment> findByAssessmentTypeAndStatusAndClientIdOrderByStartTimeAsc(
