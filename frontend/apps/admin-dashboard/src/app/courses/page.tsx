@@ -101,60 +101,41 @@ export default function CoursesPage() {
   const canManageContent = !isInstructor && !isSupportStaff
   const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
   
-  // Debug: Log user state changes
-  console.log('[CoursesPage] Render - user:', user?.id, 'role:', user?.role, 'isInstructor:', isInstructor, 'loading:', loading)
-  
   // Ref to track if initial load has been triggered (prevents duplicate calls)
   const loadTriggeredRef = useRef(false)
   
   const loadCourses = useCallback(async (forceReload = false) => {
-    console.log('[CoursesPage] loadCourses called - forceReload:', forceReload, 'loadTriggeredRef:', loadTriggeredRef.current)
-    
     // Skip if already loaded, unless force reload
     if (loadTriggeredRef.current && !forceReload) {
-      console.log('[CoursesPage] Skipping - already loaded')
       return
     }
     loadTriggeredRef.current = true
     setLoading(true)
-    
-    console.log('[CoursesPage] Starting to load courses - isInstructor:', isInstructor, 'userId:', user?.id)
     
     try {
       // For instructors, fetch their allowed course IDs first
       let allowedCourseIds: Set<string> | null = null
       
       if ((isInstructor || isSupportStaff) && user?.id) {
-        console.log('[CoursesPage] Fetching instructor access for user:', user.id)
         try {
           const accessResponse = await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
-          console.log('[CoursesPage] Instructor access response:', accessResponse.data)
           allowedCourseIds = new Set(accessResponse.data.allowedCourseIds || [])
-          console.log('[CoursesPage] allowedCourseIds:', Array.from(allowedCourseIds))
         } catch (err) {
-          console.error('[CoursesPage] Failed to load instructor access:', err)
+          console.error('Failed to load instructor access:', err)
           allowedCourseIds = new Set()
         }
-      } else {
-        console.log('[CoursesPage] Not an instructor/support staff, skipping access fetch')
       }
       
-      console.log('[CoursesPage] Fetching courses list')
       let data = await coursesApi.listCourses()
-      console.log('[CoursesPage] Courses loaded:', data.length, 'courses')
       
       // Filter courses for instructors
       if (allowedCourseIds !== null) {
-        console.log('[CoursesPage] Filtering courses by allowedCourseIds')
         data = data.filter(course => allowedCourseIds!.has(course.id))
-        console.log('[CoursesPage] After filtering:', data.length, 'courses')
       }
       
       setCourses(data)
       setFilteredCourses(data)
-      console.log('[CoursesPage] Courses set successfully')
     } catch (error) {
-      console.error('[CoursesPage] Error loading courses:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to load courses',
@@ -190,13 +171,10 @@ export default function CoursesPage() {
 
   // Load courses once when user is ready
   useEffect(() => {
-    console.log('[CoursesPage] useEffect triggered - user?.id:', user?.id, 'isInstructor:', isInstructor, 'isSupportStaff:', isSupportStaff)
     // For instructors/support staff, wait for user.id
     // For others, just need user to be defined
     const userReady = user !== undefined && ((!isInstructor && !isSupportStaff) || user?.id)
-    console.log('[CoursesPage] userReady:', userReady)
     if (userReady) {
-      console.log('[CoursesPage] Calling loadCourses()')
       loadCourses()
     }
   }, [user?.id, isInstructor, isSupportStaff]) // eslint-disable-line react-hooks/exhaustive-deps

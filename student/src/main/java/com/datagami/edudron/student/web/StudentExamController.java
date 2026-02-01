@@ -107,24 +107,12 @@ public class StudentExamController {
             }
             UUID clientId = UUID.fromString(clientIdStr);
             
-            // Debug logging for exam visibility troubleshooting
-            logger.info("[ExamDebug] ========== getAvailableExams START ==========");
-            logger.info("[ExamDebug] Student: {}, ClientId: {}", studentId, clientIdStr);
-            
             // Get student's enrollments to determine which courses they have access to
             List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId);
             Set<String> enrolledCourseIds = enrollments.stream()
                 .map(Enrollment::getCourseId)
                 .filter(courseId -> courseId != null && !courseId.isEmpty())
                 .collect(Collectors.toSet());
-            
-            // Debug: Log enrollment details
-            logger.info("[ExamDebug] Found {} enrollments for student", enrollments.size());
-            for (Enrollment e : enrollments) {
-                logger.info("[ExamDebug] Enrollment: id={}, courseId={}, batchId(sectionId)={}, classId={}", 
-                    e.getId(), e.getCourseId(), e.getBatchId(), e.getClassId());
-            }
-            logger.info("[ExamDebug] Enrolled course IDs (excluding placeholders): {}", enrolledCourseIds);
             
             // Get all exam submissions for enrolled courses to find completed exams
             Set<String> submissionCourseIds = new HashSet<>();
@@ -191,23 +179,6 @@ public class StudentExamController {
                 logger.warn("Failed to fetch scheduled exams", e);
             }
             
-            // Debug: Log exams returned from Content service
-            logger.info("[ExamDebug] Fetched {} total exams from Content service (live + scheduled)", exams.size());
-            for (Object exam : exams) {
-                try {
-                    JsonNode node = objectMapper.valueToTree(exam);
-                    logger.info("[ExamDebug] Exam from Content: id={}, title={}, courseId={}, classId={}, sectionId={}, status={}", 
-                        node.path("id").asText("null"), 
-                        node.path("title").asText("null"),
-                        node.path("courseId").asText("null"), 
-                        node.path("classId").asText("null"), 
-                        node.path("sectionId").asText("null"),
-                        node.path("status").asText("null"));
-                } catch (Exception ex) {
-                    logger.warn("[ExamDebug] Could not parse exam for logging", ex);
-                }
-            }
-            
             // Fetch completed exam details (only for exams not already in the list)
             Set<String> existingExamIds = new HashSet<>();
             for (Object exam : exams) {
@@ -251,14 +222,10 @@ public class StudentExamController {
                     try {
                         JsonNode examNode = objectMapper.valueToTree(exam);
                         String examId = examNode.has("id") ? examNode.get("id").asText() : "unknown";
-                        String examTitle = examNode.path("title").asText("unknown");
-                        
-                        logger.info("[ExamDebug] --- Filtering exam: id={}, title={} ---", examId, examTitle);
                         
                         // Check if exam ID exists and hasn't been seen before
                         if (examNode.has("id")) {
                             if (seenExamIds.contains(examId)) {
-                                logger.info("[ExamDebug] FILTERED OUT: Duplicate exam id={}", examId);
                                 return false; // Skip duplicate
                             }
                             seenExamIds.add(examId);
@@ -268,11 +235,8 @@ public class StudentExamController {
                         if (examNode.has("courseId")) {
                             String courseId = examNode.get("courseId").asText();
                             if (!accessibleCourseIds.contains(courseId)) {
-                                logger.info("[ExamDebug] FILTERED OUT: Student not enrolled in course {}. Accessible courses: {}", 
-                                    courseId, accessibleCourseIds);
                                 return false; // Student not enrolled in this course
                             }
-                            logger.info("[ExamDebug] Course check PASSED: Student enrolled in course {}", courseId);
                             
                             // Find student's enrollment for this course
                             Enrollment studentEnrollment = null;
@@ -284,67 +248,44 @@ public class StudentExamController {
                             }
                             
                             if (studentEnrollment == null) {
-                                logger.info("[ExamDebug] FILTERED OUT: No enrollment found for course {} (should not happen)", courseId);
                                 return false; // Should not happen, but safety check
                             }
                             
                             String studentSectionId = studentEnrollment.getBatchId(); // batchId represents sectionId
-                            logger.info("[ExamDebug] Student's sectionId (batchId): {}", studentSectionId);
                             
                             // Priority 1: Check if exam is section-specific
-                            // Note: Check for both null AND empty string (JSON may have "" instead of null)
                             String examSectionId = examNode.has("sectionId") ? examNode.get("sectionId").asText() : null;
                             if (examSectionId != null && !examSectionId.isEmpty()) {
-                                logger.info("[ExamDebug] Exam is SECTION-SPECIFIC: requires sectionId={}", examSectionId);
-                                
                                 // Student can access if their section matches
                                 if (studentSectionId != null && studentSectionId.equals(examSectionId)) {
-                                    logger.info("[ExamDebug] INCLUDED: Section matches");
                                     return true;
                                 }
-                                // If student has no section but exam requires one, deny access
-                                if (studentSectionId == null) {
-                                    logger.info("[ExamDebug] FILTERED OUT: Student has no section but exam requires section {}", examSectionId);
-                                    return false;
-                                }
                                 // Student not in the required section
-                                logger.info("[ExamDebug] FILTERED OUT: Student section {} != exam section {}", studentSectionId, examSectionId);
                                 return false;
                             }
                             
                             // Priority 2: Check if exam is class-specific
-                            // Note: Check for both null AND empty string (JSON may have "" instead of null)
                             String examClassId = examNode.has("classId") ? examNode.get("classId").asText() : null;
                             if (examClassId != null && !examClassId.isEmpty()) {
-                                logger.info("[ExamDebug] Exam is CLASS-WIDE: requires classId={}", examClassId);
-                                
                                 // Need to check if student's section belongs to this class
                                 if (studentSectionId == null) {
-                                    logger.info("[ExamDebug] FILTERED OUT: Student has no section, cannot verify class membership for class {}", examClassId);
                                     return false;
                                 }
                                 
                                 // Get student's section to check its classId
                                 try {
-                                    logger.info("[ExamDebug] Looking up section {} in database...", studentSectionId);
                                     java.util.Optional<Section> sectionOpt = sectionRepository.findByIdAndClientId(studentSectionId, clientId);
                                     
                                     if (sectionOpt.isPresent()) {
                                         Section studentSection = sectionOpt.get();
                                         String studentClassId = studentSection.getClassId();
-                                        logger.info("[ExamDebug] Student's section {} belongs to class {}", studentSectionId, studentClassId);
                                         
                                         if (studentClassId != null && studentClassId.equals(examClassId)) {
-                                            logger.info("[ExamDebug] INCLUDED: Class matches! Student class {} == exam class {}", studentClassId, examClassId);
                                             return true;
-                                        } else {
-                                            logger.info("[ExamDebug] FILTERED OUT: Class mismatch! Student class {} != exam class {}", studentClassId, examClassId);
                                         }
-                                    } else {
-                                        logger.info("[ExamDebug] FILTERED OUT: Section {} not found in database for clientId {}", studentSectionId, clientId);
                                     }
                                 } catch (Exception e) {
-                                    logger.error("[ExamDebug] Error checking class membership for student section", e);
+                                    logger.warn("Error checking class membership for student section", e);
                                 }
                                 
                                 // Student's section not in the required class
@@ -352,19 +293,15 @@ public class StudentExamController {
                             }
                             
                             // Exam has no section or class requirement - accessible to all students in course
-                            logger.info("[ExamDebug] INCLUDED: Exam has no section/class restriction, course-wide access");
                             return true;
                         }
-                        logger.info("[ExamDebug] FILTERED OUT: Exam has no courseId");
                         return false;
                     } catch (Exception e) {
-                        logger.error("[ExamDebug] Error filtering exam", e);
+                        logger.warn("Error filtering exam", e);
                         return false;
                     }
                 })
                 .collect(Collectors.toList());
-            
-            logger.info("[ExamDebug] ========== RESULT: Returning {} filtered exams ==========", filteredExams.size());
             
             // Add attemptsTaken for each exam so frontend knows if student has completed it
             List<Map<String, Object>> examsWithAttempts = new ArrayList<>();
@@ -378,19 +315,14 @@ public class StudentExamController {
                         long attemptCount = submissionRepository.countByClientIdAndStudentIdAndAssessmentId(
                             clientId, studentId, examId);
                         examMap.put("attemptsTaken", (int) attemptCount);
-                        
-                        logger.info("[ExamDebug] Returning exam: id={}, title={}, attemptsTaken={}", 
-                            examId, examMap.get("title"), attemptCount);
                     }
                     examsWithAttempts.add(examMap);
                 } catch (Exception ex) {
-                    logger.warn("[ExamDebug] Could not add attemptsTaken to exam", ex);
                     // Still include the exam even if we can't add attemptsTaken
                     Map<String, Object> examMap = objectMapper.convertValue(exam, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
                     examsWithAttempts.add(examMap);
                 }
             }
-            logger.info("[ExamDebug] ========== getAvailableExams END ==========");
             
             return ResponseEntity.ok(examsWithAttempts);
         } catch (Exception e) {

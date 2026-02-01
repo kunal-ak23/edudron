@@ -307,10 +307,7 @@ public class InstructorAssignmentService {
      * Calls the content service to get this information.
      */
     private Set<String> getCourseIdsByAssignments(Set<String> classIds, Set<String> sectionIds) {
-        logger.info("=== getCourseIdsByAssignments START === classIds: {}, sectionIds: {}", classIds, sectionIds);
-        
         if ((classIds == null || classIds.isEmpty()) && (sectionIds == null || sectionIds.isEmpty())) {
-            logger.info("No class or section IDs provided, returning empty set");
             return new HashSet<>();
         }
         
@@ -332,8 +329,6 @@ public class InstructorAssignmentService {
             String url = urlBuilder.toString() + String.join("&", params);
             String clientId = TenantContext.getClientId();
             
-            logger.info("Calling content service: URL={}, X-Client-Id={}", url, clientId);
-            
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.set("X-Client-Id", clientId);
@@ -346,10 +341,6 @@ public class InstructorAssignmentService {
                 new ParameterizedTypeReference<List<Map<String, Object>>>() {}
             );
             
-            logger.info("Content service response status: {}, body size: {}", 
-                response.getStatusCode(), 
-                response.getBody() != null ? response.getBody().size() : "null");
-            
             Set<String> courseIds = new HashSet<>();
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 for (Map<String, Object> course : response.getBody()) {
@@ -360,10 +351,9 @@ public class InstructorAssignmentService {
                 }
             }
             
-            logger.info("=== getCourseIdsByAssignments END === Returning {} course IDs: {}", courseIds.size(), courseIds);
             return courseIds;
         } catch (Exception e) {
-            logger.error("=== getCourseIdsByAssignments FAILED === Error: {}", e.getMessage(), e);
+            logger.warn("Failed to get course IDs by assignments: {}", e.getMessage());
             return new HashSet<>();
         }
     }

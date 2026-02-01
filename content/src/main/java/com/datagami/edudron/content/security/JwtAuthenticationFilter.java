@@ -32,22 +32,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         
         final String authHeader = request.getHeader("Authorization");
         final String tenantHeader = request.getHeader("X-Client-Id");
-        final String requestPath = request.getRequestURI();
-        
-        log.info("=== JwtAuthenticationFilter START === Path: {}", requestPath);
-        log.info("X-Client-Id header: {}", tenantHeader);
-        log.info("Authorization header present: {}", authHeader != null);
         
         // Always set tenant context from X-Client-Id header if provided
         // This ensures consistency between frontend requests and service-to-service calls
         if (tenantHeader != null && !tenantHeader.isBlank()) {
             TenantContext.setClientId(tenantHeader);
-            log.info("Set TenantContext from X-Client-Id header: {}", tenantHeader);
         }
         
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             // No auth header - proceed with tenant from X-Client-Id if set
-            log.info("No Bearer token, proceeding with TenantContext: {}", TenantContext.getClientId());
             try {
                 chain.doFilter(request, response);
             } finally {
@@ -64,8 +57,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String role = jwtUtil.extractRole(token);
                 String username = jwtUtil.extractUsername(token);
                 
-                log.info("JWT valid - tenantId from token: {}, role: {}, username: {}", tenantId, role, username);
-                
                 // If X-Client-Id header was not provided, fall back to JWT tenant
                 if (tenantHeader == null || tenantHeader.isBlank()) {
                     boolean isPlaceholderTenant = tenantId != null && 
@@ -73,15 +64,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     
                     if (tenantId != null && !isPlaceholderTenant) {
                         TenantContext.setClientId(tenantId);
-                        log.info("Set TenantContext from JWT (no X-Client-Id header): {}", tenantId);
                     } else if (isPlaceholderTenant) {
-                        log.warn("JWT token has placeholder tenant ({}) but no X-Client-Id header provided", tenantId);
+                        log.debug("JWT token has placeholder tenant ({}) but no X-Client-Id header provided", tenantId);
                     }
-                } else {
-                    log.info("Using X-Client-Id header over JWT tenant. Header: {}, JWT: {}", tenantHeader, tenantId);
                 }
-                
-                log.info("Final TenantContext: {}", TenantContext.getClientId());
                 
                 // Set security context
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -102,7 +88,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             // Clear tenant context after request
             TenantContext.clear();
-            log.info("=== JwtAuthenticationFilter END === Path: {}", requestPath);
         }
     }
 }

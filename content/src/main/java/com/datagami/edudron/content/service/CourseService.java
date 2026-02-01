@@ -160,13 +160,8 @@ public class CourseService {
      */
     @Transactional(readOnly = true)
     public List<CourseDTO> getCoursesByAssignments(List<String> classIds, List<String> sectionIds) {
-        log.info("=== getCoursesByAssignments START === classIds: {}, sectionIds: {}", classIds, sectionIds);
-        
         String clientIdStr = TenantContext.getClientId();
-        log.info("TenantContext clientId: {}", clientIdStr);
-        
         if (clientIdStr == null) {
-            log.error("Tenant context is not set!");
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
@@ -176,9 +171,7 @@ public class CourseService {
         // Get courses assigned to sections
         if (sectionIds != null && !sectionIds.isEmpty()) {
             for (String sectionId : sectionIds) {
-                log.info("Querying courses for sectionId: {}, clientId: {}", sectionId, clientId);
                 List<Course> sectionCourses = courseRepository.findPublishedCoursesBySectionId(clientId, sectionId);
-                log.info("Found {} courses for section {}", sectionCourses.size(), sectionId);
                 for (Course course : sectionCourses) {
                     courseIds.add(course.getId());
                 }
@@ -188,16 +181,12 @@ public class CourseService {
         // Get courses assigned to classes
         if (classIds != null && !classIds.isEmpty()) {
             for (String classId : classIds) {
-                log.info("Querying courses for classId: {}, clientId: {}", classId, clientId);
                 List<Course> classCourses = courseRepository.findPublishedCoursesByClassId(clientId, classId);
-                log.info("Found {} courses for class {}", classCourses.size(), classId);
                 for (Course course : classCourses) {
                     courseIds.add(course.getId());
                 }
             }
         }
-        
-        log.info("Total unique course IDs found: {}", courseIds);
         
         // Fetch full course details for unique IDs
         List<CourseDTO> courses = new ArrayList<>();
@@ -206,7 +195,6 @@ public class CourseService {
                 .ifPresent(course -> courses.add(toDTO(course)));
         }
         
-        log.info("=== getCoursesByAssignments END === Returning {} courses", courses.size());
         return courses;
     }
 
@@ -236,25 +224,20 @@ public class CourseService {
     
     public Page<CourseDTO> getCourses(Boolean isPublished, Pageable pageable) {
         String clientIdStr = TenantContext.getClientId();
-        log.info("=== getCourses START === TenantContext clientId: {}", clientIdStr);
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        log.info("Parsed UUID clientId: {}", clientId);
         
         // For students, always filter to only published courses
         String userRole = getCurrentUserRole();
-        log.info("User role: {}, isPublished filter: {}", userRole, isPublished);
         if ("STUDENT".equals(userRole)) {
             isPublished = true; // Force published=true for students
-            log.debug("Student user detected - filtering to only published courses");
         }
         
         Page<Course> courses = isPublished != null
             ? courseRepository.findByClientIdAndIsPublished(clientId, isPublished, pageable)
             : courseRepository.findByClientId(clientId, pageable);
-        log.info("Query returned {} courses (total elements: {})", courses.getContent().size(), courses.getTotalElements());
         
         // NOTE: Instructor filtering is now done on the frontend to avoid:
         // 1. Circular service calls (content -> student -> content)
