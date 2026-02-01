@@ -189,43 +189,49 @@ public class CourseService {
             ? courseRepository.findByClientIdAndIsPublished(clientId, isPublished, pageable)
             : courseRepository.findByClientId(clientId, pageable);
         
-        // For instructors, filter courses to only show those assigned to their institutes' classes/sections
+        // For instructors, filter courses based on their InstructorAssignment records
         if ("INSTRUCTOR".equals(userRole)) {
-            List<String> userInstituteIds = getCurrentUserInstituteIds();
-            if (userInstituteIds != null && !userInstituteIds.isEmpty()) {
-                List<String> allowedClassIds = getClassIdsByInstituteIds(userInstituteIds);
-                List<String> allowedSectionIds = getSectionIdsByClassIds(allowedClassIds);
-                
-                // Filter courses to only include those assigned to allowed classes/sections
-                List<Course> filteredCourses = courses.getContent().stream()
-                    .filter(course -> {
-                        // Course is visible if it's assigned to any allowed class or section
-                        boolean hasAllowedClass = course.getAssignedToClassIds() != null && 
-                            course.getAssignedToClassIds().stream().anyMatch(allowedClassIds::contains);
-                        boolean hasAllowedSection = course.getAssignedToSectionIds() != null && 
-                            course.getAssignedToSectionIds().stream().anyMatch(allowedSectionIds::contains);
-                        return hasAllowedClass || hasAllowedSection;
-                    })
-                    .collect(Collectors.toList());
-                
-                log.debug("Filtered courses for INSTRUCTOR user - showing {} out of {} total courses", 
-                    filteredCourses.size(), courses.getTotalElements());
-                
-                // Create a new Page with filtered content
-                // Note: This is a simplified approach - for proper pagination, you'd need to filter at the repository level
-                return new org.springframework.data.domain.PageImpl<>(
-                    filteredCourses.stream().map(this::toDTO).collect(Collectors.toList()),
-                    pageable,
-                    filteredCourses.size()
-                );
-            } else {
-                log.warn("INSTRUCTOR user has no assigned institutes - returning empty course list");
-                return new org.springframework.data.domain.PageImpl<>(
-                    new ArrayList<>(),
-                    pageable,
-                    0
-                );
+            String userId = getCurrentUserId();
+            if (userId != null) {
+                Map<String, Object> instructorAccess = getInstructorAccess(userId);
+                if (instructorAccess != null) {
+                    Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
+                    Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
+                    Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+                    
+                    // Filter courses based on instructor assignments
+                    List<Course> filteredCourses = courses.getContent().stream()
+                        .filter(course -> {
+                            // Course is directly assigned to instructor
+                            if (allowedCourseIds.contains(course.getId())) {
+                                return true;
+                            }
+                            // Course is assigned to a class the instructor has access to
+                            boolean hasAllowedClass = course.getAssignedToClassIds() != null && 
+                                course.getAssignedToClassIds().stream().anyMatch(allowedClassIds::contains);
+                            // Course is assigned to a section the instructor has access to
+                            boolean hasAllowedSection = course.getAssignedToSectionIds() != null && 
+                                course.getAssignedToSectionIds().stream().anyMatch(allowedSectionIds::contains);
+                            return hasAllowedClass || hasAllowedSection;
+                        })
+                        .collect(Collectors.toList());
+                    
+                    log.debug("Filtered courses for INSTRUCTOR user {} - showing {} out of {} total courses", 
+                        userId, filteredCourses.size(), courses.getTotalElements());
+                    
+                    return new org.springframework.data.domain.PageImpl<>(
+                        filteredCourses.stream().map(this::toDTO).collect(Collectors.toList()),
+                        pageable,
+                        filteredCourses.size()
+                    );
+                }
             }
+            log.warn("INSTRUCTOR user has no assignments - returning empty course list");
+            return new org.springframework.data.domain.PageImpl<>(
+                new ArrayList<>(),
+                pageable,
+                0
+            );
         }
         
         return courses.map(this::toDTO);
@@ -253,42 +259,49 @@ public class CourseService {
             isFree, isPublished, searchTerm, pageable
         );
         
-        // For instructors, filter courses to only show those assigned to their institutes' classes/sections
+        // For instructors, filter courses based on their InstructorAssignment records
         if ("INSTRUCTOR".equals(userRole)) {
-            List<String> userInstituteIds = getCurrentUserInstituteIds();
-            if (userInstituteIds != null && !userInstituteIds.isEmpty()) {
-                List<String> allowedClassIds = getClassIdsByInstituteIds(userInstituteIds);
-                List<String> allowedSectionIds = getSectionIdsByClassIds(allowedClassIds);
-                
-                // Filter courses to only include those assigned to allowed classes/sections
-                List<Course> filteredCourses = courses.getContent().stream()
-                    .filter(course -> {
-                        // Course is visible if it's assigned to any allowed class or section
-                        boolean hasAllowedClass = course.getAssignedToClassIds() != null && 
-                            course.getAssignedToClassIds().stream().anyMatch(allowedClassIds::contains);
-                        boolean hasAllowedSection = course.getAssignedToSectionIds() != null && 
-                            course.getAssignedToSectionIds().stream().anyMatch(allowedSectionIds::contains);
-                        return hasAllowedClass || hasAllowedSection;
-                    })
-                    .collect(Collectors.toList());
-                
-                log.debug("Filtered courses in search for INSTRUCTOR user - showing {} out of {} total courses", 
-                    filteredCourses.size(), courses.getTotalElements());
-                
-                // Create a new Page with filtered content
-                return new org.springframework.data.domain.PageImpl<>(
-                    filteredCourses.stream().map(this::toDTO).collect(Collectors.toList()),
-                    pageable,
-                    filteredCourses.size()
-                );
-            } else {
-                log.warn("INSTRUCTOR user has no assigned institutes - returning empty course list");
-                return new org.springframework.data.domain.PageImpl<>(
-                    new ArrayList<>(),
-                    pageable,
-                    0
-                );
+            String userId = getCurrentUserId();
+            if (userId != null) {
+                Map<String, Object> instructorAccess = getInstructorAccess(userId);
+                if (instructorAccess != null) {
+                    Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
+                    Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
+                    Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+                    
+                    // Filter courses based on instructor assignments
+                    List<Course> filteredCourses = courses.getContent().stream()
+                        .filter(course -> {
+                            // Course is directly assigned to instructor
+                            if (allowedCourseIds.contains(course.getId())) {
+                                return true;
+                            }
+                            // Course is assigned to a class the instructor has access to
+                            boolean hasAllowedClass = course.getAssignedToClassIds() != null && 
+                                course.getAssignedToClassIds().stream().anyMatch(allowedClassIds::contains);
+                            // Course is assigned to a section the instructor has access to
+                            boolean hasAllowedSection = course.getAssignedToSectionIds() != null && 
+                                course.getAssignedToSectionIds().stream().anyMatch(allowedSectionIds::contains);
+                            return hasAllowedClass || hasAllowedSection;
+                        })
+                        .collect(Collectors.toList());
+                    
+                    log.debug("Filtered courses in search for INSTRUCTOR user {} - showing {} out of {} total courses", 
+                        userId, filteredCourses.size(), courses.getTotalElements());
+                    
+                    return new org.springframework.data.domain.PageImpl<>(
+                        filteredCourses.stream().map(this::toDTO).collect(Collectors.toList()),
+                        pageable,
+                        filteredCourses.size()
+                    );
+                }
             }
+            log.warn("INSTRUCTOR user has no assignments - returning empty course list");
+            return new org.springframework.data.domain.PageImpl<>(
+                new ArrayList<>(),
+                pageable,
+                0
+            );
         }
         
         Page<CourseDTO> result = courses.map(this::toDTO);
@@ -881,9 +894,82 @@ public class CourseService {
     }
     
     /**
+     * Get instructor access (allowed classes, sections, courses) from student service
+     * Returns null if unable to determine access
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getInstructorAccess(String instructorUserId) {
+        try {
+            String accessUrl = gatewayUrl + "/api/instructor-assignments/instructor/" + instructorUserId + "/access";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                accessUrl,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.debug("Could not get instructor access for user {}: {}", instructorUserId, e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Helper method to extract a Set of strings from instructor access response
+     */
+    @SuppressWarnings("unchecked")
+    private Set<String> getSetFromAccess(Map<String, Object> access, String key) {
+        if (access == null) {
+            return new java.util.HashSet<>();
+        }
+        Object value = access.get(key);
+        if (value instanceof List) {
+            return new java.util.HashSet<>((List<String>) value);
+        } else if (value instanceof Set) {
+            return (Set<String>) value;
+        }
+        return new java.util.HashSet<>();
+    }
+    
+    /**
+     * Check if instructor can access a specific course
+     */
+    public boolean canInstructorAccessCourse(String instructorUserId, String courseId) {
+        try {
+            String url = gatewayUrl + "/api/instructor-assignments/instructor/" + instructorUserId + "/can-access-course/" + courseId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Boolean> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                entity,
+                Boolean.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.debug("Could not check course access for instructor {}: {}", instructorUserId, e.getMessage());
+        }
+        return false;
+    }
+    
+    /**
      * Get the current user's assigned institute IDs from the identity service
      * Returns empty list if unable to determine or user has no assigned institutes
+     * @deprecated Use getInstructorAccess instead for instructor access control
      */
+    @Deprecated
     @SuppressWarnings("unchecked")
     private List<String> getCurrentUserInstituteIds() {
         try {

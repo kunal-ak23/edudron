@@ -306,6 +306,7 @@ public class ExamService {
     
     /**
      * Get all exams, optionally including archived ones.
+     * For instructors, only exams they have access to are returned.
      * @param includeArchived whether to include archived exams
      */
     public List<Assessment> getAllExams(boolean includeArchived) {
@@ -315,17 +316,46 @@ public class ExamService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
+        List<Assessment> exams;
         if (includeArchived) {
-            return assessmentRepository.findAllByAssessmentTypeAndClientIdIncludingArchivedOrderByCreatedAtDesc(
+            exams = assessmentRepository.findAllByAssessmentTypeAndClientIdIncludingArchivedOrderByCreatedAtDesc(
+                Assessment.AssessmentType.EXAM,
+                clientId
+            );
+        } else {
+            exams = assessmentRepository.findActiveByAssessmentTypeAndClientIdOrderByCreatedAtDesc(
                 Assessment.AssessmentType.EXAM,
                 clientId
             );
         }
         
-        return assessmentRepository.findActiveByAssessmentTypeAndClientIdOrderByCreatedAtDesc(
-            Assessment.AssessmentType.EXAM,
-            clientId
-        );
+        // For instructors, filter exams based on their assignments
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole)) {
+            String userId = getCurrentUserId();
+            if (userId != null) {
+                Map<String, Object> instructorAccess = getInstructorAccess(userId);
+                if (instructorAccess != null) {
+                    java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
+                    java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
+                    java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+                    
+                    exams = exams.stream()
+                        .filter(exam -> canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds))
+                        .collect(java.util.stream.Collectors.toList());
+                    
+                    logger.debug("Filtered exams for INSTRUCTOR user {} - showing {} exams", userId, exams.size());
+                } else {
+                    logger.warn("INSTRUCTOR user {} has no assignments - returning empty exam list", userId);
+                    return new ArrayList<>();
+                }
+            } else {
+                logger.warn("Could not determine user ID for instructor filtering");
+                return new ArrayList<>();
+            }
+        }
+        
+        return exams;
     }
     
     /**
@@ -651,14 +681,24 @@ public class ExamService {
      * Publish an exam (make it live/available to students).
      * For FIXED_WINDOW: requires start/end times to be set
      * For FLEXIBLE_START: immediately goes LIVE
+     * Instructors can publish exams within their assigned scope.
      */
     public Assessment publishExam(String examId) {
         String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot publish exams");
+        
+        // Support staff and students cannot publish
+        if ("SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("SUPPORT_STAFF and STUDENT have view-only access and cannot publish exams");
         }
         
         Assessment exam = getExamById(examId);
+        
+        // Instructors can only publish exams within their assigned scope
+        if ("INSTRUCTOR".equals(userRole)) {
+            if (!canInstructorManageExam(exam)) {
+                throw new IllegalArgumentException("You don't have permission to publish this exam. It's outside your assigned scope.");
+            }
+        }
         
         if (exam.getStatus() == Assessment.ExamStatus.LIVE) {
             throw new IllegalStateException("Exam is already live");
@@ -695,14 +735,24 @@ public class ExamService {
     
     /**
      * Complete an exam (end it and prevent further submissions).
+     * Instructors can complete exams within their assigned scope.
      */
     public Assessment completeExam(String examId) {
         String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot complete exams");
+        
+        // Support staff and students cannot complete
+        if ("SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("SUPPORT_STAFF and STUDENT have view-only access and cannot complete exams");
         }
         
         Assessment exam = getExamById(examId);
+        
+        // Instructors can only complete exams within their assigned scope
+        if ("INSTRUCTOR".equals(userRole)) {
+            if (!canInstructorManageExam(exam)) {
+                throw new IllegalArgumentException("You don't have permission to complete this exam. It's outside your assigned scope.");
+            }
+        }
         
         if (exam.getStatus() == Assessment.ExamStatus.COMPLETED) {
             throw new IllegalStateException("Exam is already completed");
@@ -981,6 +1031,136 @@ public class ExamService {
         } catch (IllegalArgumentException e) {
             return Assessment.TimingMode.FIXED_WINDOW;
         }
+    }
+    
+    /**
+     * Get instructor access (allowed classes, sections, courses) from student service
+     * Returns null if unable to determine access
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getInstructorAccess(String instructorUserId) {
+        try {
+            String accessUrl = gatewayUrl + "/api/instructor-assignments/instructor/" + instructorUserId + "/access";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                accessUrl,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            logger.debug("Could not get instructor access for user {}: {}", instructorUserId, e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Helper method to extract a Set of strings from instructor access response
+     */
+    @SuppressWarnings("unchecked")
+    private java.util.Set<String> getSetFromAccess(Map<String, Object> access, String key) {
+        if (access == null) {
+            return new java.util.HashSet<>();
+        }
+        Object value = access.get(key);
+        if (value instanceof List) {
+            return new java.util.HashSet<>((List<String>) value);
+        } else if (value instanceof java.util.Set) {
+            return (java.util.Set<String>) value;
+        }
+        return new java.util.HashSet<>();
+    }
+    
+    /**
+     * Check if instructor can access/view an exam based on their assignments
+     */
+    private boolean canInstructorAccessExam(Assessment exam, 
+            java.util.Set<String> allowedCourseIds, 
+            java.util.Set<String> allowedClassIds, 
+            java.util.Set<String> allowedSectionIds) {
+        // Check if exam's course is directly assigned
+        if (allowedCourseIds.contains(exam.getCourseId())) {
+            // If exam is section-specific, check section access
+            if (exam.getSectionId() != null) {
+                return allowedSectionIds.contains(exam.getSectionId());
+            }
+            // If exam is class-specific, check class access
+            if (exam.getClassId() != null) {
+                return allowedClassIds.contains(exam.getClassId());
+            }
+            return true; // Course-wide exam
+        }
+        
+        // Check if exam's class or section is assigned
+        if (exam.getSectionId() != null && allowedSectionIds.contains(exam.getSectionId())) {
+            return true;
+        }
+        if (exam.getClassId() != null && allowedClassIds.contains(exam.getClassId())) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Check if the current instructor can manage (publish/complete) an exam
+     */
+    private boolean canInstructorManageExam(Assessment exam) {
+        String userId = getCurrentUserId();
+        if (userId == null) {
+            return false;
+        }
+        
+        Map<String, Object> instructorAccess = getInstructorAccess(userId);
+        if (instructorAccess == null) {
+            return false;
+        }
+        
+        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
+        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
+        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        
+        return canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds);
+    }
+    
+    /**
+     * Get the current user's ID from the identity service
+     */
+    private String getCurrentUserId() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null || 
+                "anonymousUser".equals(authentication.getName())) {
+                return null;
+            }
+            
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object id = response.getBody().get("id");
+                return id != null ? id.toString() : null;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
     }
     
     /**

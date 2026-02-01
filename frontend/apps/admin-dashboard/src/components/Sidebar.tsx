@@ -120,6 +120,12 @@ const menuItems: MenuItem[] = [
     requiresTenant: true,
   },
   {
+    name: 'Instructor Assignments',
+    href: '/instructor-assignments',
+    icon: UserCog,
+    requiresTenant: true,
+  },
+  {
     name: 'Analytics',
     href: '/analytics',
     icon: BarChart3,
@@ -213,9 +219,9 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
       }
       
       // INSTRUCTOR and SUPPORT_STAFF restrictions: View-only access
-      // Hide user, student, enrollment management, and settings
+      // Hide user, student, enrollment management, instructor assignments, and settings
       if (isInstructor || isSupportStaff) {
-        if (item.href === '/users' || item.href === '/students' || item.href === '/enrollments' || item.href === '/settings') {
+        if (item.href === '/users' || item.href === '/students' || item.href === '/enrollments' || item.href === '/instructor-assignments' || item.href === '/settings') {
           return false
         }
         // Hide "Generate Course" submenu for INSTRUCTOR/SUPPORT_STAFF (view-only)

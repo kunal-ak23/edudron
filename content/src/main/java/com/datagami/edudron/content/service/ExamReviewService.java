@@ -308,7 +308,8 @@ public class ExamReviewService {
     }
     
     /**
-     * Submit instructor review (manual override)
+     * Submit instructor review (manual override).
+     * Instructors can only grade submissions for exams within their assigned scope.
      */
     public JsonNode submitInstructorReview(String submissionId, BigDecimal score, 
                                            BigDecimal maxScore, JsonNode feedback) {
@@ -336,6 +337,14 @@ public class ExamReviewService {
         
         Assessment exam = assessmentRepository.findByIdAndClientId(assessmentId, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Assessment not found"));
+        
+        // Check if instructor can grade this exam (within their assigned scope)
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole)) {
+            if (!canInstructorAccessExam(exam)) {
+                throw new IllegalArgumentException("You don't have permission to grade this submission. It's outside your assigned scope.");
+            }
+        }
         
         BigDecimal percentage = BigDecimal.ZERO;
         boolean isPassed = false;
@@ -424,5 +433,159 @@ public class ExamReviewService {
         }
         
         return quizQuestionRepository.save(question);
+    }
+    
+    /**
+     * Get the current user's role from the identity service
+     */
+    private String getCurrentUserRole() {
+        try {
+            org.springframework.security.core.Authentication authentication = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null || 
+                "anonymousUser".equals(authentication.getName())) {
+                return null;
+            }
+            
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<java.util.Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object role = response.getBody().get("role");
+                return role != null ? role.toString() : null;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not determine user role: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Get the current user's ID from the identity service
+     */
+    private String getCurrentUserId() {
+        try {
+            org.springframework.security.core.Authentication authentication = 
+                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null || 
+                "anonymousUser".equals(authentication.getName())) {
+                return null;
+            }
+            
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<java.util.Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object id = response.getBody().get("id");
+                return id != null ? id.toString() : null;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Get instructor access from student service
+     */
+    @SuppressWarnings("unchecked")
+    private java.util.Map<String, Object> getInstructorAccess(String instructorUserId) {
+        try {
+            String accessUrl = gatewayUrl + "/api/instructor-assignments/instructor/" + instructorUserId + "/access";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<java.util.Map<String, Object>> response = getRestTemplate().exchange(
+                accessUrl,
+                HttpMethod.GET,
+                entity,
+                new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            logger.debug("Could not get instructor access for user {}: {}", instructorUserId, e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * Helper method to extract a Set of strings from instructor access response
+     */
+    @SuppressWarnings("unchecked")
+    private java.util.Set<String> getSetFromAccess(java.util.Map<String, Object> access, String key) {
+        if (access == null) {
+            return new java.util.HashSet<>();
+        }
+        Object value = access.get(key);
+        if (value instanceof java.util.List) {
+            return new java.util.HashSet<>((java.util.List<String>) value);
+        } else if (value instanceof java.util.Set) {
+            return (java.util.Set<String>) value;
+        }
+        return new java.util.HashSet<>();
+    }
+    
+    /**
+     * Check if the current instructor can access an exam
+     */
+    private boolean canInstructorAccessExam(Assessment exam) {
+        String userId = getCurrentUserId();
+        if (userId == null) {
+            return false;
+        }
+        
+        java.util.Map<String, Object> instructorAccess = getInstructorAccess(userId);
+        if (instructorAccess == null) {
+            return false;
+        }
+        
+        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
+        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
+        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        
+        // Check if exam's course is directly assigned
+        if (allowedCourseIds.contains(exam.getCourseId())) {
+            // If exam is section-specific, check section access
+            if (exam.getSectionId() != null) {
+                return allowedSectionIds.contains(exam.getSectionId());
+            }
+            // If exam is class-specific, check class access
+            if (exam.getClassId() != null) {
+                return allowedClassIds.contains(exam.getClassId());
+            }
+            return true; // Course-wide exam
+        }
+        
+        // Check if exam's class or section is assigned
+        if (exam.getSectionId() != null && allowedSectionIds.contains(exam.getSectionId())) {
+            return true;
+        }
+        if (exam.getClassId() != null && allowedClassIds.contains(exam.getClassId())) {
+            return true;
+        }
+        
+        return false;
     }
 }

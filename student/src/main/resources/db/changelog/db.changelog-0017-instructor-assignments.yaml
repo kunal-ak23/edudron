@@ -1,0 +1,71 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0017-instructor-assignments
+      author: edudron
+      preConditions:
+        - onFail: HALT
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: instructor_assignments
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: instructor_assignments
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: instructor_user_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: assignment_type, type: varchar(20), constraints: { nullable: false } }
+              - column: { name: class_id, type: varchar(26) }
+              - column: { name: section_id, type: varchar(26) }
+              - column: { name: course_id, type: varchar(26) }
+              - column: { name: scoped_class_ids, type: "text[]" }
+              - column: { name: scoped_section_ids, type: "text[]" }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: instructor_assignments
+            schemaName: student
+            indexName: idx_instructor_assignments_client_instructor
+            columns:
+              - column: { name: client_id }
+              - column: { name: instructor_user_id }
+        - createIndex:
+            tableName: instructor_assignments
+            schemaName: student
+            indexName: idx_instructor_assignments_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: instructor_assignments
+            schemaName: student
+            indexName: idx_instructor_assignments_class_id
+            columns:
+              - column: { name: class_id }
+        - createIndex:
+            tableName: instructor_assignments
+            schemaName: student
+            indexName: idx_instructor_assignments_section_id
+            columns:
+              - column: { name: section_id }
+        - createIndex:
+            tableName: instructor_assignments
+            schemaName: student
+            indexName: idx_instructor_assignments_course_id
+            columns:
+              - column: { name: course_id }
+        # Unique constraint to prevent duplicate assignments
+        - createIndex:
+            tableName: instructor_assignments
+            schemaName: student
+            indexName: idx_instructor_assignments_unique
+            columns:
+              - column: { name: client_id }
+              - column: { name: instructor_user_id }
+              - column: { name: assignment_type }
+              - column: { name: class_id }
+              - column: { name: section_id }
+              - column: { name: course_id }
+            unique: true

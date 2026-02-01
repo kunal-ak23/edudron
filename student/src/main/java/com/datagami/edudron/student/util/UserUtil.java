@@ -99,16 +99,53 @@ public class UserUtil {
         return email;
     }
     
+    /**
+     * Get the current user's role from identity service.
+     * Returns null if unable to determine role.
+     */
+    public static String getCurrentUserRole() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null || 
+            "anonymousUser".equals(authentication.getName())) {
+            return null;
+        }
+        
+        try {
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<UserResponse> response = getRestTemplate().exchange(
+                meUrl,
+                HttpMethod.GET,
+                entity,
+                UserResponse.class
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody().getRole();
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user role: {}", e.getMessage());
+        }
+        return null;
+    }
+    
     // Helper class for user response
     private static class UserResponse {
         private String id;
         private String email;
+        private String role;
         
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
         
         public String getEmail() { return email; }
         public void setEmail(String email) { this.email = email; }
+        
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
     }
 }
 

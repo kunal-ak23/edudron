@@ -7,10 +7,13 @@ import com.datagami.edudron.student.dto.SectionAnalyticsDTO;
 import com.datagami.edudron.student.dto.SectionComparisonDTO;
 import com.datagami.edudron.student.dto.SkippedLectureDTO;
 import com.datagami.edudron.student.service.AnalyticsService;
+import com.datagami.edudron.student.service.InstructorAssignmentService;
 import com.datagami.edudron.student.service.LectureViewSessionService;
+import com.datagami.edudron.student.util.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +30,9 @@ public class AnalyticsController {
     
     @Autowired
     private LectureViewSessionService sessionService;
+    
+    @Autowired
+    private InstructorAssignmentService instructorAssignmentService;
 
     @GetMapping("/lectures/{lectureId}/analytics")
     @Operation(summary = "Get lecture analytics", description = "Get detailed analytics for a specific lecture")
@@ -38,6 +44,14 @@ public class AnalyticsController {
     @GetMapping("/courses/{courseId}/analytics")
     @Operation(summary = "Get course analytics", description = "Get comprehensive analytics for a course")
     public ResponseEntity<CourseAnalyticsDTO> getCourseAnalytics(@PathVariable String courseId) {
+        // Check instructor access
+        String userRole = UserUtil.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole)) {
+            String userId = UserUtil.getCurrentUserId();
+            if (userId != null && !instructorAssignmentService.canAccessCourse(userId, courseId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+        }
         CourseAnalyticsDTO analytics = analyticsService.getCourseEngagementMetrics(courseId);
         return ResponseEntity.ok(analytics);
     }
@@ -61,6 +75,14 @@ public class AnalyticsController {
     @GetMapping("/sections/{sectionId}/analytics")
     @Operation(summary = "Get section analytics", description = "Get comprehensive analytics for a section (aggregated across all courses)")
     public ResponseEntity<SectionAnalyticsDTO> getSectionAnalytics(@PathVariable String sectionId) {
+        // Check instructor access
+        String userRole = UserUtil.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole)) {
+            String userId = UserUtil.getCurrentUserId();
+            if (userId != null && !instructorAssignmentService.canAccessSection(userId, sectionId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+        }
         SectionAnalyticsDTO analytics = analyticsService.getSectionEngagementMetrics(sectionId);
         return ResponseEntity.ok(analytics);
     }
@@ -84,6 +106,14 @@ public class AnalyticsController {
     @GetMapping("/classes/{classId}/analytics")
     @Operation(summary = "Get class analytics", description = "Get comprehensive analytics for a class (aggregated across all sections and courses)")
     public ResponseEntity<ClassAnalyticsDTO> getClassAnalytics(@PathVariable String classId) {
+        // Check instructor access
+        String userRole = UserUtil.getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole)) {
+            String userId = UserUtil.getCurrentUserId();
+            if (userId != null && !instructorAssignmentService.canAccessClass(userId, classId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+        }
         ClassAnalyticsDTO analytics = analyticsService.getClassEngagementMetrics(classId);
         return ResponseEntity.ok(analytics);
     }

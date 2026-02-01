@@ -90,6 +90,9 @@ export default function ExamDetailPage() {
   const isInstructor = user?.role === 'INSTRUCTOR'
   const isSupportStaff = user?.role === 'SUPPORT_STAFF'
   const canManageExams = !isInstructor && !isSupportStaff
+  // Instructors can publish and complete exams within their assigned scope
+  // The backend will verify the instructor's access to the specific exam
+  const canPublishComplete = !isSupportStaff // Admin, ContentManager, and Instructors can try to publish/complete
   
   const [exam, setExam] = useState<Exam | null>(null)
   const [loading, setLoading] = useState(true)
@@ -534,9 +537,10 @@ export default function ExamDetailPage() {
             {getStatusBadge(exam.status)}
           </div>
         </div>
-        {canManageExams && (
+        {canPublishComplete && (
           <div className="flex gap-2">
             {/* Publish button - only for DRAFT exams */}
+            {/* Instructors can publish exams within their assigned scope - backend verifies access */}
             {exam.status === 'DRAFT' && (
               <Button 
                 onClick={() => setShowPublishDialog(true)}
@@ -579,8 +583,11 @@ export default function ExamDetailPage() {
             )}
           </div>
         )}
-        {!canManageExams && (
+        {!canManageExams && !isInstructor && (
           <Badge variant="outline" className="text-sm">View Only</Badge>
+        )}
+        {isInstructor && (
+          <Badge variant="outline" className="text-sm">Instructor - Can Publish/Complete</Badge>
         )}
       </div>
 
