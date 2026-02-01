@@ -107,14 +107,17 @@ export default function ExamsPage() {
       
       const response = await apiClient.get<PagedResponse>(`/api/exams?${params.toString()}`)
       
-      if (response && typeof response === 'object' && 'content' in response) {
-        setExams(response.content || [])
-        setTotalElements(response.totalElements || 0)
-        setTotalPages(response.totalPages || 0)
-        setStatusCounts(response.statusCounts || {})
+      // ApiClient wraps response in { data: ... }, so access response.data
+      const pagedData = (response as any).data || response
+      
+      if (pagedData && typeof pagedData === 'object' && 'content' in pagedData) {
+        setExams(pagedData.content || [])
+        setTotalElements(pagedData.totalElements || 0)
+        setTotalPages(pagedData.totalPages || 0)
+        setStatusCounts(pagedData.statusCounts || {})
       } else {
-        // Fallback for legacy response format
-        const examsArray = Array.isArray(response) ? response : []
+        // Fallback for legacy response format (array of exams)
+        const examsArray = Array.isArray(pagedData) ? pagedData : []
         setExams(examsArray)
         setTotalElements(examsArray.length)
         setTotalPages(1)
