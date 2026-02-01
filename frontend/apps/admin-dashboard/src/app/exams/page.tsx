@@ -22,6 +22,7 @@ interface Exam {
   classId?: string
   sectionId?: string
   createdAt: string
+  archived?: boolean
 }
 
 export const dynamic = 'force-dynamic'

@@ -161,6 +161,10 @@ public class Assessment {
     @Column(name = "timing_mode", length = 20)
     private TimingMode timingMode = TimingMode.FIXED_WINDOW;
     
+    // Archived flag for soft delete
+    @Column(nullable = false)
+    private Boolean archived = false;
+    
     // Relationship to exam questions (from question bank)
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequence ASC")
@@ -286,6 +290,9 @@ public class Assessment {
     
     public List<ExamQuestion> getExamQuestions() { return examQuestions; }
     public void setExamQuestions(List<ExamQuestion> examQuestions) { this.examQuestions = examQuestions; }
+    
+    public Boolean getArchived() { return archived; }
+    public void setArchived(Boolean archived) { this.archived = archived; }
 
     @PreUpdate
     public void preUpdate() {

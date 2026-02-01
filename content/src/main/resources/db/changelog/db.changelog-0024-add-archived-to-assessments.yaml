@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0024-add-archived-to-assessments
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: assessments
+                schemaName: content
+                columnName: archived
+      changes:
+        - addColumn:
+            tableName: assessments
+            schemaName: content
+            columns:
+              - column:
+                  name: archived
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+                  remarks: "Flag to indicate if the exam is archived (soft deleted)"
+        - createIndex:
+            tableName: assessments
+            schemaName: content
+            indexName: idx_content_assessments_archived
+            columns:
+              - column: { name: archived }

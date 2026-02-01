@@ -71,7 +71,9 @@ export default function NewExamPage() {
     blockTabSwitch: false,
     maxTabSwitchesAllowed: 3,
     // Timing mode
-    timingMode: 'FIXED_WINDOW' as 'FIXED_WINDOW' | 'FLEXIBLE_START'
+    timingMode: 'FIXED_WINDOW' as 'FIXED_WINDOW' | 'FLEXIBLE_START',
+    // Duration (in minutes for UI, converted to seconds for API)
+    durationMinutes: 60
   })
 
   useEffect(() => {
@@ -160,7 +162,8 @@ export default function NewExamPage() {
         blockCopyPaste: formData.blockCopyPaste,
         blockTabSwitch: formData.blockTabSwitch,
         maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed,
-        timingMode: formData.timingMode
+        timingMode: formData.timingMode,
+        timeLimitSeconds: formData.durationMinutes * 60
       })
       const exam = (response as any)?.data || response
       
@@ -224,7 +227,8 @@ export default function NewExamPage() {
         blockCopyPaste: formData.blockCopyPaste,
         blockTabSwitch: formData.blockTabSwitch,
         maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed,
-        timingMode: formData.timingMode
+        timingMode: formData.timingMode,
+        timeLimitSeconds: formData.durationMinutes * 60
       })
       
       const exam = (response as any)?.data || response
@@ -311,7 +315,8 @@ export default function NewExamPage() {
           blockCopyPaste: formData.blockCopyPaste,
           blockTabSwitch: formData.blockTabSwitch,
           maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed,
-          timingMode: formData.timingMode
+          timingMode: formData.timingMode,
+          timeLimitSeconds: formData.durationMinutes * 60
         }
       }
 
@@ -573,9 +578,41 @@ export default function NewExamPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Fixed Window: Exam ends at scheduled time for all. Flexible Start: Each student gets full duration from when they start.
+                    {formData.timingMode === 'FIXED_WINDOW' 
+                      ? 'Exam has a fixed start and end time. All students must complete within this window.'
+                      : 'Each student gets a fixed duration from when they start the exam.'}
                   </p>
                 </div>
+
+                {formData.timingMode === 'FLEXIBLE_START' ? (
+                  <div>
+                    <Label htmlFor="durationMinutes">
+                      Exam Duration (minutes) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="durationMinutes"
+                      type="number"
+                      value={formData.durationMinutes}
+                      onChange={(e) => setFormData(prev => ({ 
+                        ...prev, 
+                        durationMinutes: parseInt(e.target.value) || 60 
+                      }))}
+                      min={1}
+                      max={480}
+                      placeholder="60"
+                    />
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Each student gets this many minutes from when they start.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Note:</strong> Start and end times will be set when you schedule the exam after creation.
+                      The exam duration is calculated from the scheduled window.
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-3 border-t pt-3">
                   <Label>Randomization Settings</Label>
