@@ -45,30 +45,37 @@ public class InstructorAssignmentService {
     @Autowired
     private ClassRepository classRepository;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
     private RestTemplate getRestTemplate() {
+        // Double-checked locking for thread safety
         if (restTemplate == null) {
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            interceptors.add((request, body, execution) -> {
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    RestTemplate template = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    interceptors.add((request, body, execution) -> {
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                }
+                            }
                         }
-                    }
+                        return execution.execute(request, body);
+                    });
+                    template.setInterceptors(interceptors);
+                    restTemplate = template;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
+            }
         }
         return restTemplate;
     }
@@ -252,13 +259,14 @@ public class InstructorAssignmentService {
                     break;
                     
                 case SECTION:
-                    // Add the section and its parent class
+                    // Add the section and its parent class for navigation
                     allowedSectionIds.add(assignment.getSectionId());
                     Section section = sectionRepository
                         .findByIdAndClientId(assignment.getSectionId(), clientId)
                         .orElse(null);
-                    if (section != null) {
-                        // Don't add the full class, just track for course filtering
+                    if (section != null && section.getClassId() != null) {
+                        // Add parent class so instructor can navigate to it in tree view
+                        allowedClassIds.add(section.getClassId());
                     }
                     break;
                     
@@ -280,6 +288,11 @@ public class InstructorAssignmentService {
             }
         }
         
+        // Derive course access from class/section assignments
+        // Courses assigned to any of the instructor's classes or sections are accessible
+        Set<String> derivedCourseIds = getCourseIdsByAssignments(allowedClassIds, allowedSectionIds);
+        allowedCourseIds.addAll(derivedCourseIds);
+        
         return new InstructorAccessDTO(
             instructorUserId,
             allowedClassIds,
@@ -287,6 +300,72 @@ public class InstructorAssignmentService {
             allowedCourseIds,
             scopedCourseIds
         );
+    }
+    
+    /**
+     * Get course IDs that are assigned to any of the specified classes or sections.
+     * Calls the content service to get this information.
+     */
+    private Set<String> getCourseIdsByAssignments(Set<String> classIds, Set<String> sectionIds) {
+        logger.info("=== getCourseIdsByAssignments START === classIds: {}, sectionIds: {}", classIds, sectionIds);
+        
+        if ((classIds == null || classIds.isEmpty()) && (sectionIds == null || sectionIds.isEmpty())) {
+            logger.info("No class or section IDs provided, returning empty set");
+            return new HashSet<>();
+        }
+        
+        try {
+            StringBuilder urlBuilder = new StringBuilder(gatewayUrl + "/content/courses/by-assignments?");
+            List<String> params = new ArrayList<>();
+            
+            if (classIds != null && !classIds.isEmpty()) {
+                for (String classId : classIds) {
+                    params.add("classIds=" + classId);
+                }
+            }
+            if (sectionIds != null && !sectionIds.isEmpty()) {
+                for (String sectionId : sectionIds) {
+                    params.add("sectionIds=" + sectionId);
+                }
+            }
+            
+            String url = urlBuilder.toString() + String.join("&", params);
+            String clientId = TenantContext.getClientId();
+            
+            logger.info("Calling content service: URL={}, X-Client-Id={}", url, clientId);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-Client-Id", clientId);
+            
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<List<Map<String, Object>>> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            
+            logger.info("Content service response status: {}, body size: {}", 
+                response.getStatusCode(), 
+                response.getBody() != null ? response.getBody().size() : "null");
+            
+            Set<String> courseIds = new HashSet<>();
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                for (Map<String, Object> course : response.getBody()) {
+                    Object id = course.get("id");
+                    if (id != null) {
+                        courseIds.add(id.toString());
+                    }
+                }
+            }
+            
+            logger.info("=== getCourseIdsByAssignments END === Returning {} course IDs: {}", courseIds.size(), courseIds);
+            return courseIds;
+        } catch (Exception e) {
+            logger.error("=== getCourseIdsByAssignments FAILED === Error: {}", e.getMessage(), e);
+            return new HashSet<>();
+        }
     }
     
     @Transactional(readOnly = true)

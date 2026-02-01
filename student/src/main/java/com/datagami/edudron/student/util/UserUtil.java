@@ -22,7 +22,8 @@ public class UserUtil {
     
     private static final Logger log = LoggerFactory.getLogger(UserUtil.class);
     
-    private static RestTemplate restTemplate;
+    private static volatile RestTemplate restTemplate;
+    private static final Object restTemplateLock = new Object();
     private static String gatewayUrl = System.getenv("GATEWAY_URL");
     
     static {
@@ -32,25 +33,31 @@ public class UserUtil {
     }
     
     private static RestTemplate getRestTemplate() {
+        // Double-checked locking for thread safety
         if (restTemplate == null) {
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new com.datagami.edudron.common.TenantContextRestTemplateInterceptor());
-            // Add interceptor to forward JWT token
-            interceptors.add((request, body, execution) -> {
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    RestTemplate template = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new com.datagami.edudron.common.TenantContextRestTemplateInterceptor());
+                    // Add interceptor to forward JWT token
+                    interceptors.add((request, body, execution) -> {
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                }
+                            }
                         }
-                    }
+                        return execution.execute(request, body);
+                    });
+                    template.setInterceptors(interceptors);
+                    restTemplate = template;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
+            }
         }
         return restTemplate;
     }

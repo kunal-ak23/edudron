@@ -81,6 +81,19 @@ public class ClassService {
         return toDTO(classEntity);
     }
     
+    public List<ClassDTO> getAllClasses() {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        List<Class> classes = classRepository.findByClientId(clientId);
+        return classes.stream()
+            .map(this::toDTO)
+            .collect(Collectors.toList());
+    }
+    
     public List<ClassDTO> getClassesByInstitute(String instituteId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {

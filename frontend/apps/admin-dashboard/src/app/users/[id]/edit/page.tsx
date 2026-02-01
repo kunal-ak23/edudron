@@ -28,6 +28,11 @@ import { extractErrorMessage } from '@/lib/error-utils'
 
 export const dynamic = 'force-dynamic'
 
+// Platform-side roles that only SYSTEM_ADMIN can modify
+const PLATFORM_SIDE_ROLES = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']
+// University-side roles that TENANT_ADMIN can modify
+const UNIVERSITY_SIDE_ROLES = ['INSTRUCTOR', 'SUPPORT_STAFF', 'STUDENT']
+
 interface UpdateUserRequest {
   email: string
   name: string
@@ -73,13 +78,8 @@ export default function EditUserPage() {
   const canManageUsers = isSystemAdmin || isTenantAdmin
   const showInstituteSelection = formData.role !== 'SYSTEM_ADMIN'
   
-  // Platform-side roles that only SYSTEM_ADMIN can modify
-  const platformSideRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER']
-  // University-side roles that TENANT_ADMIN can modify
-  const universitySideRoles = ['INSTRUCTOR', 'SUPPORT_STAFF', 'STUDENT']
-  
   // Check if the user being edited is a platform-side role
-  const isEditingPlatformSideUser = platformSideRoles.includes(formData.role)
+  const isEditingPlatformSideUser = PLATFORM_SIDE_ROLES.includes(formData.role)
   
   // Check permissions
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function EditUserPage() {
         const userData = response.data
         
         // Check if TENANT_ADMIN is trying to edit a platform-side user
-        if (isTenantAdmin && platformSideRoles.includes(userData.role)) {
+        if (isTenantAdmin && PLATFORM_SIDE_ROLES.includes(userData.role)) {
           toast({
             variant: 'destructive',
             title: 'Access Denied',
@@ -135,7 +135,7 @@ export default function EditUserPage() {
     }
     
     loadUser()
-  }, [userId, router, toast, isTenantAdmin, platformSideRoles])
+  }, [userId, router, toast, isTenantAdmin])
   
   // Load institutes
   useEffect(() => {
@@ -247,208 +247,176 @@ export default function EditUserPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-8">
-                <h1
-                  className="text-2xl font-bold text-blue-600 cursor-pointer"
-                  onClick={() => router.push('/dashboard')}
-                >
-                  EduDron Admin
-                </h1>
-                <nav className="hidden md:flex space-x-6">
-                  <button
-                    onClick={() => router.push('/dashboard')}
-                    className="text-gray-700 hover:text-blue-600"
-                  >
-                    Dashboard
-                  </button>
-                  <button
-                    onClick={() => router.push('/users')}
-                    className="text-gray-700 hover:text-blue-600 font-medium"
-                  >
-                    Users
-                  </button>
-                </nav>
-              </div>
+    <div className="max-w-2xl mx-auto py-8">
+      <div className="mb-6">
+        <Button variant="ghost" onClick={() => router.push('/users')}>
+          ← Back to Users
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Edit User</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-md">
+              <p className="text-sm text-destructive">{error}</p>
             </div>
-          </div>
-        </header>
+          )}
 
-        <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="mb-6">
-            <Button variant="ghost" onClick={() => router.push('/users')}>
-              ← Back to Users
-            </Button>
-          </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="name">
+                Full Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="name"
+                name="name"
+                type="text"
+                value={formData.name}
+                onChange={handleInputChange}
+                required
+                placeholder="John Doe"
+              />
+            </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Edit User</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {error && (
-                <div className="mb-4 p-4 bg-destructive/10 border border-destructive/20 rounded-md">
-                  <p className="text-sm text-destructive">{error}</p>
-                </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">
+                Email <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                required
+                placeholder="john.doe@example.com"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone (Optional)</Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={handleInputChange}
+                placeholder="+1234567890"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role">
+                Role <span className="text-destructive">*</span>
+              </Label>
+              <Select 
+                value={formData.role} 
+                onValueChange={handleRoleChange}
+                disabled={isEditingPlatformSideUser && !isSystemAdmin}
+              >
+                <SelectTrigger id="role">
+                  <SelectValue placeholder="Select a role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* University-side roles - available to both SYSTEM_ADMIN and TENANT_ADMIN */}
+                  <SelectItem value="STUDENT">Student</SelectItem>
+                  <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
+                  <SelectItem value="SUPPORT_STAFF">Support Staff</SelectItem>
+                  
+                  {/* Platform-side roles - only available to SYSTEM_ADMIN */}
+                  {isSystemAdmin && (
+                    <>
+                      <SelectItem value="CONTENT_MANAGER">Content Manager</SelectItem>
+                      <SelectItem value="TENANT_ADMIN">Tenant Admin</SelectItem>
+                      <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+              {isTenantAdmin && isEditingPlatformSideUser && (
+                <p className="text-sm text-destructive">
+                  You cannot modify platform-side users. Only SYSTEM_ADMIN can modify these roles.
+                </p>
               )}
+              {isTenantAdmin && !isEditingPlatformSideUser && (
+                <p className="text-sm text-muted-foreground">
+                  You can only assign university-side roles (Student, Instructor, Support Staff)
+                </p>
+              )}
+              {isSystemAdmin && formData.role === 'SYSTEM_ADMIN' && (
+                <p className="text-sm text-muted-foreground">
+                  System Admin users have access to all tenants and institutes
+                </p>
+              )}
+            </div>
 
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="name">
-                    Full Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    required
-                    placeholder="John Doe"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">
-                    Email <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    required
-                    placeholder="john.doe@example.com"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone (Optional)</Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    placeholder="+1234567890"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="role">
-                    Role <span className="text-destructive">*</span>
-                  </Label>
-                  <Select 
-                    value={formData.role} 
-                    onValueChange={handleRoleChange}
-                    disabled={isEditingPlatformSideUser && !isSystemAdmin}
-                  >
-                    <SelectTrigger id="role">
-                      <SelectValue placeholder="Select a role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {/* University-side roles - available to both SYSTEM_ADMIN and TENANT_ADMIN */}
-                      <SelectItem value="STUDENT">Student</SelectItem>
-                      <SelectItem value="INSTRUCTOR">Instructor</SelectItem>
-                      <SelectItem value="SUPPORT_STAFF">Support Staff</SelectItem>
-                      
-                      {/* Platform-side roles - only available to SYSTEM_ADMIN */}
-                      {isSystemAdmin && (
-                        <>
-                          <SelectItem value="CONTENT_MANAGER">Content Manager</SelectItem>
-                          <SelectItem value="TENANT_ADMIN">Tenant Admin</SelectItem>
-                          <SelectItem value="SYSTEM_ADMIN">System Admin</SelectItem>
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {isTenantAdmin && isEditingPlatformSideUser && (
-                    <p className="text-sm text-destructive">
-                      You cannot modify platform-side users. Only SYSTEM_ADMIN can modify these roles.
-                    </p>
-                  )}
-                  {isTenantAdmin && !isEditingPlatformSideUser && (
-                    <p className="text-sm text-muted-foreground">
-                      You can only assign university-side roles (Student, Instructor, Support Staff)
-                    </p>
-                  )}
-                  {isSystemAdmin && formData.role === 'SYSTEM_ADMIN' && (
-                    <p className="text-sm text-muted-foreground">
-                      System Admin users have access to all tenants and institutes
-                    </p>
-                  )}
-                </div>
-
-                {showInstituteSelection && (
-                  <div className="space-y-2">
-                    <Label>
-                      Institutes <span className="text-destructive">*</span>
-                    </Label>
-                    {loadingInstitutes ? (
-                      <p className="text-sm text-muted-foreground">Loading institutes...</p>
-                    ) : institutes.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No institutes available. Please create an institute first.</p>
-                    ) : (
-                      <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
-                        {institutes.map((institute) => (
-                          <div key={institute.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`institute-${institute.id}`}
-                              checked={selectedInstituteIds.includes(institute.id)}
-                              onCheckedChange={() => handleInstituteToggle(institute.id)}
-                            />
-                            <Label
-                              htmlFor={`institute-${institute.id}`}
-                              className="font-normal cursor-pointer flex-1"
-                            >
-                              {institute.name} ({institute.code})
-                            </Label>
-                          </div>
-                        ))}
+            {showInstituteSelection && (
+              <div className="space-y-2">
+                <Label>
+                  Institutes <span className="text-destructive">*</span>
+                </Label>
+                {loadingInstitutes ? (
+                  <p className="text-sm text-muted-foreground">Loading institutes...</p>
+                ) : institutes.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No institutes available. Please create an institute first.</p>
+                ) : (
+                  <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
+                    {institutes.map((institute) => (
+                      <div key={institute.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`institute-${institute.id}`}
+                          checked={selectedInstituteIds.includes(institute.id)}
+                          onCheckedChange={() => handleInstituteToggle(institute.id)}
+                        />
+                        <Label
+                          htmlFor={`institute-${institute.id}`}
+                          className="font-normal cursor-pointer flex-1"
+                        >
+                          {institute.name} ({institute.code})
+                        </Label>
                       </div>
-                    )}
-                    <p className="text-sm text-muted-foreground">
-                      Select at least one institute for this user
-                    </p>
+                    ))}
                   </div>
                 )}
+                <p className="text-sm text-muted-foreground">
+                  Select at least one institute for this user
+                </p>
+              </div>
+            )}
 
-                <div className="flex items-center space-x-2">
-                  <input
-                    id="active"
-                    name="active"
-                    type="checkbox"
-                    checked={formData.active}
-                    onChange={handleCheckboxChange}
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                  />
-                  <Label htmlFor="active" className="font-normal cursor-pointer">
-                    Active (User can login)
-                  </Label>
-                </div>
+            <div className="flex items-center space-x-2">
+              <input
+                id="active"
+                name="active"
+                type="checkbox"
+                checked={formData.active}
+                onChange={handleCheckboxChange}
+                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+              />
+              <Label htmlFor="active" className="font-normal cursor-pointer">
+                Active (User can login)
+              </Label>
+            </div>
 
-                <div className="flex justify-end space-x-4 pt-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => router.push('/users')}
-                    disabled={loading}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={loading}>
-                    {loading ? 'Updating...' : 'Update User'}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
+            <div className="flex justify-end space-x-4 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push('/users')}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? 'Updating...' : 'Update User'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   )
 }

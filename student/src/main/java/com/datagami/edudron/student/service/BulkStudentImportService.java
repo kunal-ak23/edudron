@@ -83,37 +83,44 @@ public class BulkStudentImportService {
     @Value("${IDENTITY_SERVICE_URL:http://localhost:8081}")
     private String identityServiceUrl;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     private RestTemplate getRestTemplate() {
+        // Double-checked locking for thread safety
         if (restTemplate == null) {
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            
-            // Add tenant context interceptor
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            
-            // Add JWT forwarding interceptor - forwards Authorization header from incoming request
-            interceptors.add((request, body, execution) -> {
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
-                            log.debug("Forwarding Authorization header to identity service");
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    RestTemplate template = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    
+                    // Add tenant context interceptor
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    
+                    // Add JWT forwarding interceptor - forwards Authorization header from incoming request
+                    interceptors.add((request, body, execution) -> {
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                    log.debug("Forwarding Authorization header to identity service");
+                                }
+                            } else {
+                                log.warn("No Authorization header found in current request - identity service call may fail");
+                            }
+                        } else {
+                            log.warn("No request context available - cannot forward Authorization header");
                         }
-                    } else {
-                        log.warn("No Authorization header found in current request - identity service call may fail");
-                    }
-                } else {
-                    log.warn("No request context available - cannot forward Authorization header");
+                        return execution.execute(request, body);
+                    });
+                    
+                    template.setInterceptors(interceptors);
+                    restTemplate = template;
                 }
-                return execution.execute(request, body);
-            });
-            
-            restTemplate.setInterceptors(interceptors);
+            }
         }
         return restTemplate;
     }

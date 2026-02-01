@@ -5,6 +5,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -19,6 +21,8 @@ import java.util.Collections;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
     @Autowired
     private JwtUtil jwtUtil;
 
@@ -27,9 +31,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         
         final String authHeader = request.getHeader("Authorization");
+        final String tenantHeader = request.getHeader("X-Client-Id");
+        final String requestPath = request.getRequestURI();
+        
+        log.info("=== JwtAuthenticationFilter START === Path: {}", requestPath);
+        log.info("X-Client-Id header: {}", tenantHeader);
+        log.info("Authorization header present: {}", authHeader != null);
+        
+        // Always set tenant context from X-Client-Id header if provided
+        // This ensures consistency between frontend requests and service-to-service calls
+        if (tenantHeader != null && !tenantHeader.isBlank()) {
+            TenantContext.setClientId(tenantHeader);
+            log.info("Set TenantContext from X-Client-Id header: {}", tenantHeader);
+        }
         
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            chain.doFilter(request, response);
+            // No auth header - proceed with tenant from X-Client-Id if set
+            log.info("No Bearer token, proceeding with TenantContext: {}", TenantContext.getClientId());
+            try {
+                chain.doFilter(request, response);
+            } finally {
+                TenantContext.clear();
+            }
             return;
         }
         
@@ -41,25 +64,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String role = jwtUtil.extractRole(token);
                 String username = jwtUtil.extractUsername(token);
                 
-                // Set tenant context from token or header
-                // For SYSTEM_ADMIN users, token may have "PENDING_TENANT_SELECTION" or "SYSTEM"
-                // In that case, use the X-Client-Id header if provided
-                boolean isPlaceholderTenant = tenantId != null && 
-                    ("PENDING_TENANT_SELECTION".equals(tenantId) || "SYSTEM".equals(tenantId));
+                log.info("JWT valid - tenantId from token: {}, role: {}, username: {}", tenantId, role, username);
                 
-                if (tenantId != null && !isPlaceholderTenant) {
-                    // Use tenant from token if it's a valid tenant ID
-                    TenantContext.setClientId(tenantId);
-                } else {
-                    // Fallback to header if token doesn't have tenant or has placeholder
-                    String tenantHeader = request.getHeader("X-Client-Id");
-                    if (tenantHeader != null && !tenantHeader.isBlank()) {
-                        TenantContext.setClientId(tenantHeader);
+                // If X-Client-Id header was not provided, fall back to JWT tenant
+                if (tenantHeader == null || tenantHeader.isBlank()) {
+                    boolean isPlaceholderTenant = tenantId != null && 
+                        ("PENDING_TENANT_SELECTION".equals(tenantId) || "SYSTEM".equals(tenantId));
+                    
+                    if (tenantId != null && !isPlaceholderTenant) {
+                        TenantContext.setClientId(tenantId);
+                        log.info("Set TenantContext from JWT (no X-Client-Id header): {}", tenantId);
                     } else if (isPlaceholderTenant) {
-                        // Log warning if we have placeholder but no header
-                        logger.warn("JWT token has placeholder tenant (" + tenantId + ") but no X-Client-Id header provided");
+                        log.warn("JWT token has placeholder tenant ({}) but no X-Client-Id header provided", tenantId);
                     }
+                } else {
+                    log.info("Using X-Client-Id header over JWT tenant. Header: {}, JWT: {}", tenantHeader, tenantId);
                 }
+                
+                log.info("Final TenantContext: {}", TenantContext.getClientId());
                 
                 // Set security context
                 if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -71,13 +93,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
+            } else {
+                log.warn("JWT validation failed");
             }
         } catch (Exception e) {
-            logger.error("Cannot set user authentication: {}", e);
+            log.error("Cannot set user authentication: {}", e);
         } finally {
             chain.doFilter(request, response);
             // Clear tenant context after request
             TenantContext.clear();
+            log.info("=== JwtAuthenticationFilter END === Path: {}", requestPath);
         }
     }
 }

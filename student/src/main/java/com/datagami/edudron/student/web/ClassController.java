@@ -53,6 +53,13 @@ public class ClassController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @GetMapping("/classes")
+    @Operation(summary = "List all classes", description = "Get all classes for the current tenant")
+    public ResponseEntity<List<ClassDTO>> getAllClasses() {
+        List<ClassDTO> classes = classService.getAllClasses();
+        return ResponseEntity.ok(classes);
+    }
+
     @GetMapping("/institutes/{instituteId}/classes")
     @Operation(summary = "List classes by institute", description = "Get all classes for an institute")
     public ResponseEntity<List<ClassDTO>> getClassesByInstitute(@PathVariable String instituteId) {

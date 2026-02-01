@@ -73,37 +73,44 @@ public class EnrollmentService {
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     private RestTemplate getRestTemplate() {
+        // Double-checked locking for thread safety
         if (restTemplate == null) {
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            // Add interceptor to forward JWT token (Authorization header)
-            interceptors.add((request, body, execution) -> {
-                // Get current request to extract Authorization header
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        // Only add if not already present
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
-                            log.debug("Propagated Authorization header (JWT token) to content service: {}", request.getURI());
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    RestTemplate template = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    // Add interceptor to forward JWT token (Authorization header)
+                    interceptors.add((request, body, execution) -> {
+                        // Get current request to extract Authorization header
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                // Only add if not already present
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                    log.debug("Propagated Authorization header (JWT token) to content service: {}", request.getURI());
+                                } else {
+                                    log.debug("Authorization header already present in request to {}", request.getURI());
+                                }
+                            } else {
+                                log.warn("No Authorization header found in current request - content service call may fail with 403 Forbidden: {}", request.getURI());
+                            }
                         } else {
-                            log.debug("Authorization header already present in request to {}", request.getURI());
+                            log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
                         }
-                    } else {
-                        log.warn("No Authorization header found in current request - content service call may fail with 403 Forbidden: {}", request.getURI());
-                    }
-                } else {
-                    log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
+                        return execution.execute(request, body);
+                    });
+                    template.setInterceptors(interceptors);
+                    restTemplate = template;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
+            }
         }
         return restTemplate;
     }

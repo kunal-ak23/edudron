@@ -51,39 +51,46 @@ public class AssessmentService {
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     private RestTemplate getRestTemplate() {
+        // Double-checked locking for thread safety
         if (restTemplate == null) {
-            log.debug("Initializing RestTemplate for identity service calls. Gateway URL: {}", gatewayUrl);
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            // Add interceptor to forward JWT token (Authorization header)
-            interceptors.add((request, body, execution) -> {
-                // Get current request to extract Authorization header
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        // Only add if not already present
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
-                            log.debug("Propagated Authorization header (JWT token) to identity service: {}", request.getURI());
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    log.debug("Initializing RestTemplate for identity service calls. Gateway URL: {}", gatewayUrl);
+                    RestTemplate template = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    // Add interceptor to forward JWT token (Authorization header)
+                    interceptors.add((request, body, execution) -> {
+                        // Get current request to extract Authorization header
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                // Only add if not already present
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                    log.debug("Propagated Authorization header (JWT token) to identity service: {}", request.getURI());
+                                } else {
+                                    log.debug("Authorization header already present in request to {}", request.getURI());
+                                }
+                            } else {
+                                log.debug("No Authorization header found in current request");
+                            }
                         } else {
-                            log.debug("Authorization header already present in request to {}", request.getURI());
+                            log.debug("No ServletRequestAttributes found - cannot forward JWT token");
                         }
-                    } else {
-                        log.debug("No Authorization header found in current request");
-                    }
-                } else {
-                    log.debug("No ServletRequestAttributes found - cannot forward JWT token");
+                        return execution.execute(request, body);
+                    });
+                    template.setInterceptors(interceptors);
+                    log.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
+                    restTemplate = template;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
-            log.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
+            }
         }
         return restTemplate;
     }

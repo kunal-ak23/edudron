@@ -329,31 +329,10 @@ public class ExamService {
             );
         }
         
-        // For instructors, filter exams based on their assignments
-        String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole)) {
-            String userId = getCurrentUserId();
-            if (userId != null) {
-                Map<String, Object> instructorAccess = getInstructorAccess(userId);
-                if (instructorAccess != null) {
-                    java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
-                    java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
-                    java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
-                    
-                    exams = exams.stream()
-                        .filter(exam -> canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds))
-                        .collect(java.util.stream.Collectors.toList());
-                    
-                    logger.debug("Filtered exams for INSTRUCTOR user {} - showing {} exams", userId, exams.size());
-                } else {
-                    logger.warn("INSTRUCTOR user {} has no assignments - returning empty exam list", userId);
-                    return new ArrayList<>();
-                }
-            } else {
-                logger.warn("Could not determine user ID for instructor filtering");
-                return new ArrayList<>();
-            }
-        }
+        // NOTE: Instructor filtering is now done on the frontend to avoid:
+        // 1. Circular service calls (content -> student -> content)
+        // 2. Username vs userId mismatch (SecurityContext has username, not user ID)
+        // The frontend fetches instructor access and filters exams client-side.
         
         return exams;
     }

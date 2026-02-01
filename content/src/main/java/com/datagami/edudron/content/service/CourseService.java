@@ -58,39 +58,46 @@ public class CourseService {
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
-    private RestTemplate restTemplate;
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
     
     private RestTemplate getRestTemplate() {
+        // Double-checked locking for thread safety
         if (restTemplate == null) {
-            log.debug("Initializing RestTemplate for student service calls. Gateway URL: {}", gatewayUrl);
-            restTemplate = new RestTemplate();
-            List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-            interceptors.add(new TenantContextRestTemplateInterceptor());
-            // Add interceptor to forward JWT token (Authorization header)
-            interceptors.add((request, body, execution) -> {
-                // Get current request to extract Authorization header
-                ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                if (attributes != null) {
-                    HttpServletRequest currentRequest = attributes.getRequest();
-                    String authHeader = currentRequest.getHeader("Authorization");
-                    if (authHeader != null && !authHeader.isBlank()) {
-                        // Only add if not already present
-                        if (!request.getHeaders().containsKey("Authorization")) {
-                            request.getHeaders().add("Authorization", authHeader);
-                            log.debug("Propagated Authorization header (JWT token) to student service: {}", request.getURI());
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    log.debug("Initializing RestTemplate for student service calls. Gateway URL: {}", gatewayUrl);
+                    RestTemplate template = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    // Add interceptor to forward JWT token (Authorization header)
+                    interceptors.add((request, body, execution) -> {
+                        // Get current request to extract Authorization header
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                // Only add if not already present
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                    log.debug("Propagated Authorization header (JWT token) to student service: {}", request.getURI());
+                                } else {
+                                    log.debug("Authorization header already present in request to {}", request.getURI());
+                                }
+                            } else {
+                                log.warn("No Authorization header found in current request - student service call may fail with 403 Forbidden: {}", request.getURI());
+                            }
                         } else {
-                            log.debug("Authorization header already present in request to {}", request.getURI());
+                            log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
                         }
-                    } else {
-                        log.warn("No Authorization header found in current request - student service call may fail with 403 Forbidden: {}", request.getURI());
-                    }
-                } else {
-                    log.error("No request context available - cannot forward Authorization header to {}. This may cause 403 Forbidden errors.", request.getURI());
+                        return execution.execute(request, body);
+                    });
+                    template.setInterceptors(interceptors);
+                    log.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
+                    restTemplate = template;
                 }
-                return execution.execute(request, body);
-            });
-            restTemplate.setInterceptors(interceptors);
-            log.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
+            }
         }
         return restTemplate;
     }
@@ -147,6 +154,62 @@ public class CourseService {
         return toDTO(saved);
     }
     
+    /**
+     * Get courses that are assigned to any of the specified classes or sections.
+     * Used by instructor assignment service to derive course access from class/section assignments.
+     */
+    @Transactional(readOnly = true)
+    public List<CourseDTO> getCoursesByAssignments(List<String> classIds, List<String> sectionIds) {
+        log.info("=== getCoursesByAssignments START === classIds: {}, sectionIds: {}", classIds, sectionIds);
+        
+        String clientIdStr = TenantContext.getClientId();
+        log.info("TenantContext clientId: {}", clientIdStr);
+        
+        if (clientIdStr == null) {
+            log.error("Tenant context is not set!");
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        Set<String> courseIds = new java.util.HashSet<>();
+        
+        // Get courses assigned to sections
+        if (sectionIds != null && !sectionIds.isEmpty()) {
+            for (String sectionId : sectionIds) {
+                log.info("Querying courses for sectionId: {}, clientId: {}", sectionId, clientId);
+                List<Course> sectionCourses = courseRepository.findPublishedCoursesBySectionId(clientId, sectionId);
+                log.info("Found {} courses for section {}", sectionCourses.size(), sectionId);
+                for (Course course : sectionCourses) {
+                    courseIds.add(course.getId());
+                }
+            }
+        }
+        
+        // Get courses assigned to classes
+        if (classIds != null && !classIds.isEmpty()) {
+            for (String classId : classIds) {
+                log.info("Querying courses for classId: {}, clientId: {}", classId, clientId);
+                List<Course> classCourses = courseRepository.findPublishedCoursesByClassId(clientId, classId);
+                log.info("Found {} courses for class {}", classCourses.size(), classId);
+                for (Course course : classCourses) {
+                    courseIds.add(course.getId());
+                }
+            }
+        }
+        
+        log.info("Total unique course IDs found: {}", courseIds);
+        
+        // Fetch full course details for unique IDs
+        List<CourseDTO> courses = new ArrayList<>();
+        for (String courseId : courseIds) {
+            courseRepository.findByIdAndClientId(courseId, clientId)
+                .ifPresent(course -> courses.add(toDTO(course)));
+        }
+        
+        log.info("=== getCoursesByAssignments END === Returning {} courses", courses.size());
+        return courses;
+    }
+
     public CourseDTO getCourseById(String id) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -173,13 +236,16 @@ public class CourseService {
     
     public Page<CourseDTO> getCourses(Boolean isPublished, Pageable pageable) {
         String clientIdStr = TenantContext.getClientId();
+        log.info("=== getCourses START === TenantContext clientId: {}", clientIdStr);
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
+        log.info("Parsed UUID clientId: {}", clientId);
         
         // For students, always filter to only published courses
         String userRole = getCurrentUserRole();
+        log.info("User role: {}, isPublished filter: {}", userRole, isPublished);
         if ("STUDENT".equals(userRole)) {
             isPublished = true; // Force published=true for students
             log.debug("Student user detected - filtering to only published courses");
@@ -188,51 +254,12 @@ public class CourseService {
         Page<Course> courses = isPublished != null
             ? courseRepository.findByClientIdAndIsPublished(clientId, isPublished, pageable)
             : courseRepository.findByClientId(clientId, pageable);
+        log.info("Query returned {} courses (total elements: {})", courses.getContent().size(), courses.getTotalElements());
         
-        // For instructors, filter courses based on their InstructorAssignment records
-        if ("INSTRUCTOR".equals(userRole)) {
-            String userId = getCurrentUserId();
-            if (userId != null) {
-                Map<String, Object> instructorAccess = getInstructorAccess(userId);
-                if (instructorAccess != null) {
-                    Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
-                    Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
-                    Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
-                    
-                    // Filter courses based on instructor assignments
-                    List<Course> filteredCourses = courses.getContent().stream()
-                        .filter(course -> {
-                            // Course is directly assigned to instructor
-                            if (allowedCourseIds.contains(course.getId())) {
-                                return true;
-                            }
-                            // Course is assigned to a class the instructor has access to
-                            boolean hasAllowedClass = course.getAssignedToClassIds() != null && 
-                                course.getAssignedToClassIds().stream().anyMatch(allowedClassIds::contains);
-                            // Course is assigned to a section the instructor has access to
-                            boolean hasAllowedSection = course.getAssignedToSectionIds() != null && 
-                                course.getAssignedToSectionIds().stream().anyMatch(allowedSectionIds::contains);
-                            return hasAllowedClass || hasAllowedSection;
-                        })
-                        .collect(Collectors.toList());
-                    
-                    log.debug("Filtered courses for INSTRUCTOR user {} - showing {} out of {} total courses", 
-                        userId, filteredCourses.size(), courses.getTotalElements());
-                    
-                    return new org.springframework.data.domain.PageImpl<>(
-                        filteredCourses.stream().map(this::toDTO).collect(Collectors.toList()),
-                        pageable,
-                        filteredCourses.size()
-                    );
-                }
-            }
-            log.warn("INSTRUCTOR user has no assignments - returning empty course list");
-            return new org.springframework.data.domain.PageImpl<>(
-                new ArrayList<>(),
-                pageable,
-                0
-            );
-        }
+        // NOTE: Instructor filtering is now done on the frontend to avoid:
+        // 1. Circular service calls (content -> student -> content)
+        // 2. Username vs userId mismatch (SecurityContext has username, not user ID)
+        // The frontend fetches instructor access and filters courses client-side.
         
         return courses.map(this::toDTO);
     }
@@ -259,50 +286,7 @@ public class CourseService {
             isFree, isPublished, searchTerm, pageable
         );
         
-        // For instructors, filter courses based on their InstructorAssignment records
-        if ("INSTRUCTOR".equals(userRole)) {
-            String userId = getCurrentUserId();
-            if (userId != null) {
-                Map<String, Object> instructorAccess = getInstructorAccess(userId);
-                if (instructorAccess != null) {
-                    Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
-                    Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
-                    Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
-                    
-                    // Filter courses based on instructor assignments
-                    List<Course> filteredCourses = courses.getContent().stream()
-                        .filter(course -> {
-                            // Course is directly assigned to instructor
-                            if (allowedCourseIds.contains(course.getId())) {
-                                return true;
-                            }
-                            // Course is assigned to a class the instructor has access to
-                            boolean hasAllowedClass = course.getAssignedToClassIds() != null && 
-                                course.getAssignedToClassIds().stream().anyMatch(allowedClassIds::contains);
-                            // Course is assigned to a section the instructor has access to
-                            boolean hasAllowedSection = course.getAssignedToSectionIds() != null && 
-                                course.getAssignedToSectionIds().stream().anyMatch(allowedSectionIds::contains);
-                            return hasAllowedClass || hasAllowedSection;
-                        })
-                        .collect(Collectors.toList());
-                    
-                    log.debug("Filtered courses in search for INSTRUCTOR user {} - showing {} out of {} total courses", 
-                        userId, filteredCourses.size(), courses.getTotalElements());
-                    
-                    return new org.springframework.data.domain.PageImpl<>(
-                        filteredCourses.stream().map(this::toDTO).collect(Collectors.toList()),
-                        pageable,
-                        filteredCourses.size()
-                    );
-                }
-            }
-            log.warn("INSTRUCTOR user has no assignments - returning empty course list");
-            return new org.springframework.data.domain.PageImpl<>(
-                new ArrayList<>(),
-                pageable,
-                0
-            );
-        }
+        // NOTE: Instructor filtering is now done on the frontend (same as getCourses)
         
         Page<CourseDTO> result = courses.map(this::toDTO);
         

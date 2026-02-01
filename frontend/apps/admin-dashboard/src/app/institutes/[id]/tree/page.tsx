@@ -4,39 +4,79 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Loader2, ArrowLeft, Network } from 'lucide-react'
-import { institutesApi, classesApi, sectionsApi } from '@/lib/api'
+import { institutesApi, classesApi, sectionsApi, apiClient } from '@/lib/api'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import type { Institute, Class, Section } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
 import { D3TreeView } from '@/components/D3TreeView'
 
+interface InstructorAccess {
+  allowedClassIds: string[]
+  allowedSectionIds: string[]
+  allowedCourseIds: string[]
+}
+
 export default function InstituteTreePage() {
   const router = useRouter()
   const params = useParams()
   const instituteId = params.id as string
   const { toast } = useToast()
+  const { user } = useAuth()
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [classes, setClasses] = useState<Class[]>([])
   const [sectionsByClass, setSectionsByClass] = useState<Record<string, Section[]>>({})
   const [loading, setLoading] = useState(true)
+  
+  const isInstructor = user?.role === 'INSTRUCTOR'
+  const isSupportStaff = user?.role === 'SUPPORT_STAFF'
+  const isViewOnly = isInstructor || isSupportStaff
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
+      
+      // For instructors, fetch their allowed access first
+      let allowedClassIds: Set<string> | null = null
+      let allowedSectionIds: Set<string> | null = null
+      
+      if (isViewOnly && user?.id) {
+        try {
+          const accessResponse = await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
+          allowedClassIds = new Set(accessResponse.data.allowedClassIds || [])
+          allowedSectionIds = new Set(accessResponse.data.allowedSectionIds || [])
+        } catch (err) {
+          console.error('Failed to load instructor access:', err)
+          // If we can't load access, show nothing for safety
+          allowedClassIds = new Set()
+          allowedSectionIds = new Set()
+        }
+      }
+      
       const [instituteData, classesData] = await Promise.all([
         institutesApi.getInstitute(instituteId),
         classesApi.listClassesByInstitute(instituteId)
       ])
       setInstitute(instituteData)
-      setClasses(classesData || [])
+      
+      // Filter classes for instructors
+      let filteredClasses = classesData || []
+      if (allowedClassIds !== null) {
+        filteredClasses = filteredClasses.filter(cls => allowedClassIds!.has(cls.id))
+      }
+      setClasses(filteredClasses)
 
       // Load sections for all classes
       const sectionsMap: Record<string, Section[]> = {}
-      if (classesData && classesData.length > 0) {
-        const sectionsPromises = classesData.map(async (cls) => {
+      if (filteredClasses.length > 0) {
+        const sectionsPromises = filteredClasses.map(async (cls) => {
           try {
-            const sections = await sectionsApi.listSectionsByClass(cls.id)
+            let sections = await sectionsApi.listSectionsByClass(cls.id)
+            // Filter sections for instructors
+            if (allowedSectionIds !== null) {
+              sections = (sections || []).filter(sec => allowedSectionIds!.has(sec.id))
+            }
             return { classId: cls.id, sections: sections || [] }
           } catch (err) {
             console.error(`Error loading sections for class ${cls.id}:`, err)
@@ -61,7 +101,7 @@ export default function InstituteTreePage() {
     } finally {
       setLoading(false)
     }
-  }, [instituteId, toast])
+  }, [instituteId, toast, isViewOnly, user?.id])
 
   useEffect(() => {
     if (instituteId) {
@@ -70,10 +110,12 @@ export default function InstituteTreePage() {
   }, [instituteId, loadData])
 
   const handleAddClass = () => {
+    if (isViewOnly) return
     router.push(`/institutes/${instituteId}/classes/new`)
   }
 
   const handleAddSection = (classId: string) => {
+    if (isViewOnly) return
     router.push(`/classes/${classId}/sections/new`)
   }
 
@@ -117,8 +159,8 @@ export default function InstituteTreePage() {
           institute={institute}
           classes={classes}
           sectionsByClass={sectionsByClass}
-          onAddClass={handleAddClass}
-          onAddSection={handleAddSection}
+          onAddClass={isViewOnly ? undefined : handleAddClass}
+          onAddSection={isViewOnly ? undefined : handleAddSection}
         />
       </div>
     </div>

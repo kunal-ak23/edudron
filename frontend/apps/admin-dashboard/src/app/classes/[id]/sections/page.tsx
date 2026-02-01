@@ -29,11 +29,18 @@ import {
 } from '@/components/ui/dialog'
 import { BatchCreateSectionsDialog } from '@/components/BatchCreateSectionsDialog'
 
+interface InstructorAccess {
+  allowedClassIds: string[]
+  allowedSectionIds: string[]
+  allowedCourseIds: string[]
+}
+
 export default function ClassSectionsPage() {
   const router = useRouter()
   const params = useParams()
   const classId = params.id as string
   const { toast } = useToast()
+  const { user } = useAuth()
   const [classItem, setClassItem] = useState<Class | null>(null)
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [sections, setSections] = useState<Section[]>([])
@@ -43,10 +50,28 @@ export default function ClassSectionsPage() {
   const [students, setStudents] = useState<Array<{id: string, name: string, email: string, phone: string | null}>>([])
   const [loadingStudents, setLoadingStudents] = useState(false)
   const [batchSectionsDialogOpen, setBatchSectionsDialogOpen] = useState(false)
+  
+  const isInstructor = user?.role === 'INSTRUCTOR'
+  const isSupportStaff = user?.role === 'SUPPORT_STAFF'
+  const isViewOnly = isInstructor || isSupportStaff
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
+      
+      // For instructors, fetch their allowed access first
+      let allowedSectionIds: Set<string> | null = null
+      
+      if (isViewOnly && user?.id) {
+        try {
+          const accessResponse = await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
+          allowedSectionIds = new Set(accessResponse.data.allowedSectionIds || [])
+        } catch (err) {
+          console.error('Failed to load instructor access:', err)
+          allowedSectionIds = new Set()
+        }
+      }
+      
       const classData = await classesApi.getClass(classId)
       setClassItem(classData)
       
@@ -55,7 +80,13 @@ export default function ClassSectionsPage() {
         sectionsApi.listSectionsByClass(classId)
       ])
       setInstitute(instituteData)
-      setSections(sectionsData || [])
+      
+      // Filter sections for instructors
+      let filteredSections = sectionsData || []
+      if (allowedSectionIds !== null) {
+        filteredSections = filteredSections.filter(sec => allowedSectionIds!.has(sec.id))
+      }
+      setSections(filteredSections)
     } catch (err: any) {
       console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
@@ -68,7 +99,7 @@ export default function ClassSectionsPage() {
     } finally {
       setLoading(false)
     }
-  }, [classId, toast, router])
+  }, [classId, toast, router, isViewOnly, user?.id])
 
   useEffect(() => {
     if (classId) {
@@ -153,21 +184,23 @@ export default function ClassSectionsPage() {
               <h1 className="text-3xl font-bold text-gray-900">Sections - {classItem.name}</h1>
               <p className="mt-2 text-sm text-gray-600">Manage sections for this class</p>
             </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline"
-                onClick={() => setBatchSectionsDialogOpen(true)}
-              >
-                <Layers className="h-4 w-4 mr-2" />
-                Batch Create
-              </Button>
-              <Link href={`/classes/${classId}/sections/new`}>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create New Section
+            {!isViewOnly && (
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline"
+                  onClick={() => setBatchSectionsDialogOpen(true)}
+                >
+                  <Layers className="h-4 w-4 mr-2" />
+                  Batch Create
                 </Button>
-              </Link>
-            </div>
+                <Link href={`/classes/${classId}/sections/new`}>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create New Section
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
 
           <Card>
@@ -178,14 +211,22 @@ export default function ClassSectionsPage() {
               {sections.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-semibold text-gray-900">No sections yet</h3>
-                  <p className="mt-1 text-sm text-gray-500">Create a section to get started.</p>
-                  <Link href={`/classes/${classId}/sections/new`}>
-                    <Button className="mt-4">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create First Section
-                    </Button>
-                  </Link>
+                  <h3 className="mt-2 text-sm font-semibold text-gray-900">
+                    {isViewOnly ? 'No sections assigned to you' : 'No sections yet'}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {isViewOnly 
+                      ? 'Contact your administrator to get access to sections.' 
+                      : 'Create a section to get started.'}
+                  </p>
+                  {!isViewOnly && (
+                    <Link href={`/classes/${classId}/sections/new`}>
+                      <Button className="mt-4">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create First Section
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <Table>
@@ -228,14 +269,16 @@ export default function ClassSectionsPage() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleEdit(section)}
-                          >
-                            <Edit className="h-4 w-4 mr-1" />
-                            Edit
-                          </Button>
+                          {!isViewOnly && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEdit(section)}
+                            >
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

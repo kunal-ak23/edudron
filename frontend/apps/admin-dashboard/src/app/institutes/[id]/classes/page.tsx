@@ -13,8 +13,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, Loader2, ArrowLeft, Users, Edit, FolderOpen, Network, Layers, FolderPlus } from 'lucide-react'
-import { institutesApi, classesApi } from '@/lib/api'
+import { Plus, Loader2, ArrowLeft, Users, Edit, FolderOpen, Network, Layers, FolderPlus, Eye } from 'lucide-react'
+import { institutesApi, classesApi, apiClient } from '@/lib/api'
+import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import type { Institute, Class } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -22,28 +23,59 @@ import Link from 'next/link'
 import { BatchCreateClassesDialog } from '@/components/BatchCreateClassesDialog'
 import { BatchCreateClassWithSectionsDialog } from '@/components/BatchCreateClassWithSectionsDialog'
 
+interface InstructorAccess {
+  allowedClassIds: string[]
+  allowedSectionIds: string[]
+  allowedCourseIds: string[]
+}
+
 export default function InstituteClassesPage() {
   const router = useRouter()
   const params = useParams()
   const instituteId = params.id as string
   const { toast } = useToast()
+  const { user } = useAuth()
   const [institute, setInstitute] = useState<Institute | null>(null)
   const [classes, setClasses] = useState<Class[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [batchClassesDialogOpen, setBatchClassesDialogOpen] = useState(false)
   const [batchClassWithSectionsDialogOpen, setBatchClassWithSectionsDialogOpen] = useState(false)
+  
+  const isInstructor = user?.role === 'INSTRUCTOR'
+  const isSupportStaff = user?.role === 'SUPPORT_STAFF'
+  const isViewOnly = isInstructor || isSupportStaff
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
+      
+      // For instructors, fetch their allowed access first
+      let allowedClassIds: Set<string> | null = null
+      
+      if (isViewOnly && user?.id) {
+        try {
+          const accessResponse = await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
+          allowedClassIds = new Set(accessResponse.data.allowedClassIds || [])
+        } catch (err) {
+          console.error('Failed to load instructor access:', err)
+          allowedClassIds = new Set()
+        }
+      }
+      
       const [instituteData, classesData] = await Promise.all([
         institutesApi.getInstitute(instituteId),
         classesApi.listClassesByInstitute(instituteId)
       ])
       setInstitute(instituteData)
-      setClasses(classesData || [])
+      
+      // Filter classes for instructors
+      let filteredClasses = classesData || []
+      if (allowedClassIds !== null) {
+        filteredClasses = filteredClasses.filter(cls => allowedClassIds!.has(cls.id))
+      }
+      setClasses(filteredClasses)
     } catch (err: any) {
       console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
@@ -56,7 +88,7 @@ export default function InstituteClassesPage() {
     } finally {
       setLoading(false)
     }
-  }, [instituteId, toast])
+  }, [instituteId, toast, isViewOnly, user?.id])
 
   useEffect(() => {
     if (instituteId) {
@@ -144,26 +176,30 @@ export default function InstituteClassesPage() {
                   Tree View
                 </Button>
               </Link>
-              <Button 
-                variant="outline"
-                onClick={() => setBatchClassesDialogOpen(true)}
-              >
-                <Layers className="h-4 w-4 mr-2" />
-                Batch Create
-              </Button>
-              <Button 
-                variant="outline"
-                onClick={() => setBatchClassWithSectionsDialogOpen(true)}
-              >
-                <FolderPlus className="h-4 w-4 mr-2" />
-                Class + Sections
-              </Button>
-              <Link href={`/institutes/${instituteId}/classes/new`}>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create New Class
-                </Button>
-              </Link>
+              {!isViewOnly && (
+                <>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setBatchClassesDialogOpen(true)}
+                  >
+                    <Layers className="h-4 w-4 mr-2" />
+                    Batch Create
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setBatchClassWithSectionsDialogOpen(true)}
+                  >
+                    <FolderPlus className="h-4 w-4 mr-2" />
+                    Class + Sections
+                  </Button>
+                  <Link href={`/institutes/${instituteId}/classes/new`}>
+                    <Button>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create New Class
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
 
@@ -175,14 +211,22 @@ export default function InstituteClassesPage() {
               {classes.length === 0 ? (
                 <div className="text-center py-12">
                   <Users className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-semibold text-gray-900">No classes yet</h3>
-                  <p className="mt-1 text-sm text-gray-500">Create a class to get started.</p>
-                  <Link href={`/institutes/${instituteId}/classes/new`}>
-                    <Button className="mt-4">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create First Class
-                    </Button>
-                  </Link>
+                  <h3 className="mt-2 text-sm font-semibold text-gray-900">
+                    {isViewOnly ? 'No classes assigned to you' : 'No classes yet'}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {isViewOnly 
+                      ? 'Contact your administrator to get access to classes.' 
+                      : 'Create a class to get started.'}
+                  </p>
+                  {!isViewOnly && (
+                    <Link href={`/institutes/${instituteId}/classes/new`}>
+                      <Button className="mt-4">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create First Class
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <Table>
@@ -231,14 +275,16 @@ export default function InstituteClassesPage() {
                             >
                               View Sections
                             </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleEdit(classItem)}
-                            >
-                              <Edit className="h-4 w-4 mr-1" />
-                              Edit
-                            </Button>
+                            {!isViewOnly && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(classItem)}
+                              >
+                                <Edit className="h-4 w-4 mr-1" />
+                                Edit
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>

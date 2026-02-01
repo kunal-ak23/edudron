@@ -88,7 +88,7 @@ public class ExamController {
         if (restTemplate == null) {
             synchronized (restTemplateLock) {
                 if (restTemplate == null) {
-                    restTemplate = new RestTemplate();
+                    RestTemplate template = new RestTemplate();
                     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
                     interceptors.add(new TenantContextRestTemplateInterceptor());
                     interceptors.add((request, body, execution) -> {
@@ -104,7 +104,8 @@ public class ExamController {
                         }
                         return execution.execute(request, body);
                     });
-                    restTemplate.setInterceptors(interceptors);
+                    template.setInterceptors(interceptors);
+                    restTemplate = template;
                 }
             }
         }

@@ -57,6 +57,16 @@ public class CourseController {
         return ResponseEntity.ok(courses);
     }
 
+    @GetMapping("/by-assignments")
+    @Operation(summary = "Get courses by class/section assignments", 
+               description = "Get courses assigned to any of the specified classes or sections")
+    public ResponseEntity<List<CourseDTO>> getCoursesByAssignments(
+            @RequestParam(required = false) List<String> classIds,
+            @RequestParam(required = false) List<String> sectionIds) {
+        List<CourseDTO> courses = courseService.getCoursesByAssignments(classIds, sectionIds);
+        return ResponseEntity.ok(courses);
+    }
+
     @GetMapping("/search")
     @Operation(summary = "Search courses", description = "Search courses with filters")
     public ResponseEntity<Page<CourseDTO>> searchCourses(
