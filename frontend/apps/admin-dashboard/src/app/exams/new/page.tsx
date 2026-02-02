@@ -67,6 +67,8 @@ export default function NewExamPage() {
     scorePerDifficulty: { EASY: 1, MEDIUM: 2, HARD: 3 } as Record<string, number>,
     randomizeQuestions: false,
     randomizeMcqOptions: false,
+    // Passing score
+    passingScorePercentage: 70,
     // Proctoring settings
     enableProctoring: false,
     proctoringMode: 'BASIC_MONITORING' as 'BASIC_MONITORING' | 'WEBCAM_RECORDING' | 'LIVE_PROCTORING',
@@ -163,6 +165,7 @@ export default function NewExamPage() {
         sectionId: formData.assignmentType === 'section' ? formData.sectionId : null,
         randomizeQuestions: formData.randomizeQuestions,
         randomizeMcqOptions: formData.randomizeMcqOptions,
+        passingScorePercentage: formData.passingScorePercentage,
         enableProctoring: formData.enableProctoring,
         proctoringMode: formData.enableProctoring ? formData.proctoringMode : 'DISABLED',
         photoIntervalSeconds: formData.photoIntervalSeconds,
@@ -228,6 +231,7 @@ export default function NewExamPage() {
         sectionId: formData.assignmentType === 'section' ? formData.sectionId : null,
         randomizeQuestions: formData.randomizeQuestions,
         randomizeMcqOptions: formData.randomizeMcqOptions,
+        passingScorePercentage: formData.passingScorePercentage,
         enableProctoring: formData.enableProctoring,
         proctoringMode: formData.enableProctoring ? formData.proctoringMode : 'DISABLED',
         photoIntervalSeconds: formData.photoIntervalSeconds,
@@ -350,6 +354,7 @@ export default function NewExamPage() {
           reviewMethod: formData.reviewMethod,
           randomizeQuestions: formData.randomizeQuestions,
           randomizeMcqOptions: formData.randomizeMcqOptions,
+          passingScorePercentage: formData.passingScorePercentage,
           enableProctoring: formData.enableProctoring,
           proctoringMode: formData.enableProctoring ? formData.proctoringMode : 'DISABLED',
           photoIntervalSeconds: formData.photoIntervalSeconds,
@@ -592,6 +597,25 @@ export default function NewExamPage() {
                     placeholder="Enter exam instructions"
                     rows={2}
                   />
+                </div>
+
+                <div>
+                  <Label htmlFor="passingScorePercentage">Passing Score (%)</Label>
+                  <Input
+                    id="passingScorePercentage"
+                    type="number"
+                    value={formData.passingScorePercentage}
+                    onChange={(e) => setFormData(prev => ({ 
+                      ...prev, 
+                      passingScorePercentage: Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
+                    }))}
+                    min={0}
+                    max={100}
+                    placeholder="70"
+                  />
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Students must score at least this percentage to pass
+                  </p>
                 </div>
 
                 <div>

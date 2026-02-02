@@ -164,9 +164,13 @@ public class ExamController {
         // Timing mode parameter
         String timingMode = (String) request.get("timingMode");
         
+        // Passing score percentage
+        Integer passingScorePercentage = request.get("passingScorePercentage") != null ?
+            ((Number) request.get("passingScorePercentage")).intValue() : 70;
+        
         Assessment exam = examService.createExam(courseId, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, 
             randomizeQuestions, randomizeMcqOptions, enableProctoring, proctoringMode, photoIntervalSeconds, 
-            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed, timingMode);
+            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed, timingMode, passingScorePercentage);
         return ResponseEntity.status(HttpStatus.CREATED).body(exam);
     }
     
@@ -376,10 +380,14 @@ public class ExamController {
         Integer timeLimitSeconds = request.get("timeLimitSeconds") != null ? 
             ((Number) request.get("timeLimitSeconds")).intValue() : null;
         
+        // Passing score percentage
+        Integer passingScorePercentage = request.get("passingScorePercentage") != null ?
+            ((Number) request.get("passingScorePercentage")).intValue() : null;
+        
         // Update the exam
         examService.updateExam(id, title, description, instructions, moduleIds, reviewMethod, classId, sectionId, 
             randomizeQuestions, randomizeMcqOptions, enableProctoring, proctoringMode, photoIntervalSeconds, 
-            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed, timingMode, timeLimitSeconds);
+            requireIdentityVerification, blockCopyPaste, blockTabSwitch, maxTabSwitchesAllowed, timingMode, timeLimitSeconds, passingScorePercentage);
         
         // Reload the exam with questions to return complete data
         Assessment exam = examService.getExamById(id);

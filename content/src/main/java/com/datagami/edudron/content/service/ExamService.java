@@ -114,7 +114,7 @@ public class ExamService {
                                  Boolean enableProctoring, Assessment.ProctoringMode proctoringMode,
                                  Integer photoIntervalSeconds, Boolean requireIdentityVerification,
                                  Boolean blockCopyPaste, Boolean blockTabSwitch, Integer maxTabSwitchesAllowed,
-                                 String timingMode) {
+                                 String timingMode, Integer passingScorePercentage) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -162,6 +162,9 @@ public class ExamService {
         
         // Set timing mode
         exam.setTimingMode(parseTimingMode(timingMode));
+        
+        // Set passing score percentage
+        exam.setPassingScorePercentage(passingScorePercentage != null ? passingScorePercentage : 70);
         
         Assessment saved = assessmentRepository.save(exam);
         String audience = sectionId != null ? "section: " + sectionId : 
@@ -549,7 +552,7 @@ public class ExamService {
                                  Boolean enableProctoring, Assessment.ProctoringMode proctoringMode,
                                  Integer photoIntervalSeconds, Boolean requireIdentityVerification,
                                  Boolean blockCopyPaste, Boolean blockTabSwitch, Integer maxTabSwitchesAllowed,
-                                 Assessment.TimingMode timingMode, Integer timeLimitSeconds) {
+                                 Assessment.TimingMode timingMode, Integer timeLimitSeconds, Integer passingScorePercentage) {
         // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update exams
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
@@ -622,6 +625,11 @@ public class ExamService {
         }
         if (timeLimitSeconds != null) {
             exam.setTimeLimitSeconds(timeLimitSeconds);
+        }
+        
+        // Update passing score percentage
+        if (passingScorePercentage != null) {
+            exam.setPassingScorePercentage(passingScorePercentage);
         }
         
         return assessmentRepository.save(exam);

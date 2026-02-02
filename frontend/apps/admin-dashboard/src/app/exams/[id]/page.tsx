@@ -132,6 +132,7 @@ export default function ExamDetailPage() {
     reviewMethod: 'INSTRUCTOR' as 'INSTRUCTOR' | 'AI' | 'BOTH',
     randomizeQuestions: false,
     randomizeMcqOptions: false,
+    passingScorePercentage: 70,
     timingMode: 'FIXED_WINDOW' as 'FIXED_WINDOW' | 'FLEXIBLE_START',
     durationMinutes: 60,
     startTime: '',
@@ -294,6 +295,7 @@ export default function ExamDetailPage() {
         reviewMethod: exam.reviewMethod,
         randomizeQuestions: exam.randomizeQuestions || false,
         randomizeMcqOptions: exam.randomizeMcqOptions || false,
+        passingScorePercentage: exam.passingScorePercentage || 70,
         timingMode: exam.timingMode || 'FIXED_WINDOW',
         durationMinutes: exam.timeLimitSeconds ? Math.round(exam.timeLimitSeconds / 60) : 60,
         startTime: startTimeLocal,
@@ -349,6 +351,7 @@ export default function ExamDetailPage() {
         reviewMethod: editForm.reviewMethod,
         randomizeQuestions: editForm.randomizeQuestions,
         randomizeMcqOptions: editForm.randomizeMcqOptions,
+        passingScorePercentage: editForm.passingScorePercentage,
         timingMode: editForm.timingMode,
         classId: editForm.assignmentType === 'class' ? editForm.classId : null,
         sectionId: editForm.assignmentType === 'section' ? editForm.sectionId : null
@@ -1289,6 +1292,25 @@ export default function ExamDetailPage() {
                   placeholder="Detailed instructions for students"
                   rows={5}
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="editPassingScore">Passing Score (%)</Label>
+                <Input
+                  id="editPassingScore"
+                  type="number"
+                  value={editForm.passingScorePercentage}
+                  onChange={(e) => setEditForm(prev => ({ 
+                    ...prev, 
+                    passingScorePercentage: Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
+                  }))}
+                  min={0}
+                  max={100}
+                  placeholder="70"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Students must score at least this percentage to pass
+                </p>
               </div>
 
               <div>
