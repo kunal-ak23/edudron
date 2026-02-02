@@ -411,7 +411,9 @@ public class ExamService {
         for (Object[] row : results) {
             Assessment.ExamStatus status = (Assessment.ExamStatus) row[0];
             Long count = (Long) row[1];
-            counts.put(status.name(), count);
+            // Handle null status (exams without status set default to DRAFT)
+            String statusName = status != null ? status.name() : Assessment.ExamStatus.DRAFT.name();
+            counts.merge(statusName, count, Long::sum);
             total += count;
         }
         counts.put("all", total);
