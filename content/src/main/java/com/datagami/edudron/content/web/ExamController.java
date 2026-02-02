@@ -771,6 +771,16 @@ public class ExamController {
         return ResponseEntity.ok(dto);
     }
     
+    @PutMapping("/{id}/unpublish")
+    @Operation(summary = "Unpublish exam", description = "Move a SCHEDULED or LIVE exam back to DRAFT status")
+    public ResponseEntity<ExamDetailDTO> unpublishExam(@PathVariable String id) {
+        examService.unpublishExam(id);
+        // Reload with questions
+        Assessment exam = examService.getExamById(id);
+        ExamDetailDTO dto = ExamDetailDTO.fromAssessment(exam);
+        return ResponseEntity.ok(dto);
+    }
+    
     @PutMapping("/{id}/complete")
     @Operation(summary = "Complete exam", description = "Mark an exam as completed to prevent further submissions")
     public ResponseEntity<ExamDetailDTO> completeExam(@PathVariable String id) {

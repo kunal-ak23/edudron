@@ -611,6 +611,14 @@ public class ExamService {
         // Update timing mode
         if (timingMode != null) {
             exam.setTimingMode(timingMode);
+            
+            // Clear start/end times when switching to FLEXIBLE_START
+            // (these times are only meaningful for FIXED_WINDOW mode)
+            if (timingMode == Assessment.TimingMode.FLEXIBLE_START) {
+                exam.setStartTime(null);
+                exam.setEndTime(null);
+                logger.info("Cleared start/end times for exam {} (switched to FLEXIBLE_START)", examId);
+            }
         }
         if (timeLimitSeconds != null) {
             exam.setTimeLimitSeconds(timeLimitSeconds);
@@ -708,6 +716,44 @@ public class ExamService {
             exam.setStatus(Assessment.ExamStatus.LIVE);
             logger.info("Exam {} (Flexible Start) is now LIVE", examId);
         }
+        
+        return assessmentRepository.save(exam);
+    }
+    
+    /**
+     * Unpublish an exam (move back to DRAFT status).
+     * Can unpublish SCHEDULED or LIVE exams.
+     * COMPLETED exams cannot be unpublished.
+     */
+    public Assessment unpublishExam(String examId) {
+        String userRole = getCurrentUserRole();
+        
+        // Support staff and students cannot unpublish
+        if ("SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("SUPPORT_STAFF and STUDENT have view-only access and cannot unpublish exams");
+        }
+        
+        Assessment exam = getExamById(examId);
+        
+        // Instructors can only unpublish exams within their assigned scope
+        if ("INSTRUCTOR".equals(userRole)) {
+            if (!canInstructorManageExam(exam)) {
+                throw new IllegalArgumentException("You don't have permission to unpublish this exam. It's outside your assigned scope.");
+            }
+        }
+        
+        if (exam.getStatus() == Assessment.ExamStatus.DRAFT) {
+            throw new IllegalStateException("Exam is already in draft status");
+        }
+        
+        if (exam.getStatus() == Assessment.ExamStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot unpublish a completed exam");
+        }
+        
+        Assessment.ExamStatus previousStatus = exam.getStatus();
+        exam.setStatus(Assessment.ExamStatus.DRAFT);
+        
+        logger.info("Exam {} unpublished (was {})", examId, previousStatus);
         
         return assessmentRepository.save(exam);
     }
@@ -906,14 +952,18 @@ public class ExamService {
             exam.setBlockCopyPaste(settings.isBlockCopyPaste());
             exam.setBlockTabSwitch(settings.isBlockTabSwitch());
             exam.setMaxTabSwitchesAllowed(settings.getMaxTabSwitchesAllowed() != null ? settings.getMaxTabSwitchesAllowed() : 3);
-            exam.setTimingMode(parseTimingMode(settings.getTimingMode()));
+            Assessment.TimingMode timingMode = parseTimingMode(settings.getTimingMode());
+            exam.setTimingMode(timingMode);
             
-            // Set start and end times for FIXED_WINDOW mode
-            if (settings.getStartTime() != null) {
-                exam.setStartTime(settings.getStartTime());
-            }
-            if (settings.getEndTime() != null) {
-                exam.setEndTime(settings.getEndTime());
+            // Set start and end times only for FIXED_WINDOW mode
+            // (FLEXIBLE_START doesn't use scheduled times - just duration)
+            if (timingMode == Assessment.TimingMode.FIXED_WINDOW) {
+                if (settings.getStartTime() != null) {
+                    exam.setStartTime(settings.getStartTime());
+                }
+                if (settings.getEndTime() != null) {
+                    exam.setEndTime(settings.getEndTime());
+                }
             }
         } else {
             exam.setReviewMethod(Assessment.ReviewMethod.INSTRUCTOR);
@@ -951,6 +1001,15 @@ public class ExamService {
                     distribution.put(QuestionBank.DifficultyLevel.valueOf(entry.getKey()), entry.getValue());
                 }
                 genCriteria.setDifficultyDistribution(distribution);
+            }
+            
+            // Pass score per difficulty configuration to override question default points
+            if (criteria.getScorePerDifficulty() != null && !criteria.getScorePerDifficulty().isEmpty()) {
+                Map<QuestionBank.DifficultyLevel, Integer> scores = new java.util.HashMap<>();
+                for (Map.Entry<String, Integer> entry : criteria.getScorePerDifficulty().entrySet()) {
+                    scores.put(QuestionBank.DifficultyLevel.valueOf(entry.getKey()), entry.getValue());
+                }
+                genCriteria.setScorePerDifficulty(scores);
             }
         } else {
             genCriteria.setNumberOfQuestions(10);

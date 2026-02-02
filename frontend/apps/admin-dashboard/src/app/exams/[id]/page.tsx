@@ -120,8 +120,10 @@ export default function ExamDetailPage() {
   const [deletingQuestion, setDeletingQuestion] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [unpublishing, setUnpublishing] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [showPublishDialog, setShowPublishDialog] = useState(false)
+  const [showUnpublishDialog, setShowUnpublishDialog] = useState(false)
   const [showCompleteDialog, setShowCompleteDialog] = useState(false)
   const [editForm, setEditForm] = useState({
     title: '',
@@ -444,6 +446,30 @@ export default function ExamDetailPage() {
     }
   }
 
+  const handleUnpublishExam = async () => {
+    setUnpublishing(true)
+    try {
+      const response = await apiClient.put<Exam>(`/api/exams/${examId}/unpublish`)
+      const updated = (response as any)?.data || response
+      setExam(updated as unknown as Exam)
+      setShowUnpublishDialog(false)
+      
+      toast({
+        title: 'Exam Unpublished',
+        description: 'The exam has been moved back to draft status',
+      })
+    } catch (error: any) {
+      console.error('Failed to unpublish exam:', error)
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.message || error?.message || 'Failed to unpublish exam',
+        variant: 'destructive'
+      })
+    } finally {
+      setUnpublishing(false)
+    }
+  }
+
   const handleCompleteExam = async () => {
     setCompleting(true)
     try {
@@ -549,6 +575,16 @@ export default function ExamDetailPage() {
               >
                 <Play className="h-4 w-4 mr-2" />
                 Publish Exam
+              </Button>
+            )}
+            {/* Unpublish button - for SCHEDULED or LIVE exams */}
+            {(exam.status === 'SCHEDULED' || exam.status === 'LIVE') && (
+              <Button 
+                onClick={() => setShowUnpublishDialog(true)}
+                variant="outline"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Unpublish
               </Button>
             )}
             {/* Complete button - for LIVE exams (especially useful for FLEXIBLE_START) */}
@@ -1565,6 +1601,45 @@ export default function ExamDetailPage() {
               >
                 {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
                 {publishing ? 'Publishing...' : 'Publish Exam'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Unpublish Confirmation Dialog */}
+        <Dialog open={showUnpublishDialog} onOpenChange={setShowUnpublishDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-amber-600">
+                <ArrowLeft className="h-5 w-5" />
+                Unpublish Exam
+              </DialogTitle>
+              <DialogDescription>
+                Are you sure you want to unpublish &quot;{exam.title}&quot;?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  <strong>Current Status:</strong> {exam.status}
+                </p>
+                <p className="text-sm text-amber-700 mt-2">
+                  The exam will be moved back to <strong>DRAFT</strong> status. 
+                  Students will no longer be able to access it until you publish it again.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowUnpublishDialog(false)} disabled={unpublishing}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleUnpublishExam} 
+                disabled={unpublishing}
+                variant="destructive"
+              >
+                {unpublishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowLeft className="h-4 w-4 mr-2" />}
+                {unpublishing ? 'Unpublishing...' : 'Unpublish Exam'}
               </Button>
             </DialogFooter>
           </DialogContent>
