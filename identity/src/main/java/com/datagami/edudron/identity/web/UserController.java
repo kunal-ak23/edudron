@@ -2,6 +2,7 @@ package com.datagami.edudron.identity.web;
 
 import com.datagami.edudron.identity.dto.ChangePasswordRequest;
 import com.datagami.edudron.identity.dto.CreateUserRequest;
+import com.datagami.edudron.identity.dto.PasswordResetResponse;
 import com.datagami.edudron.identity.dto.UpdateUserRequest;
 import com.datagami.edudron.identity.dto.UserDTO;
 import com.datagami.edudron.identity.service.UserService;
@@ -146,6 +147,15 @@ public class UserController {
     public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         userService.changePassword(request.getCurrentPassword(), request.getNewPassword());
         return ResponseEntity.ok().build();
+    }
+    
+    @PostMapping("/{id}/reset-password")
+    @Operation(summary = "Reset user password (admin)", description = "Reset a user's password. Only SYSTEM_ADMIN and TENANT_ADMIN can perform this action. Returns a temporary password that the admin should share with the user. The user will be required to change their password on next login.")
+    public ResponseEntity<PasswordResetResponse> resetPassword(@PathVariable String id) {
+        log.info("POST /idp/users/{}/reset-password - Admin password reset requested", id);
+        PasswordResetResponse response = userService.adminResetPassword(id);
+        log.info("POST /idp/users/{}/reset-password - Password reset successful", id);
+        return ResponseEntity.ok(response);
     }
 }
 

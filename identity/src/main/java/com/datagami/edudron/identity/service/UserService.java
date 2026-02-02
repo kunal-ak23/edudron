@@ -15,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import com.datagami.edudron.identity.domain.User;
 import com.datagami.edudron.identity.domain.UserInstitute;
 import com.datagami.edudron.identity.dto.CreateUserRequest;
+import com.datagami.edudron.identity.dto.PasswordResetResponse;
 import com.datagami.edudron.identity.dto.UpdateUserRequest;
 import com.datagami.edudron.identity.dto.UserDTO;
 import com.datagami.edudron.identity.repo.UserInstituteRepository;
@@ -34,6 +35,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.Predicate;
 
+import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -788,6 +790,114 @@ public class UserService {
         currentUser.setPassword(passwordEncoder.encode(newPassword));
         currentUser.setPasswordResetRequired(false);
         userRepository.save(currentUser);
+    }
+    
+    /**
+     * Admin-initiated password reset.
+     * Generates a secure random temporary password and sets passwordResetRequired flag.
+     * 
+     * @param userId The ID of the user whose password should be reset
+     * @return PasswordResetResponse containing the temporary password
+     */
+    @Transactional
+    public PasswordResetResponse adminResetPassword(String userId) {
+        // Load user and validate access
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        
+        // Get current user to check permissions
+        User currentUser = getCurrentUser();
+        if (currentUser == null) {
+            throw new IllegalArgumentException("Authentication required");
+        }
+        
+        // Check if current user can manage users
+        if (!currentUser.canManageUsers()) {
+            throw new IllegalArgumentException("Only SYSTEM_ADMIN and TENANT_ADMIN can reset user passwords");
+        }
+        
+        boolean isCurrentUserSystemAdmin = currentUser.getRole() == User.Role.SYSTEM_ADMIN;
+        boolean isCurrentUserTenantAdmin = currentUser.getRole() == User.Role.TENANT_ADMIN;
+        
+        // Check tenant access
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+            UUID clientId = UUID.fromString(clientIdStr);
+            if (user.getClientId() != null && !user.getClientId().equals(clientId)) {
+                throw new IllegalArgumentException("User not found: " + userId);
+            }
+        }
+        
+        // SECURITY: Only SYSTEM_ADMIN can reset SYSTEM_ADMIN passwords
+        if (user.getRole() == User.Role.SYSTEM_ADMIN && !isCurrentUserSystemAdmin) {
+            throw new IllegalArgumentException("SYSTEM_ADMIN passwords can only be reset by existing SYSTEM_ADMIN users.");
+        }
+        
+        // SECURITY: Only SYSTEM_ADMIN can reset platform-side users (TENANT_ADMIN, CONTENT_MANAGER)
+        if ((user.getRole() == User.Role.TENANT_ADMIN || user.getRole() == User.Role.CONTENT_MANAGER) && !isCurrentUserSystemAdmin) {
+            throw new IllegalArgumentException("Platform-side user passwords (TENANT_ADMIN, CONTENT_MANAGER) can only be reset by SYSTEM_ADMIN");
+        }
+        
+        // SECURITY: TENANT_ADMIN can only reset university-side users
+        if (isCurrentUserTenantAdmin) {
+            if (user.getRole() != User.Role.INSTRUCTOR && user.getRole() != User.Role.SUPPORT_STAFF && user.getRole() != User.Role.STUDENT) {
+                throw new IllegalArgumentException("TENANT_ADMIN can only reset passwords for university-side users (INSTRUCTOR, SUPPORT_STAFF, STUDENT)");
+            }
+        }
+        
+        // Generate user-friendly temporary password (Name@12345 format)
+        String temporaryPassword = generateTemporaryPassword(user.getName());
+        
+        // Update password and set reset required flag
+        user.setPassword(passwordEncoder.encode(temporaryPassword));
+        user.setPasswordResetRequired(true);
+        userRepository.save(user);
+        
+        // Log the action
+        String currentUserId = currentUser.getId();
+        String currentUserEmail = currentUser.getEmail();
+        Map<String, Object> eventData = Map.of(
+            "targetUserId", user.getId(),
+            "targetUserEmail", user.getEmail() != null ? user.getEmail() : "",
+            "targetUserName", user.getName() != null ? user.getName() : "",
+            "targetRole", user.getRole() != null ? user.getRole().name() : ""
+        );
+        eventService.logUserAction("PASSWORD_RESET_BY_ADMIN", currentUserId, currentUserEmail, "/idp/users/" + userId + "/reset-password", eventData);
+        
+        log.info("Password reset by admin {} for user {} ({})", currentUserEmail, user.getEmail(), user.getId());
+        
+        return new PasswordResetResponse(
+            temporaryPassword, 
+            "Password has been reset. The user will be required to change it on next login."
+        );
+    }
+    
+    /**
+     * Generates a user-friendly temporary password in the format: Name@12345
+     * Uses the first name (first word of the name) followed by @ and a 5-digit random number.
+     * 
+     * @param name The user's full name
+     * @return A temporary password like "John@84521"
+     */
+    private String generateTemporaryPassword(String name) {
+        SecureRandom random = new SecureRandom();
+        
+        // Extract first name (first word, or use "User" as fallback)
+        String firstName = "User";
+        if (name != null && !name.trim().isEmpty()) {
+            String[] nameParts = name.trim().split("\\s+");
+            firstName = nameParts[0];
+            // Capitalize first letter, lowercase rest
+            if (firstName.length() > 0) {
+                firstName = firstName.substring(0, 1).toUpperCase() + 
+                           (firstName.length() > 1 ? firstName.substring(1).toLowerCase() : "");
+            }
+        }
+        
+        // Generate 5-digit random number (10000-99999)
+        int randomNumber = 10000 + random.nextInt(90000);
+        
+        return firstName + "@" + randomNumber;
     }
     
     /**

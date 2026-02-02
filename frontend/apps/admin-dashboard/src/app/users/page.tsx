@@ -17,7 +17,25 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Plus, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Plus, Loader2, ChevronLeft, ChevronRight, KeyRound, Copy, Check } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { apiClient } from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -59,6 +77,14 @@ export default function UsersPage() {
   const [totalPages, setTotalPages] = useState(0)
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
+  
+  // Password reset dialog state
+  const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null)
+  const [showResetConfirmDialog, setShowResetConfirmDialog] = useState(false)
+  const [showResetSuccessDialog, setShowResetSuccessDialog] = useState(false)
+  const [temporaryPassword, setTemporaryPassword] = useState('')
+  const [resettingPassword, setResettingPassword] = useState(false)
+  const [passwordCopied, setPasswordCopied] = useState(false)
   
   const isSystemAdmin = user?.role === 'SYSTEM_ADMIN'
   const isTenantAdmin = user?.role === 'TENANT_ADMIN'
@@ -185,6 +211,86 @@ export default function UsersPage() {
     }
   }
 
+  // Check if current user can reset password for a specific user
+  const canResetPassword = (targetUser: User): boolean => {
+    if (!canManageUsers) return false
+    
+    // TENANT_ADMIN can only reset passwords for university-side users
+    if (isTenantAdmin) {
+      return ['INSTRUCTOR', 'SUPPORT_STAFF', 'STUDENT'].includes(targetUser.role)
+    }
+    
+    // SYSTEM_ADMIN can reset any user's password
+    return true
+  }
+
+  // Handle reset password confirmation
+  const handleResetPasswordClick = (targetUser: User) => {
+    setResetPasswordUser(targetUser)
+    setShowResetConfirmDialog(true)
+  }
+
+  // Handle the actual password reset
+  const handleResetPassword = async () => {
+    if (!resetPasswordUser) return
+    
+    setResettingPassword(true)
+    try {
+      const response = await apiClient.post<{ temporaryPassword: string; message: string }>(
+        `/idp/users/${resetPasswordUser.id}/reset-password`
+      )
+      
+      setTemporaryPassword(response.data.temporaryPassword)
+      setShowResetConfirmDialog(false)
+      setShowResetSuccessDialog(true)
+      setPasswordCopied(false)
+      
+      toast({
+        title: 'Password reset successful',
+        description: `Password has been reset for ${resetPasswordUser.name}`,
+      })
+    } catch (err: any) {
+      console.error('Error resetting password:', err)
+      const errorMessage = extractErrorMessage(err)
+      toast({
+        variant: 'destructive',
+        title: 'Failed to reset password',
+        description: errorMessage,
+      })
+      setShowResetConfirmDialog(false)
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
+  // Handle copy password to clipboard
+  const handleCopyPassword = async () => {
+    try {
+      await navigator.clipboard.writeText(temporaryPassword)
+      setPasswordCopied(true)
+      toast({
+        title: 'Copied to clipboard',
+        description: 'Temporary password has been copied to your clipboard',
+      })
+      // Reset the copied state after 2 seconds
+      setTimeout(() => setPasswordCopied(false), 2000)
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to copy',
+        description: 'Please manually select and copy the password',
+      })
+    }
+  }
+
+  // Close success dialog and reset state
+  const handleCloseSuccessDialog = () => {
+    setShowResetSuccessDialog(false)
+    setTemporaryPassword('')
+    setResetPasswordUser(null)
+    setPasswordCopied(false)
+  }
+
   // CONTENT_MANAGER can view users (read-only), others who can't manage are redirected
   useEffect(() => {
     if (user && !canManageUsers && !isContentManager) {
@@ -302,19 +408,31 @@ export default function UsersPage() {
                           {new Date(user.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          {canManageUsers && (
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => router.push(`/users/${user.id}/edit`)}
-                              disabled={isTenantAdmin && ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER'].includes(user.role)}
-                            >
-                              Edit
-                            </Button>
-                          )}
-                          {isContentManager && (
-                            <span className="text-sm text-muted-foreground">View only</span>
-                          )}
+                          <div className="flex items-center justify-end gap-2">
+                            {canManageUsers && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => router.push(`/users/${user.id}/edit`)}
+                                disabled={isTenantAdmin && ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'CONTENT_MANAGER'].includes(user.role)}
+                              >
+                                Edit
+                              </Button>
+                            )}
+                            {canResetPassword(user) && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleResetPasswordClick(user)}
+                              >
+                                <KeyRound className="h-4 w-4 mr-1" />
+                                Reset Password
+                              </Button>
+                            )}
+                            {isContentManager && (
+                              <span className="text-sm text-muted-foreground">View only</span>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -391,6 +509,85 @@ export default function UsersPage() {
               </CardContent>
             </Card>
           )}
+
+      {/* Password Reset Confirmation Dialog */}
+      <AlertDialog open={showResetConfirmDialog} onOpenChange={setShowResetConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset Password</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reset the password for <strong>{resetPasswordUser?.name}</strong> ({resetPasswordUser?.email})?
+              <br /><br />
+              A new temporary password will be generated. The user will be required to change their password on next login.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resettingPassword}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleResetPassword}
+              disabled={resettingPassword}
+            >
+              {resettingPassword ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                'Reset Password'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Password Reset Success Dialog */}
+      <Dialog open={showResetSuccessDialog} onOpenChange={handleCloseSuccessDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Password Reset Successful</DialogTitle>
+            <DialogDescription>
+              The password for <strong>{resetPasswordUser?.name}</strong> has been reset.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-sm text-amber-800 font-medium mb-2">
+                Important: This password will only be shown once
+              </p>
+              <p className="text-sm text-amber-700">
+                Please copy and share this temporary password with the user securely. They will be required to change it on their next login.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Temporary Password</Label>
+              <div className="flex items-center gap-2">
+                <Input 
+                  value={temporaryPassword} 
+                  readOnly 
+                  className="font-mono text-lg"
+                />
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={handleCopyPassword}
+                  className="shrink-0"
+                >
+                  {passwordCopied ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCloseSuccessDialog}>
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
   )
 }
