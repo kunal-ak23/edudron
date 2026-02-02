@@ -372,6 +372,14 @@ public class ExamPaperGenerationService {
             examQuestion.setQuestionId(question.getId());
             examQuestion.setSequence(nextSequence++);
             
+            // Set points based on difficulty if scorePerDifficulty is configured
+            if (criteria.getScorePerDifficulty() != null && question.getDifficultyLevel() != null) {
+                Integer points = criteria.getScorePerDifficulty().get(question.getDifficultyLevel());
+                if (points != null) {
+                    examQuestion.setPointsOverride(points);
+                }
+            }
+            
             addedQuestions.add(examQuestionRepository.save(examQuestion));
         }
         
@@ -478,6 +486,7 @@ public class ExamPaperGenerationService {
         private QuestionBank.DifficultyLevel difficultyLevel;
         private List<QuestionBank.QuestionType> questionTypes;
         private Map<QuestionBank.DifficultyLevel, Integer> difficultyDistribution;
+        private Map<QuestionBank.DifficultyLevel, Integer> scorePerDifficulty; // Points to assign per difficulty level
         private boolean randomize = true;
         private boolean clearExisting = false;
         
@@ -495,6 +504,9 @@ public class ExamPaperGenerationService {
         
         public Map<QuestionBank.DifficultyLevel, Integer> getDifficultyDistribution() { return difficultyDistribution; }
         public void setDifficultyDistribution(Map<QuestionBank.DifficultyLevel, Integer> difficultyDistribution) { this.difficultyDistribution = difficultyDistribution; }
+        
+        public Map<QuestionBank.DifficultyLevel, Integer> getScorePerDifficulty() { return scorePerDifficulty; }
+        public void setScorePerDifficulty(Map<QuestionBank.DifficultyLevel, Integer> scorePerDifficulty) { this.scorePerDifficulty = scorePerDifficulty; }
         
         public boolean isRandomize() { return randomize; }
         public void setRandomize(boolean randomize) { this.randomize = randomize; }

@@ -60,6 +60,11 @@ export default function NewExamPage() {
     sectionId: '',
     numberOfQuestions: 10,
     difficulty: 'ANY' as DifficultyLevel,
+    // Custom difficulty distribution settings
+    useDifficultyDistribution: false,
+    difficultyDistribution: { EASY: 3, MEDIUM: 4, HARD: 3 } as Record<string, number>,
+    useScoreOverride: false,
+    scorePerDifficulty: { EASY: 1, MEDIUM: 2, HARD: 3 } as Record<string, number>,
     randomizeQuestions: false,
     randomizeMcqOptions: false,
     // Proctoring settings
@@ -322,8 +327,22 @@ export default function NewExamPage() {
         sectionIds: selectedSectionIds,
         moduleIds: formData.moduleIds,
         generationCriteria: {
-          numberOfQuestions: formData.numberOfQuestions,
-          difficultyLevel: formData.difficulty === 'ANY' ? undefined : formData.difficulty,
+          // When using custom distribution, let distribution determine total count
+          numberOfQuestions: formData.useDifficultyDistribution 
+            ? undefined 
+            : formData.numberOfQuestions,
+          // Only set single difficulty level when NOT using distribution
+          difficultyLevel: formData.useDifficultyDistribution 
+            ? undefined 
+            : (formData.difficulty === 'ANY' ? undefined : formData.difficulty),
+          // Include distribution when enabled
+          difficultyDistribution: formData.useDifficultyDistribution 
+            ? formData.difficultyDistribution 
+            : undefined,
+          // Only include score override when BOTH toggles are enabled
+          scorePerDifficulty: (formData.useDifficultyDistribution && formData.useScoreOverride)
+            ? formData.scorePerDifficulty 
+            : undefined,
           randomize: true,
           uniquePerSection: true
         },
@@ -947,38 +966,212 @@ export default function NewExamPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div>
-                  <Label>Number of Questions</Label>
-                  <Input
-                    type="number"
-                    value={formData.numberOfQuestions}
-                    onChange={(e) => setFormData(prev => ({ 
-                      ...prev, 
-                      numberOfQuestions: parseInt(e.target.value) || 10 
-                    }))}
-                    min={1}
-                    max={100}
-                  />
-                </div>
-                <div>
-                  <Label>Difficulty Level</Label>
-                  <Select 
-                    value={formData.difficulty} 
-                    onValueChange={(value: DifficultyLevel) => 
-                      setFormData(prev => ({ ...prev, difficulty: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Any difficulty" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ANY">Any Difficulty</SelectItem>
-                      <SelectItem value="EASY">Easy</SelectItem>
-                      <SelectItem value="MEDIUM">Medium</SelectItem>
-                      <SelectItem value="HARD">Hard</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Custom Distribution Toggle (Batch mode only) */}
+                {generationMode === 'batch' && (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="useDifficultyDistribution">Custom Difficulty Distribution</Label>
+                      <p className="text-sm text-gray-500">Specify exact count per difficulty level</p>
+                    </div>
+                    <Switch
+                      id="useDifficultyDistribution"
+                      checked={formData.useDifficultyDistribution}
+                      onCheckedChange={(checked) => 
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          useDifficultyDistribution: checked,
+                          // Reset score override when distribution is disabled
+                          useScoreOverride: checked ? prev.useScoreOverride : false
+                        }))
+                      }
+                    />
+                  </div>
+                )}
+
+                {/* Standard mode OR when custom distribution is OFF */}
+                {(generationMode === 'single' || !formData.useDifficultyDistribution) && (
+                  <>
+                    <div>
+                      <Label>Number of Questions</Label>
+                      <Input
+                        type="number"
+                        value={formData.numberOfQuestions}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          numberOfQuestions: parseInt(e.target.value) || 10 
+                        }))}
+                        min={1}
+                        max={100}
+                      />
+                    </div>
+                    <div>
+                      <Label>Difficulty Level</Label>
+                      <Select 
+                        value={formData.difficulty} 
+                        onValueChange={(value: DifficultyLevel) => 
+                          setFormData(prev => ({ ...prev, difficulty: value }))
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Any difficulty" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ANY">Any Difficulty</SelectItem>
+                          <SelectItem value="EASY">Easy</SelectItem>
+                          <SelectItem value="MEDIUM">Medium</SelectItem>
+                          <SelectItem value="HARD">Hard</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
+
+                {/* Custom Distribution UI (Batch mode with distribution enabled) */}
+                {generationMode === 'batch' && formData.useDifficultyDistribution && (
+                  <div className="space-y-4 pt-2 border-t">
+                    <Label className="text-sm font-medium">Questions per Difficulty</Label>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs text-green-600">Easy</Label>
+                        <Input
+                          type="number"
+                          value={formData.difficultyDistribution.EASY || 0}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            difficultyDistribution: {
+                              ...prev.difficultyDistribution,
+                              EASY: parseInt(e.target.value) || 0
+                            }
+                          }))}
+                          min={0}
+                          max={50}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-yellow-600">Medium</Label>
+                        <Input
+                          type="number"
+                          value={formData.difficultyDistribution.MEDIUM || 0}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            difficultyDistribution: {
+                              ...prev.difficultyDistribution,
+                              MEDIUM: parseInt(e.target.value) || 0
+                            }
+                          }))}
+                          min={0}
+                          max={50}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-red-600">Hard</Label>
+                        <Input
+                          type="number"
+                          value={formData.difficultyDistribution.HARD || 0}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            difficultyDistribution: {
+                              ...prev.difficultyDistribution,
+                              HARD: parseInt(e.target.value) || 0
+                            }
+                          }))}
+                          min={0}
+                          max={50}
+                        />
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      Total: {(formData.difficultyDistribution.EASY || 0) + 
+                              (formData.difficultyDistribution.MEDIUM || 0) + 
+                              (formData.difficultyDistribution.HARD || 0)} questions
+                    </div>
+
+                    {/* Score Override Toggle */}
+                    <div className="pt-3 border-t">
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="useScoreOverride"
+                          checked={formData.useScoreOverride}
+                          onCheckedChange={(checked) => 
+                            setFormData(prev => ({ ...prev, useScoreOverride: checked === true }))
+                          }
+                        />
+                        <div>
+                          <label htmlFor="useScoreOverride" className="text-sm font-medium cursor-pointer">
+                            Override default question scores
+                          </label>
+                          <p className="text-xs text-gray-500">
+                            Set custom points based on difficulty level
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Score per Difficulty (when override is enabled) */}
+                    {formData.useScoreOverride && (
+                      <div className="space-y-3 pl-6">
+                        <Label className="text-sm font-medium">Points per Difficulty</Label>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <Label className="text-xs text-green-600">Easy</Label>
+                            <Input
+                              type="number"
+                              value={formData.scorePerDifficulty.EASY || 1}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                scorePerDifficulty: {
+                                  ...prev.scorePerDifficulty,
+                                  EASY: parseInt(e.target.value) || 1
+                                }
+                              }))}
+                              min={1}
+                              max={100}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-yellow-600">Medium</Label>
+                            <Input
+                              type="number"
+                              value={formData.scorePerDifficulty.MEDIUM || 2}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                scorePerDifficulty: {
+                                  ...prev.scorePerDifficulty,
+                                  MEDIUM: parseInt(e.target.value) || 2
+                                }
+                              }))}
+                              min={1}
+                              max={100}
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-red-600">Hard</Label>
+                            <Input
+                              type="number"
+                              value={formData.scorePerDifficulty.HARD || 3}
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                scorePerDifficulty: {
+                                  ...prev.scorePerDifficulty,
+                                  HARD: parseInt(e.target.value) || 3
+                                }
+                              }))}
+                              min={1}
+                              max={100}
+                            />
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Max possible score: {
+                            ((formData.difficultyDistribution.EASY || 0) * (formData.scorePerDifficulty.EASY || 1)) +
+                            ((formData.difficultyDistribution.MEDIUM || 0) * (formData.scorePerDifficulty.MEDIUM || 2)) +
+                            ((formData.difficultyDistribution.HARD || 0) * (formData.scorePerDifficulty.HARD || 3))
+                          } points
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -987,8 +1180,14 @@ export default function NewExamPage() {
               <QuestionPreview
                 courseId={formData.courseId}
                 moduleIds={formData.moduleIds}
-                numberOfQuestions={formData.numberOfQuestions}
-                difficultyLevel={formData.difficulty === 'ANY' ? undefined : formData.difficulty}
+                numberOfQuestions={formData.useDifficultyDistribution 
+                  ? (formData.difficultyDistribution.EASY || 0) + 
+                    (formData.difficultyDistribution.MEDIUM || 0) + 
+                    (formData.difficultyDistribution.HARD || 0)
+                  : formData.numberOfQuestions}
+                difficultyLevel={formData.useDifficultyDistribution 
+                  ? undefined 
+                  : (formData.difficulty === 'ANY' ? undefined : formData.difficulty)}
               />
             )}
           </div>

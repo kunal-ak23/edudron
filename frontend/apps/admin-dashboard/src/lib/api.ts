@@ -62,6 +62,7 @@ export interface BatchExamGenerationRequest {
     numberOfQuestions?: number
     difficultyLevel?: 'EASY' | 'MEDIUM' | 'HARD'
     difficultyDistribution?: Record<string, number>
+    scorePerDifficulty?: Record<string, number>  // Points to assign per difficulty level (overrides question defaults)
     questionTypes?: string[]
     randomize?: boolean
     uniquePerSection?: boolean

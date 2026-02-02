@@ -64,6 +64,7 @@ public class BatchExamGenerationRequest {
         private Integer numberOfQuestions = 10;
         private String difficultyLevel; // EASY, MEDIUM, HARD or null for any
         private Map<String, Integer> difficultyDistribution; // e.g., {"EASY": 3, "MEDIUM": 5, "HARD": 2}
+        private Map<String, Integer> scorePerDifficulty; // e.g., {"EASY": 1, "MEDIUM": 2, "HARD": 3} - overrides question default points
         private List<String> questionTypes; // MULTIPLE_CHOICE, TRUE_FALSE, SHORT_ANSWER, ESSAY, MATCHING
         private boolean randomize = true;
         private boolean uniquePerSection = true; // Different question selection per section
@@ -76,6 +77,9 @@ public class BatchExamGenerationRequest {
         
         public Map<String, Integer> getDifficultyDistribution() { return difficultyDistribution; }
         public void setDifficultyDistribution(Map<String, Integer> difficultyDistribution) { this.difficultyDistribution = difficultyDistribution; }
+        
+        public Map<String, Integer> getScorePerDifficulty() { return scorePerDifficulty; }
+        public void setScorePerDifficulty(Map<String, Integer> scorePerDifficulty) { this.scorePerDifficulty = scorePerDifficulty; }
         
         public List<String> getQuestionTypes() { return questionTypes; }
         public void setQuestionTypes(List<String> questionTypes) { this.questionTypes = questionTypes; }
