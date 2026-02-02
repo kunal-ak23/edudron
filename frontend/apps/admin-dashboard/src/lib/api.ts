@@ -80,6 +80,8 @@ export interface BatchExamGenerationRequest {
     blockTabSwitch?: boolean
     maxTabSwitchesAllowed?: number
     timingMode?: 'FIXED_WINDOW' | 'FLEXIBLE_START'
+    startTime?: string  // ISO 8601 format for FIXED_WINDOW mode
+    endTime?: string    // ISO 8601 format for FIXED_WINDOW mode
   }
 }
 

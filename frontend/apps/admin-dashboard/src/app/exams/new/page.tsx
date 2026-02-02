@@ -73,7 +73,10 @@ export default function NewExamPage() {
     // Timing mode
     timingMode: 'FIXED_WINDOW' as 'FIXED_WINDOW' | 'FLEXIBLE_START',
     // Duration (in minutes for UI, converted to seconds for API)
-    durationMinutes: 60
+    durationMinutes: 60,
+    // Start and end times for FIXED_WINDOW mode (batch generation)
+    startTime: '',
+    endTime: ''
   })
 
   useEffect(() => {
@@ -287,6 +290,26 @@ export default function NewExamPage() {
       return
     }
 
+    // Validate start/end times for FIXED_WINDOW mode
+    if (formData.timingMode === 'FIXED_WINDOW') {
+      if (!formData.startTime || !formData.endTime) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please set start and end times for Fixed Window mode',
+          variant: 'destructive'
+        })
+        return
+      }
+      if (new Date(formData.endTime) <= new Date(formData.startTime)) {
+        toast({
+          title: 'Validation Error',
+          description: 'End time must be after start time',
+          variant: 'destructive'
+        })
+        return
+      }
+    }
+
     setGenerating(true)
     setBatchResult(null)
     
@@ -316,7 +339,9 @@ export default function NewExamPage() {
           blockTabSwitch: formData.blockTabSwitch,
           maxTabSwitchesAllowed: formData.maxTabSwitchesAllowed,
           timingMode: formData.timingMode,
-          timeLimitSeconds: formData.durationMinutes * 60
+          timeLimitSeconds: formData.timingMode === 'FLEXIBLE_START' ? formData.durationMinutes * 60 : undefined,
+          startTime: formData.timingMode === 'FIXED_WINDOW' && formData.startTime ? new Date(formData.startTime).toISOString() : undefined,
+          endTime: formData.timingMode === 'FIXED_WINDOW' && formData.endTime ? new Date(formData.endTime).toISOString() : undefined
         }
       }
 
@@ -603,6 +628,40 @@ export default function NewExamPage() {
                     />
                     <p className="text-sm text-muted-foreground mt-1">
                       Each student gets this many minutes from when they start.
+                    </p>
+                  </div>
+                ) : generationMode === 'batch' ? (
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="startTime">
+                        Start Time <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="startTime"
+                        type="datetime-local"
+                        value={formData.startTime}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          startTime: e.target.value 
+                        }))}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="endTime">
+                        End Time <span className="text-red-500">*</span>
+                      </Label>
+                      <Input
+                        id="endTime"
+                        type="datetime-local"
+                        value={formData.endTime}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          endTime: e.target.value 
+                        }))}
+                      />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      All exams will share the same start and end time window.
                     </p>
                   </div>
                 ) : (

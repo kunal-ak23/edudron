@@ -2,6 +2,7 @@ package com.datagami.edudron.content.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -108,6 +109,10 @@ public class BatchExamGenerationRequest {
         // Timing mode: FIXED_WINDOW (exam ends at endTime for all) or FLEXIBLE_START (each student gets full duration)
         private String timingMode = "FIXED_WINDOW";
         
+        // Start and end times for FIXED_WINDOW mode
+        private OffsetDateTime startTime;
+        private OffsetDateTime endTime;
+        
         public String getReviewMethod() { return reviewMethod; }
         public void setReviewMethod(String reviewMethod) { this.reviewMethod = reviewMethod; }
         
@@ -146,5 +151,11 @@ public class BatchExamGenerationRequest {
         
         public String getTimingMode() { return timingMode; }
         public void setTimingMode(String timingMode) { this.timingMode = timingMode; }
+        
+        public OffsetDateTime getStartTime() { return startTime; }
+        public void setStartTime(OffsetDateTime startTime) { this.startTime = startTime; }
+        
+        public OffsetDateTime getEndTime() { return endTime; }
+        public void setEndTime(OffsetDateTime endTime) { this.endTime = endTime; }
     }
 }

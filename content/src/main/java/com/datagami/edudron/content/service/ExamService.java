@@ -907,6 +907,14 @@ public class ExamService {
             exam.setBlockTabSwitch(settings.isBlockTabSwitch());
             exam.setMaxTabSwitchesAllowed(settings.getMaxTabSwitchesAllowed() != null ? settings.getMaxTabSwitchesAllowed() : 3);
             exam.setTimingMode(parseTimingMode(settings.getTimingMode()));
+            
+            // Set start and end times for FIXED_WINDOW mode
+            if (settings.getStartTime() != null) {
+                exam.setStartTime(settings.getStartTime());
+            }
+            if (settings.getEndTime() != null) {
+                exam.setEndTime(settings.getEndTime());
+            }
         } else {
             exam.setReviewMethod(Assessment.ReviewMethod.INSTRUCTOR);
             exam.setTimingMode(Assessment.TimingMode.FIXED_WINDOW);
