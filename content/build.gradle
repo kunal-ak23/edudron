@@ -16,6 +16,9 @@ dependencies {
 	// PDF generation (OpenPDF)
 	implementation 'com.github.librepdf:openpdf:3.0.0'
 
+	// Jackson Java 8 date/time (OffsetDateTime, etc.) for JSON serialization
+	implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
 	// JWT
 	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
