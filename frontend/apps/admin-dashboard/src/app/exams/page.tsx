@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
@@ -40,6 +40,12 @@ interface PagedResponse {
   statusCounts: Record<string, number>
 }
 
+interface InstructorAccess {
+  allowedClassIds: string[]
+  allowedSectionIds: string[]
+  allowedCourseIds: string[]
+}
+
 const ITEMS_PER_PAGE = 10
 
 export const dynamic = 'force-dynamic'
@@ -71,6 +77,9 @@ export default function ExamsPage() {
   const isSupportStaff = user?.role === 'SUPPORT_STAFF'
   const canManageExams = !isInstructor && !isSupportStaff
 
+  // Prevent duplicate loadExams calls (e.g. React Strict Mode double-mount or rapid deps change)
+  const loadInProgressRef = useRef(false)
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -93,9 +102,20 @@ export default function ExamsPage() {
   }, [debouncedSearch, statusFilter, timingModeFilter, currentPage, router])
 
   const loadExams = useCallback(async () => {
+    if (loadInProgressRef.current) return
+    loadInProgressRef.current = true
     try {
       setLoading(true)
-      
+
+      // For instructors/support staff, fetch instructor access first (same pattern as courses page)
+      if ((isInstructor || isSupportStaff) && user?.id) {
+        try {
+          await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
+        } catch (err) {
+          console.error('Failed to load instructor access:', err)
+        }
+      }
+
       // Build query params for backend
       const params = new URLSearchParams()
       params.set('paged', 'true')
@@ -104,12 +124,12 @@ export default function ExamsPage() {
       if (statusFilter !== 'all') params.set('status', statusFilter)
       if (timingModeFilter !== 'all') params.set('timingMode', timingModeFilter)
       if (debouncedSearch) params.set('search', debouncedSearch)
-      
+
       const response = await apiClient.get<PagedResponse>(`/api/exams?${params.toString()}`)
-      
+
       // ApiClient wraps response in { data: ... }, so access response.data
       const pagedData = (response as any).data || response
-      
+
       if (pagedData && typeof pagedData === 'object' && 'content' in pagedData) {
         setExams(pagedData.content || [])
         setTotalElements(pagedData.totalElements || 0)
@@ -132,12 +152,18 @@ export default function ExamsPage() {
       setExams([])
     } finally {
       setLoading(false)
+      loadInProgressRef.current = false
     }
-  }, [currentPage, statusFilter, timingModeFilter, debouncedSearch, toast])
+  }, [currentPage, statusFilter, timingModeFilter, debouncedSearch, toast, isInstructor, isSupportStaff, user?.id])
+
+  // For instructors/support staff, wait for user.id before loading (same pattern as courses page)
+  const userReady = user !== undefined && ((!isInstructor && !isSupportStaff) || !!user?.id)
 
   useEffect(() => {
-    loadExams()
-  }, [loadExams])
+    if (userReady) {
+      loadExams()
+    }
+  }, [userReady, loadExams])
 
   // Reset page when filters change (except search which is handled separately)
   useEffect(() => {

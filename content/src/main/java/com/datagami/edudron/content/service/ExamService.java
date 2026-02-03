@@ -1,5 +1,6 @@
 package com.datagami.edudron.content.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.common.UlidGenerator;
@@ -8,6 +9,7 @@ import com.datagami.edudron.content.domain.ExamQuestion;
 import com.datagami.edudron.content.domain.QuestionBank;
 import com.datagami.edudron.content.dto.BatchExamGenerationRequest;
 import com.datagami.edudron.content.dto.BatchExamGenerationResponse;
+import com.datagami.edudron.content.dto.InstructorAccessResponse;
 import com.datagami.edudron.content.repo.AssessmentRepository;
 import com.datagami.edudron.content.repo.CourseRepository;
 import org.slf4j.Logger;
@@ -349,9 +351,9 @@ public class ExamService {
             return exams; // No access or no allowed IDs -> return all (non-instructor path)
         }
         
-        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
-        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
-        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        java.util.Set<String> allowedCourseIds = getEffectiveAllowedCourseIds(instructorAccess);
+        java.util.Set<String> allowedClassIds = getEffectiveAllowedClassIds(instructorAccess);
+        java.util.Set<String> allowedSectionIds = getEffectiveAllowedSectionIds(instructorAccess);
         boolean sectionOnlyAccess = getBooleanFromAccess(instructorAccess, "sectionOnlyAccess", false);
         
         boolean allEmpty = allowedCourseIds.isEmpty() && allowedClassIds.isEmpty() && allowedSectionIds.isEmpty();
@@ -445,13 +447,54 @@ public class ExamService {
     }
     
     /**
-     * True if the instructor access map has at least one non-empty allowed* set.
+     * True if the instructor access map has at least one non-empty allowed* set
+     * (or effective sets from direct/derived/inherited when allowed* are empty).
      */
     private boolean hasAnyAllowedIds(Map<String, Object> instructorAccess) {
         if (instructorAccess == null) return false;
-        return !getSetFromAccess(instructorAccess, "allowedCourseIds").isEmpty()
-            || !getSetFromAccess(instructorAccess, "allowedClassIds").isEmpty()
-            || !getSetFromAccess(instructorAccess, "allowedSectionIds").isEmpty();
+        return !getEffectiveAllowedCourseIds(instructorAccess).isEmpty()
+            || !getEffectiveAllowedClassIds(instructorAccess).isEmpty()
+            || !getEffectiveAllowedSectionIds(instructorAccess).isEmpty();
+    }
+    
+    /**
+     * Effective allowed course IDs: allowedCourseIds, or union of directCourseIds + derivedCourseIds when empty.
+     * Handles case where student service returns empty allowed* but populated direct/derived.
+     */
+    private java.util.Set<String> getEffectiveAllowedCourseIds(Map<String, Object> access) {
+        java.util.Set<String> allowed = getSetFromAccess(access, "allowedCourseIds");
+        if (!allowed.isEmpty()) return allowed;
+        java.util.Set<String> direct = getSetFromAccess(access, "directCourseIds");
+        java.util.Set<String> derived = getSetFromAccess(access, "derivedCourseIds");
+        java.util.Set<String> union = new java.util.HashSet<>(direct);
+        union.addAll(derived);
+        return union;
+    }
+    
+    /**
+     * Effective allowed class IDs: allowedClassIds, or union of directClassIds + inheritedClassIds when empty.
+     */
+    private java.util.Set<String> getEffectiveAllowedClassIds(Map<String, Object> access) {
+        java.util.Set<String> allowed = getSetFromAccess(access, "allowedClassIds");
+        if (!allowed.isEmpty()) return allowed;
+        java.util.Set<String> direct = getSetFromAccess(access, "directClassIds");
+        java.util.Set<String> inherited = getSetFromAccess(access, "inheritedClassIds");
+        java.util.Set<String> union = new java.util.HashSet<>(direct);
+        union.addAll(inherited);
+        return union;
+    }
+    
+    /**
+     * Effective allowed section IDs: allowedSectionIds, or union of directSectionIds + inheritedSectionIds when empty.
+     */
+    private java.util.Set<String> getEffectiveAllowedSectionIds(Map<String, Object> access) {
+        java.util.Set<String> allowed = getSetFromAccess(access, "allowedSectionIds");
+        if (!allowed.isEmpty()) return allowed;
+        java.util.Set<String> direct = getSetFromAccess(access, "directSectionIds");
+        java.util.Set<String> inherited = getSetFromAccess(access, "inheritedSectionIds");
+        java.util.Set<String> union = new java.util.HashSet<>(direct);
+        union.addAll(inherited);
+        return union;
     }
     
     /**
@@ -467,9 +510,9 @@ public class ExamService {
             return Page.empty();
         }
         
-        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
-        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
-        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        java.util.Set<String> allowedCourseIds = getEffectiveAllowedCourseIds(instructorAccess);
+        java.util.Set<String> allowedClassIds = getEffectiveAllowedClassIds(instructorAccess);
+        java.util.Set<String> allowedSectionIds = getEffectiveAllowedSectionIds(instructorAccess);
         boolean sectionOnlyAccess = getBooleanFromAccess(instructorAccess, "sectionOnlyAccess", false);
         
         boolean allEmpty = allowedCourseIds.isEmpty() && allowedClassIds.isEmpty() && allowedSectionIds.isEmpty();
@@ -590,9 +633,9 @@ public class ExamService {
             return counts;
         }
         
-        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
-        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
-        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        java.util.Set<String> allowedCourseIds = getEffectiveAllowedCourseIds(instructorAccess);
+        java.util.Set<String> allowedClassIds = getEffectiveAllowedClassIds(instructorAccess);
+        java.util.Set<String> allowedSectionIds = getEffectiveAllowedSectionIds(instructorAccess);
         boolean sectionOnlyAccess = getBooleanFromAccess(instructorAccess, "sectionOnlyAccess", false);
         
         logger.info("Instructor exam counts: allowedCourseIds={}, allowedClassIds={}, allowedSectionIds={}, sectionOnlyAccess={}",
@@ -1282,61 +1325,70 @@ public class ExamService {
     }
     
     /**
-     * Get instructor access for the current user from student service (GET /me/access).
-     * Uses JWT so student service resolves the user; avoids userId format mismatch.
+     * Get instructor access for the current user from student service.
+     * Resolves current user ID via identity (/idp/users/me) then calls
+     * GET /api/instructor-assignments/instructor/{userId}/access so we do not rely on
+     * the student service resolving the user from JWT on server-to-server calls.
      * Returns null if unable to determine access.
      */
     private Map<String, Object> getCurrentUserInstructorAccess() {
-        String accessUrl = gatewayUrl + "/api/instructor-assignments/me/access";
-        try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<?> entity = new HttpEntity<>(headers);
-            
-            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
-                accessUrl,
-                HttpMethod.GET,
-                entity,
-                new ParameterizedTypeReference<Map<String, Object>>() {}
-            );
-            
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                Map<String, Object> body = response.getBody();
-                logger.info("Instructor access OK: GET {} -> {}. Response keys: {}. allowedCourseIds size: {}, allowedClassIds size: {}, allowedSectionIds size: {}",
-                    accessUrl, response.getStatusCode(), body.keySet(),
-                    listSize(body.get("allowedCourseIds")), listSize(body.get("allowedClassIds")), listSize(body.get("allowedSectionIds")));
-                return body;
-            }
-            logger.warn("Instructor access failed: GET {} -> {} (body null: {})", 
-                accessUrl, response.getStatusCode(), response.getBody() == null);
-        } catch (Exception e) {
-            logger.warn("Instructor access error: GET {} -> {} (check gateway route and JWT forwarding)", 
-                accessUrl, e.getMessage(), e);
+        String userId = getCurrentUserId();
+        if (userId == null || userId.isBlank()) {
+            logger.debug("Instructor access: no current user ID (anonymous or /me failed)");
+            return null;
         }
-        return null;
+        Map<String, Object> access = getInstructorAccess(userId);
+        if (access != null) {
+            logger.info("Instructor access OK: userId={}. allowedCourseIds size: {}, allowedClassIds size: {}, allowedSectionIds size: {}",
+                userId, listSize(access.get("allowedCourseIds")), listSize(access.get("allowedClassIds")), listSize(access.get("allowedSectionIds")));
+        }
+        return access;
     }
     
     /**
      * Get instructor access by instructor user ID (for callers that have the ID).
+     * Uses typed DTO so Jackson deserializes JSON arrays as List&lt;String&gt; (avoids
+     * Map&lt;String, Object&gt; type ambiguity that can yield size 0). Forwards X-Client-Id
+     * and Authorization so the student service sees the same tenant and auth as the browser.
      * Returns null if unable to determine access.
      */
-    @SuppressWarnings("unchecked")
     private Map<String, Object> getInstructorAccess(String instructorUserId) {
         try {
             String accessUrl = gatewayUrl + "/api/instructor-assignments/instructor/" + instructorUserId + "/access";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            String clientId = TenantContext.getClientId();
+            if (clientId != null && !clientId.isBlank()) {
+                headers.set("X-Client-Id", clientId);
+            }
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                String authHeader = request != null ? request.getHeader("Authorization") : null;
+                if (authHeader != null && !authHeader.isBlank()) {
+                    headers.set("Authorization", authHeader);
+                }
+            }
             HttpEntity<?> entity = new HttpEntity<>(headers);
-            
-            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+
+            ResponseEntity<InstructorAccessResponse> response = getRestTemplate().exchange(
                 accessUrl,
                 HttpMethod.GET,
                 entity,
-                new ParameterizedTypeReference<Map<String, Object>>() {}
+                InstructorAccessResponse.class
             );
-            
+
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody();
+                InstructorAccessResponse dto = response.getBody();
+                Map<String, Object> body = dto.toMap();
+                logger.info("Instructor access response (content service): url={}, instructorUserId={}, allowedCourseIds size={}, allowedClassIds size={}, allowedSectionIds size={}, sectionOnlyAccess={}",
+                        accessUrl,
+                        dto.getInstructorUserId(),
+                        dto.getAllowedCourseIds().size(),
+                        dto.getAllowedClassIds().size(),
+                        dto.getAllowedSectionIds().size(),
+                        dto.isSectionOnlyAccess());
+                return body;
             }
         } catch (Exception e) {
             logger.debug("Could not get instructor access for user {}: {}", instructorUserId, e.getMessage());
@@ -1345,12 +1397,18 @@ public class ExamService {
     }
     
     /**
-     * Return size of a list/collection for logging (0 if null or not a list).
+     * Return size of a list/collection/array for logging (0 if null or not a list/array).
+     * Handles List, Collection, Object[], and Jackson JsonNode (ArrayNode).
      */
     private static int listSize(Object value) {
         if (value == null) return 0;
         if (value instanceof List) return ((List<?>) value).size();
         if (value instanceof java.util.Collection) return ((java.util.Collection<?>) value).size();
+        if (value.getClass().isArray()) return java.lang.reflect.Array.getLength(value);
+        if (value instanceof JsonNode) {
+            JsonNode node = (JsonNode) value;
+            return node.isArray() ? node.size() : 0;
+        }
         return 0;
     }
     
@@ -1377,8 +1435,8 @@ public class ExamService {
     
     /**
      * Helper method to extract a Set of normalized strings from instructor access response.
-     * Handles List/Set and converts elements to String (handles Number, UUID, etc. from JSON).
-     * Tries exact key first, then case-insensitive match (e.g. allowedCourseIds vs allowed_course_ids).
+     * Handles List/Set/array and converts elements to String (handles Number, UUID, etc. from JSON).
+     * Tries exact key first, then case-insensitive match. Handles JSON arrays deserialized as Object[].
      */
     @SuppressWarnings("unchecked")
     private java.util.Set<String> getSetFromAccess(Map<String, Object> access, String key) {
@@ -1409,16 +1467,41 @@ public class ExamService {
                     result.add(normalizeId(id));
                 }
             }
+        } else if (value != null && value.getClass().isArray()) {
+            int len = java.lang.reflect.Array.getLength(value);
+            for (int i = 0; i < len; i++) {
+                Object item = java.lang.reflect.Array.get(value, i);
+                String id = idFromJsonElement(item);
+                if (id != null) {
+                    result.add(normalizeId(id));
+                }
+            }
+        } else if (value instanceof JsonNode) {
+            JsonNode node = (JsonNode) value;
+            if (node.isArray()) {
+                for (JsonNode child : node) {
+                    String id = idFromJsonElement(child);
+                    if (id != null) {
+                        result.add(normalizeId(id));
+                    }
+                }
+            }
         }
         return result;
     }
-    
+
     private static String idFromJsonElement(Object item) {
         if (item == null) {
             return null;
         }
         if (item instanceof String) {
             return (String) item;
+        }
+        if (item instanceof JsonNode) {
+            JsonNode node = (JsonNode) item;
+            if (node.isTextual()) return node.asText();
+            if (node.isNull()) return null;
+            return node.asText();
         }
         if (item instanceof java.util.Map) {
             Object id = ((java.util.Map<?, ?>) item).get("id");
@@ -1481,9 +1564,9 @@ public class ExamService {
             return false;
         }
         
-        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
-        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
-        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        java.util.Set<String> allowedCourseIds = getEffectiveAllowedCourseIds(instructorAccess);
+        java.util.Set<String> allowedClassIds = getEffectiveAllowedClassIds(instructorAccess);
+        java.util.Set<String> allowedSectionIds = getEffectiveAllowedSectionIds(instructorAccess);
         boolean sectionOnlyAccess = getBooleanFromAccess(instructorAccess, "sectionOnlyAccess", false);
         
         return canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds, sectionOnlyAccess);

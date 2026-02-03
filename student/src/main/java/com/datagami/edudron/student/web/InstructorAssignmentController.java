@@ -7,7 +7,10 @@ import com.datagami.edudron.student.service.InstructorAssignmentService;
 import com.datagami.edudron.student.util.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +23,8 @@ import java.util.Set;
 @RequestMapping("/api/instructor-assignments")
 @Tag(name = "Instructor Assignments", description = "Manage instructor assignments to classes, sections, and courses")
 public class InstructorAssignmentController {
+
+    private static final Logger log = LoggerFactory.getLogger(InstructorAssignmentController.class);
 
     @Autowired
     private InstructorAssignmentService assignmentService;
@@ -69,8 +74,23 @@ public class InstructorAssignmentController {
     @Operation(summary = "Get instructor access scope", 
                description = "Get the derived access scope for a specific instructor (admin only)")
     public ResponseEntity<InstructorAccessDTO> getInstructorAccess(
-            @PathVariable String instructorId) {
+            @PathVariable String instructorId,
+            HttpServletRequest request) {
+        boolean hasXClientId = request.getHeader("X-Client-Id") != null && !request.getHeader("X-Client-Id").isBlank();
+        boolean hasAuth = request.getHeader("Authorization") != null && !request.getHeader("Authorization").isBlank();
+        log.info("Instructor access request: instructorId={}, hasX-Client-Id={}, hasAuthorization={}",
+                instructorId, hasXClientId, hasAuth);
+
         InstructorAccessDTO access = assignmentService.getInstructorAccess(instructorId);
+
+        int courseCount = access != null && access.getAllowedCourseIds() != null ? access.getAllowedCourseIds().size() : 0;
+        int classCount = access != null && access.getAllowedClassIds() != null ? access.getAllowedClassIds().size() : 0;
+        int sectionCount = access != null && access.getAllowedSectionIds() != null ? access.getAllowedSectionIds().size() : 0;
+        log.info("Instructor access response: instructorUserId={}, allowedCourseIds={}, allowedClassIds={}, allowedSectionIds={}, sectionOnlyAccess={}",
+                access != null ? access.getInstructorUserId() : null,
+                courseCount, classCount, sectionCount,
+                access != null ? access.isSectionOnlyAccess() : null);
+
         return ResponseEntity.ok(access);
     }
 
