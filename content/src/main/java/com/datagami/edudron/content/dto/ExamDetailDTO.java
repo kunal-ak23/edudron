@@ -57,6 +57,9 @@ public class ExamDetailDTO {
     private String timingMode;
     private Boolean archived;
     
+    /** True if every question is MULTIPLE_CHOICE or TRUE_FALSE (auto-gradable). Enables bulk-grade-mcq. */
+    private Boolean isMcqOnly;
+    
     // Unified questions list
     private List<QuestionDTO> questions = new ArrayList<>();
     
@@ -133,6 +136,10 @@ public class ExamDetailDTO {
             int seqB = b.getSequence() != null ? b.getSequence() : 0;
             return Integer.compare(seqA, seqB);
         });
+        
+        // MCQ-only: every question is MULTIPLE_CHOICE or TRUE_FALSE (auto-gradable)
+        dto.isMcqOnly = dto.questions.isEmpty() ? false : dto.questions.stream()
+            .allMatch(q -> "MULTIPLE_CHOICE".equals(q.getQuestionType()) || "TRUE_FALSE".equals(q.getQuestionType()));
         
         return dto;
     }
@@ -392,6 +399,9 @@ public class ExamDetailDTO {
     
     public Boolean getArchived() { return archived; }
     public void setArchived(Boolean archived) { this.archived = archived; }
+    
+    public Boolean getIsMcqOnly() { return isMcqOnly; }
+    public void setIsMcqOnly(Boolean isMcqOnly) { this.isMcqOnly = isMcqOnly; }
     
     public List<QuestionDTO> getQuestions() { return questions; }
     public void setQuestions(List<QuestionDTO> questions) { this.questions = questions; }

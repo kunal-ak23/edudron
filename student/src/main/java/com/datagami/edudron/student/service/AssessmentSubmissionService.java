@@ -5,6 +5,8 @@ import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.student.domain.AssessmentSubmission;
 import com.datagami.edudron.student.domain.Enrollment;
 import com.datagami.edudron.student.dto.AssessmentSubmissionDTO;
+import com.datagami.edudron.student.dto.BulkGradeRequest;
+import com.datagami.edudron.student.dto.BulkGradeResponse;
 import com.datagami.edudron.student.dto.SubmitAssessmentRequest;
 import com.datagami.edudron.student.repo.AssessmentSubmissionRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
@@ -16,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -182,6 +186,75 @@ public class AssessmentSubmissionService {
         
         Page<AssessmentSubmission> submissions = submissionRepository.findByClientIdAndAssessmentId(clientId, assessmentId, pageable);
         return submissions.map(this::toDTO);
+    }
+    
+    /**
+     * Bulk grade submissions for an assessment. Validates tenant and that each submission
+     * belongs to the given assessmentId and client; updates score, maxScore, percentage,
+     * isPassed, aiReviewFeedback, reviewStatus, gradedAt. Returns graded count and per-item errors.
+     */
+    public BulkGradeResponse bulkGradeSubmissions(String assessmentId, List<BulkGradeRequest.BulkGradeItem> grades) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        
+        if (grades == null || grades.isEmpty()) {
+            return new BulkGradeResponse(0, new ArrayList<>());
+        }
+        
+        List<AssessmentSubmission> toSave = new ArrayList<>();
+        List<BulkGradeResponse.BulkGradeError> errors = new ArrayList<>();
+        
+        for (BulkGradeRequest.BulkGradeItem item : grades) {
+            if (item.getSubmissionId() == null || item.getSubmissionId().isBlank()) {
+                errors.add(new BulkGradeResponse.BulkGradeError(null, "Missing submissionId"));
+                continue;
+            }
+            Optional<AssessmentSubmission> opt = submissionRepository.findById(item.getSubmissionId());
+            if (opt.isEmpty()) {
+                errors.add(new BulkGradeResponse.BulkGradeError(item.getSubmissionId(), "Submission not found"));
+                continue;
+            }
+            AssessmentSubmission submission = opt.get();
+            if (!submission.getClientId().equals(clientId)) {
+                errors.add(new BulkGradeResponse.BulkGradeError(item.getSubmissionId(), "Submission not found"));
+                continue;
+            }
+            if (!assessmentId.equals(submission.getAssessmentId())) {
+                errors.add(new BulkGradeResponse.BulkGradeError(item.getSubmissionId(), "Submission does not belong to this assessment"));
+                continue;
+            }
+            
+            if (item.getScore() != null) submission.setScore(item.getScore());
+            if (item.getMaxScore() != null) submission.setMaxScore(item.getMaxScore());
+            if (item.getPercentage() != null) {
+                submission.setPercentage(item.getPercentage());
+            } else if (item.getMaxScore() != null && item.getMaxScore().compareTo(BigDecimal.ZERO) > 0 && item.getScore() != null) {
+                submission.setPercentage(item.getScore().divide(item.getMaxScore(), 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)));
+            }
+            if (item.getIsPassed() != null) submission.setIsPassed(item.getIsPassed());
+            else if (submission.getPercentage() != null) {
+                submission.setIsPassed(submission.getPercentage().compareTo(BigDecimal.valueOf(60)) >= 0);
+            }
+            if (item.getAiReviewFeedback() != null) {
+                submission.setAiReviewFeedback(item.getAiReviewFeedback());
+            }
+            if (item.getReviewStatus() != null) {
+                try {
+                    submission.setReviewStatus(AssessmentSubmission.ReviewStatus.valueOf(item.getReviewStatus()));
+                } catch (IllegalArgumentException ignored) { }
+            }
+            submission.setGradedAt(java.time.OffsetDateTime.now());
+            toSave.add(submission);
+        }
+        
+        if (!toSave.isEmpty()) {
+            submissionRepository.saveAll(toSave);
+        }
+        
+        return new BulkGradeResponse(toSave.size(), errors);
     }
     
     private AssessmentSubmissionDTO toDTO(AssessmentSubmission submission) {

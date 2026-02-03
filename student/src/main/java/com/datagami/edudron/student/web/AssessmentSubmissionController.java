@@ -1,6 +1,8 @@
 package com.datagami.edudron.student.web;
 
 import com.datagami.edudron.student.dto.AssessmentSubmissionDTO;
+import com.datagami.edudron.student.dto.BulkGradeRequest;
+import com.datagami.edudron.student.dto.BulkGradeResponse;
 import com.datagami.edudron.student.dto.SubmitAssessmentRequest;
 import com.datagami.edudron.student.service.AssessmentSubmissionService;
 import com.datagami.edudron.student.util.UserUtil;
@@ -66,6 +68,18 @@ public class AssessmentSubmissionController {
     public ResponseEntity<List<AssessmentSubmissionDTO>> getSubmissionsByAssessment(@PathVariable String assessmentId) {
         List<AssessmentSubmissionDTO> submissions = submissionService.getSubmissionsByAssessmentId(assessmentId);
         return ResponseEntity.ok(submissions);
+    }
+    
+    @PostMapping("/assessments/{assessmentId}/submissions/bulk-grade")
+    @Operation(summary = "Bulk grade submissions", description = "Grade multiple submissions for an assessment (instructor/admin only)")
+    public ResponseEntity<BulkGradeResponse> bulkGrade(
+            @PathVariable String assessmentId,
+            @RequestBody BulkGradeRequest request) {
+        if (request == null || request.getGrades() == null) {
+            return ResponseEntity.badRequest().body(new BulkGradeResponse(0, java.util.Collections.emptyList()));
+        }
+        BulkGradeResponse response = submissionService.bulkGradeSubmissions(assessmentId, request.getGrades());
+        return ResponseEntity.ok(response);
     }
     
     @PostMapping("/assessments/submissions/{submissionId}/grade")
