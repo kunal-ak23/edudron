@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { ExamTimer } from '@/components/ExamTimer'
 import { StudentLayout } from '@/components/StudentLayout'
-import { Loader2, Save, CheckCircle, AlertTriangle, Eye } from 'lucide-react'
+import { Loader2, Save, CheckCircle, AlertTriangle, Eye, Clock, ArrowLeft } from 'lucide-react'
 import { apiClient } from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import { ProctoringSetupDialog } from '@/components/exams/ProctoringSetupDialog'
@@ -1093,28 +1093,59 @@ export default function TakeExamPage() {
   // Exam not available for take (not begun or ended) – show message only, no questions
   if (exam.availableForTake === false || (exam.availabilityMessage && (!exam.questions || exam.questions.length === 0))) {
     const message = exam.availabilityMessage || 'Exam is not available.'
-    const startTime = exam.startTime ? new Date(exam.startTime).toLocaleString() : null
-    const endTime = exam.endTime ? new Date(exam.endTime).toLocaleString() : null
+    const formatSchedule = (dateStr: string) => {
+      const d = new Date(dateStr)
+      const date = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+      const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true })
+      return { date, time }
+    }
+    const startSchedule = exam.startTime ? formatSchedule(exam.startTime) : null
+    const endSchedule = exam.endTime ? formatSchedule(exam.endTime) : null
     return (
       <ProtectedRoute>
         <StudentLayout>
-          <div className="max-w-2xl mx-auto py-12 px-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{exam.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3 text-amber-600">
-                  <AlertTriangle className="h-6 w-6 flex-shrink-0" />
-                  <p className="font-medium">{message}</p>
+          <div className="max-w-lg mx-auto py-16 px-4">
+            <Card className="overflow-hidden border border-gray-200/80 shadow-lg shadow-gray-200/50">
+              <div className="bg-amber-50 border-b border-amber-200/60 px-6 py-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold text-gray-900">{exam.title}</h1>
+                    <p className="mt-1 text-base font-medium text-amber-800">{message}</p>
+                  </div>
                 </div>
-                {(startTime || endTime) && (
-                  <div className="text-sm text-gray-600">
-                    {startTime && <p>Starts: {startTime}</p>}
-                    {endTime && <p>Ends: {endTime}</p>}
+              </div>
+              <CardContent className="px-6 py-6">
+                {(startSchedule || endSchedule) && (
+                  <div className="mb-6 rounded-lg bg-gray-50 px-4 py-3">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 mb-2">
+                      <Clock className="h-3.5 w-3.5" />
+                      Scheduled
+                    </div>
+                    <div className="grid gap-2 text-sm text-gray-700">
+                      {startSchedule && (
+                        <p>
+                          <span className="text-gray-500">Starts</span>{' '}
+                          <span className="font-medium">{startSchedule.date}</span> at {startSchedule.time}
+                        </p>
+                      )}
+                      {endSchedule && (
+                        <p>
+                          <span className="text-gray-500">Ends</span>{' '}
+                          <span className="font-medium">{endSchedule.date}</span> at {endSchedule.time}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
-                <Button variant="outline" onClick={() => router.push('/exams')}>
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/exams')}
+                  className="w-full sm:w-auto border-gray-300 bg-white font-medium hover:bg-gray-50 hover:border-gray-400"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
                   Back to Exams
                 </Button>
               </CardContent>
