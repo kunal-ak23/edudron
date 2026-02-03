@@ -55,3 +55,12 @@ server:
 jwt:
   secret: ${JWT_SECRET:mySecretKey123456789012345678901234567890}
 
+# Azure Storage Configuration (proctoring photos)
+# Use same env vars as content service (AZURE_STORAGE_*) so one storage account can serve both
+azure:
+  storage:
+    connection-string: ${AZURE_STORAGE_CONNECTION_STRING:}
+    account-name: ${AZURE_STORAGE_ACCOUNT_NAME:}
+    proctoring-container-name: ${AZURE_STORAGE_PROCTORING_CONTAINER:proctoring-photos}
+    photo-retention-days: ${AZURE_STORAGE_PHOTO_RETENTION_DAYS:90}
+

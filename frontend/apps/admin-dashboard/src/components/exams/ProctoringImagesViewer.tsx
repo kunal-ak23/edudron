@@ -29,6 +29,7 @@ function formatTimestamp(capturedAt?: string): string {
 
 export function ProctoringImagesViewer({ images }: ProctoringImagesViewerProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [imageError, setImageError] = useState(false)
 
   const goPrev = useCallback(() => {
     setCurrentIndex((i) => Math.max(0, i - 1))
@@ -46,6 +47,10 @@ export function ProctoringImagesViewer({ images }: ProctoringImagesViewerProps) 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [goPrev, goNext])
+
+  useEffect(() => {
+    setImageError(false)
+  }, [currentIndex, images])
 
   if (images.length === 0) {
     return (
@@ -72,12 +77,23 @@ export function ProctoringImagesViewer({ images }: ProctoringImagesViewerProps) 
         >
           <ChevronLeft className="h-5 w-5" />
         </Button>
-        <div className="flex-1 flex justify-center min-h-[300px] max-h-[70vh] bg-muted/30 rounded-lg overflow-hidden">
-          <img
-            src={current.url}
-            alt={current.label || `Image ${currentIndex + 1}`}
-            className="max-w-full max-h-[70vh] object-contain"
-          />
+        <div className="flex-1 flex justify-center items-center min-h-[300px] max-h-[70vh] bg-muted/30 rounded-lg overflow-hidden">
+          {imageError ? (
+            <div className="text-center text-muted-foreground p-4">
+              <p className="font-medium">Image could not be loaded</p>
+              <p className="text-sm mt-1">Check CORS on the storage account or try opening the URL in a new tab.</p>
+              <a href={current.url} target="_blank" rel="noopener noreferrer" className="text-primary text-sm underline mt-2 inline-block">
+                Open image URL
+              </a>
+            </div>
+          ) : (
+            <img
+              src={current.url}
+              alt={current.label || `Image ${currentIndex + 1}`}
+              className="max-w-full max-h-[70vh] object-contain"
+              onError={() => setImageError(true)}
+            />
+          )}
         </div>
         <Button
           variant="outline"

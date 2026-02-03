@@ -1957,16 +1957,17 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
     setProctoringReportLoading(true)
     setProctoringImages([])
     proctoringApi.getReport(examId, proctoringImagesSubmissionId)
-      .then((report) => {
+      .then((response) => {
         if (cancelled) return
+        const report = (response as any)?.data ?? response
         const images: ProctoringImageItem[] = []
-        if (report.identityVerificationPhotoUrl) {
+        if (report?.identityVerificationPhotoUrl) {
           images.push({
             url: report.identityVerificationPhotoUrl,
             label: 'Identity verification'
           })
         }
-        report.proctoringData?.photos?.forEach((p) => {
+        report?.proctoringData?.photos?.forEach((p: { url: string; capturedAt: string }) => {
           images.push({ url: p.url, capturedAt: p.capturedAt })
         })
         setProctoringImages(images)

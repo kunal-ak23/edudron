@@ -165,7 +165,7 @@ if [ -z "$APP_EXISTS" ]; then
             --output none 2>/dev/null || print_warning "Could not set Key Vault policy"
     fi
     
-    # Register secrets
+    # Register secrets (same Azure Storage refs as content - proctoring photos use same account)
     print_info "Registering Key Vault secrets..."
     az containerapp secret set \
         --name "$APP_NAME" \
@@ -180,6 +180,8 @@ if [ -z "$APP_EXISTS" ]; then
             "redis-password=keyvaultref:${KEY_VAULT_URL}/secrets/redis-password,identityref:system" \
             "jwt-secret=keyvaultref:${KEY_VAULT_URL}/secrets/jwt-secret,identityref:system" \
             "appinsights-connection-string=keyvaultref:${KEY_VAULT_URL}/secrets/appinsights-connection-string,identityref:system" \
+            "azure-storage-connection-string=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-CONNECTION-STRING,identityref:system" \
+            "azure-storage-account-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-ACCOUNT-NAME,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
     # Set environment variables
@@ -203,6 +205,9 @@ if [ -z "$APP_EXISTS" ]; then
             "REDIS_PASSWORD=secretref:redis-password" \
             "JWT_SECRET=secretref:jwt-secret" \
             "APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-connection-string" \
+            "AZURE_STORAGE_CONNECTION_STRING=secretref:azure-storage-connection-string" \
+            "AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name" \
+            "AZURE_STORAGE_PROCTORING_CONTAINER=proctoring-photos" \
         --output none
     
     print_success "Container app created successfully"
@@ -238,7 +243,7 @@ else
             --output none 2>/dev/null || print_warning "Could not set Key Vault policy"
     fi
     
-    # Register secrets (if not already registered)
+    # Register secrets (if not already registered; same Azure Storage refs as content)
     print_info "Registering Key Vault secrets..."
     az containerapp secret set \
         --name "$APP_NAME" \
@@ -253,6 +258,8 @@ else
             "redis-password=keyvaultref:${KEY_VAULT_URL}/secrets/redis-password,identityref:system" \
             "jwt-secret=keyvaultref:${KEY_VAULT_URL}/secrets/jwt-secret,identityref:system" \
             "appinsights-connection-string=keyvaultref:${KEY_VAULT_URL}/secrets/appinsights-connection-string,identityref:system" \
+            "azure-storage-connection-string=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-CONNECTION-STRING,identityref:system" \
+            "azure-storage-account-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-ACCOUNT-NAME,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
     
     # Update image and environment variables
@@ -276,6 +283,9 @@ else
             "REDIS_PASSWORD=secretref:redis-password" \
             "JWT_SECRET=secretref:jwt-secret" \
             "APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-connection-string" \
+            "AZURE_STORAGE_CONNECTION_STRING=secretref:azure-storage-connection-string" \
+            "AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name" \
+            "AZURE_STORAGE_PROCTORING_CONTAINER=proctoring-photos" \
         --output none
     
     print_success "Container app updated successfully"
