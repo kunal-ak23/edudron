@@ -7,11 +7,15 @@ import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.Enrollment;
 import com.datagami.edudron.student.domain.Institute;
 import com.datagami.edudron.student.domain.Section;
+import com.datagami.edudron.student.dto.BulkTransferEnrollmentRequest;
+import com.datagami.edudron.student.dto.BulkTransferEnrollmentResponse;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
 import com.datagami.edudron.student.dto.EnrollmentDTO;
 import com.datagami.edudron.student.dto.SectionStudentDTO;
 import com.datagami.edudron.student.dto.ClassStudentDTO;
 import com.datagami.edudron.student.dto.StudentClassSectionInfoDTO;
+import com.datagami.edudron.student.dto.TransferEnrollmentError;
+import com.datagami.edudron.student.dto.TransferEnrollmentRequest;
 import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.InstituteRepository;
@@ -69,7 +73,10 @@ public class EnrollmentService {
     
     @Autowired
     private CommonEventService eventService;
-    
+
+    @Autowired
+    private LectureViewSessionService sessionService;
+
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
     
@@ -1246,12 +1253,46 @@ public class EnrollmentService {
     }
     
     /**
+     * Fetch the first published course assigned to the given section or class (for transfer destination).
+     * Section takes precedence if both are provided. Returns null if none assigned or on error.
+     */
+    private String getFirstAssignedCourseIdForDestination(String sectionId, String classId) {
+        String url;
+        String scope;
+        if (sectionId != null && !sectionId.isBlank()) {
+            url = gatewayUrl + "/content/courses/section/" + sectionId;
+            scope = "section " + sectionId;
+        } else if (classId != null && !classId.isBlank()) {
+            url = gatewayUrl + "/content/courses/class/" + classId;
+            scope = "class " + classId;
+        } else {
+            return null;
+        }
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<CourseDTO[]> response = getRestTemplate().exchange(url, HttpMethod.GET, entity, CourseDTO[].class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null && response.getBody().length > 0) {
+                String courseId = response.getBody()[0].getId();
+                log.debug("First course assigned to {}: {}", scope, courseId);
+                return courseId;
+            }
+            log.debug("No courses assigned to {}", scope);
+            return null;
+        } catch (Exception e) {
+            log.warn("Failed to fetch courses for {}: {}", scope, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Inner class to deserialize course info from content service
      * Only includes fields needed for auto-enrollment
      */
     private static class CourseDTO {
         private String id;
-        
+
         public String getId() { return id; }
         public void setId(String id) { this.id = id; }
     }
@@ -1400,6 +1441,142 @@ public class EnrollmentService {
         public void setTotalPages(int totalPages) { this.totalPages = totalPages; }
     }
     
+    /**
+     * Transfer a single enrollment to a destination section (and optionally change course).
+     * Updates enrollment's batchId (section), classId, instituteId, and optionally courseId.
+     * Does not update Progress, LectureViewSession, or AssessmentSubmission (progress remains archived).
+     */
+    public EnrollmentDTO transferEnrollment(TransferEnrollmentRequest request) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Enrollment enrollment = enrollmentRepository.findById(request.getEnrollmentId())
+            .orElseThrow(() -> new IllegalArgumentException("Enrollment not found: " + request.getEnrollmentId()));
+
+        if (!enrollment.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Enrollment not found: " + request.getEnrollmentId());
+        }
+
+        // Placeholder enrollments should not be transferred
+        if ("__PLACEHOLDER_ASSOCIATION__".equals(enrollment.getCourseId())) {
+            throw new IllegalArgumentException("Cannot transfer placeholder enrollment");
+        }
+
+        boolean hasSection = request.getDestinationSectionId() != null && !request.getDestinationSectionId().isBlank();
+        boolean hasClass = request.getDestinationClassId() != null && !request.getDestinationClassId().isBlank();
+        if (!hasSection && !hasClass) {
+            throw new IllegalArgumentException("Either destination section or destination class is required");
+        }
+
+        Class destClass;
+        String destSectionId;
+        if (hasSection) {
+            Section destSection = sectionRepository.findByIdAndClientId(request.getDestinationSectionId(), clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Destination section not found: " + request.getDestinationSectionId()));
+            if (!Boolean.TRUE.equals(destSection.getIsActive())) {
+                throw new IllegalArgumentException("Destination section is not active: " + request.getDestinationSectionId());
+            }
+            destClass = classRepository.findByIdAndClientId(destSection.getClassId(), clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Destination class not found for section"));
+            destSectionId = request.getDestinationSectionId();
+        } else {
+            destClass = classRepository.findByIdAndClientId(request.getDestinationClassId(), clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Destination class not found: " + request.getDestinationClassId()));
+            if (!Boolean.TRUE.equals(destClass.getIsActive())) {
+                throw new IllegalArgumentException("Destination class is not active: " + request.getDestinationClassId());
+            }
+            destSectionId = null; // class-only transfer
+        }
+
+        String sourceSectionId = enrollment.getBatchId();
+        String sourceClassId = enrollment.getClassId();
+        String oldCourseId = enrollment.getCourseId();
+
+        // Set enrollment's course to the destination's course so the student gains access to the new batch/class's course and loses the old one
+        if (request.getDestinationCourseId() != null && !request.getDestinationCourseId().isBlank()) {
+            enrollment.setCourseId(request.getDestinationCourseId());
+        } else {
+            String destinationCourseId = getFirstAssignedCourseIdForDestination(destSectionId, destClass.getId());
+            if (destinationCourseId == null || destinationCourseId.isBlank()) {
+                throw new IllegalArgumentException(
+                    "Destination section/class has no course assigned. Assign a course to the destination section/class, or specify a destination course when transferring.");
+            }
+            enrollment.setCourseId(destinationCourseId);
+        }
+
+        enrollment.setBatchId(destSectionId); // null for class-only transfer
+        enrollment.setClassId(destClass.getId());
+        enrollment.setInstituteId(destClass.getInstituteId());
+
+        Enrollment saved = enrollmentRepository.save(enrollment);
+
+        String currentUserId = getCurrentUserId();
+        String currentUserEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = new HashMap<>();
+        eventData.put("enrollmentId", saved.getId());
+        eventData.put("studentId", saved.getStudentId());
+        eventData.put("sourceSectionId", sourceSectionId != null ? sourceSectionId : "");
+        eventData.put("sourceClassId", sourceClassId != null ? sourceClassId : "");
+        eventData.put("destinationSectionId", destSectionId != null ? destSectionId : "");
+        eventData.put("destinationClassId", destClass.getId());
+        eventData.put("oldCourseId", oldCourseId != null ? oldCourseId : "");
+        eventData.put("newCourseId", saved.getCourseId() != null ? saved.getCourseId() : "");
+        eventService.logUserAction("ENROLLMENT_TRANSFERRED", currentUserId, currentUserEmail, "/api/enrollments/transfer", eventData);
+
+        // Evict analytics caches so section/class/course counts and engagement update immediately after transfer
+        if (sourceSectionId != null && !sourceSectionId.isBlank()) {
+            sessionService.evictSectionAnalyticsCache(sourceSectionId);
+        }
+        if (destSectionId != null && !destSectionId.isBlank()) {
+            sessionService.evictSectionAnalyticsCache(destSectionId);
+        }
+        if (sourceClassId != null && !sourceClassId.isBlank()) {
+            sessionService.evictClassAnalyticsCache(sourceClassId);
+        }
+        sessionService.evictClassAnalyticsCache(destClass.getId());
+        if (saved.getCourseId() != null && !saved.getCourseId().isBlank()) {
+            sessionService.evictCourseAnalyticsCache(saved.getCourseId());
+        }
+        if (oldCourseId != null && !oldCourseId.isBlank() && !oldCourseId.equals(saved.getCourseId())) {
+            sessionService.evictCourseAnalyticsCache(oldCourseId);
+        }
+
+        log.info("Transferred enrollment {} to class {} (section: {}) (student: {}, course: {})",
+            saved.getId(), destClass.getId(), destSectionId, saved.getStudentId(), saved.getCourseId());
+
+        return toDTO(saved);
+    }
+
+    /**
+     * Bulk transfer enrollments to a destination section (and optionally change course for all).
+     * Processes one-by-one; returns successes and per-item errors (no partial rollback).
+     */
+    public BulkTransferEnrollmentResponse bulkTransferEnrollments(BulkTransferEnrollmentRequest request) {
+        List<EnrollmentDTO> successes = new ArrayList<>();
+        List<TransferEnrollmentError> errors = new ArrayList<>();
+        TransferEnrollmentRequest single = new TransferEnrollmentRequest();
+        single.setDestinationSectionId(request.getDestinationSectionId());
+        single.setDestinationClassId(request.getDestinationClassId());
+        single.setDestinationCourseId(request.getDestinationCourseId());
+
+        for (int i = 0; i < request.getEnrollmentIds().size(); i++) {
+            String enrollmentId = request.getEnrollmentIds().get(i);
+            single.setEnrollmentId(enrollmentId);
+            try {
+                EnrollmentDTO dto = transferEnrollment(single);
+                successes.add(dto);
+            } catch (Exception e) {
+                errors.add(new TransferEnrollmentError(i, enrollmentId, e.getMessage()));
+                log.warn("Bulk transfer failed for enrollment {} at index {}: {}", enrollmentId, i, e.getMessage());
+            }
+        }
+
+        return new BulkTransferEnrollmentResponse(successes, errors);
+    }
+
     private EnrollmentDTO toDTO(Enrollment enrollment) {
         EnrollmentDTO dto = new EnrollmentDTO();
         dto.setId(enrollment.getId());

@@ -300,6 +300,18 @@ export class EnrollmentsApi {
     await this.apiClient.delete(`/api/enrollments/${enrollmentId}`)
   }
 
+  // Transfer enrollment to another section (and optionally change course)
+  async transferEnrollment(request: TransferEnrollmentRequest): Promise<Enrollment> {
+    const response = await this.apiClient.post<Enrollment>('/api/enrollments/transfer', request)
+    return response.data
+  }
+
+  // Bulk transfer enrollments to a destination section (and optionally change course for all)
+  async bulkTransferEnrollments(request: BulkTransferEnrollmentRequest): Promise<BulkTransferEnrollmentResponse> {
+    const response = await this.apiClient.post<BulkTransferEnrollmentResponse>('/api/enrollments/transfer/bulk', request)
+    return response.data
+  }
+
   async enrollStudentInCourse(studentId: string, courseId: string, options?: {
     classId?: string
     sectionId?: string
@@ -401,6 +413,33 @@ export class EnrollmentsApi {
       number: page
     }
   }
+}
+
+export interface TransferEnrollmentRequest {
+  enrollmentId: string
+  /** If set, transfer to section (class derived from section). */
+  destinationSectionId?: string
+  /** If set and destinationSectionId blank, transfer to class only (no section). */
+  destinationClassId?: string
+  destinationCourseId?: string
+}
+
+export interface BulkTransferEnrollmentRequest {
+  enrollmentIds: string[]
+  destinationSectionId?: string
+  destinationClassId?: string
+  destinationCourseId?: string
+}
+
+export interface TransferEnrollmentError {
+  index: number
+  enrollmentId: string
+  message: string
+}
+
+export interface BulkTransferEnrollmentResponse {
+  successes: Enrollment[]
+  errors: TransferEnrollmentError[]
 }
 
 export interface BulkEnrollmentResult {

@@ -1,10 +1,13 @@
 package com.datagami.edudron.student.web;
 
+import com.datagami.edudron.student.dto.BulkTransferEnrollmentRequest;
+import com.datagami.edudron.student.dto.BulkTransferEnrollmentResponse;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
 import com.datagami.edudron.student.dto.EnrollmentDTO;
 import com.datagami.edudron.student.dto.SectionStudentDTO;
 import com.datagami.edudron.student.dto.ClassStudentDTO;
 import com.datagami.edudron.student.dto.StudentClassSectionInfoDTO;
+import com.datagami.edudron.student.dto.TransferEnrollmentRequest;
 import com.datagami.edudron.student.service.EnrollmentService;
 import com.datagami.edudron.student.util.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import jakarta.validation.Valid;
 import java.util.List;
 
 @RestController
@@ -137,6 +141,20 @@ public class EnrollmentController {
         String studentId = UserUtil.getCurrentUserId();
         enrollmentService.unenroll(studentId, courseId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/enrollments/transfer")
+    @Operation(summary = "Transfer enrollment (admin)", description = "Transfer an enrollment to a destination section (and optionally change course). Admin/instructor only.")
+    public ResponseEntity<EnrollmentDTO> transferEnrollment(@Valid @RequestBody TransferEnrollmentRequest request) {
+        EnrollmentDTO enrollment = enrollmentService.transferEnrollment(request);
+        return ResponseEntity.ok(enrollment);
+    }
+
+    @PostMapping("/enrollments/transfer/bulk")
+    @Operation(summary = "Bulk transfer enrollments (admin)", description = "Transfer multiple enrollments to a destination section (and optionally change course for all). Admin/instructor only.")
+    public ResponseEntity<BulkTransferEnrollmentResponse> bulkTransferEnrollments(@Valid @RequestBody BulkTransferEnrollmentRequest request) {
+        BulkTransferEnrollmentResponse response = enrollmentService.bulkTransferEnrollments(request);
+        return ResponseEntity.ok(response);
     }
 
     @DeleteMapping("/enrollments/{enrollmentId}")

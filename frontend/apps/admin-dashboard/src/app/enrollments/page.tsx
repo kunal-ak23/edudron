@@ -32,9 +32,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Loader2, Users, Filter, X, Trash2, ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { Plus, Loader2, Users, Filter, X, Trash2, ChevronLeft, ChevronRight, Search, ArrowRightLeft } from 'lucide-react'
 import { enrollmentsApi, coursesApi, institutesApi, classesApi, sectionsApi, apiClient } from '@/lib/api'
-import type { Enrollment, Course, Institute, Class, Section } from '@kunal-ak23/edudron-shared-utils'
+import type { Enrollment, Course, Institute, Class, Section, TransferEnrollmentRequest, BulkTransferEnrollmentResponse } from '@kunal-ak23/edudron-shared-utils'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 
@@ -84,6 +85,16 @@ export default function EnrollmentsPage() {
   const [pageSize, setPageSize] = useState(20)
   const [totalElements, setTotalElements] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+  // Transfer: selection and dialog
+  const [selectedEnrollmentIds, setSelectedEnrollmentIds] = useState<Set<string>>(new Set())
+  const [showTransferDialog, setShowTransferDialog] = useState(false)
+  const [transferEnrollments, setTransferEnrollments] = useState<Enrollment[]>([])
+  const [transferDestinationType, setTransferDestinationType] = useState<'section' | 'class'>('section')
+  const [transferDestinationSectionId, setTransferDestinationSectionId] = useState<string>('')
+  const [transferDestinationClassId, setTransferDestinationClassId] = useState<string>('')
+  const [transferDestinationCourseId, setTransferDestinationCourseId] = useState<string>('')
+  const [allowDifferentCourse, setAllowDifferentCourse] = useState(false)
+  const [transferring, setTransferring] = useState(false)
 
   // Load students with pagination and backend filtering
   const loadStudents = useCallback(async (searchQuery: string = '', page: number = 0, size: number = 100) => {
@@ -385,6 +396,115 @@ export default function EnrollmentsPage() {
     setCurrentPage(0) // Reset to first page when clearing filters
   }
 
+  const isPlaceholderEnrollment = (e: Enrollment) => e.courseId === '__PLACEHOLDER_ASSOCIATION__'
+
+  const handleTransferClick = (enrollment: Enrollment) => {
+    if (isPlaceholderEnrollment(enrollment)) return
+    setTransferEnrollments([enrollment])
+    setTransferDestinationType('section')
+    setTransferDestinationSectionId('')
+    setTransferDestinationClassId('')
+    setTransferDestinationCourseId('')
+    setAllowDifferentCourse(false)
+    setShowTransferDialog(true)
+  }
+
+  const handleTransferSelectedClick = () => {
+    const toTransfer = enrollments.filter(e => selectedEnrollmentIds.has(e.id) && !isPlaceholderEnrollment(e))
+    if (toTransfer.length === 0) {
+      toast({ variant: 'destructive', title: 'No enrollments selected', description: 'Select at least one non-placeholder enrollment to transfer.' })
+      return
+    }
+    setTransferEnrollments(toTransfer)
+    setTransferDestinationType('section')
+    setTransferDestinationSectionId('')
+    setTransferDestinationClassId('')
+    setTransferDestinationCourseId('')
+    setAllowDifferentCourse(false)
+    setShowTransferDialog(true)
+  }
+
+  const handleTransferConfirm = async () => {
+    const hasSection = !!transferDestinationSectionId?.trim()
+    const hasClass = !!transferDestinationClassId?.trim()
+    const isClassOnly = transferDestinationType === 'class' && hasClass && !hasSection
+    const isSectionTransfer = (transferDestinationType === 'section' && hasSection) || (transferDestinationType === 'class' && hasSection)
+    if (!isSectionTransfer && !isClassOnly) {
+      toast({
+        variant: 'destructive',
+        title: 'Destination required',
+        description: transferDestinationType === 'section' ? 'Please select a destination section.' : 'Please select a destination class (or section within class).',
+      })
+      return
+    }
+    if (allowDifferentCourse && !transferDestinationCourseId?.trim()) {
+      toast({ variant: 'destructive', title: 'Course required', description: 'Please select a destination course when changing course.' })
+      return
+    }
+    const destSectionId = hasSection ? transferDestinationSectionId?.trim() || undefined : undefined
+    const destClassId = isClassOnly ? transferDestinationClassId?.trim() || undefined : undefined
+    setTransferring(true)
+    try {
+      if (transferEnrollments.length === 1) {
+        await enrollmentsApi.transferEnrollment({
+          enrollmentId: transferEnrollments[0].id,
+          destinationSectionId: destSectionId?.trim() || undefined,
+          destinationClassId: destClassId?.trim() || undefined,
+          destinationCourseId: allowDifferentCourse ? transferDestinationCourseId || undefined : undefined,
+        })
+        toast({ title: 'Success', description: 'Enrollment transferred successfully.' })
+      } else {
+        const res: BulkTransferEnrollmentResponse = await enrollmentsApi.bulkTransferEnrollments({
+          enrollmentIds: transferEnrollments.map(e => e.id),
+          destinationSectionId: destSectionId?.trim() || undefined,
+          destinationClassId: destClassId?.trim() || undefined,
+          destinationCourseId: allowDifferentCourse ? transferDestinationCourseId || undefined : undefined,
+        })
+        const successCount = res.successes?.length ?? 0
+        const errorCount = res.errors?.length ?? 0
+        if (errorCount === 0) {
+          toast({ title: 'Success', description: `${successCount} enrollment(s) transferred successfully.` })
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Transfer completed with errors',
+            description: `${successCount} transferred, ${errorCount} failed. ${res.errors?.[0]?.message ?? ''}`,
+          })
+        }
+      }
+      setShowTransferDialog(false)
+      setTransferEnrollments([])
+      setSelectedEnrollmentIds(new Set())
+      await loadEnrollments()
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Transfer failed',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setTransferring(false)
+    }
+  }
+
+  const toggleEnrollmentSelection = (id: string) => {
+    setSelectedEnrollmentIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAllOnPage = (checked: boolean) => {
+    const realEnrollments = enrollments.filter(e => !isPlaceholderEnrollment(e))
+    if (checked) {
+      setSelectedEnrollmentIds(new Set(realEnrollments.map(e => e.id)))
+    } else {
+      setSelectedEnrollmentIds(new Set())
+    }
+  }
+
   const handleUnenrollClick = (enrollment: Enrollment) => {
     setEnrollmentToUnenroll(enrollment)
     setShowUnenrollDialog(true)
@@ -489,10 +609,18 @@ export default function EnrollmentsPage() {
           <h1 className="text-3xl font-bold">Enrollments</h1>
           <p className="text-gray-600 mt-2">Manage student course enrollments</p>
         </div>
-        <Button onClick={() => setShowAddEnrollmentDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Enrollment
-        </Button>
+        <div className="flex gap-2">
+          {selectedEnrollmentIds.size > 0 && (
+            <Button variant="secondary" onClick={handleTransferSelectedClick}>
+              <ArrowRightLeft className="h-4 w-4 mr-2" />
+              Transfer selected ({selectedEnrollmentIds.size})
+            </Button>
+          )}
+          <Button onClick={() => setShowAddEnrollmentDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Enrollment
+          </Button>
+        </div>
       </div>
 
       <Card className="mb-6">
@@ -648,6 +776,13 @@ export default function EnrollmentsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={enrollments.filter(e => !isPlaceholderEnrollment(e)).length > 0 && enrollments.filter(e => !isPlaceholderEnrollment(e)).every(e => selectedEnrollmentIds.has(e.id))}
+                          onCheckedChange={(checked) => selectAllOnPage(!!checked)}
+                          aria-label="Select all on page"
+                        />
+                      </TableHead>
                       <TableHead>Student Email</TableHead>
                       <TableHead>Course</TableHead>
                       <TableHead>Hierarchy</TableHead>
@@ -659,6 +794,15 @@ export default function EnrollmentsPage() {
                   <TableBody>
                     {enrollments.map((enrollment) => (
                       <TableRow key={enrollment.id}>
+                        <TableCell className="w-10">
+                          {!isPlaceholderEnrollment(enrollment) && (
+                            <Checkbox
+                              checked={selectedEnrollmentIds.has(enrollment.id)}
+                              onCheckedChange={() => toggleEnrollmentSelection(enrollment.id)}
+                              aria-label={`Select ${enrollment.studentEmail || enrollment.studentId}`}
+                            />
+                          )}
+                        </TableCell>
                         <TableCell className="font-medium">
                           {enrollment.studentEmail || enrollment.studentId}
                         </TableCell>
@@ -677,18 +821,30 @@ export default function EnrollmentsPage() {
                           {new Date(enrollment.enrolledAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleUnenrollClick(enrollment)}
-                            disabled={unenrollingId === enrollment.id}
-                          >
-                            {unenrollingId === enrollment.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4 text-red-500" />
+                          <div className="flex items-center justify-end gap-1">
+                            {!isPlaceholderEnrollment(enrollment) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleTransferClick(enrollment)}
+                                title="Transfer to another section"
+                              >
+                                <ArrowRightLeft className="h-4 w-4" />
+                              </Button>
                             )}
-                          </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleUnenrollClick(enrollment)}
+                              disabled={unenrollingId === enrollment.id}
+                            >
+                              {unenrollingId === enrollment.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              )}
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -800,6 +956,157 @@ export default function EnrollmentsPage() {
                 </>
               ) : (
                 'Confirm Unenroll'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={showTransferDialog} onOpenChange={(open) => { setShowTransferDialog(open); if (!open) setTransferEnrollments([]) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Transfer enrollment{transferEnrollments.length !== 1 ? 's' : ''}</DialogTitle>
+            <DialogDescription>
+              Move {transferEnrollments.length === 1 ? 'this enrollment' : `${transferEnrollments.length} enrollments`} to a destination section or class. Optionally change course for cross-course transfer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Transfer to</Label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="transferDestinationType"
+                    checked={transferDestinationType === 'section'}
+                    onChange={() => { setTransferDestinationType('section'); setTransferDestinationClassId(''); setTransferDestinationSectionId('') }}
+                  />
+                  <span>Section (batch)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="transferDestinationType"
+                    checked={transferDestinationType === 'class'}
+                    onChange={() => { setTransferDestinationType('class'); setTransferDestinationSectionId(''); setTransferDestinationClassId('') }}
+                  />
+                  <span>Class</span>
+                </label>
+              </div>
+            </div>
+            {transferDestinationType === 'section' && (
+              <div className="space-y-2">
+                <Label>Destination section *</Label>
+                <SearchableSelect
+                  options={[
+                    { value: '', label: 'Select section' },
+                    ...sections.map(s => ({
+                      value: s.id,
+                      label: s.name,
+                      searchText: s.name.toLowerCase(),
+                    })),
+                  ]}
+                  value={transferDestinationSectionId}
+                  onValueChange={setTransferDestinationSectionId}
+                  placeholder="Select destination section"
+                  emptyMessage="No sections found"
+                />
+              </div>
+            )}
+            {transferDestinationType === 'class' && (
+              <>
+                <div className="space-y-2">
+                  <Label>Destination class *</Label>
+                  <SearchableSelect
+                    options={[
+                      { value: '', label: 'Select class' },
+                      ...classes.map(c => ({
+                        value: c.id,
+                        label: c.name,
+                        searchText: c.name.toLowerCase(),
+                      })),
+                    ]}
+                    value={transferDestinationClassId}
+                    onValueChange={(v) => { setTransferDestinationClassId(v); setTransferDestinationSectionId('') }}
+                    placeholder="Select destination class"
+                    emptyMessage="No classes found"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Section within class (optional)</Label>
+                  <SearchableSelect
+                    options={[
+                      { value: '', label: 'None – class only' },
+                      ...sections.filter(s => s.classId === transferDestinationClassId).map(s => ({
+                        value: s.id,
+                        label: s.name,
+                        searchText: s.name.toLowerCase(),
+                      })),
+                    ]}
+                    value={transferDestinationSectionId}
+                    onValueChange={setTransferDestinationSectionId}
+                    placeholder="Optional: select a section"
+                    emptyMessage="No sections in this class"
+                    disabled={!transferDestinationClassId}
+                  />
+                  <p className="text-xs text-muted-foreground">Leave as &quot;None&quot; to link the student to the class only (no specific section).</p>
+                </div>
+              </>
+            )}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="allow-different-course"
+                checked={allowDifferentCourse}
+                onCheckedChange={(c) => setAllowDifferentCourse(!!c)}
+              />
+              <Label htmlFor="allow-different-course" className="text-sm font-normal cursor-pointer">
+                Allow different course (cross-course transfer)
+              </Label>
+            </div>
+            {allowDifferentCourse && (
+              <div className="space-y-2">
+                <Label>Destination course</Label>
+                <SearchableSelect
+                  options={allCourses
+                    .filter(c => c.isPublished && c.status !== 'ARCHIVED')
+                    .map(c => ({
+                      value: c.id,
+                      label: c.title,
+                      searchText: c.title.toLowerCase(),
+                    }))}
+                  value={transferDestinationCourseId}
+                  onValueChange={setTransferDestinationCourseId}
+                  placeholder="Select destination course"
+                  emptyMessage="No courses found"
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setShowTransferDialog(false); setTransferEnrollments([]) }}
+              disabled={transferring}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleTransferConfirm}
+              disabled={
+                transferring ||
+                (allowDifferentCourse && !transferDestinationCourseId?.trim()) ||
+                (transferDestinationType === 'section' && !transferDestinationSectionId?.trim()) ||
+                (transferDestinationType === 'class' && !transferDestinationClassId?.trim())
+              }
+            >
+              {transferring ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Transferring...
+                </>
+              ) : (
+                `Transfer ${transferEnrollments.length} enrollment${transferEnrollments.length !== 1 ? 's' : ''}`
               )}
             </Button>
           </DialogFooter>

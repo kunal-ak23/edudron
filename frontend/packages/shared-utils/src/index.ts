@@ -83,7 +83,11 @@ export type {
   LectureProgress,
   SectionProgress,
   ClassStudentDTO,
-  SectionStudentDTO
+  SectionStudentDTO,
+  TransferEnrollmentRequest,
+  BulkTransferEnrollmentRequest,
+  TransferEnrollmentError,
+  BulkTransferEnrollmentResponse
 } from './api/enrollments'
 // Section and CreateSectionRequest are already exported above on line 17
 
