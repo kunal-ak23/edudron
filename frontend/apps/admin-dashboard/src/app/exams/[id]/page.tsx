@@ -125,6 +125,9 @@ export default function ExamDetailPage() {
   const [showPublishDialog, setShowPublishDialog] = useState(false)
   const [showUnpublishDialog, setShowUnpublishDialog] = useState(false)
   const [showCompleteDialog, setShowCompleteDialog] = useState(false)
+  const [showAdjustScheduleDialog, setShowAdjustScheduleDialog] = useState(false)
+  const [adjustScheduleForm, setAdjustScheduleForm] = useState({ startTime: '', endTime: '' })
+  const [savingSchedule, setSavingSchedule] = useState(false)
   const [editForm, setEditForm] = useState({
     title: '',
     description: '',
@@ -306,6 +309,72 @@ export default function ExamDetailPage() {
       })
     }
     setShowEditDialog(true)
+  }
+
+  const handleOpenAdjustScheduleDialog = () => {
+    if (exam) {
+      let startTimeLocal = ''
+      let endTimeLocal = ''
+      if (exam.startTime) {
+        const startDate = new Date(exam.startTime)
+        startTimeLocal = new Date(startDate.getTime() - startDate.getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 16)
+      }
+      if (exam.endTime) {
+        const endDate = new Date(exam.endTime)
+        endTimeLocal = new Date(endDate.getTime() - endDate.getTimezoneOffset() * 60000)
+          .toISOString().slice(0, 16)
+      }
+      setAdjustScheduleForm({ startTime: startTimeLocal, endTime: endTimeLocal })
+    }
+    setShowAdjustScheduleDialog(true)
+  }
+
+  const handleSaveAdjustSchedule = async () => {
+    if (!adjustScheduleForm.startTime || !adjustScheduleForm.endTime) {
+      toast({
+        title: 'Validation Error',
+        description: 'Start time and end time are required',
+        variant: 'destructive'
+      })
+      return
+    }
+    const start = new Date(adjustScheduleForm.startTime)
+    const end = new Date(adjustScheduleForm.endTime)
+    if (end <= start) {
+      toast({
+        title: 'Validation Error',
+        description: 'End time must be after start time',
+        variant: 'destructive'
+      })
+      return
+    }
+    setSavingSchedule(true)
+    try {
+      const startTimeISO = convertToISOWithTimezone(adjustScheduleForm.startTime)
+      const endTimeISO = convertToISOWithTimezone(adjustScheduleForm.endTime)
+      const response = await apiClient.put(`/api/exams/${examId}/schedule`, {
+        startTime: startTimeISO,
+        endTime: endTimeISO
+      })
+      const updated = (response as any)?.data || response
+      setExam(updated as unknown as Exam)
+      setShowAdjustScheduleDialog(false)
+      toast({
+        title: 'Success',
+        description: 'Exam schedule updated successfully'
+      })
+      await loadExam()
+    } catch (error: any) {
+      console.error('Failed to update schedule:', error)
+      toast({
+        title: 'Error',
+        description: error?.response?.data?.message || error?.message || 'Failed to update schedule',
+        variant: 'destructive'
+      })
+    } finally {
+      setSavingSchedule(false)
+    }
   }
 
   const handleSaveEdit = async () => {
@@ -611,10 +680,18 @@ export default function ExamDetailPage() {
               <Eye className="h-4 w-4 mr-2" />
               Preview
             </Button>
-            <Button variant="outline" onClick={handleOpenEditDialog}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Details
-            </Button>
+            {canManageExams && (
+              <Button variant="outline" onClick={handleOpenEditDialog}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Details
+              </Button>
+            )}
+            {isInstructor && exam.timingMode === 'FIXED_WINDOW' && (
+              <Button variant="outline" onClick={handleOpenAdjustScheduleDialog}>
+                <Clock className="h-4 w-4 mr-2" />
+                Adjust date & time
+              </Button>
+            )}
             {exam.status !== 'LIVE' && (
               <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -1525,6 +1602,53 @@ export default function ExamDetailPage() {
               <Button onClick={handleSaveEdit} disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Adjust schedule dialog (instructor, fixed-window only) */}
+        <Dialog open={showAdjustScheduleDialog} onOpenChange={setShowAdjustScheduleDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Adjust date & time
+              </DialogTitle>
+              <DialogDescription>
+                Change the start and end times for this fixed-window exam.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="adjustStartTime">Start Time</Label>
+                <Input
+                  id="adjustStartTime"
+                  type="datetime-local"
+                  value={adjustScheduleForm.startTime}
+                  onChange={(e) => setAdjustScheduleForm(prev => ({ ...prev, startTime: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label htmlFor="adjustEndTime">End Time</Label>
+                <Input
+                  id="adjustEndTime"
+                  type="datetime-local"
+                  value={adjustScheduleForm.endTime}
+                  onChange={(e) => setAdjustScheduleForm(prev => ({ ...prev, endTime: e.target.value }))}
+                />
+              </div>
+              <p className="text-xs text-gray-500">
+                The exam will be available between these times.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowAdjustScheduleDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveAdjustSchedule} disabled={savingSchedule}>
+                {savingSchedule ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Save schedule
               </Button>
             </DialogFooter>
           </DialogContent>

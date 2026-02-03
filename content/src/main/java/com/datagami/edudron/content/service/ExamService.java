@@ -222,6 +222,19 @@ public class ExamService {
             throw new IllegalArgumentException("Assessment is not an exam: " + examId);
         }
         
+        if (exam.getTimingMode() != Assessment.TimingMode.FIXED_WINDOW) {
+            throw new IllegalArgumentException("Schedule can only be set for Fixed Window exams");
+        }
+        
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole)) {
+            if (!canInstructorManageExam(exam)) {
+                throw new IllegalArgumentException("You don't have permission to adjust the schedule for this exam. It's outside your assigned scope.");
+            }
+        } else if ("SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
+            throw new IllegalArgumentException("SUPPORT_STAFF and STUDENT have view-only access and cannot schedule exams");
+        }
+        
         if (startTime == null || endTime == null) {
             throw new IllegalArgumentException("Start time and end time are required");
         }
@@ -230,20 +243,23 @@ public class ExamService {
             throw new IllegalArgumentException("End time must be after start time");
         }
         
-        if (startTime.isBefore(OffsetDateTime.now())) {
-            throw new IllegalArgumentException("Start time cannot be in the past");
-        }
-        
-        // Store old times for logging
+        // Store old times for logging and reschedule detection
         OffsetDateTime oldStartTime = exam.getStartTime();
         OffsetDateTime oldEndTime = exam.getEndTime();
         boolean isReschedule = oldStartTime != null || oldEndTime != null;
+        OffsetDateTime now = OffsetDateTime.now();
+        
+        if (!isReschedule && startTime.isBefore(now)) {
+            throw new IllegalArgumentException("Start time cannot be in the past");
+        }
+        if (isReschedule && exam.getStatus() == Assessment.ExamStatus.LIVE && !endTime.isAfter(now)) {
+            throw new IllegalArgumentException("When rescheduling a live exam, end time must be in the future");
+        }
         
         exam.setStartTime(startTime);
         exam.setEndTime(endTime);
         
         // Set status based on current time
-        OffsetDateTime now = OffsetDateTime.now();
         if (now.isBefore(startTime)) {
             exam.setStatus(Assessment.ExamStatus.SCHEDULED);
         } else if (now.isAfter(endTime)) {
