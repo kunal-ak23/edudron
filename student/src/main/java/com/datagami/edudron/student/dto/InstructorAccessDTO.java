@@ -16,17 +16,72 @@ public class InstructorAccessDTO {
     // courses have scoped restrictions
     private Set<String> scopedCourseIds; // Courses with class/section restrictions
 
+    /**
+     * True when the instructor has only SECTION-type assignments (no CLASS, no COURSE).
+     * Used by content service to show only section-level exams to section-only instructors.
+     */
+    private boolean sectionOnlyAccess;
+
+    /**
+     * Courses from COURSE-type assignments only (direct). Used to distinguish from derived course access.
+     */
+    private Set<String> directCourseIds;
+    /**
+     * Courses accessible via class/section (from content service). Inherited/derived from class/section assignments.
+     */
+    private Set<String> derivedCourseIds;
+    /**
+     * Classes from CLASS-type assignments only (direct).
+     */
+    private Set<String> directClassIds;
+    /**
+     * Classes from SECTION (parent class) or COURSE (scopedClassIds). Inherited, not from CLASS assignment.
+     */
+    private Set<String> inheritedClassIds;
+    /**
+     * Sections from SECTION assignments or COURSE (scopedSectionIds). Direct assignment to section or course scope.
+     */
+    private Set<String> directSectionIds;
+    /**
+     * Sections from CLASS (all sections in the class). Inherited from class assignment.
+     */
+    private Set<String> inheritedSectionIds;
+
     // Constructors
     public InstructorAccessDTO() {}
 
-    public InstructorAccessDTO(String instructorUserId, Set<String> allowedClassIds, 
+    public InstructorAccessDTO(String instructorUserId, Set<String> allowedClassIds,
                                Set<String> allowedSectionIds, Set<String> allowedCourseIds,
                                Set<String> scopedCourseIds) {
+        this(instructorUserId, allowedClassIds, allowedSectionIds, allowedCourseIds, scopedCourseIds, false,
+            null, null, null, null, null, null);
+    }
+
+    public InstructorAccessDTO(String instructorUserId, Set<String> allowedClassIds,
+                               Set<String> allowedSectionIds, Set<String> allowedCourseIds,
+                               Set<String> scopedCourseIds, boolean sectionOnlyAccess) {
+        this(instructorUserId, allowedClassIds, allowedSectionIds, allowedCourseIds, scopedCourseIds, sectionOnlyAccess,
+            null, null, null, null, null, null);
+    }
+
+    public InstructorAccessDTO(String instructorUserId, Set<String> allowedClassIds,
+                               Set<String> allowedSectionIds, Set<String> allowedCourseIds,
+                               Set<String> scopedCourseIds, boolean sectionOnlyAccess,
+                               Set<String> directCourseIds, Set<String> derivedCourseIds,
+                               Set<String> directClassIds, Set<String> inheritedClassIds,
+                               Set<String> directSectionIds, Set<String> inheritedSectionIds) {
         this.instructorUserId = instructorUserId;
         this.allowedClassIds = allowedClassIds;
         this.allowedSectionIds = allowedSectionIds;
         this.allowedCourseIds = allowedCourseIds;
         this.scopedCourseIds = scopedCourseIds;
+        this.sectionOnlyAccess = sectionOnlyAccess;
+        this.directCourseIds = directCourseIds;
+        this.derivedCourseIds = derivedCourseIds;
+        this.directClassIds = directClassIds;
+        this.inheritedClassIds = inheritedClassIds;
+        this.directSectionIds = directSectionIds;
+        this.inheritedSectionIds = inheritedSectionIds;
     }
 
     // Getters and Setters
@@ -44,6 +99,27 @@ public class InstructorAccessDTO {
 
     public Set<String> getScopedCourseIds() { return scopedCourseIds; }
     public void setScopedCourseIds(Set<String> scopedCourseIds) { this.scopedCourseIds = scopedCourseIds; }
+
+    public boolean isSectionOnlyAccess() { return sectionOnlyAccess; }
+    public void setSectionOnlyAccess(boolean sectionOnlyAccess) { this.sectionOnlyAccess = sectionOnlyAccess; }
+
+    public Set<String> getDirectCourseIds() { return directCourseIds; }
+    public void setDirectCourseIds(Set<String> directCourseIds) { this.directCourseIds = directCourseIds; }
+
+    public Set<String> getDerivedCourseIds() { return derivedCourseIds; }
+    public void setDerivedCourseIds(Set<String> derivedCourseIds) { this.derivedCourseIds = derivedCourseIds; }
+
+    public Set<String> getDirectClassIds() { return directClassIds; }
+    public void setDirectClassIds(Set<String> directClassIds) { this.directClassIds = directClassIds; }
+
+    public Set<String> getInheritedClassIds() { return inheritedClassIds; }
+    public void setInheritedClassIds(Set<String> inheritedClassIds) { this.inheritedClassIds = inheritedClassIds; }
+
+    public Set<String> getDirectSectionIds() { return directSectionIds; }
+    public void setDirectSectionIds(Set<String> directSectionIds) { this.directSectionIds = directSectionIds; }
+
+    public Set<String> getInheritedSectionIds() { return inheritedSectionIds; }
+    public void setInheritedSectionIds(Set<String> inheritedSectionIds) { this.inheritedSectionIds = inheritedSectionIds; }
 
     /**
      * Check if instructor can access a specific class

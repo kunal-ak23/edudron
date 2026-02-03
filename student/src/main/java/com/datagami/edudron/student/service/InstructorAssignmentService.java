@@ -245,42 +245,59 @@ public class InstructorAssignmentService {
         Set<String> allowedSectionIds = new HashSet<>();
         Set<String> allowedCourseIds = new HashSet<>();
         Set<String> scopedCourseIds = new HashSet<>();
-        
+        Set<String> directCourseIds = new HashSet<>();
+        Set<String> directClassIds = new HashSet<>();
+        Set<String> inheritedClassIds = new HashSet<>();
+        Set<String> directSectionIds = new HashSet<>();
+        Set<String> inheritedSectionIds = new HashSet<>();
+        boolean hasClassOrCourseAssignment = false;
+
         for (InstructorAssignment assignment : assignments) {
             switch (assignment.getAssignmentType()) {
                 case CLASS:
-                    // Add the class and all its sections
-                    allowedClassIds.add(assignment.getClassId());
+                    hasClassOrCourseAssignment = true;
+                    // Add the class (direct) and all its sections (inherited)
+                    String classId = assignment.getClassId();
+                    directClassIds.add(classId);
+                    allowedClassIds.add(classId);
                     List<Section> sectionsInClass = sectionRepository
-                        .findByClientIdAndClassId(clientId, assignment.getClassId());
-                    for (Section section : sectionsInClass) {
-                        allowedSectionIds.add(section.getId());
+                        .findByClientIdAndClassId(clientId, classId);
+                    for (Section s : sectionsInClass) {
+                        inheritedSectionIds.add(s.getId());
+                        allowedSectionIds.add(s.getId());
                     }
                     break;
                     
                 case SECTION:
-                    // Add the section and its parent class for navigation
-                    allowedSectionIds.add(assignment.getSectionId());
+                    // Add the section (direct) and its parent class for navigation (inherited)
+                    String sectionId = assignment.getSectionId();
+                    directSectionIds.add(sectionId);
+                    allowedSectionIds.add(sectionId);
                     Section section = sectionRepository
-                        .findByIdAndClientId(assignment.getSectionId(), clientId)
+                        .findByIdAndClientId(sectionId, clientId)
                         .orElse(null);
                     if (section != null && section.getClassId() != null) {
-                        // Add parent class so instructor can navigate to it in tree view
+                        inheritedClassIds.add(section.getClassId());
                         allowedClassIds.add(section.getClassId());
                     }
                     break;
                     
                 case COURSE:
-                    allowedCourseIds.add(assignment.getCourseId());
+                    hasClassOrCourseAssignment = true;
+                    String courseId = assignment.getCourseId();
+                    directCourseIds.add(courseId);
+                    allowedCourseIds.add(courseId);
                     // If course has scope restrictions, track it
                     if ((assignment.getScopedClassIds() != null && !assignment.getScopedClassIds().isEmpty()) ||
                         (assignment.getScopedSectionIds() != null && !assignment.getScopedSectionIds().isEmpty())) {
-                        scopedCourseIds.add(assignment.getCourseId());
-                        // Add scoped classes/sections
+                        scopedCourseIds.add(courseId);
+                        // Add scoped classes (inherited) and scoped sections (direct for course scope)
                         if (assignment.getScopedClassIds() != null) {
+                            inheritedClassIds.addAll(assignment.getScopedClassIds());
                             allowedClassIds.addAll(assignment.getScopedClassIds());
                         }
                         if (assignment.getScopedSectionIds() != null) {
+                            directSectionIds.addAll(assignment.getScopedSectionIds());
                             allowedSectionIds.addAll(assignment.getScopedSectionIds());
                         }
                     }
@@ -292,13 +309,24 @@ public class InstructorAssignmentService {
         // Courses assigned to any of the instructor's classes or sections are accessible
         Set<String> derivedCourseIds = getCourseIdsByAssignments(allowedClassIds, allowedSectionIds);
         allowedCourseIds.addAll(derivedCourseIds);
-        
+
+        // Section-only: instructor has only SECTION assignments (no CLASS, no COURSE).
+        // Content service uses this to show only section-level exams to section-only instructors.
+        boolean sectionOnlyAccess = !hasClassOrCourseAssignment && !allowedSectionIds.isEmpty();
+
         return new InstructorAccessDTO(
             instructorUserId,
             allowedClassIds,
             allowedSectionIds,
             allowedCourseIds,
-            scopedCourseIds
+            scopedCourseIds,
+            sectionOnlyAccess,
+            directCourseIds,
+            derivedCourseIds,
+            directClassIds,
+            inheritedClassIds,
+            directSectionIds,
+            inheritedSectionIds
         );
     }
     

@@ -340,36 +340,42 @@ public class ExamService {
     
     /**
      * Filter exams based on instructor's section/class/course assignments.
-     * Non-instructors see all exams.
+     * Uses /me/access (same as exam list pagination); non-instructors or failed access see all exams.
      */
     private List<Assessment> filterExamsForInstructor(List<Assessment> exams) {
-        String userRole = getCurrentUserRole();
-        if (!"INSTRUCTOR".equals(userRole)) {
-            return exams; // Non-instructors see all exams
-        }
-        
-        String userId = getCurrentUserId();
-        if (userId == null) {
-            logger.warn("Could not determine user ID for instructor filtering");
-            return exams;
-        }
-        
-        Map<String, Object> instructorAccess = getInstructorAccess(userId);
-        if (instructorAccess == null) {
-            logger.warn("Could not get instructor access for user {}", userId);
-            return java.util.Collections.emptyList(); // No access means no exams
+        // Use /me/access so we don't depend on identity role; same as getExamsPaginated
+        Map<String, Object> instructorAccess = getCurrentUserInstructorAccess();
+        if (instructorAccess == null || !hasAnyAllowedIds(instructorAccess)) {
+            return exams; // No access or no allowed IDs -> return all (non-instructor path)
         }
         
         java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
         java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
         java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        boolean sectionOnlyAccess = getBooleanFromAccess(instructorAccess, "sectionOnlyAccess", false);
         
-        logger.debug("Instructor {} has access to courses: {}, classes: {}, sections: {}", 
-            userId, allowedCourseIds, allowedClassIds, allowedSectionIds);
+        boolean allEmpty = allowedCourseIds.isEmpty() && allowedClassIds.isEmpty() && allowedSectionIds.isEmpty();
+        logger.info("Instructor exam filter: allowedCourseIds={} (sample: {}), allowedClassIds={} (sample: {}), allowedSectionIds={} (sample: {}), sectionOnlyAccess={}, examsBefore={}",
+            allowedCourseIds.size(), sampleIds(allowedCourseIds, 5),
+            allowedClassIds.size(), sampleIds(allowedClassIds, 5),
+            allowedSectionIds.size(), sampleIds(allowedSectionIds, 5),
+            sectionOnlyAccess, exams.size());
+        if (allEmpty) {
+            logger.warn("Instructor exam filter: all allowed* sets are empty. No exams will be returned.");
+        }
         
-        return exams.stream()
-            .filter(exam -> canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds))
+        List<Assessment> filtered = exams.stream()
+            .filter(exam -> canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds, sectionOnlyAccess))
             .collect(java.util.stream.Collectors.toList());
+        
+        logger.info("Instructor exam filter: examsAfter={}", filtered.size());
+        if (!exams.isEmpty() && filtered.isEmpty() && !allEmpty) {
+            Assessment first = exams.get(0);
+            logger.warn("Instructor exam filter: no exam matched. First exam: courseId={}, classId={}, sectionId={}",
+                first.getCourseId(), first.getClassId(), first.getSectionId());
+        }
+        
+        return filtered;
     }
     
     /**
@@ -411,11 +417,19 @@ public class ExamService {
         // Normalize search
         String searchTerm = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
         
-        // For instructors, we need to filter after fetching since the repository doesn't know about instructor access
-        // We fetch all matching exams and then filter + paginate in memory
-        String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole)) {
-            return getExamsPaginatedForInstructor(clientId, examStatus, examTimingMode, searchTerm, page, size);
+        // Use instructor access (same as courses page) to decide filtering, not identity role.
+        // This way we only call the student service; no dependency on /idp/users/me for role.
+        // If /me/access returns a body with any allowed IDs, treat as instructor and filter.
+        Map<String, Object> instructorAccess = getCurrentUserInstructorAccess();
+        boolean isInstructorWithAccess = instructorAccess != null && hasAnyAllowedIds(instructorAccess);
+        if (isInstructorWithAccess) {
+            logger.info("Exam list: using instructor path (access returned with allowed IDs)");
+            return getExamsPaginatedForInstructor(clientId, examStatus, examTimingMode, searchTerm, page, size, instructorAccess);
+        }
+        if (instructorAccess != null) {
+            logger.info("Exam list: access returned but no allowed IDs; returning all exams");
+        } else {
+            logger.info("Exam list: no instructor access (null); returning all exams (non-instructor or /me/access failed)");
         }
         
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -431,26 +445,41 @@ public class ExamService {
     }
     
     /**
+     * True if the instructor access map has at least one non-empty allowed* set.
+     */
+    private boolean hasAnyAllowedIds(Map<String, Object> instructorAccess) {
+        if (instructorAccess == null) return false;
+        return !getSetFromAccess(instructorAccess, "allowedCourseIds").isEmpty()
+            || !getSetFromAccess(instructorAccess, "allowedClassIds").isEmpty()
+            || !getSetFromAccess(instructorAccess, "allowedSectionIds").isEmpty();
+    }
+    
+    /**
      * Get paginated exams for an instructor, filtered by their section/class/course assignments.
+     * @param instructorAccess already-fetched access (from getCurrentUserInstructorAccess); must be non-null.
      */
     private Page<Assessment> getExamsPaginatedForInstructor(UUID clientId, Assessment.ExamStatus examStatus, 
-            Assessment.TimingMode examTimingMode, String searchTerm, int page, int size) {
+            Assessment.TimingMode examTimingMode, String searchTerm, int page, int size,
+            Map<String, Object> instructorAccess) {
         
-        String userId = getCurrentUserId();
-        if (userId == null) {
-            logger.warn("Could not determine user ID for instructor pagination");
-            return Page.empty();
-        }
-        
-        Map<String, Object> instructorAccess = getInstructorAccess(userId);
         if (instructorAccess == null) {
-            logger.warn("Could not get instructor access for user {}", userId);
+            logger.warn("Instructor pagination: no access. Returning empty page.");
             return Page.empty();
         }
         
         java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
         java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
         java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        boolean sectionOnlyAccess = getBooleanFromAccess(instructorAccess, "sectionOnlyAccess", false);
+        
+        boolean allEmpty = allowedCourseIds.isEmpty() && allowedClassIds.isEmpty() && allowedSectionIds.isEmpty();
+        logger.info("Instructor pagination: allowedCourseIds={} (sample: {}), allowedClassIds={} (sample: {}), allowedSectionIds={} (sample: {}), sectionOnlyAccess={}",
+            allowedCourseIds.size(), sampleIds(allowedCourseIds, 5),
+            allowedClassIds.size(), sampleIds(allowedClassIds, 5),
+            allowedSectionIds.size(), sampleIds(allowedSectionIds, 5), sectionOnlyAccess);
+        if (allEmpty) {
+            logger.warn("Instructor pagination: all allowed* sets are empty. Instructor has no assignments or /me/access returned empty. No exams will be returned.");
+        }
         
         // Fetch all exams without pagination (for filtering)
         Pageable unpaged = PageRequest.of(0, Integer.MAX_VALUE, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -463,10 +492,24 @@ public class ExamService {
             unpaged
         );
         
-        // Filter by instructor access
+        long totalFetched = allExams.getTotalElements();
+        logger.info("Instructor pagination: repository returned {} exams for tenant (status={}, timing={}, search={})",
+            totalFetched, examStatus, examTimingMode, searchTerm);
+        
+        // Filter by instructor access (section-only instructors see only section-level exams)
         List<Assessment> filteredExams = allExams.getContent().stream()
-            .filter(exam -> canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds))
+            .filter(exam -> canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds, sectionOnlyAccess))
             .collect(java.util.stream.Collectors.toList());
+        
+        logger.info("Instructor pagination: after filter {} -> {} exams (page={}, size={})", 
+            totalFetched, filteredExams.size(), page, size);
+        if (totalFetched > 0 && filteredExams.isEmpty() && !allEmpty) {
+            // Have exams and have allowed IDs but none matched - log first exam's IDs for debugging
+            Assessment first = allExams.getContent().get(0);
+            logger.warn("Instructor pagination: no exam matched. First exam: courseId={}, classId={}, sectionId={} (normalized: {}, {}, {})",
+                first.getCourseId(), first.getClassId(), first.getSectionId(),
+                normalizeId(first.getCourseId()), normalizeId(first.getClassId()), normalizeId(first.getSectionId()));
+        }
         
         // Apply pagination manually
         int start = page * size;
@@ -499,10 +542,10 @@ public class ExamService {
         }
         UUID clientId = UUID.fromString(clientIdStr);
         
-        // For instructors, we need to count only accessible exams
-        String userRole = getCurrentUserRole();
-        if ("INSTRUCTOR".equals(userRole)) {
-            return getExamCountsByStatusForInstructor(clientId);
+        // Use instructor access (same as exam list) to decide; don't depend on identity role
+        Map<String, Object> instructorAccess = getCurrentUserInstructorAccess();
+        if (instructorAccess != null && hasAnyAllowedIds(instructorAccess)) {
+            return getExamCountsByStatusForInstructor(clientId, instructorAccess);
         }
         
         List<Object[]> results = assessmentRepository.countExamsByStatus(
@@ -532,9 +575,9 @@ public class ExamService {
     
     /**
      * Get exam counts by status for an instructor, filtered by their section/class/course assignments.
+     * @param instructorAccess already-fetched access (caller ensures non-null and has allowed IDs).
      */
-    private Map<String, Long> getExamCountsByStatusForInstructor(UUID clientId) {
-        String userId = getCurrentUserId();
+    private Map<String, Long> getExamCountsByStatusForInstructor(UUID clientId, Map<String, Object> instructorAccess) {
         Map<String, Long> counts = new HashMap<>();
         
         // Ensure all statuses are present with 0 count
@@ -543,22 +586,19 @@ public class ExamService {
         }
         counts.put("all", 0L);
         
-        if (userId == null) {
-            logger.warn("Could not determine user ID for instructor exam counts");
-            return counts;
-        }
-        
-        Map<String, Object> instructorAccess = getInstructorAccess(userId);
         if (instructorAccess == null) {
-            logger.warn("Could not get instructor access for user {}", userId);
             return counts;
         }
         
         java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
         java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
         java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        boolean sectionOnlyAccess = getBooleanFromAccess(instructorAccess, "sectionOnlyAccess", false);
         
-        // Fetch all exams and filter by instructor access
+        logger.info("Instructor exam counts: allowedCourseIds={}, allowedClassIds={}, allowedSectionIds={}, sectionOnlyAccess={}",
+            allowedCourseIds.size(), allowedClassIds.size(), allowedSectionIds.size(), sectionOnlyAccess);
+        
+        // Fetch all exams and filter by instructor access (section-only: only section-level exams)
         List<Assessment> allExams = assessmentRepository.findActiveByAssessmentTypeAndClientIdOrderByCreatedAtDesc(
             Assessment.AssessmentType.EXAM,
             clientId
@@ -566,7 +606,7 @@ public class ExamService {
         
         long total = 0;
         for (Assessment exam : allExams) {
-            if (canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds)) {
+            if (canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds, sectionOnlyAccess)) {
                 String statusName = exam.getStatus() != null ? 
                     exam.getStatus().name() : Assessment.ExamStatus.DRAFT.name();
                 counts.merge(statusName, 1L, Long::sum);
@@ -1242,8 +1282,43 @@ public class ExamService {
     }
     
     /**
-     * Get instructor access (allowed classes, sections, courses) from student service
-     * Returns null if unable to determine access
+     * Get instructor access for the current user from student service (GET /me/access).
+     * Uses JWT so student service resolves the user; avoids userId format mismatch.
+     * Returns null if unable to determine access.
+     */
+    private Map<String, Object> getCurrentUserInstructorAccess() {
+        String accessUrl = gatewayUrl + "/api/instructor-assignments/me/access";
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                accessUrl,
+                HttpMethod.GET,
+                entity,
+                new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+                logger.info("Instructor access OK: GET {} -> {}. Response keys: {}. allowedCourseIds size: {}, allowedClassIds size: {}, allowedSectionIds size: {}",
+                    accessUrl, response.getStatusCode(), body.keySet(),
+                    listSize(body.get("allowedCourseIds")), listSize(body.get("allowedClassIds")), listSize(body.get("allowedSectionIds")));
+                return body;
+            }
+            logger.warn("Instructor access failed: GET {} -> {} (body null: {})", 
+                accessUrl, response.getStatusCode(), response.getBody() == null);
+        } catch (Exception e) {
+            logger.warn("Instructor access error: GET {} -> {} (check gateway route and JWT forwarding)", 
+                accessUrl, e.getMessage(), e);
+        }
+        return null;
+    }
+    
+    /**
+     * Get instructor access by instructor user ID (for callers that have the ID).
+     * Returns null if unable to determine access.
      */
     @SuppressWarnings("unchecked")
     private Map<String, Object> getInstructorAccess(String instructorUserId) {
@@ -1270,7 +1345,40 @@ public class ExamService {
     }
     
     /**
-     * Helper method to extract a Set of strings from instructor access response
+     * Return size of a list/collection for logging (0 if null or not a list).
+     */
+    private static int listSize(Object value) {
+        if (value == null) return 0;
+        if (value instanceof List) return ((List<?>) value).size();
+        if (value instanceof java.util.Collection) return ((java.util.Collection<?>) value).size();
+        return 0;
+    }
+    
+    /**
+     * Return a sample of IDs for logging (first n, or "none" if empty).
+     */
+    private static String sampleIds(java.util.Set<String> ids, int max) {
+        if (ids == null || ids.isEmpty()) {
+            return "none";
+        }
+        return ids.stream().limit(max).reduce((a, b) -> a + ", " + b).orElse("none");
+    }
+    
+    /**
+     * Normalize ID for comparison (trim, lowercase) so UUID/string format differences match.
+     */
+    private static String normalizeId(String id) {
+        if (id == null) {
+            return null;
+        }
+        String s = id.trim();
+        return s.isEmpty() ? null : s.toLowerCase();
+    }
+    
+    /**
+     * Helper method to extract a Set of normalized strings from instructor access response.
+     * Handles List/Set and converts elements to String (handles Number, UUID, etc. from JSON).
+     * Tries exact key first, then case-insensitive match (e.g. allowedCourseIds vs allowed_course_ids).
      */
     @SuppressWarnings("unchecked")
     private java.util.Set<String> getSetFromAccess(Map<String, Object> access, String key) {
@@ -1278,42 +1386,89 @@ public class ExamService {
             return new java.util.HashSet<>();
         }
         Object value = access.get(key);
-        if (value instanceof List) {
-            return new java.util.HashSet<>((List<String>) value);
-        } else if (value instanceof java.util.Set) {
-            return (java.util.Set<String>) value;
+        if (value == null && !access.isEmpty()) {
+            for (Map.Entry<String, Object> entry : access.entrySet()) {
+                if (key.equalsIgnoreCase(entry.getKey())) {
+                    value = entry.getValue();
+                    break;
+                }
+            }
         }
-        return new java.util.HashSet<>();
+        java.util.Set<String> result = new java.util.HashSet<>();
+        if (value instanceof List) {
+            for (Object item : (List<?>) value) {
+                String id = idFromJsonElement(item);
+                if (id != null) {
+                    result.add(normalizeId(id));
+                }
+            }
+        } else if (value instanceof java.util.Set) {
+            for (Object item : (java.util.Set<?>) value) {
+                String id = idFromJsonElement(item);
+                if (id != null) {
+                    result.add(normalizeId(id));
+                }
+            }
+        }
+        return result;
+    }
+    
+    private static String idFromJsonElement(Object item) {
+        if (item == null) {
+            return null;
+        }
+        if (item instanceof String) {
+            return (String) item;
+        }
+        if (item instanceof java.util.Map) {
+            Object id = ((java.util.Map<?, ?>) item).get("id");
+            return id != null ? id.toString() : null;
+        }
+        return item.toString();
     }
     
     /**
-     * Check if instructor can access/view an exam based on their assignments
+     * Check if instructor can access/view an exam based on their assignments.
+     * Uses normalized ID comparison so UUID/string format differences match.
+     * When sectionOnlyAccess is true, only section-level exams (exam.sectionId set) in allowedSectionIds are shown.
      */
-    private boolean canInstructorAccessExam(Assessment exam, 
-            java.util.Set<String> allowedCourseIds, 
-            java.util.Set<String> allowedClassIds, 
-            java.util.Set<String> allowedSectionIds) {
+    private boolean canInstructorAccessExam(Assessment exam,
+            java.util.Set<String> allowedCourseIds,
+            java.util.Set<String> allowedClassIds,
+            java.util.Set<String> allowedSectionIds,
+            boolean sectionOnlyAccess) {
+        String courseId = normalizeId(exam.getCourseId());
+        String sectionId = normalizeId(exam.getSectionId());
+        String classId = normalizeId(exam.getClassId());
+
+        // Instructor with only section-level access: show only section-level exams assigned to their sections
+        if (sectionOnlyAccess) {
+            return sectionId != null && allowedSectionIds.contains(sectionId);
+        }
+
+        // Section-level exam: show if instructor has that section
+        if (sectionId != null && allowedSectionIds.contains(sectionId)) {
+            return true;
+        }
+
         // Check if exam's course is directly assigned
-        if (allowedCourseIds.contains(exam.getCourseId())) {
-            // If exam is section-specific, check section access
-            if (exam.getSectionId() != null) {
-                return allowedSectionIds.contains(exam.getSectionId());
+        if (courseId != null && allowedCourseIds.contains(courseId)) {
+            // If exam is section-specific, already handled above
+            if (sectionId != null) {
+                return allowedSectionIds.contains(sectionId);
             }
             // If exam is class-specific, check class access
-            if (exam.getClassId() != null) {
-                return allowedClassIds.contains(exam.getClassId());
+            if (classId != null) {
+                return allowedClassIds.contains(classId);
             }
             return true; // Course-wide exam
         }
-        
-        // Check if exam's class or section is assigned
-        if (exam.getSectionId() != null && allowedSectionIds.contains(exam.getSectionId())) {
+
+        // Class-wide exam (no section)
+        if (classId != null && allowedClassIds.contains(classId)) {
             return true;
         }
-        if (exam.getClassId() != null && allowedClassIds.contains(exam.getClassId())) {
-            return true;
-        }
-        
+
         return false;
     }
     
@@ -1321,12 +1476,7 @@ public class ExamService {
      * Check if the current instructor can manage (publish/complete) an exam
      */
     private boolean canInstructorManageExam(Assessment exam) {
-        String userId = getCurrentUserId();
-        if (userId == null) {
-            return false;
-        }
-        
-        Map<String, Object> instructorAccess = getInstructorAccess(userId);
+        Map<String, Object> instructorAccess = getCurrentUserInstructorAccess();
         if (instructorAccess == null) {
             return false;
         }
@@ -1334,8 +1484,21 @@ public class ExamService {
         java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
         java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
         java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        boolean sectionOnlyAccess = getBooleanFromAccess(instructorAccess, "sectionOnlyAccess", false);
         
-        return canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds);
+        return canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds, sectionOnlyAccess);
+    }
+    
+    /**
+     * Get boolean from instructor access map (e.g. sectionOnlyAccess).
+     */
+    private static boolean getBooleanFromAccess(Map<String, Object> access, String key, boolean defaultValue) {
+        if (access == null) return defaultValue;
+        Object value = access.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof String) return Boolean.parseBoolean((String) value);
+        return defaultValue;
     }
     
     /**
