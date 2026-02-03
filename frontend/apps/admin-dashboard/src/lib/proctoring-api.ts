@@ -38,7 +38,7 @@ export const proctoringApi = {
     submissionId: string
   ): Promise<ProctoringReport> => {
     return apiClient.get(
-      `/api/exams/${examId}/submissions/${submissionId}/proctoring/report`
+      `/api/student/exams/${examId}/submissions/${submissionId}/proctoring/report`
     ) as unknown as Promise<ProctoringReport>
   },
 
@@ -50,7 +50,7 @@ export const proctoringApi = {
     submissionId: string,
     severity?: 'INFO' | 'WARNING' | 'VIOLATION'
   ): Promise<ProctoringEvent[]> => {
-    const url = `/api/exams/${examId}/submissions/${submissionId}/proctoring/events`
+    const url = `/api/student/exams/${examId}/submissions/${submissionId}/proctoring/events`
     const params = severity ? `?severity=${severity}` : ''
     return apiClient.get(url + params) as unknown as Promise<ProctoringEvent[]>
   }

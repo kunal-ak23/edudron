@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, Loader2, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone, Play, Square } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, questionsApi, type QuestionData } from '@/lib/api'
+import { proctoringApi } from '@/lib/proctoring-api'
+import { ProctoringImagesViewer, type ProctoringImageItem } from '@/components/exams/ProctoringImagesViewer'
 import { QuestionEditor } from '@/components/exams/QuestionEditor'
 import {
   Dialog,
@@ -1079,7 +1081,7 @@ export default function ExamDetailPage() {
           </TabsContent>
 
           <TabsContent value="submissions">
-            <SubmissionsList examId={examId} questions={questions} reviewMethod={exam.reviewMethod} passingScorePercentage={exam.passingScorePercentage || 70} />
+            <SubmissionsList examId={examId} questions={questions} reviewMethod={exam.reviewMethod} passingScorePercentage={exam.passingScorePercentage || 70} enableProctoring={exam.enableProctoring} />
           </TabsContent>
         </Tabs>
 
@@ -1893,12 +1895,14 @@ export default function ExamDetailPage() {
 }
 
 // Submissions List Component
-function SubmissionsList({ examId, questions, reviewMethod, passingScorePercentage }: { examId: string; questions: Question[]; reviewMethod?: string; passingScorePercentage: number }) {
+function SubmissionsList({ examId, questions, reviewMethod, passingScorePercentage, enableProctoring }: { examId: string; questions: Question[]; reviewMethod?: string; passingScorePercentage: number; enableProctoring?: boolean }) {
   const router = useRouter()
   const [submissions, setSubmissions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSubmission, setSelectedSubmission] = useState<any | null>(null)
   const [showReviewDialog, setShowReviewDialog] = useState(false)
+  const [showProctoringImagesDialog, setShowProctoringImagesDialog] = useState(false)
+  const [proctoringImagesSubmissionId, setProctoringImagesSubmissionId] = useState<string | null>(null)
   const [reviewing, setReviewing] = useState(false)
   const [loadingSubmissionDetails, setLoadingSubmissionDetails] = useState(false)
   const [manualGrading, setManualGrading] = useState(false)
@@ -1910,6 +1914,8 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
   })
   const [questionGrades, setQuestionGrades] = useState<Record<string, { score: string; feedback: string }>>({})
   const [savingGrade, setSavingGrade] = useState(false)
+  const [proctoringReportLoading, setProctoringReportLoading] = useState(false)
+  const [proctoringImages, setProctoringImages] = useState<ProctoringImageItem[]>([])
   const { toast } = useToast()
 
   const loadSubmissions = useCallback(async () => {
@@ -1941,6 +1947,38 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
   useEffect(() => {
     loadSubmissions()
   }, [examId, loadSubmissions])
+
+  useEffect(() => {
+    if (!showProctoringImagesDialog || !proctoringImagesSubmissionId) {
+      setProctoringImages([])
+      return
+    }
+    let cancelled = false
+    setProctoringReportLoading(true)
+    setProctoringImages([])
+    proctoringApi.getReport(examId, proctoringImagesSubmissionId)
+      .then((report) => {
+        if (cancelled) return
+        const images: ProctoringImageItem[] = []
+        if (report.identityVerificationPhotoUrl) {
+          images.push({
+            url: report.identityVerificationPhotoUrl,
+            label: 'Identity verification'
+          })
+        }
+        report.proctoringData?.photos?.forEach((p) => {
+          images.push({ url: p.url, capturedAt: p.capturedAt })
+        })
+        setProctoringImages(images)
+      })
+      .catch(() => {
+        if (!cancelled) setProctoringImages([])
+      })
+      .finally(() => {
+        if (!cancelled) setProctoringReportLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [showProctoringImagesDialog, proctoringImagesSubmissionId, examId])
 
   if (loading) {
     return (
@@ -2070,6 +2108,19 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                       }} disabled={reviewing}>
                         {reviewing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
                         AI Review
+                      </Button>
+                    )}
+                    {enableProctoring && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setProctoringImagesSubmissionId(submission.id)
+                          setShowProctoringImagesDialog(true)
+                        }}
+                      >
+                        <Camera className="h-4 w-4 mr-2" />
+                        Proctoring
                       </Button>
                     )}
                   </div>
@@ -2581,6 +2632,36 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
               Close
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Proctoring images dialog */}
+      <Dialog
+        open={showProctoringImagesDialog}
+        onOpenChange={(open) => {
+          setShowProctoringImagesDialog(open)
+          if (!open) setProctoringImagesSubmissionId(null)
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Proctoring images</DialogTitle>
+            <DialogDescription>
+              {proctoringImagesSubmissionId && `Submission: ${proctoringImagesSubmissionId}`}
+            </DialogDescription>
+          </DialogHeader>
+          {proctoringReportLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+            </div>
+          ) : proctoringImages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
+              <Camera className="h-12 w-12 mb-2 opacity-50" />
+              <p>No proctoring data or images captured for this submission</p>
+            </div>
+          ) : (
+            <ProctoringImagesViewer images={proctoringImages} />
+          )}
         </DialogContent>
       </Dialog>
     </Card>
