@@ -38,6 +38,14 @@ interface Exam {
   blockTabSwitch?: boolean
   maxTabSwitchesAllowed?: number
   reviewMethod?: 'AI' | 'INSTRUCTOR'
+  /** When false, exam is not in its take window; do not show questions. */
+  availableForTake?: boolean
+  /** Message when availableForTake is false (e.g. "Exam has not begun yet", "Exam has ended"). */
+  availabilityMessage?: string
+  startTime?: string
+  endTime?: string
+  /** FIXED_WINDOW = time based on end time; FLEXIBLE_START = time starts when user clicks start */
+  timingMode?: 'FIXED_WINDOW' | 'FLEXIBLE_START'
 }
 
 interface Question {
@@ -468,6 +476,19 @@ export default function TakeExamPage() {
         questions: questionsArray
       }
       
+      // When exam is not available for take (not begun or ended), show message only; do not load submission or questions
+      if (!isPreviewMode && (examWithQuestions as any).availableForTake === false) {
+        setExam({
+          ...examWithQuestions,
+          questions: [],
+          availableForTake: false,
+          availabilityMessage: (examWithQuestions as any).availabilityMessage || 'Exam is not available.'
+        })
+        setLoading(false)
+        isLoadingExamRef.current = false
+        return
+      }
+      
       if (examWithQuestions.questions.length === 0) {
       }
       
@@ -690,11 +711,15 @@ export default function TakeExamPage() {
             return
           }
           
-          // Check if exam has ended (403 Forbidden)
+          // Check if exam not available (403 Forbidden) – show backend message
           if (startError?.response?.status === 403 || startError?.status === 403) {
+            const data = startError?.response?.data
+            const description = (typeof data?.message === 'string' && data.message)
+              ? data.message
+              : (typeof data?.error === 'string' ? data.error : null) || 'This exam is not available.'
             toast({
               title: 'Exam Unavailable',
-              description: 'This exam is no longer available.',
+              description,
               variant: 'destructive'
             })
             router.push('/exams')
@@ -1065,6 +1090,41 @@ export default function TakeExamPage() {
     )
   }
 
+  // Exam not available for take (not begun or ended) – show message only, no questions
+  if (exam.availableForTake === false || (exam.availabilityMessage && (!exam.questions || exam.questions.length === 0))) {
+    const message = exam.availabilityMessage || 'Exam is not available.'
+    const startTime = exam.startTime ? new Date(exam.startTime).toLocaleString() : null
+    const endTime = exam.endTime ? new Date(exam.endTime).toLocaleString() : null
+    return (
+      <ProtectedRoute>
+        <StudentLayout>
+          <div className="max-w-2xl mx-auto py-12 px-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>{exam.title}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3 text-amber-600">
+                  <AlertTriangle className="h-6 w-6 flex-shrink-0" />
+                  <p className="font-medium">{message}</p>
+                </div>
+                {(startTime || endTime) && (
+                  <div className="text-sm text-gray-600">
+                    {startTime && <p>Starts: {startTime}</p>}
+                    {endTime && <p>Ends: {endTime}</p>}
+                  </div>
+                )}
+                <Button variant="outline" onClick={() => router.push('/exams')}>
+                  Back to Exams
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </StudentLayout>
+      </ProtectedRoute>
+    )
+  }
+
   return (
     <ProtectedRoute>
       <StudentLayout>
@@ -1184,6 +1244,9 @@ export default function TakeExamPage() {
                       timeRemainingSeconds={timeRemaining}
                       onTimeUp={handleTimeUp}
                       onUpdate={(remaining) => setTimeRemaining(remaining)}
+                      timingMode={(exam as any).timingMode || 'FIXED_WINDOW'}
+                      examEndTime={(exam as any).endTime}
+                      examStartedAt={undefined}
                     />
                   )}
                 </div>

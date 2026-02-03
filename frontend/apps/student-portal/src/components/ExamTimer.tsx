@@ -17,6 +17,13 @@ interface ExamTimerProps {
   examStartedAt?: string // ISO timestamp when student started
 }
 
+/** Compute seconds remaining until end time (for FIXED_WINDOW). */
+function getSecondsUntilEnd(examEndTime: string): number {
+  const end = new Date(examEndTime).getTime()
+  const now = Date.now()
+  return Math.max(0, Math.floor((end - now) / 1000))
+}
+
 export function ExamTimer({ 
   timeRemainingSeconds, 
   onTimeUp, 
@@ -26,14 +33,22 @@ export function ExamTimer({
   examEndTime,
   examStartedAt
 }: ExamTimerProps) {
-  const [remaining, setRemaining] = useState(timeRemainingSeconds)
+  // FIXED_WINDOW with endTime: derive from end time; FLEXIBLE_START: count down from initial (starts when user clicked start)
+  const isFixedWindowWithEnd = timingMode === 'FIXED_WINDOW' && examEndTime
+  const [remaining, setRemaining] = useState(() => 
+    isFixedWindowWithEnd ? getSecondsUntilEnd(examEndTime) : timeRemainingSeconds
+  )
   const [warningShown, setWarningShown] = useState(false)
   const [fiveMinWarningShown, setFiveMinWarningShown] = useState(false)
   const [oneMinWarningShown, setOneMinWarningShown] = useState(false)
 
   useEffect(() => {
-    setRemaining(timeRemainingSeconds)
-  }, [timeRemainingSeconds])
+    if (isFixedWindowWithEnd && examEndTime) {
+      setRemaining(getSecondsUntilEnd(examEndTime))
+    } else {
+      setRemaining(timeRemainingSeconds)
+    }
+  }, [timeRemainingSeconds, isFixedWindowWithEnd, examEndTime])
 
   useEffect(() => {
     if (remaining <= 0) {
@@ -44,23 +59,33 @@ export function ExamTimer({
     }
 
     const interval = setInterval(() => {
-      setRemaining(prev => {
-        const newRemaining = Math.max(0, prev - 1)
-        
+      if (isFixedWindowWithEnd && examEndTime) {
+        // FIXED_WINDOW: time is based on end time — recalculate every second
+        const newRemaining = getSecondsUntilEnd(examEndTime)
+        setRemaining(newRemaining)
         if (onUpdate) {
           onUpdate(newRemaining)
         }
-
         if (newRemaining === 0 && autoSubmit) {
           onTimeUp()
         }
-
-        return newRemaining
-      })
+      } else {
+        // FLEXIBLE_START: time started when user clicked start — count down from stored value
+        setRemaining(prev => {
+          const newRemaining = Math.max(0, prev - 1)
+          if (onUpdate) {
+            onUpdate(newRemaining)
+          }
+          if (newRemaining === 0 && autoSubmit) {
+            onTimeUp()
+          }
+          return newRemaining
+        })
+      }
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [remaining, onTimeUp, onUpdate, autoSubmit])
+  }, [remaining, onTimeUp, onUpdate, autoSubmit, isFixedWindowWithEnd, examEndTime])
 
   useEffect(() => {
     // Show warning when 5 minutes remaining

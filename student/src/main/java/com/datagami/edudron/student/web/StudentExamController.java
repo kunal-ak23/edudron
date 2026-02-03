@@ -30,6 +30,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -376,8 +377,23 @@ public class StudentExamController {
                 return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
             }
             
+            // Compute whether exam is available for take (live and in window)
+            AvailabilityResult availability = computeAvailabilityForTake(exam);
+            com.fasterxml.jackson.databind.node.ObjectNode examNode = (com.fasterxml.jackson.databind.node.ObjectNode) exam.deepCopy();
+            examNode.put("availableForTake", availability.available);
+            if (availability.message != null) {
+                examNode.put("availabilityMessage", availability.message);
+            }
+            
+            if (!availability.available) {
+                // Do not send questions to frontend when not allowed to take
+                examNode.set("questions", objectMapper.createArrayNode());
+                return ResponseEntity.ok(examNode);
+            }
+            
             // Apply randomization if student has a submission with randomized order
-            JsonNode finalExam = applyRandomization(exam, id, studentId, clientId);
+            JsonNode finalExam = applyRandomization(examNode, id, studentId, clientId);
+            ((com.fasterxml.jackson.databind.node.ObjectNode) finalExam).put("availableForTake", true);
             
             return ResponseEntity.ok(finalExam);
         } catch (Exception e) {
@@ -388,7 +404,7 @@ public class StudentExamController {
     
     @PostMapping("/{id}/start")
     @Operation(summary = "Start exam", description = "Start an exam attempt")
-    public ResponseEntity<AssessmentSubmissionDTO> startExam(
+    public ResponseEntity<?> startExam(
             @PathVariable String id,
             @RequestBody(required = false) JsonNode request) {
         
@@ -432,6 +448,15 @@ public class StudentExamController {
                 return ResponseEntity.badRequest().build();
             }
             
+            // Status check: exam must be LIVE to start
+            String status = exam.has("status") && !exam.get("status").isNull() ? exam.get("status").asText() : null;
+            if (!"LIVE".equals(status)) {
+                logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", 
+                    studentId, id, status);
+                return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+            }
+            
             java.time.OffsetDateTime endTime = null;
             java.time.OffsetDateTime startTime = null;
             
@@ -450,7 +475,7 @@ public class StudentExamController {
                             logger.warn("Student {} attempted to start exam {} after end time. End: {}, Now: {}", 
                                 studentId, id, endTime, now);
                             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                                .body(null);
+                                .body(Map.of("message", "Exam has ended"));
                         }
                     }
                     // For FLEXIBLE_START, we don't block based on endTime at start
@@ -473,7 +498,7 @@ public class StudentExamController {
                         logger.warn("Student {} attempted to start exam {} before start time. Start: {}, Now: {}", 
                             studentId, id, startTime, now);
                         return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                            .body(null);
+                            .body(Map.of("message", "Exam has not begun yet"));
                     }
                 } catch (Exception e) {
                     logger.error("Failed to parse exam start time: {}", startTimeStr, e);
@@ -608,6 +633,74 @@ public class StudentExamController {
         }
     }
     
+    /**
+     * Result of availability check for taking an exam.
+     */
+    private static class AvailabilityResult {
+        final boolean available;
+        final String message;
+
+        AvailabilityResult(boolean available, String message) {
+            this.available = available;
+            this.message = message;
+        }
+    }
+
+    /**
+     * Compute whether the exam is currently available for take (live and within window).
+     * FIXED_WINDOW: available when status == LIVE and now >= startTime and now <= endTime.
+     * FLEXIBLE_START: available when status == LIVE.
+     */
+    private AvailabilityResult computeAvailabilityForTake(JsonNode exam) {
+        String status = exam.has("status") && !exam.get("status").isNull() ? exam.get("status").asText() : null;
+        String timingModeStr = exam.has("timingMode") && !exam.get("timingMode").isNull() ?
+            exam.get("timingMode").asText() : "FIXED_WINDOW";
+        boolean isFlexible = "FLEXIBLE_START".equalsIgnoreCase(timingModeStr);
+        OffsetDateTime now = OffsetDateTime.now();
+
+        if (isFlexible) {
+            boolean available = "LIVE".equals(status);
+            return new AvailabilityResult(available, available ? null : "Exam has not begun yet");
+        }
+
+        // FIXED_WINDOW
+        if (!"LIVE".equals(status)) {
+            return new AvailabilityResult(false, "Exam has not begun yet");
+        }
+        OffsetDateTime startTime = null;
+        OffsetDateTime endTime = null;
+        if (exam.has("startTime") && !exam.get("startTime").isNull()) {
+            String startStr = exam.get("startTime").asText();
+            if (startStr != null && !startStr.isBlank()) {
+                try {
+                    startTime = OffsetDateTime.parse(startStr);
+                } catch (Exception e) {
+                    logger.debug("Failed to parse exam startTime: {}", startStr);
+                }
+            }
+        }
+        if (exam.has("endTime") && !exam.get("endTime").isNull()) {
+            String endStr = exam.get("endTime").asText();
+            if (endStr != null && !endStr.isBlank()) {
+                try {
+                    endTime = OffsetDateTime.parse(endStr);
+                } catch (Exception e) {
+                    logger.debug("Failed to parse exam endTime: {}", endStr);
+                }
+            }
+        }
+        if (startTime == null || endTime == null) {
+            return new AvailabilityResult(true, null);
+        }
+        if (now.isBefore(startTime)) {
+            return new AvailabilityResult(false, "Exam has not begun yet");
+        }
+        if (now.isAfter(endTime)) {
+            return new AvailabilityResult(false, "Exam has ended");
+        }
+        return new AvailabilityResult(true, null);
+    }
+
     /**
      * Apply randomization to exam based on student's submission
      */
