@@ -22,6 +22,12 @@ import {
 import { apiClient, coursesApi, enrollmentsApi } from '@/lib/api'
 import type { Course, Batch } from '@kunal-ak23/edudron-shared-utils'
 
+interface InstructorAccess {
+  allowedClassIds: string[]
+  allowedSectionIds: string[]
+  allowedCourseIds: string[]
+}
+
 // Force dynamic rendering - disable static generation
 export const dynamic = 'force-dynamic'
 
@@ -92,51 +98,106 @@ export default function DashboardPage() {
     setLoading(true)
     try {
       const userStr = localStorage.getItem('user')
+      let parsedUser: { id?: string; name?: string; role?: string } | null = null
       if (userStr) {
-        setUser(JSON.parse(userStr))
-      }
-
-      const results = await Promise.allSettled([
-        coursesApi.listCourses(),
-        enrollmentsApi.listBatches(),
-        apiClient.get<number>('/idp/users/role/STUDENT/count?active=true'),
-        apiClient.get<number>('/api/classes/count?active=true'),
-        apiClient.get<number>('/api/sections/count?active=true'),
-      ])
-
-      const coursesData = results[0].status === 'fulfilled' ? results[0].value : []
-      const batchesData = results[1].status === 'fulfilled' ? results[1].value : []
-
-      // Count endpoint returns a number
-      let resolvedStudentCount: number | null = null
-      if (results[2].status === 'fulfilled') {
-        const raw = results[2].value?.data
-        if (typeof raw === 'number' && Number.isFinite(raw)) {
-          resolvedStudentCount = raw
+        try {
+          parsedUser = JSON.parse(userStr)
+          setUser(parsedUser)
+        } catch {
+          setUser(null)
         }
       }
 
-      let resolvedActiveClassCount: number | null = null
-      if (results[3].status === 'fulfilled') {
-        const raw = results[3].value?.data
-        if (typeof raw === 'number' && Number.isFinite(raw)) {
-          resolvedActiveClassCount = raw
-        }
-      }
+      const isInstructor = parsedUser?.role === 'INSTRUCTOR'
+      const isSupportStaff = parsedUser?.role === 'SUPPORT_STAFF'
+      const useInstructorScope = (isInstructor || isSupportStaff) && parsedUser?.id
 
-      let resolvedActiveSectionCount: number | null = null
-      if (results[4].status === 'fulfilled') {
-        const raw = results[4].value?.data
-        if (typeof raw === 'number' && Number.isFinite(raw)) {
-          resolvedActiveSectionCount = raw
+      if (useInstructorScope) {
+        // Instructor/scoped path: fetch access, then load and filter courses and batches
+        let access: InstructorAccess | null = null
+        try {
+          const accessRes = await apiClient.get<InstructorAccess>(
+            `/api/instructor-assignments/instructor/${parsedUser!.id}/access`
+          )
+          access = accessRes.data
+        } catch (err) {
+          console.error('Failed to load instructor access:', err)
+          access = { allowedClassIds: [], allowedSectionIds: [], allowedCourseIds: [] }
         }
-      }
 
-      setCourses(coursesData)
-      setBatches(batchesData)
-      setStudentCount(resolvedStudentCount)
-      setActiveClassCount(resolvedActiveClassCount)
-      setActiveSectionCount(resolvedActiveSectionCount)
+        const allowedCourseIds = new Set(access?.allowedCourseIds ?? [])
+        const allowedSectionIds = new Set(access?.allowedSectionIds ?? [])
+        const allowedClassIds = access?.allowedClassIds ?? []
+
+        const [coursesRes, batchesRes] = await Promise.all([
+          coursesApi.listCourses(),
+          enrollmentsApi.listBatches(),
+        ])
+
+        const coursesData =
+          allowedCourseIds.size > 0
+            ? coursesRes.filter((c) => allowedCourseIds.has(c.id))
+            : []
+        const batchesData =
+          allowedSectionIds.size > 0
+            ? batchesRes.filter((b) => allowedSectionIds.has(b.id))
+            : []
+
+        const resolvedActiveClassCount = allowedClassIds.length
+        const resolvedActiveSectionCount = allowedSectionIds.size
+        const resolvedStudentCount = batchesData.reduce(
+          (sum, b) => sum + (b.enrolledCount ?? b.studentCount ?? 0),
+          0
+        )
+
+        setCourses(coursesData)
+        setBatches(batchesData)
+        setStudentCount(resolvedStudentCount)
+        setActiveClassCount(resolvedActiveClassCount)
+        setActiveSectionCount(resolvedActiveSectionCount)
+      } else {
+        // Non-instructor path: tenant-wide data
+        const results = await Promise.allSettled([
+          coursesApi.listCourses(),
+          enrollmentsApi.listBatches(),
+          apiClient.get<number>('/idp/users/role/STUDENT/count?active=true'),
+          apiClient.get<number>('/api/classes/count?active=true'),
+          apiClient.get<number>('/api/sections/count?active=true'),
+        ])
+
+        const coursesData = results[0].status === 'fulfilled' ? results[0].value : []
+        const batchesData = results[1].status === 'fulfilled' ? results[1].value : []
+
+        let resolvedStudentCount: number | null = null
+        if (results[2].status === 'fulfilled') {
+          const raw = results[2].value?.data
+          if (typeof raw === 'number' && Number.isFinite(raw)) {
+            resolvedStudentCount = raw
+          }
+        }
+
+        let resolvedActiveClassCount: number | null = null
+        if (results[3].status === 'fulfilled') {
+          const raw = results[3].value?.data
+          if (typeof raw === 'number' && Number.isFinite(raw)) {
+            resolvedActiveClassCount = raw
+          }
+        }
+
+        let resolvedActiveSectionCount: number | null = null
+        if (results[4].status === 'fulfilled') {
+          const raw = results[4].value?.data
+          if (typeof raw === 'number' && Number.isFinite(raw)) {
+            resolvedActiveSectionCount = raw
+          }
+        }
+
+        setCourses(coursesData)
+        setBatches(batchesData)
+        setStudentCount(resolvedStudentCount)
+        setActiveClassCount(resolvedActiveClassCount)
+        setActiveSectionCount(resolvedActiveSectionCount)
+      }
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
     } finally {
@@ -170,6 +231,8 @@ export default function DashboardPage() {
   if (!allowedRoles.includes(authUser.role)) {
     return null
   }
+
+  const isInstructorView = authUser.role === 'INSTRUCTOR' || authUser.role === 'SUPPORT_STAFF'
 
   const publishedCourses = courses.filter(c => c.isPublished)
   const draftCourses = courses.filter(c => !c.isPublished)
@@ -269,7 +332,13 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-3xl font-bold">{loading ? '...' : totalBatches}</p>
                 <p className="text-sm text-green-100 mt-1">
-                  {loading ? '...' : activeBatches.length} active{activeBatches.length !== totalBatches ? `, ${totalBatches - activeBatches.length} inactive` : ''}
+                  {isInstructorView
+                    ? totalBatches === 0 && !loading
+                      ? 'You have no section assignments yet'
+                      : 'Sections you\'re assigned to'
+                    : loading
+                      ? '...'
+                      : `${activeBatches.length} active${activeBatches.length !== totalBatches ? `, ${totalBatches - activeBatches.length} inactive` : ''}`}
                 </p>
               </CardContent>
             </Card>
@@ -281,7 +350,13 @@ export default function DashboardPage() {
                   <Users className="w-6 h-6 text-indigo-200" />
                 </div>
                 <p className="text-3xl font-bold">{loading ? '...' : activeClassCount ?? '—'}</p>
-                <p className="text-sm text-indigo-100 mt-1">Active in tenant</p>
+                <p className="text-sm text-indigo-100 mt-1">
+                  {isInstructorView
+                    ? (activeClassCount === 0 || activeClassCount === null) && !loading
+                      ? 'You have no class assignments yet'
+                      : 'Classes you\'re assigned to'
+                    : 'Active in tenant'}
+                </p>
               </CardContent>
             </Card>
 
@@ -293,7 +368,11 @@ export default function DashboardPage() {
                 </div>
                 <p className="text-3xl font-bold">{loading ? '...' : totalStudents.toLocaleString()}</p>
                 <p className="text-sm text-purple-100 mt-1">
-                  {studentCount !== null ? 'Students in tenant' : 'Enrolled across all batches'}
+                  {isInstructorView
+                    ? 'Enrolled in your sections'
+                    : studentCount !== null
+                      ? 'Students in tenant'
+                      : 'Enrolled across all batches'}
                 </p>
               </CardContent>
             </Card>
@@ -307,7 +386,9 @@ export default function DashboardPage() {
                 <p className="text-3xl font-bold">
                   {loading ? '...' : seatUtilization === null ? '—' : `${Math.round(seatUtilization)}%`}
                 </p>
-                <p className="text-sm text-orange-100 mt-1">Across batches with capacity set</p>
+                <p className="text-sm text-orange-100 mt-1">
+                  {isInstructorView ? 'Across your sections' : 'Across batches with capacity set'}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -339,13 +420,19 @@ export default function DashboardPage() {
                   </div>
                 ) : courses.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
-                    <p>No courses yet</p>
-                    <Button
-                      className="mt-4"
-                      onClick={() => router.push('/courses/new')}
-                    >
-                      Create Your First Course
-                    </Button>
+                    <p>
+                      {isInstructorView
+                        ? 'No courses in your assigned classes or sections yet.'
+                        : 'No courses yet'}
+                    </p>
+                    {!isInstructorView && (
+                      <Button
+                        className="mt-4"
+                        onClick={() => router.push('/courses/new')}
+                      >
+                        Create Your First Course
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -369,16 +456,18 @@ export default function DashboardPage() {
                             )}
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/courses/${course.id}`)
-                          }}
-                        >
-                          Edit
-                        </Button>
+                        {!isInstructorView && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              router.push(`/courses/${course.id}`)
+                            }}
+                          >
+                            Edit
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -395,21 +484,25 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <Button
-                      className="w-full justify-start"
-                      onClick={() => router.push('/courses/new')}
-                    >
-                      <Plus className="w-5 h-5 mr-2" />
-                      Create New Course
-                    </Button>
-                    <Button
-                      className="w-full justify-start"
-                      variant="outline"
-                      onClick={() => router.push('/batches/new')}
-                    >
-                      <Users className="w-5 h-5 mr-2" />
-                      Create New Batch
-                    </Button>
+                    {!isInstructorView && (
+                      <>
+                        <Button
+                          className="w-full justify-start"
+                          onClick={() => router.push('/courses/new')}
+                        >
+                          <Plus className="w-5 h-5 mr-2" />
+                          Create New Course
+                        </Button>
+                        <Button
+                          className="w-full justify-start"
+                          variant="outline"
+                          onClick={() => router.push('/batches/new')}
+                        >
+                          <Users className="w-5 h-5 mr-2" />
+                          Create New Batch
+                        </Button>
+                      </>
+                    )}
                     {(authUser?.role === 'SYSTEM_ADMIN' || authUser?.role === 'TENANT_ADMIN') && (
                       <Button
                         className="w-full justify-start"
@@ -428,14 +521,16 @@ export default function DashboardPage() {
                       <FileText className="w-5 h-5 mr-2" />
                       Manage Course Index
                     </Button>
-                    <Button
-                      className="w-full justify-start"
-                      variant="outline"
-                      onClick={() => router.push('/users')}
-                    >
-                      <UserCog className="w-5 h-5 mr-2" />
-                      Manage Users
-                    </Button>
+                    {!isInstructorView && (
+                      <Button
+                        className="w-full justify-start"
+                        variant="outline"
+                        onClick={() => router.push('/users')}
+                      >
+                        <UserCog className="w-5 h-5 mr-2" />
+                        Manage Users
+                      </Button>
+                    )}
                     <Button
                       className="w-full justify-start"
                       variant="outline"

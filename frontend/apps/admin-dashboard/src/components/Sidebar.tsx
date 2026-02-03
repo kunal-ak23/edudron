@@ -231,9 +231,9 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
       }
       
       // INSTRUCTOR and SUPPORT_STAFF restrictions: View-only access
-      // Hide user, student, enrollment management, instructor assignments, and settings
+      // Hide user, student, enrollment management, instructor assignments, settings, and payments
       if (isInstructor || isSupportStaff) {
-        if (item.href === '/users' || item.href === '/students' || item.href === '/enrollments' || item.href === '/instructor-assignments' || item.href === '/settings') {
+        if (item.href === '/users' || item.href === '/students' || item.href === '/enrollments' || item.href === '/instructor-assignments' || item.href === '/settings' || item.href === '/payments') {
           return false
         }
         // Hide "Generate Course" submenu for INSTRUCTOR/SUPPORT_STAFF (view-only)
