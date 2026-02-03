@@ -7,8 +7,10 @@ import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.content.domain.Assessment;
 import com.datagami.edudron.content.domain.ExamQuestion;
 import com.datagami.edudron.content.domain.QuestionBank;
+import com.datagami.edudron.content.config.CacheConfig;
 import com.datagami.edudron.content.dto.BatchExamGenerationRequest;
 import com.datagami.edudron.content.dto.BatchExamGenerationResponse;
+import com.datagami.edudron.content.dto.ExamDetailDTO;
 import com.datagami.edudron.content.dto.InstructorAccessResponse;
 import com.datagami.edudron.content.repo.AssessmentRepository;
 import com.datagami.edudron.content.repo.CourseRepository;
@@ -16,6 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -62,6 +66,9 @@ public class ExamService {
     
     @Autowired
     private ExamPaperGenerationService examPaperGenerationService;
+    
+    @Autowired
+    private CacheManager cacheManager;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -205,6 +212,7 @@ public class ExamService {
         
         Assessment updated = assessmentRepository.save(exam);
         logger.info("Successfully generated exam questions for exam: {}", examId);
+        evictExamCache(examId);
         return updated;
     }
     
@@ -275,6 +283,7 @@ public class ExamService {
         } else {
             logger.info("Scheduled exam: {} from {} to {}", examId, startTime, endTime);
         }
+        evictExamCache(examId);
         return updated;
     }
     
@@ -712,6 +721,31 @@ public class ExamService {
     }
     
     /**
+     * Get exam detail as DTO (cached in Redis). Same exam for many students = one DB hit per tenant.
+     */
+    @Cacheable(value = CacheConfig.EXAM_DETAIL_CACHE, key = "T(com.datagami.edudron.common.TenantContext).getClientId() + '::' + #examId", unless = "#result == null")
+    public ExamDetailDTO getExamDetailDTO(String examId) {
+        Assessment exam = getExamById(examId);
+        return ExamDetailDTO.fromAssessment(exam);
+    }
+    
+    /**
+     * Evict cached exam detail after any mutation (update, schedule, publish, question change, etc.).
+     */
+    public void evictExamCache(String examId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            return;
+        }
+        String key = clientIdStr + "::" + examId;
+        var cache = cacheManager.getCache(CacheConfig.EXAM_DETAIL_CACHE);
+        if (cache != null) {
+            cache.evict(key);
+            logger.debug("Evicted exam cache for key: {}", key);
+        }
+    }
+    
+    /**
      * Check if exam is currently accessible (time-based validation)
      * Returns true if current time is within exam's start and end time
      */
@@ -885,7 +919,9 @@ public class ExamService {
             exam.setPassingScorePercentage(passingScorePercentage);
         }
         
-        return assessmentRepository.save(exam);
+        Assessment saved = assessmentRepository.save(exam);
+        evictExamCache(examId);
+        return saved;
     }
     
     /**
@@ -916,11 +952,13 @@ public class ExamService {
             exam.setArchived(true);
             assessmentRepository.save(exam);
             logger.info("Archived exam {} with {} submissions", examId, submissionCount);
+            evictExamCache(examId);
             return false; // indicates archived, not deleted
         } else {
             // No submissions, safe to delete
             assessmentRepository.delete(exam);
             logger.info("Deleted exam: {}", examId);
+            evictExamCache(examId);
             return true; // indicates deleted
         }
     }
@@ -978,7 +1016,9 @@ public class ExamService {
             logger.info("Exam {} (Flexible Start) is now LIVE", examId);
         }
         
-        return assessmentRepository.save(exam);
+        Assessment saved = assessmentRepository.save(exam);
+        evictExamCache(examId);
+        return saved;
     }
     
     /**
@@ -1016,7 +1056,9 @@ public class ExamService {
         
         logger.info("Exam {} unpublished (was {})", examId, previousStatus);
         
-        return assessmentRepository.save(exam);
+        Assessment saved = assessmentRepository.save(exam);
+        evictExamCache(examId);
+        return saved;
     }
     
     /**
@@ -1051,6 +1093,7 @@ public class ExamService {
         exam.setStatus(Assessment.ExamStatus.COMPLETED);
         Assessment updated = assessmentRepository.save(exam);
         logger.info("Exam {} marked as COMPLETED", examId);
+        evictExamCache(examId);
         return updated;
     }
     
@@ -1072,6 +1115,7 @@ public class ExamService {
         exam.setArchived(true);
         assessmentRepository.save(exam);
         logger.info("Archived exam: {}", examId);
+        evictExamCache(examId);
     }
     
     /**
@@ -1100,6 +1144,7 @@ public class ExamService {
         exam.setArchived(false);
         assessmentRepository.save(exam);
         logger.info("Unarchived exam: {}", examId);
+        evictExamCache(examId);
     }
     
     /**

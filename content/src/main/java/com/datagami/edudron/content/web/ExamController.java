@@ -276,8 +276,7 @@ public class ExamController {
     @GetMapping("/{id}")
     @Operation(summary = "Get exam", description = "Get exam details by ID with unified questions")
     public ResponseEntity<ExamDetailDTO> getExam(@PathVariable String id) {
-        Assessment exam = examService.getExamById(id);
-        ExamDetailDTO dto = ExamDetailDTO.fromAssessment(exam);
+        ExamDetailDTO dto = examService.getExamDetailDTO(id);
         return ResponseEntity.ok(dto);
     }
     
@@ -945,6 +944,7 @@ public class ExamController {
         }
         
         QuizQuestion question = questionService.createQuestion(id, questionType, questionText, points, options, tentativeAnswer);
+        examService.evictExamCache(id);
         return ResponseEntity.status(HttpStatus.CREATED).body(question);
     }
     
@@ -974,6 +974,7 @@ public class ExamController {
         }
         
         QuizQuestion question = questionService.updateQuestion(questionId, questionText, points, options, tentativeAnswer);
+        examService.evictExamCache(id);
         return ResponseEntity.ok(question);
     }
     
@@ -983,6 +984,7 @@ public class ExamController {
             @PathVariable String id,
             @PathVariable String questionId) {
         questionService.deleteQuestion(questionId);
+        examService.evictExamCache(id);
         return ResponseEntity.noContent().build();
     }
     
@@ -999,6 +1001,7 @@ public class ExamController {
         }
         
         questionService.reorderQuestions(id, questionIds);
+        examService.evictExamCache(id);
         return ResponseEntity.ok().build();
     }
     

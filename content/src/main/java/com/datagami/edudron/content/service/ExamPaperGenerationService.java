@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -49,6 +50,10 @@ public class ExamPaperGenerationService {
     
     @Autowired
     private AssessmentRepository assessmentRepository;
+    
+    @Autowired
+    @Lazy
+    private ExamService examService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -166,6 +171,7 @@ public class ExamPaperGenerationService {
         
         ExamQuestion saved = examQuestionRepository.save(examQuestion);
         logger.info("Added question {} to exam {} at sequence {}", questionId, examId, nextSequence);
+        examService.evictExamCache(examId);
         return saved;
     }
     
@@ -187,6 +193,7 @@ public class ExamPaperGenerationService {
         examQuestionRepository.decrementSequencesAfter(examId, clientId, deletedSequence);
         
         logger.info("Removed question {} from exam {}", questionBankId, examId);
+        examService.evictExamCache(examId);
     }
     
     /**
@@ -212,6 +219,7 @@ public class ExamPaperGenerationService {
         examQuestionRepository.decrementSequencesAfter(examId, clientId, deletedSequence);
         
         logger.info("Removed exam question {} from exam {}", examQuestionId, examId);
+        examService.evictExamCache(examId);
     }
     
     /**
@@ -234,6 +242,7 @@ public class ExamPaperGenerationService {
         }
         
         logger.info("Reordered {} questions in exam {}", questionIds.size(), examId);
+        examService.evictExamCache(examId);
     }
     
     /**
@@ -248,7 +257,9 @@ public class ExamPaperGenerationService {
         
         examQuestion.setPointsOverride(pointsOverride);
         
-        return examQuestionRepository.save(examQuestion);
+        ExamQuestion saved = examQuestionRepository.save(examQuestion);
+        examService.evictExamCache(examId);
+        return saved;
     }
     
     /**

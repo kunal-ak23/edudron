@@ -8,6 +8,7 @@ import com.datagami.edudron.student.domain.Section;
 import com.datagami.edudron.student.dto.AssessmentSubmissionDTO;
 import com.datagami.edudron.student.repo.AssessmentSubmissionRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
+import com.datagami.edudron.student.client.ContentExamClient;
 import com.datagami.edudron.student.repo.SectionRepository;
 import com.datagami.edudron.student.service.ExamSubmissionService;
 import com.datagami.edudron.student.util.UserUtil;
@@ -61,6 +62,9 @@ public class StudentExamController {
     
     @Autowired
     private SectionRepository sectionRepository;
+    
+    @Autowired
+    private ContentExamClient contentExamClient;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -343,23 +347,10 @@ public class StudentExamController {
             }
             UUID clientId = UUID.fromString(clientIdStr);
             
-            // Fetch exam details first
-            String url = gatewayUrl + "/api/exams/" + id;
-            HttpHeaders headers = new HttpHeaders();
-            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
-            
-            ResponseEntity<JsonNode> response = getRestTemplate().exchange(
-                url,
-                HttpMethod.GET,
-                new HttpEntity<>(headers),
-                JsonNode.class
-            );
-            
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            JsonNode exam = contentExamClient.getExam(id);
+            if (exam == null) {
                 return ResponseEntity.notFound().build();
             }
-            
-            JsonNode exam = response.getBody();
             String courseId = exam.has("courseId") ? exam.get("courseId").asText() : null;
             
             if (courseId == null) {
@@ -411,23 +402,10 @@ public class StudentExamController {
         String studentId = UserUtil.getCurrentUserId();
         
         try {
-            // Fetch exam details to get courseId and timeLimitSeconds
-            String examUrl = gatewayUrl + "/api/exams/" + id;
-            HttpHeaders examHeaders = new HttpHeaders();
-            examHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
-            
-            ResponseEntity<JsonNode> examResponse = getRestTemplate().exchange(
-                examUrl,
-                HttpMethod.GET,
-                new HttpEntity<>(examHeaders),
-                JsonNode.class
-            );
-            
-            if (!examResponse.getStatusCode().is2xxSuccessful() || examResponse.getBody() == null) {
+            JsonNode exam = contentExamClient.getExam(id);
+            if (exam == null) {
                 return ResponseEntity.notFound().build();
             }
-            
-            JsonNode exam = examResponse.getBody();
             String courseId = exam.has("courseId") ? exam.get("courseId").asText() : null;
             Integer timeLimitSeconds = exam.has("timeLimitSeconds") ? 
                 exam.get("timeLimitSeconds").asInt() : null;

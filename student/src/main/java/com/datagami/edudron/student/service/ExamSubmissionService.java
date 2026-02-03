@@ -3,6 +3,7 @@ package com.datagami.edudron.student.service;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.common.UlidGenerator;
+import com.datagami.edudron.student.client.ContentExamClient;
 import com.datagami.edudron.student.domain.AssessmentSubmission;
 import com.datagami.edudron.student.domain.Enrollment;
 import com.datagami.edudron.student.repo.AssessmentSubmissionRepository;
@@ -14,19 +15,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
-import jakarta.servlet.http.HttpServletRequest;
-
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
@@ -53,40 +43,8 @@ public class ExamSubmissionService {
     @Autowired
     private ProctoringService proctoringService;
     
-    @Value("${GATEWAY_URL:http://localhost:8080}")
-    private String gatewayUrl;
-    
-    private volatile RestTemplate restTemplate;
-    private final Object restTemplateLock = new Object();
-    
-    private RestTemplate getRestTemplate() {
-        // Double-checked locking for thread-safe lazy initialization
-        if (restTemplate == null) {
-            synchronized (restTemplateLock) {
-                if (restTemplate == null) {
-                    RestTemplate newTemplate = new RestTemplate();
-                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
-                    interceptors.add(new TenantContextRestTemplateInterceptor());
-                    interceptors.add((request, body, execution) -> {
-                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-                        if (attributes != null) {
-                            HttpServletRequest currentRequest = attributes.getRequest();
-                            String authHeader = currentRequest.getHeader("Authorization");
-                            if (authHeader != null && !authHeader.isBlank()) {
-                                if (!request.getHeaders().containsKey("Authorization")) {
-                                    request.getHeaders().add("Authorization", authHeader);
-                                }
-                            }
-                        }
-                        return execution.execute(request, body);
-                    });
-                    newTemplate.setInterceptors(interceptors);
-                    restTemplate = newTemplate;
-                }
-            }
-        }
-        return restTemplate;
-    }
+    @Autowired
+    private ContentExamClient contentExamClient;
     
     /**
      * Timing mode for exams - mirrors the Assessment.TimingMode enum
@@ -487,24 +445,11 @@ public class ExamSubmissionService {
      */
     private void generateRandomization(AssessmentSubmission submission, String examId) {
         try {
-            // Fetch exam details from content service
-            String examUrl = gatewayUrl + "/api/exams/" + examId;
-            HttpHeaders headers = new HttpHeaders();
-            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
-            
-            ResponseEntity<JsonNode> examResponse = getRestTemplate().exchange(
-                examUrl,
-                HttpMethod.GET,
-                new HttpEntity<>(headers),
-                JsonNode.class
-            );
-            
-            if (!examResponse.getStatusCode().is2xxSuccessful() || examResponse.getBody() == null) {
+            JsonNode exam = contentExamClient.getExam(examId);
+            if (exam == null) {
                 logger.warn("Failed to fetch exam details for randomization: {}", examId);
                 return;
             }
-            
-            JsonNode exam = examResponse.getBody();
             boolean randomizeQuestions = exam.has("randomizeQuestions") && exam.get("randomizeQuestions").asBoolean();
             boolean randomizeMcqOptions = exam.has("randomizeMcqOptions") && exam.get("randomizeMcqOptions").asBoolean();
             

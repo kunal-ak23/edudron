@@ -18,14 +18,15 @@ public class CacheConfig {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager(
             "courseAnalytics",
             "lectureAnalytics",
-            "sectionAnalytics",    // NEW: Section-level analytics cache
-            "classAnalytics"       // NEW: Class-level analytics cache
+            "sectionAnalytics",
+            "classAnalytics",
+            "examFromContent"      // Cached exam from Content service (5 min TTL, 2000 max for scale)
         );
         cacheManager.setCaffeine(
             Caffeine.newBuilder()
-                .maximumSize(1000) // Maximum 1000 entries per cache
-                .expireAfterWrite(10, TimeUnit.MINUTES) // Cache expires after 10 minutes
-                .recordStats() // Enable cache statistics
+                .maximumSize(2000)
+                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .recordStats()
         );
         return cacheManager;
     }
