@@ -332,12 +332,44 @@ public class ExamService {
             );
         }
         
-        // NOTE: Instructor filtering is now done on the frontend to avoid:
-        // 1. Circular service calls (content -> student -> content)
-        // 2. Username vs userId mismatch (SecurityContext has username, not user ID)
-        // The frontend fetches instructor access and filters exams client-side.
+        // Apply instructor filtering if the current user is an instructor
+        exams = filterExamsForInstructor(exams);
         
         return exams;
+    }
+    
+    /**
+     * Filter exams based on instructor's section/class/course assignments.
+     * Non-instructors see all exams.
+     */
+    private List<Assessment> filterExamsForInstructor(List<Assessment> exams) {
+        String userRole = getCurrentUserRole();
+        if (!"INSTRUCTOR".equals(userRole)) {
+            return exams; // Non-instructors see all exams
+        }
+        
+        String userId = getCurrentUserId();
+        if (userId == null) {
+            logger.warn("Could not determine user ID for instructor filtering");
+            return exams;
+        }
+        
+        Map<String, Object> instructorAccess = getInstructorAccess(userId);
+        if (instructorAccess == null) {
+            logger.warn("Could not get instructor access for user {}", userId);
+            return java.util.Collections.emptyList(); // No access means no exams
+        }
+        
+        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
+        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
+        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        
+        logger.debug("Instructor {} has access to courses: {}, classes: {}, sections: {}", 
+            userId, allowedCourseIds, allowedClassIds, allowedSectionIds);
+        
+        return exams.stream()
+            .filter(exam -> canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds))
+            .collect(java.util.stream.Collectors.toList());
     }
     
     /**
@@ -379,6 +411,13 @@ public class ExamService {
         // Normalize search
         String searchTerm = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
         
+        // For instructors, we need to filter after fetching since the repository doesn't know about instructor access
+        // We fetch all matching exams and then filter + paginate in memory
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole)) {
+            return getExamsPaginatedForInstructor(clientId, examStatus, examTimingMode, searchTerm, page, size);
+        }
+        
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         
         return assessmentRepository.findExamsWithFilters(
@@ -392,7 +431,66 @@ public class ExamService {
     }
     
     /**
+     * Get paginated exams for an instructor, filtered by their section/class/course assignments.
+     */
+    private Page<Assessment> getExamsPaginatedForInstructor(UUID clientId, Assessment.ExamStatus examStatus, 
+            Assessment.TimingMode examTimingMode, String searchTerm, int page, int size) {
+        
+        String userId = getCurrentUserId();
+        if (userId == null) {
+            logger.warn("Could not determine user ID for instructor pagination");
+            return Page.empty();
+        }
+        
+        Map<String, Object> instructorAccess = getInstructorAccess(userId);
+        if (instructorAccess == null) {
+            logger.warn("Could not get instructor access for user {}", userId);
+            return Page.empty();
+        }
+        
+        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
+        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
+        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        
+        // Fetch all exams without pagination (for filtering)
+        Pageable unpaged = PageRequest.of(0, Integer.MAX_VALUE, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Assessment> allExams = assessmentRepository.findExamsWithFilters(
+            Assessment.AssessmentType.EXAM,
+            clientId,
+            examStatus,
+            examTimingMode,
+            searchTerm,
+            unpaged
+        );
+        
+        // Filter by instructor access
+        List<Assessment> filteredExams = allExams.getContent().stream()
+            .filter(exam -> canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds))
+            .collect(java.util.stream.Collectors.toList());
+        
+        // Apply pagination manually
+        int start = page * size;
+        int end = Math.min(start + size, filteredExams.size());
+        
+        if (start >= filteredExams.size()) {
+            return new org.springframework.data.domain.PageImpl<>(
+                java.util.Collections.emptyList(),
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")),
+                filteredExams.size()
+            );
+        }
+        
+        List<Assessment> pageContent = filteredExams.subList(start, end);
+        return new org.springframework.data.domain.PageImpl<>(
+            pageContent,
+            PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")),
+            filteredExams.size()
+        );
+    }
+    
+    /**
      * Get exam counts by status for filter badges.
+     * For instructors, only counts exams they have access to.
      */
     public Map<String, Long> getExamCountsByStatus() {
         String clientIdStr = TenantContext.getClientId();
@@ -400,6 +498,12 @@ public class ExamService {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
+        
+        // For instructors, we need to count only accessible exams
+        String userRole = getCurrentUserRole();
+        if ("INSTRUCTOR".equals(userRole)) {
+            return getExamCountsByStatusForInstructor(clientId);
+        }
         
         List<Object[]> results = assessmentRepository.countExamsByStatus(
             Assessment.AssessmentType.EXAM,
@@ -422,6 +526,54 @@ public class ExamService {
         for (Assessment.ExamStatus status : Assessment.ExamStatus.values()) {
             counts.putIfAbsent(status.name(), 0L);
         }
+        
+        return counts;
+    }
+    
+    /**
+     * Get exam counts by status for an instructor, filtered by their section/class/course assignments.
+     */
+    private Map<String, Long> getExamCountsByStatusForInstructor(UUID clientId) {
+        String userId = getCurrentUserId();
+        Map<String, Long> counts = new HashMap<>();
+        
+        // Ensure all statuses are present with 0 count
+        for (Assessment.ExamStatus status : Assessment.ExamStatus.values()) {
+            counts.put(status.name(), 0L);
+        }
+        counts.put("all", 0L);
+        
+        if (userId == null) {
+            logger.warn("Could not determine user ID for instructor exam counts");
+            return counts;
+        }
+        
+        Map<String, Object> instructorAccess = getInstructorAccess(userId);
+        if (instructorAccess == null) {
+            logger.warn("Could not get instructor access for user {}", userId);
+            return counts;
+        }
+        
+        java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
+        java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
+        java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
+        
+        // Fetch all exams and filter by instructor access
+        List<Assessment> allExams = assessmentRepository.findActiveByAssessmentTypeAndClientIdOrderByCreatedAtDesc(
+            Assessment.AssessmentType.EXAM,
+            clientId
+        );
+        
+        long total = 0;
+        for (Assessment exam : allExams) {
+            if (canInstructorAccessExam(exam, allowedCourseIds, allowedClassIds, allowedSectionIds)) {
+                String statusName = exam.getStatus() != null ? 
+                    exam.getStatus().name() : Assessment.ExamStatus.DRAFT.name();
+                counts.merge(statusName, 1L, Long::sum);
+                total++;
+            }
+        }
+        counts.put("all", total);
         
         return counts;
     }
