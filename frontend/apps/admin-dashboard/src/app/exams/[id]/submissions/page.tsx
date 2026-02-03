@@ -22,14 +22,18 @@ import {
   CheckCircle, 
   XCircle,
   Clock,
-  Download
+  Download,
+  CheckSquare
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@kunal-ak23/edudron-shared-utils'
 
 interface Submission {
   id: string
   studentId: string
+  studentName?: string
+  studentEmail?: string
   score: number | null
   maxScore: number | null
   percentage: number | null
@@ -44,6 +48,8 @@ interface Exam {
   id: string
   title: string
   description?: string
+  reviewMethod?: string
+  isMcqOnly?: boolean
 }
 
 export const dynamic = 'force-dynamic'
@@ -60,6 +66,7 @@ export default function ExamSubmissionsPage() {
   const [loading, setLoading] = useState(true)
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(new Set())
   const [regrading, setRegrading] = useState(false)
+  const [gradingMcq, setGradingMcq] = useState(false)
   const [regradingSubmissions, setRegradingSubmissions] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -97,11 +104,15 @@ export default function ExamSubmissionsPage() {
   }, [loadData])
 
   useEffect(() => {
-    // Filter submissions by search query
+    // Filter submissions by search query (student ID, name or email)
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
       setFilteredSubmissions(
-        submissions.filter(s => s.studentId.toLowerCase().includes(query))
+        submissions.filter(s =>
+          s.studentId.toLowerCase().includes(query) ||
+          (s.studentName?.toLowerCase().includes(query)) ||
+          (s.studentEmail?.toLowerCase().includes(query))
+        )
       )
     } else {
       setFilteredSubmissions(submissions)
@@ -163,6 +174,36 @@ export default function ExamSubmissionsPage() {
     }
   }
 
+  const handleGradeAllMcq = async () => {
+    setGradingMcq(true)
+    try {
+      const response = await apiClient.post(`/api/exams/${examId}/submissions/bulk-grade-mcq`, {})
+      const result = response as any
+      const body = result?.data ?? result
+      const gradedCount = body?.gradedCount ?? 0
+      const skippedCount = body?.skippedCount ?? 0
+      const errors = body?.errors ?? []
+      const errorCount = Array.isArray(errors) ? errors.length : 0
+      let description = `Graded ${gradedCount} submission(s).`
+      if (skippedCount > 0) description += ` Skipped ${skippedCount}.`
+      if (errorCount > 0) description += ` ${errorCount} error(s).`
+      toast({
+        title: 'Grade All MCQ Complete',
+        description
+      })
+      await loadData()
+    } catch (error) {
+      console.error('Failed to grade all MCQ:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to grade submissions',
+        variant: 'destructive'
+      })
+    } finally {
+      setGradingMcq(false)
+    }
+  }
+
   const handleRegradeSubmission = async (submissionId: string) => {
     setRegradingSubmissions(prev => new Set(prev).add(submissionId))
     
@@ -197,6 +238,8 @@ export default function ExamSubmissionsPage() {
     // Header
     csvRows.push([
       'Student ID',
+      'Student Name',
+      'Student Email',
       'Score',
       'Max Score',
       'Percentage',
@@ -210,6 +253,8 @@ export default function ExamSubmissionsPage() {
     for (const submission of filteredSubmissions) {
       csvRows.push([
         submission.studentId,
+        submission.studentName ?? '',
+        submission.studentEmail ?? '',
         submission.score !== null ? submission.score : 'N/A',
         submission.maxScore !== null ? submission.maxScore : 'N/A',
         submission.percentage !== null ? submission.percentage.toFixed(2) + '%' : 'N/A',
@@ -262,7 +307,30 @@ export default function ExamSubmissionsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          {selectedSubmissions.size > 0 && (
+          {exam?.isMcqOnly && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={handleGradeAllMcq}
+                    disabled={gradingMcq}
+                    variant="outline"
+                  >
+                    {gradingMcq ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <CheckSquare className="h-4 w-4 mr-2" />
+                    )}
+                    Grade All MCQ
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Grade all completed submissions (MCQ/True-False only). Works for any review method.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {selectedSubmissions.size > 0 && (exam?.reviewMethod === 'AI' || exam?.reviewMethod === 'BOTH') && (
             <Button 
               onClick={handleBulkRegrade} 
               disabled={regrading}
@@ -348,10 +416,10 @@ export default function ExamSubmissionsPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="max-w-md">
-            <Label htmlFor="search">Search by Student ID</Label>
+            <Label htmlFor="search">Search by student ID, name or email</Label>
             <Input
               id="search"
-              placeholder="Enter student ID..."
+              placeholder="Student ID, name or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -380,7 +448,7 @@ export default function ExamSubmissionsPage() {
                       onChange={(e) => toggleAllSubmissions(e.target.checked)}
                     />
                   </TableHead>
-                  <TableHead>Student ID</TableHead>
+                  <TableHead>Student</TableHead>
                   <TableHead>Score</TableHead>
                   <TableHead>Percentage</TableHead>
                   <TableHead>Status</TableHead>
@@ -400,8 +468,10 @@ export default function ExamSubmissionsPage() {
                         onChange={() => toggleSubmission(submission.id)}
                       />
                     </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {submission.studentId.substring(0, 12)}...
+                    <TableCell className="text-sm">
+                      <span title={submission.studentId}>
+                        {submission.studentName || submission.studentEmail || `${submission.studentId.substring(0, 12)}...`}
+                      </span>
                     </TableCell>
                     <TableCell>
                       {submission.score !== null && submission.score !== undefined
@@ -458,22 +528,24 @@ export default function ExamSubmissionsPage() {
                         : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRegradeSubmission(submission.id)}
-                        disabled={regradingSubmissions.has(submission.id)}
-                        title="Re-grade this submission"
-                      >
-                        {regradingSubmissions.has(submission.id) ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-1" />
-                            Re-grade
-                          </>
-                        )}
-                      </Button>
+                      {(exam?.reviewMethod === 'AI' || exam?.reviewMethod === 'BOTH') && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRegradeSubmission(submission.id)}
+                          disabled={regradingSubmissions.has(submission.id)}
+                          title="Re-grade this submission"
+                        >
+                          {regradingSubmissions.has(submission.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-1" />
+                              Re-grade
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

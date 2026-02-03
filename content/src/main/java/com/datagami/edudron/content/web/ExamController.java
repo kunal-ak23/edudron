@@ -1,6 +1,7 @@
 package com.datagami.edudron.content.web;
 
 import com.datagami.edudron.content.domain.Assessment;
+import com.datagami.edudron.content.domain.QuestionBank;
 import com.datagami.edudron.content.domain.QuizQuestion;
 import com.datagami.edudron.content.dto.BatchExamGenerationRequest;
 import com.datagami.edudron.content.dto.BatchExamGenerationResponse;
@@ -110,6 +111,35 @@ public class ExamController {
             }
         }
         return restTemplate;
+    }
+    
+    /** Fetch student name and email from identity (one call per student). Returns null on failure. */
+    private java.util.Map<String, String> fetchStudentNameEmail(String studentId) {
+        try {
+            String url = gatewayUrl + "/idp/users/" + studentId;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            ResponseEntity<Map<String, Object>> resp = getRestTemplate().exchange(
+                url,
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                Map<String, Object> user = resp.getBody();
+                String name = user.get("name") != null ? user.get("name").toString() : null;
+                String email = user.get("email") != null ? user.get("email").toString() : null;
+                if (name != null || email != null) {
+                    java.util.Map<String, String> info = new java.util.HashMap<>();
+                    info.put("name", name);
+                    info.put("email", email);
+                    return info;
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("Could not fetch user details for student {}: {}", studentId, e.getMessage());
+        }
+        return null;
     }
     
     @PostMapping
@@ -536,13 +566,30 @@ public class ExamController {
                 submissions = new ArrayList<>();
             }
             
-            // Filter out deeply nested JSON fields to prevent nesting depth errors
+            // Enrich with student name/email (one identity call per unique student)
+            java.util.Set<String> uniqueStudentIds = submissions.stream()
+                .map(s -> (String) s.get("studentId"))
+                .filter(sid -> sid != null && !sid.isEmpty())
+                .collect(Collectors.toSet());
+            java.util.Map<String, java.util.Map<String, String>> studentInfo = new java.util.HashMap<>();
+            for (String studentId : uniqueStudentIds) {
+                java.util.Map<String, String> info = fetchStudentNameEmail(studentId);
+                if (info != null) {
+                    studentInfo.put(studentId, info);
+                }
+            }
+            
+            // Filter out deeply nested JSON fields and add student name/email
             List<Map<String, Object>> simplifiedSubmissions = new ArrayList<>();
             for (Map<String, Object> submission : submissions) {
                 Map<String, Object> simplified = new java.util.HashMap<>(submission);
-                // Remove deeply nested JSON fields that cause nesting depth issues
                 simplified.remove("answersJson");
                 simplified.remove("aiReviewFeedback");
+                String sid = (String) submission.get("studentId");
+                if (sid != null && studentInfo.containsKey(sid)) {
+                    simplified.put("studentName", studentInfo.get(sid).get("name"));
+                    simplified.put("studentEmail", studentInfo.get(sid).get("email"));
+                }
                 simplifiedSubmissions.add(simplified);
             }
             
@@ -670,6 +717,205 @@ public class ExamController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to process bulk re-grade: " + e.getMessage()));
         }
+    }
+    
+    @PostMapping("/{id}/submissions/bulk-grade-mcq")
+    @Operation(summary = "Bulk grade MCQ-only exam", description = "Grade all completed submissions for an exam that contains only MCQ/TRUE_FALSE questions. Works for all review methods (INSTRUCTOR, AI, BOTH).")
+    public ResponseEntity<?> bulkGradeMcq(
+            @PathVariable String id) {
+        try {
+            String clientIdStr = TenantContext.getClientId();
+            if (clientIdStr == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            }
+            UUID clientId = UUID.fromString(clientIdStr);
+            
+            Assessment exam = examService.getExamById(id);
+            List<QuizQuestion> quizQuestions = quizQuestionRepository.findByAssessmentIdAndClientIdWithOptions(id, clientId);
+            
+            if (!isExamMcqOnly(exam, quizQuestions)) {
+                return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Exam is not MCQ-only. Bulk grade is only available when all questions are MULTIPLE_CHOICE or TRUE_FALSE."));
+            }
+            
+            String submissionsUrl = gatewayUrl + "/api/assessments/" + id + "/submissions";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            ResponseEntity<List<Map<String, Object>>> submissionsResponse = getRestTemplate().exchange(
+                submissionsUrl,
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+            List<Map<String, Object>> allSubmissions = submissionsResponse.getBody();
+            if (allSubmissions == null) allSubmissions = new ArrayList<>();
+            
+            List<Map<String, Object>> completed = allSubmissions.stream()
+                .filter(s -> s.get("completedAt") != null)
+                .collect(Collectors.toList());
+            int skippedCount = allSubmissions.size() - completed.size();
+            
+            List<com.datagami.edudron.content.domain.ExamQuestion> examQuestions =
+                examQuestionRepository.findByExamIdAndClientIdWithQuestions(id, clientId);
+            
+            List<Map<String, Object>> gradesPayload = new ArrayList<>();
+            List<Map<String, Object>> errorsList = new ArrayList<>();
+            
+            for (Map<String, Object> sub : completed) {
+                String submissionId = (String) sub.get("id");
+                if (submissionId == null) continue;
+                Object answersObj = sub.get("answersJson");
+                JsonNode answersJson = answersObj instanceof JsonNode ? (JsonNode) answersObj : objectMapper.valueToTree(answersObj);
+                
+                try {
+                    Object[] result = gradeOneSubmissionMcq(exam, examQuestions, quizQuestions, answersJson);
+                    double totalScore = (Double) result[0];
+                    double maxScore = (Double) result[1];
+                    JsonNode aiReviewFeedback = (JsonNode) result[2];
+                    double percentage = maxScore > 0 ? (totalScore / maxScore) * 100.0 : 0.0;
+                    boolean isPassed = percentage >= exam.getPassingScorePercentage();
+                    
+                    Map<String, Object> gradeItem = new java.util.HashMap<>();
+                    gradeItem.put("submissionId", submissionId);
+                    gradeItem.put("score", totalScore);
+                    gradeItem.put("maxScore", maxScore);
+                    gradeItem.put("percentage", percentage);
+                    gradeItem.put("isPassed", isPassed);
+                    gradeItem.put("aiReviewFeedback", aiReviewFeedback);
+                    gradeItem.put("reviewStatus", "AI_REVIEWED");
+                    gradesPayload.add(gradeItem);
+                } catch (Exception e) {
+                    logger.warn("Failed to grade submission {}: {}", submissionId, e.getMessage());
+                    Map<String, Object> err = new java.util.HashMap<>();
+                    err.put("submissionId", submissionId);
+                    err.put("message", e.getMessage());
+                    errorsList.add(err);
+                }
+            }
+            
+            if (gradesPayload.isEmpty() && errorsList.isEmpty()) {
+                Map<String, Object> response = new java.util.HashMap<>();
+                response.put("gradedCount", 0);
+                response.put("skippedCount", skippedCount);
+                response.put("errors", new ArrayList<>());
+                return ResponseEntity.ok(response);
+            }
+            
+            String bulkGradeUrl = gatewayUrl + "/api/assessments/" + id + "/submissions/bulk-grade";
+            Map<String, Object> bulkBody = new java.util.HashMap<>();
+            bulkBody.put("grades", gradesPayload);
+            HttpHeaders postHeaders = new HttpHeaders();
+            postHeaders.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            postHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            String bodyStr = objectMapper.writeValueAsString(bulkBody);
+            ResponseEntity<Map<String, Object>> bulkResponse = getRestTemplate().exchange(
+                bulkGradeUrl,
+                HttpMethod.POST,
+                new HttpEntity<>(bodyStr, postHeaders),
+                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            
+            Map<String, Object> bulkResult = bulkResponse.getBody();
+            int gradedCount = bulkResult != null && bulkResult.containsKey("gradedCount")
+                ? ((Number) bulkResult.get("gradedCount")).intValue() : gradesPayload.size();
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> bulkErrors = bulkResult != null && bulkResult.containsKey("errors")
+                ? (List<Map<String, Object>>) bulkResult.get("errors") : new ArrayList<>();
+            for (Map<String, Object> be : bulkErrors) {
+                Map<String, Object> err = new java.util.HashMap<>();
+                err.put("submissionId", be.get("submissionId"));
+                err.put("message", be.get("message"));
+                errorsList.add(err);
+            }
+            
+            Map<String, Object> response = new java.util.HashMap<>();
+            response.put("gradedCount", gradedCount);
+            response.put("skippedCount", skippedCount);
+            response.put("errors", errorsList);
+            logger.info("Bulk grade MCQ completed for exam {}: {} graded, {} skipped", id, gradedCount, skippedCount);
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Bulk grade MCQ validation failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("Failed to bulk grade MCQ for exam {}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Bulk grade failed: " + e.getMessage()));
+        }
+    }
+    
+    private boolean isExamMcqOnly(Assessment exam, List<QuizQuestion> quizQuestions) {
+        if (exam.getExamQuestions() != null) {
+            for (com.datagami.edudron.content.domain.ExamQuestion eq : exam.getExamQuestions()) {
+                QuestionBank qb = eq.getQuestion();
+                if (qb == null) return false;
+                if (qb.getQuestionType() != QuestionBank.QuestionType.MULTIPLE_CHOICE
+                    && qb.getQuestionType() != QuestionBank.QuestionType.TRUE_FALSE) {
+                    return false;
+                }
+            }
+        }
+        for (QuizQuestion qq : quizQuestions) {
+            if (qq.getQuestionType() != QuizQuestion.QuestionType.MULTIPLE_CHOICE
+                && qq.getQuestionType() != QuizQuestion.QuestionType.TRUE_FALSE) {
+                return false;
+            }
+        }
+        boolean hasQuestions = (exam.getExamQuestions() != null && !exam.getExamQuestions().isEmpty())
+            || !quizQuestions.isEmpty();
+        return hasQuestions;
+    }
+    
+    /** Grade one submission (MCQ/TRUE_FALSE only). Returns [totalScore, maxScore, aiReviewFeedback]. */
+    private Object[] gradeOneSubmissionMcq(Assessment exam,
+            List<com.datagami.edudron.content.domain.ExamQuestion> examQuestions,
+            List<QuizQuestion> quizQuestions, JsonNode answersJson) {
+        double totalScore = 0.0;
+        double maxScore = 0.0;
+        ArrayNode questionReviews = objectMapper.createArrayNode();
+        
+        for (com.datagami.edudron.content.domain.ExamQuestion eq : examQuestions) {
+            QuestionBank qb = eq.getQuestion();
+            if (qb == null) continue;
+            String questionId = eq.getId();
+            int questionPoints = eq.getEffectivePoints();
+            maxScore += questionPoints;
+            JsonNode answerNode = answersJson != null && !answersJson.isNull() ? answersJson.get(questionId) : null;
+            double pointsEarned = (answerNode != null && !answerNode.isNull()) ? gradeQuestionBankQuestion(qb, answerNode, questionPoints) : 0.0;
+            boolean isCorrect = pointsEarned == questionPoints;
+            ObjectNode review = objectMapper.createObjectNode();
+            review.put("questionId", questionId);
+            review.put("pointsEarned", pointsEarned);
+            review.put("maxPoints", questionPoints);
+            review.put("feedback", isCorrect ? "Correct" : "Incorrect");
+            review.put("isCorrect", isCorrect);
+            questionReviews.add(review);
+            totalScore += pointsEarned;
+        }
+        for (QuizQuestion question : quizQuestions) {
+            String questionId = question.getId();
+            int questionPoints = question.getPoints();
+            maxScore += questionPoints;
+            JsonNode answerNode = answersJson != null && !answersJson.isNull() ? answersJson.get(questionId) : null;
+            double pointsEarned = (answerNode != null && !answerNode.isNull()) ? gradeObjectiveQuestion(question, answerNode) : 0.0;
+            boolean isCorrect = pointsEarned == questionPoints;
+            ObjectNode review = objectMapper.createObjectNode();
+            review.put("questionId", questionId);
+            review.put("pointsEarned", pointsEarned);
+            review.put("maxPoints", questionPoints);
+            review.put("feedback", isCorrect ? "Correct" : "Incorrect");
+            review.put("isCorrect", isCorrect);
+            questionReviews.add(review);
+            totalScore += pointsEarned;
+        }
+        ObjectNode reviewFeedback = objectMapper.createObjectNode();
+        reviewFeedback.set("questionReviews", questionReviews);
+        reviewFeedback.put("totalScore", totalScore);
+        reviewFeedback.put("maxScore", maxScore);
+        double percentage = maxScore > 0 ? (totalScore / maxScore) * 100.0 : 0.0;
+        reviewFeedback.put("percentage", percentage);
+        reviewFeedback.put("isPassed", percentage >= exam.getPassingScorePercentage());
+        return new Object[]{ totalScore, maxScore, reviewFeedback };
     }
     
     @PostMapping("/{id}/inline-questions")

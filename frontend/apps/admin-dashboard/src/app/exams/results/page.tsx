@@ -198,10 +198,13 @@ export default function ExamResultsPage() {
       return
     }
 
-    // Find exam IDs for selected submissions
+    // Find exam IDs for selected submissions (only exams with AI review enabled)
     const submissionsByExam = new Map<string, string[]>()
     
     for (const result of results) {
+      if (result.reviewMethod !== 'AI' && result.reviewMethod !== 'BOTH') {
+        continue
+      }
       for (const submission of result.submissions) {
         if (selectedSubmissions.has(submission.id)) {
           if (!submissionsByExam.has(result.examId)) {
@@ -210,6 +213,15 @@ export default function ExamResultsPage() {
           submissionsByExam.get(result.examId)!.push(submission.id)
         }
       }
+    }
+
+    if (submissionsByExam.size === 0) {
+      toast({
+        title: 'Re-grade not available',
+        description: 'Re-grade is only available for exams with AI review. Use Grade All MCQ on the exam submissions page for MCQ-only exams.',
+        variant: 'destructive'
+      })
+      return
     }
 
     setBulkReviewing(true)
@@ -580,18 +592,20 @@ export default function ExamResultsPage() {
                                     >
                                       View
                                     </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleRegradeSubmission(result.examId, submission.id)}
-                                      disabled={regradingSubmissions.has(submission.id)}
-                                    >
-                                      {regradingSubmissions.has(submission.id) ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                      ) : (
-                                        <RefreshCw className="h-3 w-3" />
-                                      )}
-                                    </Button>
+                                    {(result.reviewMethod === 'AI' || result.reviewMethod === 'BOTH') && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => handleRegradeSubmission(result.examId, submission.id)}
+                                        disabled={regradingSubmissions.has(submission.id)}
+                                      >
+                                        {regradingSubmissions.has(submission.id) ? (
+                                          <Loader2 className="h-3 w-3 animate-spin" />
+                                        ) : (
+                                          <RefreshCw className="h-3 w-3" />
+                                        )}
+                                      </Button>
+                                    )}
                                   </div>
                                 </TableCell>
                               </TableRow>
