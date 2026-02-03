@@ -27,18 +27,19 @@ public class AuditLogQueryService {
     public Page<AuditLogDTO> getAuditLogs(Pageable pageable, String entity, String action, String actor,
                                           OffsetDateTime from, OffsetDateTime to) {
         String clientIdStr = TenantContext.getClientId();
-        UUID clientId = null;
+        UUID parsed = null;
         if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
             try {
-                clientId = UUID.fromString(clientIdStr);
+                parsed = UUID.fromString(clientIdStr);
             } catch (IllegalArgumentException ignored) {
             }
         }
+        final UUID filterClientId = parsed;
 
         Specification<AuditLog> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
-            if (clientId != null) {
-                predicates.add(cb.equal(root.get("clientId"), clientId));
+            if (filterClientId != null) {
+                predicates.add(cb.equal(root.get("clientId"), filterClientId));
             }
             if (entity != null && !entity.isBlank()) {
                 predicates.add(cb.equal(cb.lower(root.get("entity")), entity.toLowerCase().trim()));
