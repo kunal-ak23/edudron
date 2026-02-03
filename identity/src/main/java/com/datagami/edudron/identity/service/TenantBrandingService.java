@@ -1,16 +1,22 @@
 package com.datagami.edudron.identity.service;
 
+import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.identity.domain.User;
 import com.datagami.edudron.identity.domain.TenantBranding;
 import com.datagami.edudron.identity.dto.TenantBrandingDTO;
 import com.datagami.edudron.identity.repo.TenantBrandingRepository;
+import com.datagami.edudron.identity.repo.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -20,6 +26,12 @@ public class TenantBrandingService {
     
     @Autowired
     private TenantBrandingRepository tenantBrandingRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private IdentityAuditService auditService;
     
     @Cacheable(value = "tenantBranding", key = "#clientId")
     @Transactional(readOnly = true)
@@ -44,6 +56,8 @@ public class TenantBrandingService {
             updateEntityFromDTO(existingBranding, brandingDTO);
             existingBranding.setClientId(clientId);
             tenantBrandingRepository.save(existingBranding);
+            auditService.logCrud("UPDATE", "TenantBranding", existingBranding.getId().toString(),
+                getCurrentUserId(), getCurrentUserEmail(), java.util.Map.of("clientId", clientId.toString()));
             return toDTO(existingBranding);
         } else {
             // Create new branding
@@ -52,7 +66,35 @@ public class TenantBrandingService {
             newBranding.setClientId(clientId);
             updateEntityFromDTO(newBranding, brandingDTO);
             tenantBrandingRepository.save(newBranding);
+            auditService.logCrud("CREATE", "TenantBranding", newBranding.getId().toString(),
+                getCurrentUserId(), getCurrentUserEmail(), java.util.Map.of("clientId", clientId.toString()));
             return toDTO(newBranding);
+        }
+    }
+
+    private String getCurrentUserId() {
+        User u = getCurrentUser();
+        return u != null ? u.getId() : null;
+    }
+
+    private String getCurrentUserEmail() {
+        User u = getCurrentUser();
+        return u != null ? u.getEmail() : null;
+    }
+
+    private User getCurrentUser() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || auth.getName() == null || auth.getName().isBlank()) return null;
+            String clientIdStr = TenantContext.getClientId();
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                UUID clientId = UUID.fromString(clientIdStr);
+                Optional<User> user = userRepository.findByEmailAndClientId(auth.getName(), clientId);
+                if (user.isPresent()) return user.get();
+            }
+            return userRepository.findByEmailAndRoleAndActiveTrue(auth.getName(), User.Role.SYSTEM_ADMIN).orElse(null);
+        } catch (Exception e) {
+            return null;
         }
     }
     

@@ -6,11 +6,13 @@ import com.datagami.edudron.payment.domain.SubscriptionPlan;
 import com.datagami.edudron.payment.dto.CreateSubscriptionPlanRequest;
 import com.datagami.edudron.payment.dto.SubscriptionPlanDTO;
 import com.datagami.edudron.payment.repo.SubscriptionPlanRepository;
+import com.datagami.edudron.payment.util.UserUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -20,6 +22,9 @@ public class SubscriptionPlanService {
     
     @Autowired
     private SubscriptionPlanRepository planRepository;
+    
+    @Autowired
+    private PaymentAuditService auditService;
     
     public SubscriptionPlanDTO createPlan(CreateSubscriptionPlanRequest request) {
         String clientIdStr = TenantContext.getClientId();
@@ -39,6 +44,10 @@ public class SubscriptionPlanService {
         plan.setIsActive(true);
         
         SubscriptionPlan saved = planRepository.save(plan);
+        String actor = UserUtil.getCurrentUserIdOrNull();
+        if (actor == null) actor = "system";
+        auditService.logCrud("CREATE", "SubscriptionPlan", saved.getId(), actor, null,
+            Map.of("serviceName", "payment", "newValue", Map.of("id", saved.getId(), "name", saved.getName())));
         return toDTO(saved);
     }
     
@@ -96,6 +105,10 @@ public class SubscriptionPlanService {
         plan.setBillingPeriod(request.getBillingPeriod());
         
         SubscriptionPlan saved = planRepository.save(plan);
+        String actor = UserUtil.getCurrentUserIdOrNull();
+        if (actor == null) actor = "system";
+        auditService.logCrud("UPDATE", "SubscriptionPlan", saved.getId(), actor, null,
+            Map.of("serviceName", "payment", "newValue", Map.of("id", saved.getId(), "name", saved.getName())));
         return toDTO(saved);
     }
     
@@ -111,6 +124,10 @@ public class SubscriptionPlanService {
         
         plan.setIsActive(false);
         planRepository.save(plan);
+        String actor = UserUtil.getCurrentUserIdOrNull();
+        if (actor == null) actor = "system";
+        auditService.logCrud("UPDATE", "SubscriptionPlan", plan.getId(), actor, null,
+            Map.of("serviceName", "payment", "isActive", false));
     }
     
     private SubscriptionPlanDTO toDTO(SubscriptionPlan plan) {

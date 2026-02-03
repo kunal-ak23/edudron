@@ -45,6 +45,9 @@ public class InstituteService {
     
     @Autowired
     private ClassRepository classRepository;
+
+    @Autowired
+    private StudentAuditService auditService;
     
     @Value("${gateway.url:http://localhost:8080}")
     private String gatewayUrl;
@@ -116,6 +119,8 @@ public class InstituteService {
         institute.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
         
         Institute saved = instituteRepository.save(institute);
+        auditService.logCrud("CREATE", "Institute", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("name", saved.getName(), "code", saved.getCode()));
         return toDTO(saved, clientId);
     }
     
@@ -218,6 +223,8 @@ public class InstituteService {
         }
         
         Institute saved = instituteRepository.save(institute);
+        auditService.logCrud("UPDATE", "Institute", instituteId, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("name", saved.getName(), "code", saved.getCode()));
         return toDTO(saved, clientId);
     }
     
@@ -233,6 +240,39 @@ public class InstituteService {
         
         institute.setIsActive(false);
         instituteRepository.save(institute);
+        auditService.logCrud("UPDATE", "Institute", instituteId, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("action", "DEACTIVATE", "name", institute.getName()));
+    }
+    
+    private String getCurrentUserId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName()))
+                return auth.getName();
+        } catch (Exception e) {
+            logger.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    private String getCurrentUserEmail() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName())) return null;
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl, HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {});
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object email = response.getBody().get("email");
+                return email != null ? email.toString() : null;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not determine user email: {}", e.getMessage());
+        }
+        return null;
     }
     
     private InstituteDTO toDTO(Institute institute, UUID clientId) {

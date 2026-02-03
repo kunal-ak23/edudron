@@ -26,7 +26,8 @@ import {
   CreditCard,
   Sparkles,
   ClipboardList,
-  BarChart3
+  BarChart3,
+  ScrollText
 } from 'lucide-react'
 
 interface MenuItem {
@@ -138,6 +139,12 @@ const menuItems: MenuItem[] = [
     requiresTenant: true,
   },
   {
+    name: 'Audit logs',
+    href: '/audit-logs',
+    icon: ScrollText,
+    requiresTenant: true,
+  },
+  {
     name: 'Settings',
     href: '/settings',
     icon: Settings,
@@ -202,6 +209,11 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
         return false
       }
       
+      // Audit logs: SYSTEM_ADMIN only
+      if (item.href === '/audit-logs' && !isSystemAdmin) {
+        return false
+      }
+      
       // Hide user management for users who cannot manage users
       // CONTENT_MANAGER can view users but not manage them, so we'll show the link but they'll be redirected
       // Allow CONTENT_MANAGER to see users link (read-only access)
@@ -252,6 +264,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
   // Function to get the parent section name based on pathname
   const getParentSection = (path: string) => {
     if (path.startsWith('/super-admin')) return 'System Management'
+    if (path.startsWith('/audit-logs')) return 'Audit logs'
     if (path.startsWith('/institutes')) return 'Institutes'
     if (path.startsWith('/courses')) return 'Courses'
     if (path.startsWith('/exams') || path.startsWith('/question-bank')) return 'Exams'

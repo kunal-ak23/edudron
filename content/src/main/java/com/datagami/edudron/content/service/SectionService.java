@@ -44,6 +44,9 @@ public class SectionService {
     
     @Autowired
     private CourseRepository courseRepository;
+
+    @Autowired
+    private ContentAuditService auditService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -121,6 +124,8 @@ public class SectionService {
         section.setSequence(nextSequence);
         
         Section saved = sectionRepository.save(section);
+        auditService.logCrud("CREATE", "Section", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("courseId", courseId, "title", title != null ? title : ""));
         return toDTO(saved);
     }
     
@@ -172,6 +177,8 @@ public class SectionService {
         }
         
         Section saved = sectionRepository.save(section);
+        auditService.logCrud("UPDATE", "Section", id, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("title", title != null ? title : "", "courseId", section.getCourseId()));
         return toDTO(saved);
     }
     
@@ -190,8 +197,40 @@ public class SectionService {
         
         Section section = sectionRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Section not found: " + id));
-        
+        auditService.logCrud("DELETE", "Section", id, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("courseId", section.getCourseId(), "title", section.getTitle() != null ? section.getTitle() : ""));
         sectionRepository.delete(section);
+    }
+    
+    private String getCurrentUserId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName()))
+                return auth.getName();
+        } catch (Exception e) {
+            log.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    private String getCurrentUserEmail() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName())) return null;
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl, HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {});
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object email = response.getBody().get("email");
+                return email != null ? email.toString() : null;
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user email: {}", e.getMessage());
+        }
+        return null;
     }
     
     /**

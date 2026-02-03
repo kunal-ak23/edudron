@@ -32,6 +32,9 @@ public class ClassService {
     
     @Autowired
     private EnrollmentRepository enrollmentRepository;
+
+    @Autowired
+    private StudentAuditService auditService;
     
     public ClassDTO createClass(String instituteId, CreateClassRequest request) {
         String clientIdStr = TenantContext.getClientId();
@@ -217,6 +220,8 @@ public class ClassService {
         }
         
         Class saved = classRepository.save(classEntity);
+        auditService.logCrud("UPDATE", "Class", classId, null, null,
+            java.util.Map.of("name", saved.getName(), "code", saved.getCode(), "instituteId", saved.getInstituteId()));
         return toDTO(saved);
     }
     
@@ -232,6 +237,8 @@ public class ClassService {
         
         classEntity.setIsActive(false);
         classRepository.save(classEntity);
+        auditService.logCrud("UPDATE", "Class", classId, null, null,
+            java.util.Map.of("action", "DEACTIVATE", "name", classEntity.getName()));
     }
 
     @Transactional(readOnly = true)

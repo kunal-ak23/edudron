@@ -47,6 +47,9 @@ public class AssessmentService {
     
     @Autowired
     private LectureRepository lectureRepository;
+
+    @Autowired
+    private ContentAuditService auditService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -134,6 +137,8 @@ public class AssessmentService {
         assessment.setSequence(nextSequence);
         
         Assessment saved = assessmentRepository.save(assessment);
+        auditService.logCrud("CREATE", "Assessment", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("courseId", courseId, "lectureId", lectureId, "title", title != null ? title : ""));
         return saved;
     }
     
@@ -183,8 +188,40 @@ public class AssessmentService {
         
         Assessment assessment = assessmentRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Assessment not found: " + id));
-        
+        auditService.logCrud("DELETE", "Assessment", id, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("courseId", assessment.getCourseId(), "title", assessment.getTitle() != null ? assessment.getTitle() : ""));
         assessmentRepository.delete(assessment);
+    }
+    
+    private String getCurrentUserId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName()))
+                return auth.getName();
+        } catch (Exception e) {
+            log.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    private String getCurrentUserEmail() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName())) return null;
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl, HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {});
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object email = response.getBody().get("email");
+                return email != null ? email.toString() : null;
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user email: {}", e.getMessage());
+        }
+        return null;
     }
     
     /**

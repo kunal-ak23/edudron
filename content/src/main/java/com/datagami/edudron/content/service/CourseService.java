@@ -54,6 +54,9 @@ public class CourseService {
     
     @Autowired
     private CommonEventService eventService;
+
+    @Autowired
+    private ContentAuditService auditService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -150,7 +153,8 @@ public class CourseService {
             "isFree", saved.getIsFree() != null ? saved.getIsFree() : false
         );
         eventService.logUserAction("COURSE_CREATED", userId, userEmail, "/api/content/courses", eventData);
-        
+        auditService.logCrud("CREATE", "Course", saved.getId(), userId, userEmail, eventData);
+
         return toDTO(saved);
     }
     
@@ -358,7 +362,8 @@ public class CourseService {
             "hasSectionAssignments", saved.getAssignedToSectionIds() != null && !saved.getAssignedToSectionIds().isEmpty()
         );
         eventService.logUserAction("COURSE_EDITED", userId, userEmail, "/api/content/courses/" + id, eventData);
-        
+        auditService.logCrud("UPDATE", "Course", id, userId, userEmail, eventData);
+
         // Automatically enroll students for newly assigned classes/sections
         // Only enroll if course is published
         // IMPORTANT: Enrollment must happen AFTER transaction commits to avoid race condition
@@ -603,7 +608,8 @@ public class CourseService {
             "wasPublished", course.getIsPublished() != null ? course.getIsPublished() : false
         );
         eventService.logUserAction("COURSE_DELETED", userId, userEmail, "/api/content/courses/" + id, eventData);
-        
+        auditService.logCrud("DELETE", "Course", id, userId, userEmail, eventData);
+
         courseRepository.delete(course);
     }
     
@@ -650,7 +656,8 @@ public class CourseService {
             "totalDurationSeconds", saved.getTotalDurationSeconds() != null ? saved.getTotalDurationSeconds() : 0
         );
         eventService.logUserAction("COURSE_PUBLISHED", userId, userEmail, "/api/content/courses/" + id + "/publish", eventData);
-        
+        auditService.logCrud("PUBLISH", "Course", id, userId, userEmail, eventData);
+
         // If course was not previously published, enroll students for assigned classes/sections
         // IMPORTANT: Enrollment must happen AFTER transaction commits to avoid race condition
         if (!wasPublished && 
@@ -721,6 +728,7 @@ public class CourseService {
             "wasPublished", true
         );
         eventService.logUserAction("COURSE_UNPUBLISHED", userId, userEmail, "/api/content/courses/" + id + "/unpublish", eventData);
+        auditService.logCrud("UNPUBLISH", "Course", id, userId, userEmail, eventData);
 
         return toDTO(saved);
     }

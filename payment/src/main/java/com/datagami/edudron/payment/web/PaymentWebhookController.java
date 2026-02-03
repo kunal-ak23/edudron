@@ -7,6 +7,7 @@ import com.datagami.edudron.payment.domain.PaymentWebhook;
 import com.datagami.edudron.payment.integration.RazorpayClientWrapper;
 import com.datagami.edudron.payment.repo.PaymentRepository;
 import com.datagami.edudron.payment.repo.PaymentWebhookRepository;
+import com.datagami.edudron.payment.service.PaymentAuditService;
 import com.datagami.edudron.payment.service.PaymentService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -35,7 +37,10 @@ public class PaymentWebhookController {
 
     @Autowired
     private PaymentService paymentService;
-
+    
+    @Autowired
+    private PaymentAuditService auditService;
+    
     @Autowired
     private RazorpayClientWrapper razorpayClient;
 
@@ -90,6 +95,8 @@ public class PaymentWebhookController {
                             p.setStatus(Payment.Status.SUCCESS);
                             p.setPaidAt(java.time.OffsetDateTime.now());
                             paymentRepository.save(p);
+                            auditService.logCrud("UPDATE", "Payment", p.getId(), "webhook", null,
+                                Map.of("serviceName", "payment", "status", Payment.Status.SUCCESS.name()));
                         });
                     }
                 }
@@ -107,6 +114,8 @@ public class PaymentWebhookController {
                             p.setStatus(Payment.Status.FAILED);
                             p.setFailureReason(errorDescription);
                             paymentRepository.save(p);
+                            auditService.logCrud("UPDATE", "Payment", p.getId(), "webhook", null,
+                                Map.of("serviceName", "payment", "status", Payment.Status.FAILED.name()));
                         });
                     }
                 }

@@ -48,6 +48,9 @@ public class AuthService {
     @Autowired
     private CommonEventService eventService;
 
+    @Autowired
+    private IdentityAuditService auditService;
+
     public AuthResponse login(AuthRequest request) {
         // Normalize email to lowercase for case-insensitive authentication
         String normalizedEmail = request.email() != null ? request.email().toLowerCase().trim() : null;
@@ -349,6 +352,8 @@ public class AuthService {
             "tenantName", tenantName
         );
         eventService.logUserAction("USER_REGISTERED", user.getId(), user.getEmail(), "/auth/register", registrationData);
+        auditService.logCrud("CREATE", "User", user.getId(), user.getId(), user.getEmail(),
+            Map.of("role", user.getRole().name(), "tenantId", tenantId));
 
         return new AuthResponse(
                 token,

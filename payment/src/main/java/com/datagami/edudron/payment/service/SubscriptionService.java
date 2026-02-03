@@ -8,12 +8,14 @@ import com.datagami.edudron.payment.dto.CreateSubscriptionRequest;
 import com.datagami.edudron.payment.dto.SubscriptionDTO;
 import com.datagami.edudron.payment.repo.SubscriptionPlanRepository;
 import com.datagami.edudron.payment.repo.SubscriptionRepository;
+import com.datagami.edudron.payment.util.UserUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -26,6 +28,9 @@ public class SubscriptionService {
     
     @Autowired
     private SubscriptionPlanRepository planRepository;
+    
+    @Autowired
+    private PaymentAuditService auditService;
     
     public SubscriptionDTO createSubscription(String studentId, CreateSubscriptionRequest request) {
         String clientIdStr = TenantContext.getClientId();
@@ -66,6 +71,10 @@ public class SubscriptionService {
         }
         
         Subscription saved = subscriptionRepository.save(subscription);
+        String actor = UserUtil.getCurrentUserIdOrNull();
+        if (actor == null) actor = "system";
+        auditService.logCrud("CREATE", "Subscription", saved.getId(), actor, null,
+            Map.of("serviceName", "payment", "newValue", Map.of("id", saved.getId(), "status", saved.getStatus().name())));
         return toDTO(saved);
     }
     
@@ -118,6 +127,10 @@ public class SubscriptionService {
         
         subscription.setStatus(Subscription.Status.CANCELLED);
         subscriptionRepository.save(subscription);
+        String actor = UserUtil.getCurrentUserIdOrNull();
+        if (actor == null) actor = "system";
+        auditService.logCrud("UPDATE", "Subscription", subscription.getId(), actor, null,
+            Map.of("serviceName", "payment", "status", Subscription.Status.CANCELLED.name()));
     }
     
     private SubscriptionDTO toDTO(Subscription subscription) {

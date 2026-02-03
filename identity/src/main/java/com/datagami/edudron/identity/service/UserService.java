@@ -64,6 +64,9 @@ public class UserService {
     
     @Autowired
     private CommonEventService eventService;
+
+    @Autowired
+    private IdentityAuditService auditService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -482,7 +485,8 @@ public class UserService {
             "instituteIds", request.getInstituteIds() != null ? request.getInstituteIds() : List.of()
         );
         eventService.logUserAction("USER_CREATED", currentUserId, currentUserEmail, "/idp/users", eventData);
-        
+        auditService.logCrud("CREATE", "User", user.getId(), currentUserId, currentUserEmail, eventData);
+
         return toDTO(user);
     }
     
@@ -616,7 +620,8 @@ public class UserService {
             "instituteIds", request.getInstituteIds() != null ? request.getInstituteIds() : List.of()
         );
         eventService.logUserAction("USER_UPDATED", currentUserId, currentUserEmail, "/idp/users/" + id, eventData);
-        
+        auditService.logCrud("UPDATE", "User", id, currentUserId, currentUserEmail, eventData);
+
         return toDTO(user);
     }
     
@@ -751,6 +756,10 @@ public class UserService {
                 userInstituteRepository.save(userInstitute);
             }
         }
+        String currentUserId = currentUser != null ? currentUser.getId() : null;
+        String currentUserEmail = currentUser != null ? currentUser.getEmail() : null;
+        auditService.logCrud("UPDATE", "UserInstitute", userId, currentUserId, currentUserEmail,
+            Map.of("instituteIds", instituteIds));
     }
     
     @Transactional(readOnly = true)
@@ -863,7 +872,9 @@ public class UserService {
             "targetRole", user.getRole() != null ? user.getRole().name() : ""
         );
         eventService.logUserAction("PASSWORD_RESET_BY_ADMIN", currentUserId, currentUserEmail, "/idp/users/" + userId + "/reset-password", eventData);
-        
+        auditService.logCrud("UPDATE", "User", userId, currentUserId, currentUserEmail,
+            Map.of("action", "PASSWORD_RESET_BY_ADMIN", "targetUserId", user.getId()));
+
         log.info("Password reset by admin {} for user {} ({})", currentUserEmail, user.getEmail(), user.getId());
         
         return new PasswordResetResponse(

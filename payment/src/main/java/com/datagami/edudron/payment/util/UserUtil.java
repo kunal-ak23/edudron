@@ -12,6 +12,15 @@ public class UserUtil {
         }
         throw new IllegalStateException("User not authenticated");
     }
+
+    /** For audit logging when user may not be present (e.g. webhook). Returns null if not authenticated. */
+    public static String getCurrentUserIdOrNull() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() != null) {
+            return authentication.getName();
+        }
+        return null;
+    }
 }
 
 

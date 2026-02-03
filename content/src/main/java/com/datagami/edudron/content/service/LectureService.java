@@ -54,6 +54,9 @@ public class LectureService {
     
     @Autowired
     private MediaUploadService mediaUploadService;
+
+    @Autowired
+    private ContentAuditService auditService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -143,6 +146,8 @@ public class LectureService {
         }
         
         Lecture saved = lectureRepository.save(lecture);
+        auditService.logCrud("CREATE", "Lecture", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("sectionId", sectionId, "courseId", section.getCourseId(), "title", title != null ? title : ""));
         return toDTO(saved);
     }
     
@@ -208,6 +213,8 @@ public class LectureService {
         }
         
         Lecture saved = lectureRepository.save(lecture);
+        auditService.logCrud("UPDATE", "Lecture", id, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("title", title != null ? title : "", "courseId", lecture.getCourseId()));
         return toDTO(saved);
     }
     
@@ -226,7 +233,8 @@ public class LectureService {
         
         Lecture lecture = lectureRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + id));
-        
+        auditService.logCrud("DELETE", "Lecture", id, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("courseId", lecture.getCourseId(), "title", lecture.getTitle() != null ? lecture.getTitle() : ""));
         // Load all lecture content to clean up Azure storage files
         List<LectureContent> contents = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(id, clientId);
         
@@ -319,6 +327,37 @@ public class LectureService {
         dto.setCreatedAt(content.getCreatedAt());
         dto.setUpdatedAt(content.getUpdatedAt());
         return dto;
+    }
+    
+    private String getCurrentUserId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName()))
+                return auth.getName();
+        } catch (Exception e) {
+            log.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    private String getCurrentUserEmail() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName())) return null;
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl, HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {});
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object email = response.getBody().get("email");
+                return email != null ? email.toString() : null;
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user email: {}", e.getMessage());
+        }
+        return null;
     }
     
     /**

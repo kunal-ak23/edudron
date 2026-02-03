@@ -33,6 +33,9 @@ public class SectionService {
     
     @Autowired
     private ProgressRepository progressRepository;
+
+    @Autowired
+    private StudentAuditService auditService;
     
     public SectionDTO createSection(String classId, CreateSectionRequest request) {
         String clientIdStr = TenantContext.getClientId();
@@ -61,6 +64,8 @@ public class SectionService {
         section.setIsActive(true);
         
         Section saved = sectionRepository.save(section);
+        auditService.logCrud("CREATE", "Section", saved.getId(), null, null,
+            java.util.Map.of("name", saved.getName(), "classId", classId));
         return toDTO(saved, clientId);
     }
     
@@ -152,6 +157,8 @@ public class SectionService {
         section.setMaxStudents(request.getMaxStudents());
         
         Section saved = sectionRepository.save(section);
+        auditService.logCrud("UPDATE", "Section", sectionId, null, null,
+            java.util.Map.of("name", saved.getName(), "classId", saved.getClassId()));
         return toDTO(saved, clientId);
     }
     
@@ -167,6 +174,8 @@ public class SectionService {
         
         section.setIsActive(false);
         sectionRepository.save(section);
+        auditService.logCrud("UPDATE", "Section", sectionId, null, null,
+            java.util.Map.of("action", "DEACTIVATE", "name", section.getName()));
     }
 
     public void activateSection(String sectionId) {

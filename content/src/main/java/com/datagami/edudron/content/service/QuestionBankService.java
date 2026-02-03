@@ -57,6 +57,9 @@ public class QuestionBankService {
     
     @Autowired
     private SectionRepository sectionRepository;
+
+    @Autowired
+    private ContentAuditService auditService;
     
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -152,6 +155,8 @@ public class QuestionBankService {
         
         logger.info("Created question bank question {} for course {} modules {}", 
             reloaded.getId(), courseId, moduleIds);
+        auditService.logCrud("CREATE", "QuestionBank", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("courseId", courseId, "moduleIds", moduleIds != null ? moduleIds : List.of()));
         return reloaded;
     }
     
@@ -224,6 +229,8 @@ public class QuestionBankService {
             .orElse(updated);
         
         logger.info("Updated question bank question {}", questionId);
+        auditService.logCrud("UPDATE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("courseId", question.getCourseId()));
         return reloaded;
     }
     
@@ -250,7 +257,8 @@ public class QuestionBankService {
         
         question.setIsActive(false);
         questionBankRepository.save(question);
-        
+        auditService.logCrud("UPDATE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("action", "SOFT_DELETE", "isActive", false));
         logger.info("Soft deleted question bank question {}", questionId);
     }
     
@@ -265,8 +273,9 @@ public class QuestionBankService {
             .orElseThrow(() -> new IllegalArgumentException("Question not found: " + questionId));
         
         optionRepository.deleteByQuestionIdAndClientId(questionId, clientId);
+        auditService.logCrud("DELETE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("courseId", question.getCourseId()));
         questionBankRepository.delete(question);
-        
         logger.info("Hard deleted question bank question {}", questionId);
     }
     
@@ -466,6 +475,37 @@ public class QuestionBankService {
             options.add(option);
         }
         return options;
+    }
+    
+    private String getCurrentUserId() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null && !"anonymousUser".equals(auth.getName()))
+                return auth.getName();
+        } catch (Exception e) {
+            logger.debug("Could not determine user ID: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    private String getCurrentUserEmail() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName())) return null;
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                meUrl, HttpMethod.GET, new HttpEntity<>(headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {});
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object email = response.getBody().get("email");
+                return email != null ? email.toString() : null;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not determine user email: {}", e.getMessage());
+        }
+        return null;
     }
     
     private String getCurrentUserRole() {

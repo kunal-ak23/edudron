@@ -8,6 +8,7 @@ import com.datagami.edudron.payment.dto.PaymentDTO;
 import com.datagami.edudron.payment.dto.PaymentResponseDTO;
 import com.datagami.edudron.payment.integration.RazorpayClientWrapper;
 import com.datagami.edudron.payment.repo.PaymentRepository;
+import com.datagami.edudron.payment.util.UserUtil;
 import com.razorpay.Order;
 import com.razorpay.RazorpayException;
 import org.json.JSONObject;
@@ -36,6 +37,9 @@ public class PaymentService {
     
     @Autowired
     private RazorpayClientWrapper razorpayClient;
+    
+    @Autowired
+    private PaymentAuditService auditService;
     
     public PaymentResponseDTO createPayment(String studentId, CreatePaymentRequest request) {
         String clientIdStr = TenantContext.getClientId();
@@ -86,6 +90,10 @@ public class PaymentService {
             saved.setFailureReason("Failed to create payment gateway order: " + e.getMessage());
             saved = paymentRepository.save(saved);
         }
+        
+        String actor = UserUtil.getCurrentUserIdOrNull();
+        auditService.logCrud("CREATE", "Payment", saved.getId(), actor, null,
+            Map.of("serviceName", "payment", "newValue", Map.of("id", saved.getId(), "status", saved.getStatus().name(), "amountPaise", saved.getAmountPaise())));
         
         PaymentResponseDTO response = new PaymentResponseDTO();
         response.setPayment(toDTO(saved));
@@ -141,6 +149,10 @@ public class PaymentService {
         }
         
         paymentRepository.save(payment);
+        String actor = UserUtil.getCurrentUserIdOrNull();
+        if (actor == null) actor = "system";
+        auditService.logCrud("UPDATE", "Payment", payment.getId(), actor, null,
+            Map.of("serviceName", "payment", "status", status.name()));
     }
     
     private PaymentDTO toDTO(Payment payment) {

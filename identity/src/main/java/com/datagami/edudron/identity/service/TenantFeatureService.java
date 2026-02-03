@@ -1,12 +1,17 @@
 package com.datagami.edudron.identity.service;
 
+import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.identity.domain.User;
 import com.datagami.edudron.identity.domain.TenantFeatureType;
 import com.datagami.edudron.identity.dto.TenantFeatureDto;
 import com.datagami.edudron.identity.entity.TenantFeature;
 import com.datagami.edudron.identity.repo.TenantFeatureRepository;
+import com.datagami.edudron.identity.repo.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +24,12 @@ import java.util.stream.Collectors;
 public class TenantFeatureService {
     
     private final TenantFeatureRepository repository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private IdentityAuditService auditService;
 
     @Autowired
     public TenantFeatureService(TenantFeatureRepository repository) {
@@ -57,7 +68,11 @@ public class TenantFeatureService {
             tenantFeature.setEnabled(enabled);
         }
         
-        return repository.save(tenantFeature);
+        TenantFeature saved = repository.save(tenantFeature);
+        auditService.logCrud(existing.isPresent() ? "UPDATE" : "CREATE", "TenantFeature",
+            saved.getId().toString(), getCurrentUserId(), getCurrentUserEmail(),
+            Map.of("clientId", clientId.toString(), "feature", feature.name(), "enabled", enabled));
+        return saved;
     }
 
     /**
@@ -66,6 +81,34 @@ public class TenantFeatureService {
     @CacheEvict(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()")
     public void resetFeatureToDefault(UUID clientId, TenantFeatureType feature) {
         repository.deleteByClientIdAndFeature(clientId, feature);
+        auditService.logCrud("DELETE", "TenantFeature", clientId + "::" + feature.name(),
+            getCurrentUserId(), getCurrentUserEmail(), Map.of("clientId", clientId.toString(), "feature", feature.name()));
+    }
+
+    private String getCurrentUserId() {
+        User u = getCurrentUser();
+        return u != null ? u.getId() : null;
+    }
+
+    private String getCurrentUserEmail() {
+        User u = getCurrentUser();
+        return u != null ? u.getEmail() : null;
+    }
+
+    private User getCurrentUser() {
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth == null || auth.getName() == null || auth.getName().isBlank()) return null;
+            String clientIdStr = TenantContext.getClientId();
+            if (clientIdStr != null && !"SYSTEM".equals(clientIdStr) && !"PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+                UUID cid = UUID.fromString(clientIdStr);
+                Optional<User> user = userRepository.findByEmailAndClientId(auth.getName(), cid);
+                if (user.isPresent()) return user.get();
+            }
+            return userRepository.findByEmailAndRoleAndActiveTrue(auth.getName(), User.Role.SYSTEM_ADMIN).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

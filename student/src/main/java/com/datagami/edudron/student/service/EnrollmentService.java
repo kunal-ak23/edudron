@@ -75,6 +75,9 @@ public class EnrollmentService {
     private CommonEventService eventService;
 
     @Autowired
+    private StudentAuditService auditService;
+
+    @Autowired
     private LectureViewSessionService sessionService;
 
     @Value("${GATEWAY_URL:http://localhost:8080}")
@@ -350,7 +353,8 @@ public class EnrollmentService {
             "sectionId", sectionId != null ? sectionId : ""
         );
         eventService.logUserAction("COURSE_ENROLLED", currentUserId, currentUserEmail, "/api/courses/" + request.getCourseId() + "/enroll", eventData);
-        
+        auditService.logCrud("CREATE", "Enrollment", saved.getId(), currentUserId, currentUserEmail, eventData);
+
         // Automatically enroll student in all published courses assigned to this section/class
         // This happens after the main enrollment is created to ensure consistency
         try {
@@ -742,7 +746,8 @@ public class EnrollmentService {
             "sectionId", sectionId != null ? sectionId : ""
         );
         eventService.logUserAction("COURSE_UNENROLLED", currentUserId, currentUserEmail, "/api/courses/" + courseId + "/enroll", eventData);
-        
+        auditService.logCrud("DELETE", "Enrollment", enrollment.getId(), currentUserId, currentUserEmail, eventData);
+
         enrollmentRepository.delete(enrollment);
         
         // CRITICAL: Check if student needs a placeholder enrollment to maintain section/class association
@@ -830,7 +835,8 @@ public class EnrollmentService {
             "sectionId", sectionId != null ? sectionId : ""
         );
         eventService.logUserAction("ENROLLMENT_DELETED", currentUserId, currentUserEmail, "/api/enrollments/" + enrollmentId, eventData);
-        
+        auditService.logCrud("DELETE", "Enrollment", enrollmentId, currentUserId, currentUserEmail, eventData);
+
         enrollmentRepository.delete(enrollment);
         log.info("Deleted enrollment {} for student {} in course {}", 
             enrollmentId, studentId, courseId);
@@ -1525,6 +1531,7 @@ public class EnrollmentService {
         eventData.put("oldCourseId", oldCourseId != null ? oldCourseId : "");
         eventData.put("newCourseId", saved.getCourseId() != null ? saved.getCourseId() : "");
         eventService.logUserAction("ENROLLMENT_TRANSFERRED", currentUserId, currentUserEmail, "/api/enrollments/transfer", eventData);
+        auditService.logCrud("TRANSFER", "Enrollment", saved.getId(), currentUserId, currentUserEmail, eventData);
 
         // Evict analytics caches so section/class/course counts and engagement update immediately after transfer
         if (sourceSectionId != null && !sourceSectionId.isBlank()) {
