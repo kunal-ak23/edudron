@@ -20,12 +20,12 @@ public class CacheConfig {
             "lectureAnalytics",
             "sectionAnalytics",
             "classAnalytics",
-            "examFromContent"      // Cached exam from Content service (5 min TTL, 2000 max for scale)
+            "examFromContent"      // Cached exam from Content service (1 min TTL, 2000 max for scale)
         );
         cacheManager.setCaffeine(
             Caffeine.newBuilder()
                 .maximumSize(2000)
-                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .expireAfterWrite(1, TimeUnit.MINUTES)
                 .recordStats()
         );
         return cacheManager;

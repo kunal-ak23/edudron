@@ -744,6 +744,21 @@ public class ExamService {
             logger.debug("Evicted exam cache for key: {}", key);
         }
     }
+
+    /**
+     * Evict cached exam detail by exam id and client id (for use when tenant context is not set, e.g. scheduled job).
+     */
+    public void evictExamCache(String examId, UUID clientId) {
+        if (clientId == null) {
+            return;
+        }
+        String key = clientId.toString() + "::" + examId;
+        var cache = cacheManager.getCache(CacheConfig.EXAM_DETAIL_CACHE);
+        if (cache != null) {
+            cache.evict(key);
+            logger.debug("Evicted exam cache for key: {}", key);
+        }
+    }
     
     /**
      * Check if exam is currently accessible (time-based validation)
@@ -819,6 +834,7 @@ public class ExamService {
                 if (newStatus != null && newStatus != exam.getStatus()) {
                     exam.setStatus(newStatus);
                     assessmentRepository.save(exam);
+                    evictExamCache(exam.getId(), exam.getClientId());
                     updatedCount++;
                     logger.info("Updated exam status: examId={}, oldStatus={}, newStatus={}, clientId={}", 
                         exam.getId(), exam.getStatus(), newStatus, exam.getClientId());

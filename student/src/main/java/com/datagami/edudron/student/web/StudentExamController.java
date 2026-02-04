@@ -626,7 +626,9 @@ public class StudentExamController {
 
     /**
      * Compute whether the exam is currently available for take (live and within window).
-     * FIXED_WINDOW: available when status == LIVE and now >= startTime and now <= endTime.
+     * FIXED_WINDOW: when startTime/endTime are present, available when now is within [startTime, endTime]
+     * (do not gate on cached status so scheduled exams go live at the correct time).
+     * When start/end are missing, require status == LIVE.
      * FLEXIBLE_START: available when status == LIVE.
      */
     private AvailabilityResult computeAvailabilityForTake(JsonNode exam) {
@@ -641,10 +643,7 @@ public class StudentExamController {
             return new AvailabilityResult(available, available ? null : "Exam has not begun yet");
         }
 
-        // FIXED_WINDOW
-        if (!"LIVE".equals(status)) {
-            return new AvailabilityResult(false, "Exam has not begun yet");
-        }
+        // FIXED_WINDOW: parse window first; if we have both start and end, use time window only (ignore cached status)
         OffsetDateTime startTime = null;
         OffsetDateTime endTime = null;
         if (exam.has("startTime") && !exam.get("startTime").isNull()) {
@@ -667,14 +666,19 @@ public class StudentExamController {
                 }
             }
         }
-        if (startTime == null || endTime == null) {
+        if (startTime != null && endTime != null) {
+            // Use time window only so scheduled exams go live at the correct time (cached status may be stale)
+            if (now.isBefore(startTime)) {
+                return new AvailabilityResult(false, "Exam has not begun yet");
+            }
+            if (now.isAfter(endTime)) {
+                return new AvailabilityResult(false, "Exam has ended");
+            }
             return new AvailabilityResult(true, null);
         }
-        if (now.isBefore(startTime)) {
+        // No window: fall back to requiring LIVE status
+        if (!"LIVE".equals(status)) {
             return new AvailabilityResult(false, "Exam has not begun yet");
-        }
-        if (now.isAfter(endTime)) {
-            return new AvailabilityResult(false, "Exam has ended");
         }
         return new AvailabilityResult(true, null);
     }
