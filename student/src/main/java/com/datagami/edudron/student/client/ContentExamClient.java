@@ -91,4 +91,33 @@ public class ContentExamClient {
             return null;
         }
     }
+
+    /**
+     * Fetch real-time exam status from Content (not cached). Use for FLEXIBLE_START when cached
+     * status may be stale (e.g. right after publish).
+     *
+     * @param examId exam ID
+     * @return JSON with currentStatus, isAccessible, etc., or null if not found or error
+     */
+    public JsonNode getExamCurrentStatus(String examId) {
+        String url = gatewayUrl + "/api/exams/" + examId + "/current-status";
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(List.of(org.springframework.http.MediaType.APPLICATION_JSON));
+
+        try {
+            ResponseEntity<JsonNode> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    JsonNode.class
+            );
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+            return null;
+        } catch (Exception e) {
+            logger.warn("Failed to fetch current status for exam {} from Content: {}", examId, e.getMessage());
+            return null;
+        }
+    }
 }

@@ -455,10 +455,28 @@ public class StudentExamController {
 
             // Allow start only when exam is in window (same logic as computeAvailabilityForTake)
             if (timingMode == ExamSubmissionService.TimingMode.FLEXIBLE_START) {
-                if (!"LIVE".equals(status)) {
-                    logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId, id, status);
-                    return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                        .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                if ("LIVE".equals(status)) {
+                    // Cached status says LIVE, allow
+                } else {
+                    // Cached status may be stale (e.g. right after publish); use real-time status from Content
+                    JsonNode statusResponse = contentExamClient.getExamCurrentStatus(id);
+                    if (statusResponse != null) {
+                        boolean isAccessible = statusResponse.has("isAccessible") && !statusResponse.get("isAccessible").isNull()
+                            && statusResponse.get("isAccessible").asBoolean();
+                        String currentStatus = statusResponse.has("currentStatus") && !statusResponse.get("currentStatus").isNull()
+                            ? statusResponse.get("currentStatus").asText() : null;
+                        if (isAccessible || "LIVE".equals(currentStatus)) {
+                            // Real-time status says live, allow
+                        } else {
+                            logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId, id, status);
+                            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                                .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                        }
+                    } else {
+                        logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId, id, status);
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                            .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                    }
                 }
             } else {
                 // FIXED_WINDOW: use time window so cached SCHEDULED does not block when now is in window
@@ -637,8 +655,24 @@ public class StudentExamController {
         OffsetDateTime now = OffsetDateTime.now();
 
         if (isFlexible) {
-            boolean available = "LIVE".equals(status);
-            return new AvailabilityResult(available, available ? null : "Exam has not begun yet");
+            if ("LIVE".equals(status)) {
+                return new AvailabilityResult(true, null);
+            }
+            // Cached status may be stale (e.g. right after publish); use real-time status from Content
+            String examId = exam.has("id") && !exam.get("id").isNull() ? exam.get("id").asText() : null;
+            if (examId != null) {
+                JsonNode statusResponse = contentExamClient.getExamCurrentStatus(examId);
+                if (statusResponse != null) {
+                    boolean isAccessible = statusResponse.has("isAccessible") && !statusResponse.get("isAccessible").isNull()
+                        && statusResponse.get("isAccessible").asBoolean();
+                    String currentStatus = statusResponse.has("currentStatus") && !statusResponse.get("currentStatus").isNull()
+                        ? statusResponse.get("currentStatus").asText() : null;
+                    if (isAccessible || "LIVE".equals(currentStatus)) {
+                        return new AvailabilityResult(true, null);
+                    }
+                }
+            }
+            return new AvailabilityResult(false, "Exam has not begun yet");
         }
 
         // FIXED_WINDOW: parse window first; if we have both start and end, use time window only (ignore cached status)
