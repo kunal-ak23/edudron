@@ -426,61 +426,59 @@ public class StudentExamController {
                 return ResponseEntity.badRequest().build();
             }
             
-            // Status check: exam must be LIVE to start
-            String status = exam.has("status") && !exam.get("status").isNull() ? exam.get("status").asText() : null;
-            if (!"LIVE".equals(status)) {
-                logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", 
-                    studentId, id, status);
-                return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
-            }
-            
+            // Parse start/end times once for availability and submission
             java.time.OffsetDateTime endTime = null;
             java.time.OffsetDateTime startTime = null;
-            
-            // Real-time validation: Check if exam has ended
-            if (exam.has("endTime") && !exam.get("endTime").isNull()) {
-                String endTimeStr = exam.get("endTime").asText();
-                if (endTimeStr != null && !endTimeStr.isBlank()) {
-                try {
-                    endTime = java.time.OffsetDateTime.parse(endTimeStr);
-                    java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
-                    
-                    // For FIXED_WINDOW mode, exam ends at endTime for everyone
-                    // For FLEXIBLE_START mode, students can still start if there's time for at least some portion
-                    if (timingMode == ExamSubmissionService.TimingMode.FIXED_WINDOW) {
-                        if (now.isAfter(endTime)) {
-                            logger.warn("Student {} attempted to start exam {} after end time. End: {}, Now: {}", 
-                                studentId, id, endTime, now);
-                            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                                .body(Map.of("message", "Exam has ended"));
-                        }
-                    }
-                    // For FLEXIBLE_START, we don't block based on endTime at start
-                    // The student gets their full duration
-                } catch (Exception e) {
-                    logger.error("Failed to parse exam end time: {}", endTimeStr, e);
-                }
-                }
-            }
-            
-            // Also check if exam has started
             if (exam.has("startTime") && !exam.get("startTime").isNull()) {
                 String startTimeStr = exam.get("startTime").asText();
                 if (startTimeStr != null && !startTimeStr.isBlank()) {
-                try {
-                    startTime = java.time.OffsetDateTime.parse(startTimeStr);
-                    java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
-                    
-                    if (now.isBefore(startTime)) {
-                        logger.warn("Student {} attempted to start exam {} before start time. Start: {}, Now: {}", 
-                            studentId, id, startTime, now);
-                        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                            .body(Map.of("message", "Exam has not begun yet"));
+                    try {
+                        startTime = java.time.OffsetDateTime.parse(startTimeStr);
+                    } catch (Exception e) {
+                        logger.debug("Failed to parse exam start time: {}", startTimeStr);
                     }
-                } catch (Exception e) {
-                    logger.error("Failed to parse exam start time: {}", startTimeStr, e);
                 }
+            }
+            if (exam.has("endTime") && !exam.get("endTime").isNull()) {
+                String endTimeStr = exam.get("endTime").asText();
+                if (endTimeStr != null && !endTimeStr.isBlank()) {
+                    try {
+                        endTime = java.time.OffsetDateTime.parse(endTimeStr);
+                    } catch (Exception e) {
+                        logger.debug("Failed to parse exam end time: {}", endTimeStr);
+                    }
+                }
+            }
+            
+            java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
+            String status = exam.has("status") && !exam.get("status").isNull() ? exam.get("status").asText() : null;
+
+            // Allow start only when exam is in window (same logic as computeAvailabilityForTake)
+            if (timingMode == ExamSubmissionService.TimingMode.FLEXIBLE_START) {
+                if (!"LIVE".equals(status)) {
+                    logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId, id, status);
+                    return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                        .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                }
+            } else {
+                // FIXED_WINDOW: use time window so cached SCHEDULED does not block when now is in window
+                if (startTime != null && endTime != null) {
+                    if (now.isBefore(startTime)) {
+                        logger.warn("Student {} attempted to start exam {} before start time. Start: {}, Now: {}", studentId, id, startTime, now);
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                            .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                    }
+                    if (now.isAfter(endTime)) {
+                        logger.warn("Student {} attempted to start exam {} after end time. End: {}, Now: {}", studentId, id, endTime, now);
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                            .body(Map.of("message", "Exam has ended"));
+                    }
+                } else {
+                    if (!"LIVE".equals(status)) {
+                        logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId, id, status);
+                        return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
+                            .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                    }
                 }
             }
             
