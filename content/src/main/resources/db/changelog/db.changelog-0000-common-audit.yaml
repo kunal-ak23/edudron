@@ -1,0 +1,33 @@
+# Ensures common.audit_logs exists so this service can persist audit logs.
+# Only identity creates common schema + tables by default; student/content/payment
+# also write to common.audit_logs, so we create the table if missing (e.g. when
+# running content before identity, or against a fresh DB).
+databaseChangeLog:
+  - changeSet:
+      id: content-0000-common-schema
+      author: edudron
+      changes:
+        - sql:
+            sql: create schema if not exists common;
+  - changeSet:
+      id: content-0000-common-audit-logs
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              schemaName: common
+              tableName: audit_logs
+      changes:
+        - createTable:
+            tableName: audit_logs
+            schemaName: common
+            columns:
+              - column: { name: id, type: uuid, constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: actor, type: varchar(128) }
+              - column: { name: action, type: varchar(64) }
+              - column: { name: entity, type: varchar(64) }
+              - column: { name: entity_id, type: varchar(64) }
+              - column: { name: meta, type: jsonb }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }

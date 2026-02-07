@@ -1,4 +1,6 @@
 databaseChangeLog:
+  - include:
+      file: db/changelog/db.changelog-0000-common-audit.yaml
   - changeSet:
       id: content-schema-0001-create
       author: edudron

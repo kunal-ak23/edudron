@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.OffsetDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -39,25 +40,44 @@ public abstract class AuditService {
      */
     public void logCrud(String operation, String entityType, String entityId,
                         String actorUserId, String actorEmail, Map<String, Object> meta) {
+        logCrudWithClient(null, operation, entityType, entityId, actorUserId, actorEmail, meta);
+    }
+
+    /**
+     * Log a CRUD operation with an explicit client/tenant ID. Use this when calling from an @Async
+     * method so the entry is stored with the correct tenant (TenantContext is thread-local and not
+     * available in the async thread). If clientId is null, falls back to TenantContext.
+     */
+    public void logCrud(UUID clientId, String operation, String entityType, String entityId,
+                        String actorUserId, String actorEmail, Map<String, Object> meta) {
+        logCrudWithClient(clientId, operation, entityType, entityId, actorUserId, actorEmail, meta);
+    }
+
+    private void logCrudWithClient(UUID clientId, String operation, String entityType, String entityId,
+                                   String actorUserId, String actorEmail, Map<String, Object> meta) {
         try {
+            UUID effectiveClientId = clientId != null ? clientId : getClientId();
             AuditLog entry = new AuditLog();
             entry.setId(UUID.randomUUID());
-            entry.setClientId(getClientId());
+            entry.setClientId(effectiveClientId);
             entry.setAction(truncate(operation, 64));
             entry.setEntity(truncate(entityType, 64));
             entry.setEntityId(truncate(entityId, 64));
-            entry.setActor(truncate(actorUserId != null ? actorUserId : actorEmail, 128));
+            // Prefer email for human-readable Actor column; fall back to userId (e.g. webhook, system)
+            String actorDisplay = (actorEmail != null && !actorEmail.isBlank()) ? actorEmail : actorUserId;
+            entry.setActor(truncate(actorDisplay, 128));
             entry.setCreatedAt(OffsetDateTime.now());
 
             if (meta != null && !meta.isEmpty()) {
-                meta.put("serviceName", getServiceName());
-                String json = objectMapper.writeValueAsString(meta);
+                Map<String, Object> metaCopy = new HashMap<>(meta);
+                metaCopy.put("serviceName", getServiceName());
+                String json = objectMapper.writeValueAsString(metaCopy);
                 if (json.length() > META_JSON_MAX_LENGTH) {
                     json = json.substring(0, META_JSON_MAX_LENGTH) + "\"...[truncated]";
                 }
-                entry.setMeta(json);
+                entry.setMeta(objectMapper.readTree(json));
             } else {
-                entry.setMeta(objectMapper.writeValueAsString(Map.of("serviceName", getServiceName())));
+                entry.setMeta(objectMapper.readTree(objectMapper.writeValueAsString(Map.of("serviceName", getServiceName()))));
             }
 
             @SuppressWarnings("unchecked")

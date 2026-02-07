@@ -220,7 +220,7 @@ public class ClassService {
         }
         
         Class saved = classRepository.save(classEntity);
-        auditService.logCrud("UPDATE", "Class", classId, null, null,
+        auditService.logCrud(clientId, "UPDATE", "Class", classId, null, null,
             java.util.Map.of("name", saved.getName(), "code", saved.getCode(), "instituteId", saved.getInstituteId()));
         return toDTO(saved);
     }
@@ -237,7 +237,7 @@ public class ClassService {
         
         classEntity.setIsActive(false);
         classRepository.save(classEntity);
-        auditService.logCrud("UPDATE", "Class", classId, null, null,
+        auditService.logCrud(clientId, "UPDATE", "Class", classId, null, null,
             java.util.Map.of("action", "DEACTIVATE", "name", classEntity.getName()));
     }
 

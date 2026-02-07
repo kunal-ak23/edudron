@@ -69,7 +69,7 @@ public class TenantFeatureService {
         }
         
         TenantFeature saved = repository.save(tenantFeature);
-        auditService.logCrud(existing.isPresent() ? "UPDATE" : "CREATE", "TenantFeature",
+        auditService.logCrud(clientId, existing.isPresent() ? "UPDATE" : "CREATE", "TenantFeature",
             saved.getId().toString(), getCurrentUserId(), getCurrentUserEmail(),
             Map.of("clientId", clientId.toString(), "feature", feature.name(), "enabled", enabled));
         return saved;
@@ -81,7 +81,7 @@ public class TenantFeatureService {
     @CacheEvict(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()")
     public void resetFeatureToDefault(UUID clientId, TenantFeatureType feature) {
         repository.deleteByClientIdAndFeature(clientId, feature);
-        auditService.logCrud("DELETE", "TenantFeature", clientId + "::" + feature.name(),
+        auditService.logCrud(clientId, "DELETE", "TenantFeature", clientId + "::" + feature.name(),
             getCurrentUserId(), getCurrentUserEmail(), Map.of("clientId", clientId.toString(), "feature", feature.name()));
     }
 

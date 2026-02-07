@@ -1,5 +1,7 @@
 databaseChangeLog:
   - include:
+      file: db/changelog/db.changelog-0000-common-audit.yaml
+  - include:
       file: db/changelog/db.changelog-0001-plans.yaml
   - include:
       file: db/changelog/db.changelog-0002-subscriptions.yaml

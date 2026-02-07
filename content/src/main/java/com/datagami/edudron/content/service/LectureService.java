@@ -146,7 +146,7 @@ public class LectureService {
         }
         
         Lecture saved = lectureRepository.save(lecture);
-        auditService.logCrud("CREATE", "Lecture", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "CREATE", "Lecture", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
             Map.of("sectionId", sectionId, "courseId", section.getCourseId(), "title", title != null ? title : ""));
         return toDTO(saved);
     }
@@ -213,7 +213,7 @@ public class LectureService {
         }
         
         Lecture saved = lectureRepository.save(lecture);
-        auditService.logCrud("UPDATE", "Lecture", id, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "UPDATE", "Lecture", id, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("title", title != null ? title : "", "courseId", lecture.getCourseId()));
         return toDTO(saved);
     }
@@ -233,7 +233,7 @@ public class LectureService {
         
         Lecture lecture = lectureRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + id));
-        auditService.logCrud("DELETE", "Lecture", id, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "DELETE", "Lecture", id, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("courseId", lecture.getCourseId(), "title", lecture.getTitle() != null ? lecture.getTitle() : ""));
         // Load all lecture content to clean up Azure storage files
         List<LectureContent> contents = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(id, clientId);

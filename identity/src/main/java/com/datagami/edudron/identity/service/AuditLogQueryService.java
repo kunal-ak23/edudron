@@ -70,7 +70,7 @@ public class AuditLogQueryService {
         dto.setAction(log.getAction());
         dto.setEntity(log.getEntity());
         dto.setEntityId(log.getEntityId());
-        dto.setMeta(log.getMeta());
+        dto.setMeta(log.getMeta() != null ? log.getMeta().toString() : null);
         dto.setCreatedAt(log.getCreatedAt());
         return dto;
     }

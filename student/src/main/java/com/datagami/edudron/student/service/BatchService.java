@@ -55,7 +55,7 @@ public class BatchService {
         batch.setIsActive(true);
         
         Batch saved = batchRepository.save(batch);
-        auditService.logCrud("CREATE", "Batch", saved.getId(), null, null,
+        auditService.logCrud(clientId, "CREATE", "Batch", saved.getId(), null, null,
             java.util.Map.of("name", saved.getName(), "courseId", saved.getCourseId() != null ? saved.getCourseId() : ""));
         return toDTO(saved, clientId);
     }
@@ -116,7 +116,7 @@ public class BatchService {
         batch.setMaxStudents(request.getMaxStudents());
         
         Batch saved = batchRepository.save(batch);
-        auditService.logCrud("UPDATE", "Batch", batchId, null, null,
+        auditService.logCrud(clientId, "UPDATE", "Batch", batchId, null, null,
             java.util.Map.of("name", saved.getName(), "courseId", saved.getCourseId() != null ? saved.getCourseId() : ""));
         return toDTO(saved, clientId);
     }
@@ -133,7 +133,7 @@ public class BatchService {
         
         batch.setIsActive(false);
         batchRepository.save(batch);
-        auditService.logCrud("UPDATE", "Batch", batchId, null, null,
+        auditService.logCrud(clientId, "UPDATE", "Batch", batchId, null, null,
             java.util.Map.of("action", "DEACTIVATE", "name", batch.getName()));
     }
     

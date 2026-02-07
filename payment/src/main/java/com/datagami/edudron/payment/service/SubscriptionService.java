@@ -73,7 +73,7 @@ public class SubscriptionService {
         Subscription saved = subscriptionRepository.save(subscription);
         String actor = UserUtil.getCurrentUserIdOrNull();
         if (actor == null) actor = "system";
-        auditService.logCrud("CREATE", "Subscription", saved.getId(), actor, null,
+        auditService.logCrud(saved.getClientId(), "CREATE", "Subscription", saved.getId(), actor, null,
             Map.of("serviceName", "payment", "newValue", Map.of("id", saved.getId(), "status", saved.getStatus().name())));
         return toDTO(saved);
     }
@@ -129,7 +129,7 @@ public class SubscriptionService {
         subscriptionRepository.save(subscription);
         String actor = UserUtil.getCurrentUserIdOrNull();
         if (actor == null) actor = "system";
-        auditService.logCrud("UPDATE", "Subscription", subscription.getId(), actor, null,
+        auditService.logCrud(subscription.getClientId(), "UPDATE", "Subscription", subscription.getId(), actor, null,
             Map.of("serviceName", "payment", "status", Subscription.Status.CANCELLED.name()));
     }
     

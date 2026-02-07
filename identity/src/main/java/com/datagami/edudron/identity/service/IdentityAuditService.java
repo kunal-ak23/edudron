@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class IdentityAuditService extends AuditService {
@@ -39,5 +40,12 @@ public class IdentityAuditService extends AuditService {
     public void logCrud(String operation, String entityType, String entityId,
                         String actorUserId, String actorEmail, Map<String, Object> meta) {
         super.logCrud(operation, entityType, entityId, actorUserId, actorEmail, meta);
+    }
+
+    @Async("eventTaskExecutor")
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void logCrud(UUID clientId, String operation, String entityType, String entityId,
+                        String actorUserId, String actorEmail, Map<String, Object> meta) {
+        super.logCrud(clientId, operation, entityType, entityId, actorUserId, actorEmail, meta);
     }
 }

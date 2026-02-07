@@ -60,7 +60,7 @@ public class ClientService {
         log.info("Created client: {} with ID: {}", saved.getName(), saved.getId());
         String actorId = currentUser != null ? currentUser.getId() : null;
         String actorEmail = currentUser != null ? currentUser.getEmail() : null;
-        auditService.logCrud("CREATE", "Client", saved.getId().toString(), actorId, actorEmail,
+        auditService.logCrud(saved.getId(), "CREATE", "Client", saved.getId().toString(), actorId, actorEmail,
             java.util.Map.of("name", saved.getName(), "slug", saved.getSlug()));
         return toDTO(saved);
     }
@@ -181,7 +181,7 @@ public class ClientService {
         log.info("Updated client: {}", saved.getId());
         String actorId = currentUser != null ? currentUser.getId() : null;
         String actorEmail = currentUser != null ? currentUser.getEmail() : null;
-        auditService.logCrud("UPDATE", "Client", id.toString(), actorId, actorEmail,
+        auditService.logCrud(id, "UPDATE", "Client", id.toString(), actorId, actorEmail,
             java.util.Map.of("name", saved.getName(), "slug", saved.getSlug()));
         return toDTO(saved);
     }
@@ -203,7 +203,7 @@ public class ClientService {
         clientRepository.save(client);
         String actorId = currentUser != null ? currentUser.getId() : null;
         String actorEmail = currentUser != null ? currentUser.getEmail() : null;
-        auditService.logCrud("DELETE", "Client", id.toString(), actorId, actorEmail,
+        auditService.logCrud(id, "DELETE", "Client", id.toString(), actorId, actorEmail,
             java.util.Map.of("name", client.getName()));
         log.info("Soft deleted client: {}", id);
     }

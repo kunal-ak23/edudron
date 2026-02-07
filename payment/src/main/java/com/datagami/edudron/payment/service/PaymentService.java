@@ -92,7 +92,7 @@ public class PaymentService {
         }
         
         String actor = UserUtil.getCurrentUserIdOrNull();
-        auditService.logCrud("CREATE", "Payment", saved.getId(), actor, null,
+        auditService.logCrud(saved.getClientId(), "CREATE", "Payment", saved.getId(), actor, null,
             Map.of("serviceName", "payment", "newValue", Map.of("id", saved.getId(), "status", saved.getStatus().name(), "amountPaise", saved.getAmountPaise())));
         
         PaymentResponseDTO response = new PaymentResponseDTO();
@@ -151,7 +151,7 @@ public class PaymentService {
         paymentRepository.save(payment);
         String actor = UserUtil.getCurrentUserIdOrNull();
         if (actor == null) actor = "system";
-        auditService.logCrud("UPDATE", "Payment", payment.getId(), actor, null,
+        auditService.logCrud(payment.getClientId(), "UPDATE", "Payment", payment.getId(), actor, null,
             Map.of("serviceName", "payment", "status", status.name()));
     }
     

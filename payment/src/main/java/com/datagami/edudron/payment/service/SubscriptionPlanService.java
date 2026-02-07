@@ -46,7 +46,7 @@ public class SubscriptionPlanService {
         SubscriptionPlan saved = planRepository.save(plan);
         String actor = UserUtil.getCurrentUserIdOrNull();
         if (actor == null) actor = "system";
-        auditService.logCrud("CREATE", "SubscriptionPlan", saved.getId(), actor, null,
+        auditService.logCrud(saved.getClientId(), "CREATE", "SubscriptionPlan", saved.getId(), actor, null,
             Map.of("serviceName", "payment", "newValue", Map.of("id", saved.getId(), "name", saved.getName())));
         return toDTO(saved);
     }
@@ -107,11 +107,11 @@ public class SubscriptionPlanService {
         SubscriptionPlan saved = planRepository.save(plan);
         String actor = UserUtil.getCurrentUserIdOrNull();
         if (actor == null) actor = "system";
-        auditService.logCrud("UPDATE", "SubscriptionPlan", saved.getId(), actor, null,
+        auditService.logCrud(saved.getClientId(), "UPDATE", "SubscriptionPlan", saved.getId(), actor, null,
             Map.of("serviceName", "payment", "newValue", Map.of("id", saved.getId(), "name", saved.getName())));
         return toDTO(saved);
     }
-    
+
     public void deactivatePlan(String planId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -126,7 +126,7 @@ public class SubscriptionPlanService {
         planRepository.save(plan);
         String actor = UserUtil.getCurrentUserIdOrNull();
         if (actor == null) actor = "system";
-        auditService.logCrud("UPDATE", "SubscriptionPlan", plan.getId(), actor, null,
+        auditService.logCrud(plan.getClientId(), "UPDATE", "SubscriptionPlan", plan.getId(), actor, null,
             Map.of("serviceName", "payment", "isActive", false));
     }
     

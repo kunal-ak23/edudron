@@ -155,7 +155,7 @@ public class QuestionBankService {
         
         logger.info("Created question bank question {} for course {} modules {}", 
             reloaded.getId(), courseId, moduleIds);
-        auditService.logCrud("CREATE", "QuestionBank", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "CREATE", "QuestionBank", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
             Map.of("courseId", courseId, "moduleIds", moduleIds != null ? moduleIds : List.of()));
         return reloaded;
     }
@@ -229,7 +229,7 @@ public class QuestionBankService {
             .orElse(updated);
         
         logger.info("Updated question bank question {}", questionId);
-        auditService.logCrud("UPDATE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "UPDATE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("courseId", question.getCourseId()));
         return reloaded;
     }
@@ -257,7 +257,7 @@ public class QuestionBankService {
         
         question.setIsActive(false);
         questionBankRepository.save(question);
-        auditService.logCrud("UPDATE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "UPDATE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("action", "SOFT_DELETE", "isActive", false));
         logger.info("Soft deleted question bank question {}", questionId);
     }
@@ -273,7 +273,7 @@ public class QuestionBankService {
             .orElseThrow(() -> new IllegalArgumentException("Question not found: " + questionId));
         
         optionRepository.deleteByQuestionIdAndClientId(questionId, clientId);
-        auditService.logCrud("DELETE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "DELETE", "QuestionBank", questionId, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("courseId", question.getCourseId()));
         questionBankRepository.delete(question);
         logger.info("Hard deleted question bank question {}", questionId);

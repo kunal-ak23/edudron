@@ -1,6 +1,10 @@
 package com.datagami.edudron.common.domain;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -37,8 +41,9 @@ public class AuditLog {
     @Column(name = "entity_id", length = 64)
     private String entityId;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private String meta; // JSON string: serviceName, oldValue, newValue, etc.
+    private JsonNode meta; // JSON: serviceName, oldValue, newValue, etc.
 
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
@@ -65,8 +70,8 @@ public class AuditLog {
     public String getEntityId() { return entityId; }
     public void setEntityId(String entityId) { this.entityId = entityId; }
 
-    public String getMeta() { return meta; }
-    public void setMeta(String meta) { this.meta = meta; }
+    public JsonNode getMeta() { return meta; }
+    public void setMeta(JsonNode meta) { this.meta = meta; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

@@ -124,7 +124,7 @@ public class SectionService {
         section.setSequence(nextSequence);
         
         Section saved = sectionRepository.save(section);
-        auditService.logCrud("CREATE", "Section", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "CREATE", "Section", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
             Map.of("courseId", courseId, "title", title != null ? title : ""));
         return toDTO(saved);
     }
@@ -177,7 +177,7 @@ public class SectionService {
         }
         
         Section saved = sectionRepository.save(section);
-        auditService.logCrud("UPDATE", "Section", id, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "UPDATE", "Section", id, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("title", title != null ? title : "", "courseId", section.getCourseId()));
         return toDTO(saved);
     }
@@ -197,7 +197,7 @@ public class SectionService {
         
         Section section = sectionRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Section not found: " + id));
-        auditService.logCrud("DELETE", "Section", id, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "DELETE", "Section", id, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("courseId", section.getCourseId(), "title", section.getTitle() != null ? section.getTitle() : ""));
         sectionRepository.delete(section);
     }

@@ -119,7 +119,7 @@ public class InstituteService {
         institute.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
         
         Institute saved = instituteRepository.save(institute);
-        auditService.logCrud("CREATE", "Institute", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "CREATE", "Institute", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
             Map.of("name", saved.getName(), "code", saved.getCode()));
         return toDTO(saved, clientId);
     }
@@ -223,7 +223,7 @@ public class InstituteService {
         }
         
         Institute saved = instituteRepository.save(institute);
-        auditService.logCrud("UPDATE", "Institute", instituteId, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "UPDATE", "Institute", instituteId, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("name", saved.getName(), "code", saved.getCode()));
         return toDTO(saved, clientId);
     }
@@ -240,7 +240,7 @@ public class InstituteService {
         
         institute.setIsActive(false);
         instituteRepository.save(institute);
-        auditService.logCrud("UPDATE", "Institute", instituteId, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "UPDATE", "Institute", instituteId, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("action", "DEACTIVATE", "name", institute.getName()));
     }
     

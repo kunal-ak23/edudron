@@ -64,7 +64,7 @@ public class SectionService {
         section.setIsActive(true);
         
         Section saved = sectionRepository.save(section);
-        auditService.logCrud("CREATE", "Section", saved.getId(), null, null,
+        auditService.logCrud(clientId, "CREATE", "Section", saved.getId(), null, null,
             java.util.Map.of("name", saved.getName(), "classId", classId));
         return toDTO(saved, clientId);
     }
@@ -157,7 +157,7 @@ public class SectionService {
         section.setMaxStudents(request.getMaxStudents());
         
         Section saved = sectionRepository.save(section);
-        auditService.logCrud("UPDATE", "Section", sectionId, null, null,
+        auditService.logCrud(clientId, "UPDATE", "Section", sectionId, null, null,
             java.util.Map.of("name", saved.getName(), "classId", saved.getClassId()));
         return toDTO(saved, clientId);
     }
@@ -174,7 +174,7 @@ public class SectionService {
         
         section.setIsActive(false);
         sectionRepository.save(section);
-        auditService.logCrud("UPDATE", "Section", sectionId, null, null,
+        auditService.logCrud(clientId, "UPDATE", "Section", sectionId, null, null,
             java.util.Map.of("action", "DEACTIVATE", "name", section.getName()));
     }
 

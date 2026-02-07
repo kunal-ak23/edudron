@@ -56,7 +56,7 @@ public class TenantBrandingService {
             updateEntityFromDTO(existingBranding, brandingDTO);
             existingBranding.setClientId(clientId);
             tenantBrandingRepository.save(existingBranding);
-            auditService.logCrud("UPDATE", "TenantBranding", existingBranding.getId().toString(),
+            auditService.logCrud(clientId, "UPDATE", "TenantBranding", existingBranding.getId().toString(),
                 getCurrentUserId(), getCurrentUserEmail(), java.util.Map.of("clientId", clientId.toString()));
             return toDTO(existingBranding);
         } else {
@@ -66,7 +66,7 @@ public class TenantBrandingService {
             newBranding.setClientId(clientId);
             updateEntityFromDTO(newBranding, brandingDTO);
             tenantBrandingRepository.save(newBranding);
-            auditService.logCrud("CREATE", "TenantBranding", newBranding.getId().toString(),
+            auditService.logCrud(clientId, "CREATE", "TenantBranding", newBranding.getId().toString(),
                 getCurrentUserId(), getCurrentUserEmail(), java.util.Map.of("clientId", clientId.toString()));
             return toDTO(newBranding);
         }

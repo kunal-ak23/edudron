@@ -352,7 +352,7 @@ public class AuthService {
             "tenantName", tenantName
         );
         eventService.logUserAction("USER_REGISTERED", user.getId(), user.getEmail(), "/auth/register", registrationData);
-        auditService.logCrud("CREATE", "User", user.getId(), user.getId(), user.getEmail(),
+        auditService.logCrud(clientId, "CREATE", "User", user.getId(), user.getId(), user.getEmail(),
             Map.of("role", user.getRole().name(), "tenantId", tenantId));
 
         return new AuthResponse(

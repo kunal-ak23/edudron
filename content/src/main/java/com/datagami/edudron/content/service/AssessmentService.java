@@ -137,7 +137,7 @@ public class AssessmentService {
         assessment.setSequence(nextSequence);
         
         Assessment saved = assessmentRepository.save(assessment);
-        auditService.logCrud("CREATE", "Assessment", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "CREATE", "Assessment", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
             Map.of("courseId", courseId, "lectureId", lectureId, "title", title != null ? title : ""));
         return saved;
     }
@@ -188,7 +188,7 @@ public class AssessmentService {
         
         Assessment assessment = assessmentRepository.findByIdAndClientId(id, clientId)
             .orElseThrow(() -> new IllegalArgumentException("Assessment not found: " + id));
-        auditService.logCrud("DELETE", "Assessment", id, getCurrentUserId(), getCurrentUserEmail(),
+        auditService.logCrud(clientId, "DELETE", "Assessment", id, getCurrentUserId(), getCurrentUserEmail(),
             Map.of("courseId", assessment.getCourseId(), "title", assessment.getTitle() != null ? assessment.getTitle() : ""));
         assessmentRepository.delete(assessment);
     }

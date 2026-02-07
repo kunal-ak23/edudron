@@ -95,7 +95,7 @@ public class PaymentWebhookController {
                             p.setStatus(Payment.Status.SUCCESS);
                             p.setPaidAt(java.time.OffsetDateTime.now());
                             paymentRepository.save(p);
-                            auditService.logCrud("UPDATE", "Payment", p.getId(), "webhook", null,
+                            auditService.logCrud(p.getClientId(), "UPDATE", "Payment", p.getId(), "webhook", null,
                                 Map.of("serviceName", "payment", "status", Payment.Status.SUCCESS.name()));
                         });
                     }
@@ -114,7 +114,7 @@ public class PaymentWebhookController {
                             p.setStatus(Payment.Status.FAILED);
                             p.setFailureReason(errorDescription);
                             paymentRepository.save(p);
-                            auditService.logCrud("UPDATE", "Payment", p.getId(), "webhook", null,
+                            auditService.logCrud(p.getClientId(), "UPDATE", "Payment", p.getId(), "webhook", null,
                                 Map.of("serviceName", "payment", "status", Payment.Status.FAILED.name()));
                         });
                     }
