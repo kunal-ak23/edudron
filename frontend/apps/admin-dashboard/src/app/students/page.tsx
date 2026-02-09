@@ -235,14 +235,13 @@ export default function StudentsPage() {
     loadStudents()
   }, [currentPage, pageSize, debouncedSearchTerm, loadStudents])
 
-  // Role-based access control
+  // Role-based access control: admins can manage; instructors can view (read-only)
   useEffect(() => {
     if (!isAuthenticated() || !user) {
       router.push('/login')
       return
     }
-    
-    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
+    const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'INSTRUCTOR']
     if (!allowedRoles.includes(user.role)) {
       router.push('/unauthorized')
     }
@@ -453,27 +452,31 @@ export default function StudentsPage() {
     return null
   }
 
-  const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN']
+  const allowedRoles = ['SYSTEM_ADMIN', 'TENANT_ADMIN', 'INSTRUCTOR']
   if (!allowedRoles.includes(user.role)) {
     return null
   }
 
+  const canManageStudents = user.role === 'SYSTEM_ADMIN' || user.role === 'TENANT_ADMIN'
+
   return (
     <div>
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex gap-2">
-            <Button onClick={() => setShowAddDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Student
-            </Button>
-            <Link href="/students/import">
-              <Button variant="outline">
+        {canManageStudents && (
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex gap-2">
+              <Button onClick={() => setShowAddDialog(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Import Students
+                Add Student
               </Button>
-            </Link>
+              <Link href="/students/import">
+                <Button variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Import Students
+                </Button>
+              </Link>
+            </div>
           </div>
-        </div>
+        )}
 
         <Card>
             <CardHeader>
@@ -504,7 +507,7 @@ export default function StudentsPage() {
                   <p className="text-muted-foreground">
                     {searchTerm ? 'No students found matching your search.' : 'No students found.'}
                   </p>
-                  {!searchTerm && (
+                  {!searchTerm && canManageStudents && (
                     <Link href="/students/import">
                       <Button variant="outline" className="mt-4">
                         <Plus className="h-4 w-4 mr-2" />
@@ -524,11 +527,16 @@ export default function StudentsPage() {
                       <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead>Last Login</TableHead>
+                      <TableHead className="w-10" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredStudents.map((student) => (
-                      <TableRow key={student.id}>
+                      <TableRow
+                        key={student.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => router.push(`/students/${student.id}`)}
+                      >
                         <TableCell className="font-medium">{student.name}</TableCell>
                         <TableCell>
                           <div className="flex items-center">
@@ -560,6 +568,9 @@ export default function StudentsPage() {
                           {student.lastLoginAt
                             ? new Date(student.lastLoginAt).toLocaleDateString()
                             : 'Never'}
+                        </TableCell>
+                        <TableCell className="w-10 text-muted-foreground">
+                          <ChevronRight className="h-4 w-4" />
                         </TableCell>
                       </TableRow>
                     ))}

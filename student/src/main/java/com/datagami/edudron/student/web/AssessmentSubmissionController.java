@@ -69,6 +69,13 @@ public class AssessmentSubmissionController {
         List<AssessmentSubmissionDTO> submissions = submissionService.getSubmissionsByAssessmentId(assessmentId);
         return ResponseEntity.ok(submissions);
     }
+
+    @GetMapping("/students/{studentId}/submissions")
+    @Operation(summary = "Get submissions by student", description = "Get all assessment/exam submissions for a student (instructor/admin only)")
+    public ResponseEntity<List<AssessmentSubmissionDTO>> getSubmissionsByStudent(@PathVariable String studentId) {
+        List<AssessmentSubmissionDTO> submissions = submissionService.getSubmissionsByStudentId(studentId);
+        return ResponseEntity.ok(submissions);
+    }
     
     @PostMapping("/assessments/{assessmentId}/submissions/bulk-grade")
     @Operation(summary = "Bulk grade submissions", description = "Grade multiple submissions for an assessment (instructor/admin only)")

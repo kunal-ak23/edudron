@@ -176,6 +176,19 @@ public class AssessmentSubmissionService {
         List<AssessmentSubmission> submissions = submissionRepository.findByClientIdAndAssessmentId(clientId, assessmentId);
         return submissions.stream().map(this::toDTO).collect(Collectors.toList());
     }
+
+    /**
+     * Get all assessment/exam submissions for a student (admin/instructor view).
+     */
+    public List<AssessmentSubmissionDTO> getSubmissionsByStudentId(String studentId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        List<AssessmentSubmission> submissions = submissionRepository.findByClientIdAndStudentIdOrderBySubmittedAtDesc(clientId, studentId);
+        return submissions.stream().map(this::toDTO).collect(Collectors.toList());
+    }
     
     public Page<AssessmentSubmissionDTO> getSubmissionsByAssessmentId(String assessmentId, Pageable pageable) {
         String clientIdStr = TenantContext.getClientId();
