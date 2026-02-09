@@ -65,7 +65,7 @@ export default function SectionAnalyticsPage() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="mb-6 flex items-center gap-4">
-        <Button variant="ghost" onClick={() => router.push('/analytics')}>
+        <Button variant="ghost" onClick={() => router.push('/analytics/sections')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>

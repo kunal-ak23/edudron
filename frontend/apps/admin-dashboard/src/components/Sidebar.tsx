@@ -27,7 +27,8 @@ import {
   Sparkles,
   ClipboardList,
   BarChart3,
-  ScrollText
+  ScrollText,
+  Layers
 } from 'lucide-react'
 
 interface MenuItem {
@@ -131,6 +132,12 @@ const menuItems: MenuItem[] = [
     href: '/analytics',
     icon: BarChart3,
     requiresTenant: true,
+    children: [
+      { name: 'Overview', href: '/analytics', icon: BarChart3 },
+      { name: 'Section Analytics', href: '/analytics/sections', icon: Layers },
+      { name: 'Class Analytics', href: '/analytics/classes', icon: GraduationCap },
+      { name: 'Users Report', href: '/analytics/users-report', icon: Users },
+    ]
   },
   {
     name: 'Payments',
