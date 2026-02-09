@@ -23,7 +23,9 @@ import {
   XCircle,
   Clock,
   Download,
-  CheckSquare
+  CheckSquare,
+  AlertTriangle,
+  ShieldCheck
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api'
@@ -42,6 +44,7 @@ interface Submission {
   submittedAt: string
   gradedAt?: string
   answersJson: any
+  markedAsCheating?: boolean
 }
 
 interface Exam {
@@ -68,6 +71,7 @@ export default function ExamSubmissionsPage() {
   const [regrading, setRegrading] = useState(false)
   const [gradingMcq, setGradingMcq] = useState(false)
   const [regradingSubmissions, setRegradingSubmissions] = useState<Set<string>>(new Set())
+  const [markingCheatingSubmissions, setMarkingCheatingSubmissions] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
 
   const loadData = useCallback(async () => {
@@ -232,6 +236,33 @@ export default function ExamSubmissionsPage() {
     }
   }
 
+  const handleMarkAsCheating = async (submissionId: string, markedAsCheating: boolean) => {
+    setMarkingCheatingSubmissions(prev => new Set(prev).add(submissionId))
+    try {
+      await apiClient.put(`/api/exams/${examId}/submissions/${submissionId}/mark-cheating`, {
+        markedAsCheating
+      })
+      toast({
+        title: 'Success',
+        description: markedAsCheating ? 'Submission marked as cheating' : 'Cheating flag removed'
+      })
+      await loadData()
+    } catch (error) {
+      console.error('Failed to update cheating flag:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to update cheating flag',
+        variant: 'destructive'
+      })
+    } finally {
+      setMarkingCheatingSubmissions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(submissionId)
+        return newSet
+      })
+    }
+  }
+
   const exportToCSV = () => {
     const csvRows = []
     
@@ -245,6 +276,7 @@ export default function ExamSubmissionsPage() {
       'Percentage',
       'Status',
       'Review Status',
+      'Marked as cheating',
       'Submitted At',
       'Graded At'
     ].join(','))
@@ -260,6 +292,7 @@ export default function ExamSubmissionsPage() {
         submission.percentage !== null ? submission.percentage.toFixed(2) + '%' : 'N/A',
         submission.isPassed ? 'Passed' : 'Failed',
         submission.reviewStatus,
+        submission.markedAsCheating ? 'Yes' : 'No',
         submission.submittedAt ? new Date(submission.submittedAt).toLocaleString() : 'N/A',
         submission.gradedAt ? new Date(submission.gradedAt).toLocaleString() : 'N/A'
       ].join(','))
@@ -453,6 +486,7 @@ export default function ExamSubmissionsPage() {
                   <TableHead>Percentage</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Review Status</TableHead>
+                  <TableHead>Cheating</TableHead>
                   <TableHead>Submitted</TableHead>
                   <TableHead>Graded</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -517,6 +551,16 @@ export default function ExamSubmissionsPage() {
                         {submission.reviewStatus || 'PENDING'}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      {submission.markedAsCheating ? (
+                        <Badge variant="destructive" className="gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          Flagged
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">No</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm">
                       {submission.submittedAt
                         ? new Date(submission.submittedAt).toLocaleDateString()
@@ -528,24 +572,47 @@ export default function ExamSubmissionsPage() {
                         : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      {(exam?.reviewMethod === 'AI' || exam?.reviewMethod === 'BOTH') && (
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRegradeSubmission(submission.id)}
-                          disabled={regradingSubmissions.has(submission.id)}
-                          title="Re-grade this submission"
+                          onClick={() => handleMarkAsCheating(submission.id, !submission.markedAsCheating)}
+                          disabled={markingCheatingSubmissions.has(submission.id)}
+                          title={submission.markedAsCheating ? 'Unmark cheating' : 'Mark as cheating'}
                         >
-                          {regradingSubmissions.has(submission.id) ? (
+                          {markingCheatingSubmissions.has(submission.id) ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : submission.markedAsCheating ? (
+                            <>
+                              <ShieldCheck className="h-4 w-4 mr-1" />
+                              Unmark
+                            </>
                           ) : (
                             <>
-                              <RefreshCw className="h-4 w-4 mr-1" />
-                              Re-grade
+                              <AlertTriangle className="h-4 w-4 mr-1" />
+                              Mark cheating
                             </>
                           )}
                         </Button>
-                      )}
+                        {(exam?.reviewMethod === 'AI' || exam?.reviewMethod === 'BOTH') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRegradeSubmission(submission.id)}
+                            disabled={regradingSubmissions.has(submission.id)}
+                            title="Re-grade this submission"
+                          >
+                            {regradingSubmissions.has(submission.id) ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                Re-grade
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

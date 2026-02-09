@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0018-add-marked-as-cheating
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - columnExists:
+                tableName: assessment_submissions
+                schemaName: student
+                columnName: marked_as_cheating
+      changes:
+        - addColumn:
+            tableName: assessment_submissions
+            schemaName: student
+            columns:
+              - column:
+                  name: marked_as_cheating
+                  type: boolean
+                  defaultValueBoolean: false
+                  remarks: "Instructor/admin flag: submission marked as cheating"

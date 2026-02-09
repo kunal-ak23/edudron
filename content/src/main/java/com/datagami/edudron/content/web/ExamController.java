@@ -663,6 +663,32 @@ public class ExamController {
                 .body(Map.of("error", "Failed to re-grade submission: " + e.getMessage()));
         }
     }
+
+    @PutMapping("/{examId}/submissions/{submissionId}/mark-cheating")
+    @Operation(summary = "Mark submission as cheating", description = "Set or clear the marked-as-cheating flag for a submission (instructor/admin only)")
+    public ResponseEntity<Map<String, Object>> markSubmissionAsCheating(
+            @PathVariable String examId,
+            @PathVariable String submissionId,
+            @RequestBody Map<String, Object> requestBody) {
+        try {
+            String url = gatewayUrl + "/api/assessments/submissions/" + submissionId + "/mark-cheating";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody != null ? requestBody : new java.util.HashMap<>(), headers);
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.PUT,
+                entity,
+                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
+        } catch (Exception e) {
+            logger.error("Failed to mark submission {} as cheating", submissionId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to update cheating flag: " + e.getMessage()));
+        }
+    }
     
     @PostMapping("/{id}/submissions/regrade-bulk")
     @Operation(summary = "Re-grade multiple submissions", description = "Re-trigger AI grading for multiple submissions (admin only)")

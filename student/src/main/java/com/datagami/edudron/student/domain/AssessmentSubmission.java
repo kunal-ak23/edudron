@@ -100,7 +100,10 @@ public class AssessmentSubmission {
     @Enumerated(EnumType.STRING)
     @Column(name = "proctoring_status", length = 20)
     private ProctoringStatus proctoringStatus;
-    
+
+    @Column(name = "marked_as_cheating")
+    private Boolean markedAsCheating = false;
+
     public enum ReviewStatus {
         PENDING, AI_REVIEWED, INSTRUCTOR_REVIEWED, COMPLETED
     }
@@ -196,6 +199,9 @@ public class AssessmentSubmission {
     
     public ProctoringStatus getProctoringStatus() { return proctoringStatus; }
     public void setProctoringStatus(ProctoringStatus proctoringStatus) { this.proctoringStatus = proctoringStatus; }
+
+    public Boolean getMarkedAsCheating() { return markedAsCheating; }
+    public void setMarkedAsCheating(Boolean markedAsCheating) { this.markedAsCheating = markedAsCheating; }
 }
 
 

@@ -834,6 +834,7 @@ public class StudentExamController {
             dto.setReviewStatus(submission.getReviewStatus().name());
         }
         dto.setAiReviewFeedback(submission.getAiReviewFeedback());
+        dto.setMarkedAsCheating(submission.getMarkedAsCheating());
         
         return dto;
     }

@@ -127,6 +127,22 @@ public class AssessmentSubmissionService {
         AssessmentSubmission saved = submissionRepository.save(submission);
         return toDTO(saved);
     }
+
+    public AssessmentSubmissionDTO markSubmissionAsCheating(String submissionId, Boolean markedAsCheating) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        AssessmentSubmission submission = submissionRepository.findById(submissionId)
+            .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
+        if (!submission.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Submission not found: " + submissionId);
+        }
+        submission.setMarkedAsCheating(Boolean.TRUE.equals(markedAsCheating));
+        AssessmentSubmission saved = submissionRepository.save(submission);
+        return toDTO(saved);
+    }
     
     public List<AssessmentSubmissionDTO> getStudentSubmissions(String studentId, String courseId) {
         String clientIdStr = TenantContext.getClientId();
@@ -295,6 +311,7 @@ public class AssessmentSubmissionService {
             dto.setReviewStatus(submission.getReviewStatus().name());
         }
         dto.setAiReviewFeedback(submission.getAiReviewFeedback());
+        dto.setMarkedAsCheating(submission.getMarkedAsCheating());
         
         return dto;
     }

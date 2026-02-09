@@ -120,6 +120,24 @@ public class AssessmentSubmissionController {
             return ResponseEntity.ok(submission);
         }
     }
+
+    @PutMapping("/assessments/submissions/{submissionId}/mark-cheating")
+    @Operation(summary = "Mark submission as cheating", description = "Set or clear the marked-as-cheating flag (instructor/admin only)")
+    public ResponseEntity<AssessmentSubmissionDTO> markAsCheating(
+            @PathVariable String submissionId,
+            @RequestBody java.util.Map<String, Object> requestBody) {
+        if (requestBody == null || !requestBody.containsKey("markedAsCheating")) {
+            return ResponseEntity.badRequest().build();
+        }
+        Object val = requestBody.get("markedAsCheating");
+        Boolean markedAsCheating = val instanceof Boolean ? (Boolean) val
+            : val instanceof String ? Boolean.parseBoolean((String) val) : null;
+        if (markedAsCheating == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        AssessmentSubmissionDTO submission = submissionService.markSubmissionAsCheating(submissionId, markedAsCheating);
+        return ResponseEntity.ok(submission);
+    }
 }
 
 

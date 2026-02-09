@@ -23,6 +23,7 @@ interface Submission {
     percentage: number
   }
   reviewStatus: string
+  markedAsCheating?: boolean
 }
 
 interface QuestionReview {
@@ -145,6 +146,16 @@ export default function ExamResultsPage() {
               <p className="text-gray-600 mt-1">Exam Results</p>
             </div>
           </div>
+
+          {submission.markedAsCheating && (
+            <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+              <CardContent className="pt-6">
+                <p className="text-amber-800 dark:text-amber-200 font-medium">
+                  This attempt has been flagged for review. Please contact your instructor if you have questions.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Score Summary */}
           <Card className="border-2">

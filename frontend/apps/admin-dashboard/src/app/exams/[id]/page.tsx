@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Loader2, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone, Play, Square } from 'lucide-react'
+import { ArrowLeft, Loader2, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone, Play, Square } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, questionsApi, type QuestionData } from '@/lib/api'
 import { proctoringApi } from '@/lib/proctoring-api'
@@ -1916,6 +1916,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
   const [savingGrade, setSavingGrade] = useState(false)
   const [proctoringReportLoading, setProctoringReportLoading] = useState(false)
   const [proctoringImages, setProctoringImages] = useState<ProctoringImageItem[]>([])
+  const [markingCheating, setMarkingCheating] = useState(false)
   const { toast } = useToast()
 
   const loadSubmissions = useCallback(async () => {
@@ -2169,6 +2170,49 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                 <div>
                   <Label>Review Status</Label>
                   <Badge variant="outline">{selectedSubmission.reviewStatus || 'PENDING'}</Badge>
+                </div>
+                <div className="col-span-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Label>Marked as cheating</Label>
+                    {selectedSubmission.markedAsCheating ? (
+                      <Badge variant="destructive" className="gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        Flagged
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">No</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="mark-cheating-switch" className="text-sm font-normal">Mark as cheating</Label>
+                    <Switch
+                      id="mark-cheating-switch"
+                      checked={!!selectedSubmission.markedAsCheating}
+                      disabled={markingCheating}
+                      onCheckedChange={async (checked) => {
+                        setMarkingCheating(true)
+                        try {
+                          await apiClient.put(`/api/exams/${examId}/submissions/${selectedSubmission.id}/mark-cheating`, {
+                            markedAsCheating: checked
+                          })
+                          setSelectedSubmission((prev: any) => prev ? { ...prev, markedAsCheating: checked } : null)
+                          toast({
+                            title: 'Success',
+                            description: checked ? 'Submission marked as cheating' : 'Cheating flag removed'
+                          })
+                        } catch (err) {
+                          console.error('Failed to update cheating flag:', err)
+                          toast({
+                            title: 'Error',
+                            description: 'Failed to update cheating flag',
+                            variant: 'destructive'
+                          })
+                        } finally {
+                          setMarkingCheating(false)
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
                 {selectedSubmission.submittedAt && (
                   <div>

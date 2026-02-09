@@ -27,6 +27,7 @@ public class AssessmentSubmissionDTO {
     private Integer timeRemainingSeconds;
     private String reviewStatus;
     private JsonNode aiReviewFeedback;
+    private Boolean markedAsCheating;
 
     // Constructors
     public AssessmentSubmissionDTO() {}
@@ -88,6 +89,9 @@ public class AssessmentSubmissionDTO {
 
     public JsonNode getAiReviewFeedback() { return aiReviewFeedback; }
     public void setAiReviewFeedback(JsonNode aiReviewFeedback) { this.aiReviewFeedback = aiReviewFeedback; }
+
+    public Boolean getMarkedAsCheating() { return markedAsCheating; }
+    public void setMarkedAsCheating(Boolean markedAsCheating) { this.markedAsCheating = markedAsCheating; }
 }
 
 
