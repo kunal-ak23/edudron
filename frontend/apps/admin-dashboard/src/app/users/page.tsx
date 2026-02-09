@@ -110,13 +110,6 @@ export default function UsersPage() {
         params.append('search', debouncedSearchTerm.trim())
       }
 
-      console.log('[UsersPage] Loading users with filters:', { 
-        page: currentPage, 
-        size: pageSize,
-        role: roleFilter !== 'all' ? roleFilter : null,
-        search: debouncedSearchTerm.trim() || null 
-      })
-
       // Use paginated endpoint with backend filtering
       try {
         const response = await apiClient.get<PaginatedResponse<User>>(
@@ -124,18 +117,11 @@ export default function UsersPage() {
         )
         const paginatedData = response.data || { content: [], totalElements: 0, totalPages: 0, number: 0, size: pageSize, first: true, last: true }
         
-        console.log('[UsersPage] Received response:', {
-          contentLength: paginatedData.content?.length,
-          totalElements: paginatedData.totalElements,
-          totalPages: paginatedData.totalPages
-        })
-        
         setUsers(paginatedData.content || [])
         setTotalElements(paginatedData.totalElements || 0)
         setTotalPages(paginatedData.totalPages || 0)
       } catch (paginatedError: any) {
         // Fallback to non-paginated endpoint if paginated endpoint doesn't exist
-        console.warn('Paginated endpoint failed, falling back to non-paginated:', paginatedError)
         const response = await apiClient.get<User[]>('/idp/users')
         
         let usersData: User[] = []
@@ -161,7 +147,6 @@ export default function UsersPage() {
         setTotalPages(Math.ceil(usersData.length / pageSize))
       }
     } catch (err: any) {
-      console.error('Error loading users:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -250,7 +235,6 @@ export default function UsersPage() {
         description: `Password has been reset for ${resetPasswordUser.name}`,
       })
     } catch (err: any) {
-      console.error('Error resetting password:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

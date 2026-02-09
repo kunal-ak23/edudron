@@ -61,7 +61,6 @@ export default function CoursesPage() {
           isSelfEnrollmentEnabled = await tenantFeaturesApi.isStudentSelfEnrollmentEnabled()
           setSelfEnrollmentEnabled(isSelfEnrollmentEnabled)
         } catch (error) {
-          console.error('Failed to check self-enrollment feature:', error)
           // Default to false if check fails
           isSelfEnrollmentEnabled = false
           setSelfEnrollmentEnabled(false)
@@ -76,11 +75,6 @@ export default function CoursesPage() {
         const enrollmentsResponse = await enrollmentsApi.listEnrollments()
         enrollmentsData = Array.isArray(enrollmentsResponse) ? enrollmentsResponse : []
       } catch (error) {
-        console.error('❌ Enrollments API call failed:', {
-          message: (error as any)?.message,
-          status: (error as any)?.response?.status,
-          data: (error as any)?.response?.data,
-        })
         enrollmentsData = []
       }
       
@@ -114,11 +108,6 @@ export default function CoursesPage() {
       setCourses(visibleCourses)
       setFilteredCourses(visibleCourses)
     } catch (error) {
-      console.error('Failed to load courses:', {
-        message: (error as any)?.message,
-        status: (error as any)?.response?.status,
-        data: (error as any)?.response?.data,
-      })
     } finally {
       setLoading(false)
     }

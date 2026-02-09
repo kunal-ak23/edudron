@@ -112,12 +112,6 @@ export default function EnrollmentsPage() {
       }
       
       const apiUrl = `/idp/users/role/STUDENT/paginated?${params.toString()}`
-      console.log('[EnrollmentsDialog] Loading students with filters:', { 
-        page, 
-        size, 
-        search: searchQuery.trim() || null 
-      })
-      
       try {
         const studentsResponse = await apiClient.get<{
           content: Array<{ id: string; email: string; name?: string }>
@@ -126,13 +120,9 @@ export default function EnrollmentsPage() {
         }>(apiUrl)
         
         const loadedStudents = studentsResponse.data?.content || []
-        console.log('[EnrollmentsDialog] Received {} students (total: {})', 
-          loadedStudents.length, studentsResponse.data?.totalElements)
-        
         setStudents(loadedStudents)
       } catch (paginatedError) {
         // Fallback to non-paginated endpoint if paginated doesn't exist
-        console.warn('Paginated endpoint failed, falling back to non-paginated:', paginatedError)
         const studentsResponse = await apiClient.get<Array<{ id: string; email: string; name?: string }>>('/idp/users/role/STUDENT')
         const allStudents = studentsResponse.data || []
         
@@ -150,7 +140,6 @@ export default function EnrollmentsPage() {
         }
       }
     } catch (err) {
-      console.error('Error loading students:', err)
       // Continue without students - will show empty list
     } finally {
       setStudentsLoading(false)
@@ -187,27 +176,12 @@ export default function EnrollmentsPage() {
         filters.email = debouncedSearchEmail.trim()
       }
       
-      console.log('[EnrollmentsPage] Loading enrollments with filters:', filters, 'page:', currentPage, 'size:', pageSize)
-      
       // Call backend API with filters
       const enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(
         currentPage,
         pageSize,
         Object.keys(filters).length > 0 ? filters : undefined
       )
-      
-      console.log('[EnrollmentsPage] Received response:', {
-        contentLength: enrollmentsResponse.content.length,
-        totalElements: enrollmentsResponse.totalElements,
-        totalPages: enrollmentsResponse.totalPages,
-        currentPage: enrollmentsResponse.number,
-        firstFew: enrollmentsResponse.content.slice(0, 3).map(e => ({
-          id: e.id,
-          studentId: e.studentId,
-          studentEmail: e.studentEmail,
-          courseId: e.courseId
-        }))
-      })
       
       setEnrollments(enrollmentsResponse.content)
       setTotalElements(enrollmentsResponse.totalElements)
@@ -226,7 +200,6 @@ export default function EnrollmentsPage() {
       // Merge with existing courses to avoid losing data
       setCourses(prev => ({ ...prev, ...coursesMap }))
     } catch (err: any) {
-      console.error('Error loading enrollments:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to load enrollments',
@@ -286,7 +259,6 @@ export default function EnrollmentsPage() {
       // This avoids loading all students on page load
       setInitialLoadDone(true)
     } catch (err: any) {
-      console.error('Error loading data:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to load enrollments',
@@ -529,7 +501,6 @@ export default function EnrollmentsPage() {
       setShowUnenrollDialog(false)
       setEnrollmentToUnenroll(null)
     } catch (err: any) {
-      console.error('Error unenrolling:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to unenroll',
@@ -581,7 +552,6 @@ export default function EnrollmentsPage() {
       // Reload enrollments to show new enrollment
       await loadEnrollments()
     } catch (err: any) {
-      console.error('Error enrolling student:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to enroll student',

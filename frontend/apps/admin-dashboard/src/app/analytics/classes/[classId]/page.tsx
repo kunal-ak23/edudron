@@ -38,7 +38,7 @@ export default function ClassAnalyticsPage() {
         const analyticsData = await analyticsApi.getClassAnalytics(classId)
         setAnalytics(analyticsData)
       } catch (error) {
-        console.error('Failed to load class analytics:', error)
+        // Failed to load class analytics
       } finally {
         setLoading(false)
       }

@@ -59,7 +59,6 @@ export function ProctoringSetupDialog({
       setLoading(true)
       setError(null)
       
-      console.log('Requesting camera permission...')
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           width: { ideal: 1280 },
@@ -69,16 +68,12 @@ export function ProctoringSetupDialog({
         audio: false 
       })
       
-      console.log('Camera permission granted, stream obtained:', mediaStream)
-      console.log('Video tracks:', mediaStream.getVideoTracks())
-      console.log('Active tracks:', mediaStream.getVideoTracks()[0]?.enabled, mediaStream.getVideoTracks()[0]?.readyState)
       
       // Set stream first, then change step
       setStream(mediaStream)
       setStep('preview')
       setLoading(false)
     } catch (err) {
-      console.error('Camera permission error:', err)
       setError('Camera access denied. Please allow camera access to proceed with this proctored exam.')
       setLoading(false)
     }
@@ -111,7 +106,6 @@ export function ProctoringSetupDialog({
         await proctoringApi.verifyIdentity(examId, submissionId, base64Photo)
       } else {
         // Simulate upload in preview mode
-        console.log('[PREVIEW] Identity verification simulated')
         await new Promise(resolve => setTimeout(resolve, 500)) // Simulate network delay
       }
       
@@ -125,7 +119,6 @@ export function ProctoringSetupDialog({
       }
       
     } catch (err) {
-      console.error('Photo capture error:', err)
       setError('Failed to capture photo. Please try again.')
     } finally {
       setLoading(false)
@@ -134,14 +127,11 @@ export function ProctoringSetupDialog({
 
   // Skip identity verification (for basic monitoring mode)
   const skipIdentityVerification = async () => {
-    console.log('⏭️ skipIdentityVerification called')
     // Request fullscreen before completing (allow in preview too)
     if (requestFullscreen) {
-      console.log('Requesting fullscreen before completing...')
       try {
         await requestFullscreen()
       } catch (err) {
-        console.error('Fullscreen request failed:', err)
       }
     }
     onComplete()
@@ -149,56 +139,41 @@ export function ProctoringSetupDialog({
   
   // Start exam (with fullscreen)
   const startExam = async () => {
-    console.log('🚀 startExam() called in ProctoringSetupDialog')
-    console.log('isPreview:', isPreview)
-    console.log('requestFullscreen function exists:', !!requestFullscreen)
-    console.log('capturedPhoto exists:', !!capturedPhoto)
     
     // Request fullscreen before completing (user gesture required)
     // Allow fullscreen in both preview and real mode so preview can test it
     if (requestFullscreen) {
-      console.log('✅ Calling requestFullscreen()...')
       try {
         await requestFullscreen()
-        console.log('✅ requestFullscreen() completed successfully')
       } catch (err) {
-        console.error('❌ Fullscreen request failed in startExam:', err)
         // Continue anyway - don't block exam start
       }
     } else {
-      console.log('⚠️ Skipping fullscreen request - function not provided')
     }
     
-    console.log('Calling onComplete with capturedPhoto')
     onComplete(capturedPhoto)
   }
 
   // Attach stream to video element when stream is ready
   useEffect(() => {
     if (stream && videoRef.current && step === 'preview') {
-      console.log('Attaching stream to video element in useEffect')
       videoRef.current.srcObject = stream
       
       // Play the video
       const playVideo = async () => {
         try {
           if (videoRef.current) {
-            console.log('Waiting for video metadata...')
             await new Promise<void>((resolve) => {
               if (videoRef.current) {
                 videoRef.current.onloadedmetadata = () => {
-                  console.log('Video metadata loaded')
                   resolve()
                 }
               }
             })
             
-            console.log('Attempting to play video...')
             await videoRef.current.play()
-            console.log('Video playing successfully!')
           }
         } catch (err) {
-          console.error('Error playing video:', err)
           setError('Failed to display camera feed. Please try again.')
         }
       }
@@ -211,7 +186,6 @@ export function ProctoringSetupDialog({
   useEffect(() => {
     return () => {
       if (stream) {
-        console.log('Cleaning up camera stream')
         stream.getTracks().forEach(track => track.stop())
       }
     }
@@ -424,7 +398,7 @@ export function ProctoringSetupDialog({
                     // Ensure video is playing
                     const video = e.target as HTMLVideoElement
                     if (video.paused) {
-                      video.play().catch(err => console.error('Failed to play video:', err))
+                      video.play().catch(() => {})
                     }
                   }}
                 />
@@ -506,7 +480,6 @@ export function ProctoringSetupDialog({
                 </Button>
                 <Button 
                   onClick={() => {
-                    console.log('🔘 Start Exam button clicked!')
                     startExam()
                   }} 
                   size="lg" 

@@ -35,7 +35,7 @@ export default function SectionAnalyticsIndexPage() {
         const data = await enrollmentsApi.listSections().catch(() => [])
         setSections(data.filter((s) => s.isActive))
       } catch (error) {
-        console.error('Failed to load sections:', error)
+        // Failed to load sections
       } finally {
         setLoading(false)
       }

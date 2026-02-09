@@ -103,9 +103,6 @@ export default function TakeExamPage() {
   
   // Log requestFullscreen availability on mount
   useEffect(() => {
-    console.log('🔧 Component mounted - checking fullscreen support')
-    console.log('Browser supports fullscreen:', !!document.documentElement.requestFullscreen)
-    console.log('Document fullscreenEnabled:', document.fullscreenEnabled)
   }, [])
 
   // Helper to log proctoring events
@@ -116,14 +113,8 @@ export default function TakeExamPage() {
   ) => {
     if (!exam?.enableProctoring || !submissionId) return
     
-    // In preview mode, just log to console instead of API
+    // In preview mode, skip API call
     if (isPreviewMode) {
-      console.log('[PREVIEW] Proctoring Event:', {
-        eventType,
-        severity,
-        metadata,
-        timestamp: new Date().toISOString()
-      })
       return
     }
     
@@ -138,7 +129,6 @@ export default function TakeExamPage() {
         }
       })
     } catch (err) {
-      console.error('Failed to log proctoring event:', err)
     }
   }, [exam, examId, submissionId])
 
@@ -153,17 +143,8 @@ export default function TakeExamPage() {
     const handleVisibilityChange = () => {
       const isCurrentlyFullscreen = !!document.fullscreenElement
       
-      console.log('📋 Visibility change detected:', {
-        documentHidden: document.hidden,
-        isFullscreenTransition: isFullscreenTransitionRef.current,
-        isCurrentlyFullscreen,
-        proctoringComplete,
-        timestamp: new Date().toISOString()
-      })
-      
       // Only count tab switches after proctoring setup is complete
       if (!proctoringComplete) {
-        console.log('⏭️ Ignoring visibility change - proctoring setup not complete')
         return
       }
       
@@ -173,17 +154,14 @@ export default function TakeExamPage() {
       if (document.hidden) {
         if (isCurrentlyFullscreen) {
           // Can't be in fullscreen AND have switched away - this is a false positive
-          console.log('⏭️ Ignoring visibility change - document hidden but still in fullscreen (false positive)')
           return
         }
         // Document is hidden AND not in fullscreen - this is a real tab switch
-        console.log('📋 Document is hidden and not in fullscreen - treating as real tab switch')
       } else {
         // Document is NOT hidden (user returned or is still on page)
         
         // Ignore visibility changes during fullscreen transitions when returning
         if (isFullscreenTransitionRef.current) {
-          console.log('⏭️ Ignoring visibility change - fullscreen transition in progress (returning)')
           return
         }
         
@@ -191,7 +169,6 @@ export default function TakeExamPage() {
         // When entering/exiting fullscreen, the document might briefly become "hidden"
         // but we're still on the same page
         if (isCurrentlyFullscreen) {
-          console.log('⏭️ Ignoring visibility change - just entered fullscreen')
           return
         }
       }
@@ -200,13 +177,10 @@ export default function TakeExamPage() {
         // Debounce: ignore if last tab switch was less than 500ms ago (prevents React Strict Mode double counting)
         const now = Date.now()
         if (now - lastTabSwitchTimeRef.current < 500) {
-          console.log('⏭️ Ignoring rapid consecutive visibility change (debounce)')
           return
         }
         lastTabSwitchTimeRef.current = now
         
-        console.log('🚨 TAB SWITCH DETECTED - document.hidden is true')
-        console.log('🚨 Current fullscreen transition flag:', isFullscreenTransitionRef.current)
         
         // Save when user switches tabs or minimizes (not in preview mode)
         if (!isPreviewMode && hasUnsavedChangesRef.current && submissionId) {
@@ -215,7 +189,6 @@ export default function TakeExamPage() {
         
         // Increment tab switch count directly (not using setState callback to avoid double execution)
         const newCount = tabSwitchCount + 1
-        console.log(`🚨 TAB SWITCH COUNT INCREMENTED: ${tabSwitchCount} -> ${newCount}`)
         setTabSwitchCount(newCount)
         
         const maxAllowed = exam.maxTabSwitchesAllowed || 3
@@ -247,7 +220,6 @@ export default function TakeExamPage() {
           const maxAllowed = exam.maxTabSwitchesAllowed || 3
           const remaining = maxAllowed - tabSwitchCount
           
-          console.log('📋 User returned to tab, showing warning:', { tabSwitchCount, remaining, maxAllowed })
           
           // Close fullscreen warning if open - tab switch warning takes priority
           setShowFullscreenWarning(false)
@@ -318,7 +290,6 @@ export default function TakeExamPage() {
             new Blob([saveData], { type: 'application/json' })
           )
         } catch (error) {
-          console.error('Failed to save on unload:', error)
         }
       }
     }
@@ -397,7 +368,6 @@ export default function TakeExamPage() {
   const loadExam = async () => {
     // Guard against double loading from React Strict Mode
     if (isLoadingExamRef.current) {
-      console.log('Already loading exam, skipping duplicate call')
       return
     }
     isLoadingExamRef.current = true
@@ -416,25 +386,11 @@ export default function TakeExamPage() {
       let exam = (examResponse as any)?.data || examResponse
       exam = exam as Exam
       
-      // Log proctoring settings for debugging in preview mode
-      if (isPreviewMode) {
-        console.log('[PREVIEW] Exam loaded with proctoring settings:', {
-          enableProctoring: exam.enableProctoring,
-          proctoringMode: exam.proctoringMode,
-          photoIntervalSeconds: exam.photoIntervalSeconds,
-          requireIdentityVerification: exam.requireIdentityVerification,
-          blockCopyPaste: exam.blockCopyPaste,
-          blockTabSwitch: exam.blockTabSwitch,
-          maxTabSwitchesAllowed: exam.maxTabSwitchesAllowed
-        })
-      }
-      
       // Real-time check: if exam has ended, redirect to results
       if ((exam as any).endTime) {
         const endTime = new Date((exam as any).endTime)
         const now = new Date()
         if (now > endTime) {
-          console.log('Exam has ended, redirecting to results')
           router.push(`/exams/${examId}/results`)
           return
         }
@@ -616,8 +572,6 @@ export default function TakeExamPage() {
           submissionIdValue = submission?.id || submission?.submissionId || null
           
           if (!submissionIdValue) {
-            console.error('Failed to extract submission ID from response:', submission)
-            console.error('Full response:', response)
             // Try alternative extraction methods
             if (submission && typeof submission === 'object') {
               const keys = Object.keys(submission)
@@ -632,7 +586,6 @@ export default function TakeExamPage() {
           }
           
           if (!submissionIdValue) {
-            console.error('Could not extract submission ID from start exam response')
             throw new Error('Could not extract submission ID from start exam response')
           }
           
@@ -679,9 +632,7 @@ export default function TakeExamPage() {
             }
             
             setExam(refreshedExamWithQuestions)
-            console.log('Exam refreshed with randomized order after start')
           } catch (refreshError) {
-            console.warn('Could not refresh exam after start, continuing with original order:', refreshError)
           }
           
           // Immediately save empty answers to ensure submission exists
@@ -693,12 +644,9 @@ export default function TakeExamPage() {
                 timeRemainingSeconds: submission?.timeRemainingSeconds || examWithQuestions.timeLimitSeconds || 0
               })
             } catch (saveError) {
-              console.error('Failed to do initial save:', saveError)
             }
           }
         } catch (startError: any) {
-          console.error('Failed to start exam submission:', startError)
-          console.error('Error details:', startError?.response || startError?.message)
           
           // Check if it's a max attempts error (409 Conflict)
           if (startError?.response?.status === 409 || startError?.status === 409) {
@@ -734,11 +682,8 @@ export default function TakeExamPage() {
       if (submissionIdValue) {
         startAutoSave()
       } else {
-        console.error('No submission ID available, cannot start auto-save')
-        console.error('This may prevent auto-save from working. Please refresh the page.')
       }
     } catch (error) {
-      console.error('Failed to load exam:', error)
     } finally {
       setLoading(false)
       isLoadingExamRef.current = false
@@ -757,7 +702,6 @@ export default function TakeExamPage() {
         const endTime = new Date((exam as any).endTime)
         const now = new Date()
         if (now > endTime) {
-          console.log('Exam time expired, auto-submitting')
           handleSubmit()
           return
         }
@@ -794,7 +738,6 @@ export default function TakeExamPage() {
       
       hasUnsavedChangesRef.current = false
     } catch (error: any) {
-      console.error('Failed to save progress:', error)
       // Don't clear the unsaved changes flag on error so we can retry
       // The error might be temporary (network issue, etc.)
     } finally {
@@ -831,7 +774,6 @@ export default function TakeExamPage() {
     
     // Synchronous guard to prevent multiple submission attempts
     if (isSubmittingRef.current) {
-      console.log('Submission already in progress, ignoring duplicate call')
       return
     }
     isSubmittingRef.current = true
@@ -842,7 +784,6 @@ export default function TakeExamPage() {
     }
 
     if (!submissionId) {
-      console.error('No submission ID available')
       // Try to create submission if it doesn't exist
       if (!exam) {
         toast({
@@ -873,7 +814,6 @@ export default function TakeExamPage() {
           return handleSubmit()
         }
       } catch (createError) {
-        console.error('Failed to create submission:', createError)
       }
       toast({
         title: 'Error',
@@ -885,7 +825,6 @@ export default function TakeExamPage() {
     }
 
     if (!examId) {
-      console.error('No exam ID available')
       toast({
         title: 'Error',
         description: 'Exam ID is missing. Please refresh the page and try again.',
@@ -914,14 +853,6 @@ export default function TakeExamPage() {
         router.push(`/exams/${examId}/results`)
       }, 100)
     } catch (error: any) {
-      console.error('Failed to submit exam:', error)
-      console.error('Error details:', {
-        message: error?.message,
-        response: error?.response,
-        status: error?.response?.status,
-        data: error?.response?.data
-      })
-      
       const errorMessage = error?.response?.data?.message || 
                           error?.response?.data?.error || 
                           error?.message || ''
@@ -963,46 +894,32 @@ export default function TakeExamPage() {
   
   // Request fullscreen mode
   const requestFullscreen = async () => {
-    console.log('🖥️ requestFullscreen() called')
-    console.log('Current fullscreen element:', document.fullscreenElement)
-    console.log('Fullscreen enabled:', document.fullscreenEnabled)
     
     // Set flag to ignore visibility changes during fullscreen transition
-    console.log('🚦 Setting fullscreen transition flag to TRUE')
     isFullscreenTransitionRef.current = true
     
     try {
       const elem = document.documentElement
-      console.log('Target element for fullscreen:', elem)
       
       // Check browser support
       if (!elem.requestFullscreen) {
-        console.error('❌ requestFullscreen not supported by browser')
         toast({
           title: 'Browser Not Supported',
           description: 'Your browser does not support fullscreen mode',
           variant: 'destructive'
         })
-        console.log('🚦 Resetting fullscreen transition flag to FALSE (no support)')
         isFullscreenTransitionRef.current = false
         return
       }
       
-      console.log('✅ requestFullscreen is supported, calling it now...')
       await elem.requestFullscreen()
-      console.log('✅ Fullscreen request successful!')
       setIsFullscreen(true)
       
       // Reset the flag after a longer delay to allow the transition to fully complete
       setTimeout(() => {
-        console.log('🚦 Resetting fullscreen transition flag to FALSE (after timeout)')
         isFullscreenTransitionRef.current = false
       }, 1000) // Increased to 1 second
     } catch (err: any) {
-      console.error('❌ Fullscreen request failed:', err)
-      console.error('Error name:', err?.name)
-      console.error('Error message:', err?.message)
-      console.error('Error stack:', err?.stack)
       
       // Reset the flag on error
       isFullscreenTransitionRef.current = false
@@ -1020,22 +937,17 @@ export default function TakeExamPage() {
   
   // Handle fullscreen change
   useEffect(() => {
-    console.log('📺 Fullscreen change listener initialized')
-    console.log('Document fullscreenEnabled:', document.fullscreenEnabled)
     
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement
-      console.log('📺 Fullscreen state changed:', isNowFullscreen)
       
       // Set transition flag to prevent false tab switch detection during fullscreen changes
-      console.log('🚦 Setting fullscreen transition flag to TRUE (fullscreen change event)')
       isFullscreenTransitionRef.current = true
       
       setIsFullscreen(isNowFullscreen)
       
       // Show warning dialog if user exits fullscreen during proctored exam (after setup is complete)
       if (!isNowFullscreen && exam?.enableProctoring && proctoringComplete) {
-        console.log('⚠️ User exited fullscreen during proctored exam - showing warning dialog')
         setShowFullscreenWarning(true)
         
         // Log the event (not in preview mode)
@@ -1048,7 +960,6 @@ export default function TakeExamPage() {
       
       // Reset the transition flag after a delay
       setTimeout(() => {
-        console.log('🚦 Resetting fullscreen transition flag to FALSE (after fullscreen change)')
         isFullscreenTransitionRef.current = false
       }, 1000)
     }
@@ -1234,10 +1145,8 @@ export default function TakeExamPage() {
                 photoIntervalSeconds={exam.photoIntervalSeconds || 120}
                 isPreview={isPreviewMode}
                 onPhotoCapture={(timestamp) => {
-                  console.log(isPreviewMode ? '[PREVIEW] Photo simulated at:' : 'Photo captured at:', timestamp)
                 }}
                 onError={(error) => {
-                  console.error('Webcam error:', error)
                 }}
               />
             )}
@@ -1764,19 +1673,16 @@ export default function TakeExamPage() {
                 onClick={async () => {
                   // Request fullscreen first (needs user gesture), then close dialog
                   try {
-                    console.log('🖥️ Return to Fullscreen button clicked')
                     const elem = document.documentElement
                     if (elem.requestFullscreen) {
                       isFullscreenTransitionRef.current = true
                       await elem.requestFullscreen()
-                      console.log('✅ Fullscreen request successful from dialog')
                       setIsFullscreen(true)
                       setTimeout(() => {
                         isFullscreenTransitionRef.current = false
                       }, 1000)
                     }
                   } catch (err) {
-                    console.error('❌ Fullscreen request failed:', err)
                   }
                   setShowFullscreenWarning(false)
                 }}

@@ -93,7 +93,6 @@ export default function UsersReportPage() {
         }
         setUsers(list)
       } else {
-        console.error('Failed to load users for report:', err)
         setUsers([])
         toast({
           title: 'Error',
@@ -205,7 +204,7 @@ export default function UsersReportPage() {
     rows.push('By section (grouped by class),Class,Section,Total,Logged in,Never logged in')
     for (const className of Array.from(sectionsByClass.keys()).sort()) {
       const classAgg = sectionsByClass.get(className)!
-      rows.push([safe(className), safe(''), '', '', ''])
+      rows.push([safe(className), safe(''), '', '', ''].join(','))
       for (const sec of classAgg.sections.sort((a, b) => a.sectionName.localeCompare(b.sectionName))) {
         rows.push([safe(''), safe(sec.sectionName), sec.total, sec.loggedIn, sec.neverLoggedIn].join(','))
       }

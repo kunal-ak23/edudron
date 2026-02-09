@@ -39,7 +39,7 @@ export default function SectionAnalyticsPage() {
         const analyticsData = await analyticsApi.getSectionAnalytics(sectionId)
         setAnalytics(analyticsData)
       } catch (error) {
-        console.error('Failed to load section analytics:', error)
+        // Failed to load section analytics
       } finally {
         setLoading(false)
       }

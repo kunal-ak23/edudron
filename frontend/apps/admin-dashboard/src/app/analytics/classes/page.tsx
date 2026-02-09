@@ -44,12 +44,12 @@ export default function ClassAnalyticsIndexPage() {
             const instituteClasses = await classesApi.listClassesByInstitute(institute.id)
             allClasses.push(...instituteClasses.filter((c) => c.isActive))
           } catch (err) {
-            console.error(`Failed to load classes for institute ${institute.id}:`, err)
+            // Skip institute on error
           }
         }
         setClasses(allClasses)
       } catch (error) {
-        console.error('Failed to load data:', error)
+        // Failed to load data
       } finally {
         setLoading(false)
       }

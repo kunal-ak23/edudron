@@ -104,24 +104,12 @@ export default function StudentsPage() {
         params.append('search', debouncedSearchTerm.trim())
       }
 
-      console.log('[StudentsPage] Loading students with filters:', { 
-        page: currentPage, 
-        size: pageSize, 
-        search: debouncedSearchTerm.trim() || null 
-      })
-
       // Use paginated endpoint with backend filtering
       try {
         const response = await apiClient.get<PaginatedResponse<Student>>(
           `/idp/users/role/STUDENT/paginated?${params.toString()}`
         )
         const paginatedData = response.data || { content: [], totalElements: 0, totalPages: 0, number: 0, size: pageSize, first: true, last: true }
-        
-        console.log('[StudentsPage] Received response:', {
-          contentLength: paginatedData.content?.length,
-          totalElements: paginatedData.totalElements,
-          totalPages: paginatedData.totalPages
-        })
         
         setStudents(paginatedData.content || [])
         setTotalElements(paginatedData.totalElements || 0)
@@ -144,7 +132,6 @@ export default function StudentsPage() {
         }
         
         // Fallback to non-paginated endpoint if paginated endpoint doesn't exist (404, etc.)
-        console.warn('Paginated endpoint failed, falling back to non-paginated:', paginatedError)
         try {
           const response = await apiClient.get<Student[]>('/idp/users/role/STUDENT')
           const students = response.data || []
@@ -180,7 +167,6 @@ export default function StudentsPage() {
         }
       }
     } catch (err: any) {
-      console.error('Error loading students:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -277,7 +263,6 @@ export default function StudentsPage() {
             setNewStudent(prev => ({ ...prev, instituteId: allInstitutes[0].id }))
           }
         } catch (err) {
-          console.error('Failed to load institutes:', err)
           toast({
             variant: 'destructive',
             title: 'Error',
@@ -317,7 +302,6 @@ export default function StudentsPage() {
           setNewStudent(prev => ({ ...prev, classId: '', sectionId: '' }))
           setSections([])
         } catch (err) {
-          console.error('Failed to load classes:', err)
           setClasses([])
         } finally {
           setLoadingClasses(false)
@@ -341,7 +325,6 @@ export default function StudentsPage() {
           // Reset section when class changes
           setNewStudent(prev => ({ ...prev, sectionId: '' }))
         } catch (err) {
-          console.error('Failed to load sections:', err)
           setSections([])
         } finally {
           setLoadingSections(false)
@@ -436,7 +419,6 @@ export default function StudentsPage() {
       // Reload students
       await loadStudents()
     } catch (err: any) {
-      console.error('Error creating student:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
