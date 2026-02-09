@@ -112,7 +112,6 @@ export default function ExamsPage() {
         try {
           await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
         } catch (err) {
-          console.error('Failed to load instructor access:', err)
         }
       }
 
@@ -143,7 +142,6 @@ export default function ExamsPage() {
         setTotalPages(1)
       }
     } catch (error) {
-      console.error('Failed to load exams:', error)
       toast({
         title: 'Error',
         description: 'Failed to load exams',
@@ -404,7 +402,6 @@ export default function ExamsPage() {
                   </Card>
                 )
               } catch (error) {
-                console.error('Error rendering exam:', exam, error)
                 return null
               }
             })}

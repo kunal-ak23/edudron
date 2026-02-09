@@ -66,7 +66,6 @@ export function AddStudentToClassDialog({
         const loadedStudents = studentsResponse.data?.content || []
         setStudents(loadedStudents)
       } catch (paginatedError) {
-        console.warn('Paginated endpoint failed, falling back to non-paginated:', paginatedError)
         const studentsResponse = await apiClient.get<Array<{ id: string; email: string; name?: string }>>('/idp/users/role/STUDENT')
         const allStudents = studentsResponse.data || []
         
@@ -83,7 +82,6 @@ export function AddStudentToClassDialog({
         }
       }
     } catch (err) {
-      console.error('Error loading students:', err)
     } finally {
       setStudentsLoading(false)
     }
@@ -96,7 +94,6 @@ export function AddStudentToClassDialog({
       const coursesData = await coursesApi.listCourses()
       setCourses(coursesData.filter(c => c.isPublished && c.status !== 'ARCHIVED'))
     } catch (err) {
-      console.error('Error loading courses:', err)
     } finally {
       setCoursesLoading(false)
     }
@@ -178,7 +175,6 @@ export function AddStudentToClassDialog({
         onSuccess()
       }
     } catch (err: any) {
-      console.error('Error adding student to class:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to add student',

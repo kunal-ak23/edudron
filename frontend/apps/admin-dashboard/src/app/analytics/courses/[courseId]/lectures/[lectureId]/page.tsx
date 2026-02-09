@@ -41,7 +41,6 @@ export default function LectureAnalyticsPage() {
         const analyticsData = await analyticsApi.getLectureAnalytics(lectureId)
         setAnalytics(analyticsData)
       } catch (error) {
-        console.error('Failed to load analytics:', error)
       } finally {
         setLoading(false)
       }

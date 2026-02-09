@@ -35,7 +35,6 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
         const data = await proctoringApi.getReport(examId, submissionId)
         setReport(data)
       } catch (err) {
-        console.error('Failed to load proctoring report:', err)
       } finally {
         setLoading(false)
       }

@@ -141,7 +141,6 @@ export function BatchCreateClassesDialog({
         onSuccess()
       }
     } catch (err: any) {
-      console.error('Error creating classes:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to create classes',

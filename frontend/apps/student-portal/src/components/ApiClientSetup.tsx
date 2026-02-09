@@ -23,7 +23,6 @@ export function ApiClientSetup() {
     // Set up logout callback
     apiClient.setOnLogout(() => {
       logout().catch((error) => {
-        console.error('[ApiClientSetup] Logout error:', error)
         // Force redirect even if logout fails
         if (typeof window !== 'undefined') {
           window.location.href = '/login'

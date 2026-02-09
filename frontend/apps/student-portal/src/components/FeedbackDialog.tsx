@@ -40,7 +40,6 @@ export function FeedbackDialog({
       await onSubmit(selectedType, comment.trim() || undefined)
       onClose()
     } catch (error) {
-      console.error('Failed to submit feedback:', error)
     } finally {
       setIsSubmitting(false)
     }

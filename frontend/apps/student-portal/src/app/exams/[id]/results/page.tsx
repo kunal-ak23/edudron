@@ -79,7 +79,6 @@ export default function ExamResultsPage() {
         const examData = (examResponse as any)?.data || examResponse
         setExam(examData as Exam)
       } catch (error) {
-        console.error('Failed to load exam:', error)
       }
 
       // Load submission
@@ -89,10 +88,8 @@ export default function ExamResultsPage() {
         const submissionData = (submissionResponse as any)?.data || submissionResponse
         setSubmission(submissionData as Submission)
       } catch (error) {
-        console.error('Failed to load submission:', error)
       }
     } catch (error) {
-      console.error('Failed to load results:', error)
     } finally {
       setLoading(false)
     }

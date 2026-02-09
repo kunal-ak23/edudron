@@ -46,13 +46,11 @@ export function WebcamMonitor({
           try {
             await videoRef.current.play()
           } catch (playErr) {
-            console.error('Video play error:', playErr)
           }
         }
         
         setIsActive(true)
       } catch (err) {
-        console.error('Webcam initialization error:', err)
         onError?.('Failed to access webcam. Proctoring may be affected.')
       }
     }
@@ -113,7 +111,6 @@ export function WebcamMonitor({
         setPhotoCount(prev => prev + 1)
         const timestamp = new Date().toISOString()
         onPhotoCapture?.(timestamp)
-        console.log(`[PREVIEW] Proctoring photo ${photoCount + 1} simulated at ${timestamp}`)
       } else {
         // Upload to backend
         const response = await proctoringApi.capturePhoto(examId, submissionId, base64Photo)
@@ -121,10 +118,8 @@ export function WebcamMonitor({
         setPhotoCount(prev => prev + 1)
         onPhotoCapture?.(response.capturedAt)
         
-        console.log(`Proctoring photo ${photoCount + 1} captured at ${response.capturedAt}`)
       }
     } catch (err) {
-      console.error('Photo capture error:', err)
       onError?.('Failed to capture proctoring photo')
     }
   }

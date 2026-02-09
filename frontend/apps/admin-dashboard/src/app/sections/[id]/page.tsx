@@ -80,7 +80,6 @@ export default function SectionDetailPage() {
       const instituteData = await institutesApi.getInstitute(classData.instituteId)
       setInstitute(instituteData)
     } catch (err: any) {
-      console.error('Error loading section:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -105,7 +104,6 @@ export default function SectionDetailPage() {
       setMembersTotalElements(response.totalElements)
       setMembersTotalPages(response.totalPages)
     } catch (err: any) {
-      console.error('Error loading members:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to load members',
@@ -140,7 +138,6 @@ export default function SectionDetailPage() {
         description: `${updated.name} has been updated successfully.`,
       })
     } catch (err: any) {
-      console.error('Error updating section:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -162,7 +159,6 @@ export default function SectionDetailPage() {
       // Reload section to refresh status
       await loadSection()
     } catch (err: any) {
-      console.error('Error deleting section:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -184,7 +180,6 @@ export default function SectionDetailPage() {
       // Reload section to refresh status
       await loadSection()
     } catch (err: any) {
-      console.error('Error activating section:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

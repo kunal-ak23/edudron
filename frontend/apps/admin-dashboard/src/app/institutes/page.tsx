@@ -59,7 +59,6 @@ export default function InstitutesPage() {
       const allInstitutes = await institutesApi.listInstitutes()
       setInstitutes(allInstitutes || [])
     } catch (err: any) {
-      console.error('Error loading institutes:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -95,7 +94,6 @@ export default function InstitutesPage() {
       })
       loadInstitutes()
     } catch (err: any) {
-      console.error('Error creating institute:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

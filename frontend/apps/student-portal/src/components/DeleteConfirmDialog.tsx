@@ -25,7 +25,6 @@ export function DeleteConfirmDialog({
       await onConfirm()
       onClose()
     } catch (error) {
-      console.error('Failed to delete:', error)
     } finally {
       setIsDeleting(false)
     }

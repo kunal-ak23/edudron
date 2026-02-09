@@ -45,7 +45,6 @@ export default function BatchesPage() {
       })
       setCourses(coursesMap)
     } catch (error) {
-      console.error('Failed to load batches:', error)
     } finally {
       setLoading(false)
     }

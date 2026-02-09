@@ -80,7 +80,6 @@ export default function ClassDetailPage() {
       const instituteData = await institutesApi.getInstitute(classData.instituteId)
       setInstitute(instituteData)
     } catch (err: any) {
-      console.error('Error loading class:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -105,7 +104,6 @@ export default function ClassDetailPage() {
       setMembersTotalElements(response.totalElements)
       setMembersTotalPages(response.totalPages)
     } catch (err: any) {
-      console.error('Error loading members:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to load members',
@@ -121,7 +119,6 @@ export default function ClassDetailPage() {
       const sectionsData = await sectionsApi.listSectionsByClass(classId)
       setSections(sectionsData)
     } catch (err: any) {
-      console.error('Error loading sections:', err)
     }
   }, [classId])
 
@@ -153,7 +150,6 @@ export default function ClassDetailPage() {
       
       setStudentSectionsMap(map)
     } catch (err: any) {
-      console.error('Error loading student sections map:', err)
       // Continue without the map - sections column will be empty
     }
   }, [classId])
@@ -189,7 +185,6 @@ export default function ClassDetailPage() {
         description: `${updated.name} has been updated successfully.`,
       })
     } catch (err: any) {
-      console.error('Error updating class:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -210,7 +205,6 @@ export default function ClassDetailPage() {
       })
       router.push(`/institutes/${classItem?.instituteId}/classes`)
     } catch (err: any) {
-      console.error('Error deleting class:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

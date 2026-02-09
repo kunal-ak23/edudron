@@ -107,7 +107,6 @@ export function QuestionEditor({ question, onSave, onCancel }: QuestionEditorPro
       }
       await onSave(questionData)
     } catch (error) {
-      console.error('Failed to save question:', error)
     } finally {
       setSaving(false)
     }

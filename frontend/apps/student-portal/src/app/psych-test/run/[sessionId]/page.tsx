@@ -96,7 +96,6 @@ export default function PsychTestRunnerPage() {
       setSelectedOptionId('')
       setText('')
     } catch (e: any) {
-      console.error(e)
       setError('Failed to load next question.')
     } finally {
       setLoading(false)
@@ -209,7 +208,6 @@ export default function PsychTestRunnerPage() {
       })
       await loadNext()
     } catch (e: any) {
-      console.error(e)
       setError('Failed to submit answer.')
       // Bring the question back so the student can retry.
       setDisplayQ(q)
@@ -234,7 +232,6 @@ export default function PsychTestRunnerPage() {
       )
       router.push(`/psych-test/results/${sessionId}`)
     } catch (e: any) {
-      console.error(e)
       // If completion took longer than the HTTP timeout, it may still succeed server-side.
       // Redirect to results page and let it poll until ready.
       const status = e?.response?.status

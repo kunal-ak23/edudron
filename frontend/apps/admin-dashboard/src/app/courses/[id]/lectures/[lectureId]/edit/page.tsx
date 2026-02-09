@@ -151,7 +151,6 @@ export default function LectureEditPage() {
         await loadAttachments(lectureId)
       }
     } catch (error) {
-      console.error('Failed to load lecture:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to load lecture',
@@ -186,7 +185,6 @@ export default function LectureEditPage() {
       const textItems = allItems.filter((content: LectureContent) => content.contentType === 'TEXT')
       return { allItems, textItems, updatedFormData }
     } catch (error) {
-      console.error('Failed to load text contents:', error)
       setTextContents([])
       return { allItems: [], textItems: [], updatedFormData: undefined }
     }
@@ -201,7 +199,6 @@ export default function LectureEditPage() {
       )
       setAttachments(attachmentItems)
     } catch (error) {
-      console.error('Failed to load attachments:', error)
       setAttachments([])
     }
   }
@@ -309,7 +306,6 @@ export default function LectureEditPage() {
       // Navigate back to course page only for main lectures
       router.push(`/courses/${courseId}`)
     } catch (error) {
-      console.error('Failed to save lecture:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to save lecture',

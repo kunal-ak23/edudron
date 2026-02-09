@@ -78,7 +78,6 @@ export default function NewUserPage() {
         const data = await institutesApi.listInstitutes()
         setInstitutes(data)
       } catch (err) {
-        console.error('Failed to load institutes:', err)
       } finally {
         setLoadingInstitutes(false)
       }
@@ -153,7 +152,6 @@ export default function NewUserPage() {
       await apiClient.post('/idp/users', submitData)
       router.push('/users')
     } catch (err: any) {
-      console.error('Failed to create user:', err)
       setError(err.response?.data?.message || err.message || 'Failed to create user')
     } finally {
       setLoading(false)

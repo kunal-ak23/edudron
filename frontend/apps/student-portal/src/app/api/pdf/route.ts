@@ -114,7 +114,6 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Error streaming PDF from Azure:", error);
     return new NextResponse(
       error instanceof Error ? error.message : "Internal server error",
       { status: 500 }

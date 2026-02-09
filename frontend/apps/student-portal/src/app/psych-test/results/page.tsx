@@ -38,7 +38,6 @@ export default function PsychTestPastResultsPage() {
         const data = (resp && typeof resp === 'object' && 'data' in (resp as any)) ? (resp as any).data : resp
         setItems(Array.isArray(data) ? (data as PastResult[]) : [])
       } catch (e: any) {
-        console.error(e)
         setError('Failed to load past results.')
       } finally {
         setLoading(false)

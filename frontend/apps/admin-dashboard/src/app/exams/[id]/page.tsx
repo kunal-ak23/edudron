@@ -163,7 +163,6 @@ export default function ExamDetailPage() {
       }
       setExam(data as unknown as Exam)
     } catch (error) {
-      console.error('Failed to load exam:', error)
       toast({
         title: 'Error',
         description: 'Failed to load exam',
@@ -187,7 +186,6 @@ export default function ExamDetailPage() {
       const classesData = Array.isArray(classesResponse) ? classesResponse : (classesResponse as any)?.data || []
       setClasses(classesData)
     } catch (error) {
-      console.error('Failed to load classes/sections:', error)
       setSections([])
       setClasses([])
     }
@@ -218,7 +216,6 @@ export default function ExamDetailPage() {
         description: 'Tentative answer updated successfully'
       })
     } catch (error) {
-      console.error('Failed to update tentative answer:', error)
       toast({
         title: 'Error',
         description: 'Failed to update tentative answer',
@@ -257,7 +254,6 @@ export default function ExamDetailPage() {
         description: 'Proctoring settings updated successfully'
       })
     } catch (error) {
-      console.error('Failed to update proctoring settings:', error)
       toast({
         title: 'Error',
         description: 'Failed to update proctoring settings',
@@ -368,7 +364,6 @@ export default function ExamDetailPage() {
       })
       await loadExam()
     } catch (error: any) {
-      console.error('Failed to update schedule:', error)
       toast({
         title: 'Error',
         description: error?.response?.data?.message || error?.message || 'Failed to update schedule',
@@ -455,7 +450,6 @@ export default function ExamDetailPage() {
         description: 'Exam details updated successfully'
       })
     } catch (error) {
-      console.error('Failed to update exam details:', error)
       toast({
         title: 'Error',
         description: 'Failed to update exam details',
@@ -481,7 +475,6 @@ export default function ExamDetailPage() {
       
       router.push('/exams')
     } catch (error) {
-      console.error('Failed to delete exam:', error)
       toast({
         title: 'Error',
         description: 'Failed to delete exam',
@@ -509,7 +502,6 @@ export default function ExamDetailPage() {
           : 'The exam is now live and available to students',
       })
     } catch (error: any) {
-      console.error('Failed to publish exam:', error)
       toast({
         title: 'Error',
         description: error?.response?.data?.message || error?.message || 'Failed to publish exam',
@@ -533,7 +525,6 @@ export default function ExamDetailPage() {
         description: 'The exam has been moved back to draft status',
       })
     } catch (error: any) {
-      console.error('Failed to unpublish exam:', error)
       toast({
         title: 'Error',
         description: error?.response?.data?.message || error?.message || 'Failed to unpublish exam',
@@ -557,7 +548,6 @@ export default function ExamDetailPage() {
         description: 'The exam has been marked as completed. No further submissions will be accepted.',
       })
     } catch (error: any) {
-      console.error('Failed to complete exam:', error)
       toast({
         title: 'Error',
         description: error?.response?.data?.message || error?.message || 'Failed to complete exam',
@@ -1058,7 +1048,6 @@ export default function ExamDetailPage() {
                               description: 'Questions generated successfully'
                             })
                           } catch (error) {
-                            console.error('Failed to generate questions:', error)
                             toast({
                               title: 'Error',
                               description: 'Failed to generate questions',
@@ -1171,7 +1160,6 @@ export default function ExamDetailPage() {
                   setEditingQuestion(null)
                   setIsCreatingQuestion(false)
                 } catch (error) {
-                  console.error('Failed to save question:', error)
                   toast({
                     title: 'Error',
                     description: isCreatingQuestion ? 'Failed to add question' : 'Failed to update question',
@@ -1872,7 +1860,6 @@ export default function ExamDetailPage() {
                     setShowDeleteQuestionDialog(false)
                     setQuestionToDelete(null)
                   } catch (error) {
-                    console.error('Failed to delete question:', error)
                     toast({
                       title: 'Error',
                       description: 'Failed to delete question',
@@ -1929,7 +1916,6 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
       const submissionsArray = Array.isArray(data) ? data : []
       setSubmissions(submissionsArray)
     } catch (error: any) {
-      console.error('Failed to load submissions:', error)
       // Check if it's a JSON parsing error
       const errorMessage = error?.message?.includes('JSON') 
         ? 'Failed to parse submissions data. The response may be too large or malformed.'
@@ -2066,7 +2052,6 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                         setSelectedSubmission(fullSubmission)
                         setShowReviewDialog(true)
                       } catch (error) {
-                        console.error('Failed to load submission details:', error)
                         toast({
                           title: 'Error',
                           description: 'Failed to load submission details',
@@ -2098,7 +2083,6 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                           })
                           await loadSubmissions()
                         } catch (error) {
-                          console.error('Failed to trigger review:', error)
                           toast({
                             title: 'Error',
                             description: 'Failed to trigger AI review',
@@ -2201,7 +2185,6 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                             description: checked ? 'Submission marked as cheating' : 'Cheating flag removed'
                           })
                         } catch (err) {
-                          console.error('Failed to update cheating flag:', err)
                           toast({
                             title: 'Error',
                             description: 'Failed to update cheating flag',
@@ -2235,7 +2218,6 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                   try {
                     answersJson = JSON.parse(answersJson)
                   } catch (e) {
-                    console.error('Failed to parse answersJson:', e)
                     answersJson = null
                   }
                 }
@@ -2621,7 +2603,6 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                             setShowReviewDialog(false)
                             setSelectedSubmission(null)
                           } catch (error) {
-                            console.error('Failed to grade submission:', error)
                             toast({
                               title: 'Error',
                               description: 'Failed to save grades',

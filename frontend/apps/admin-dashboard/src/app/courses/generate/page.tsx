@@ -76,7 +76,6 @@ export default function GenerateCoursePage() {
       setReferenceIndexes(refs)
       setWritingFormats(formats)
     } catch (error) {
-      console.error('Failed to load indexes:', error)
     }
   }
 
@@ -128,7 +127,6 @@ export default function GenerateCoursePage() {
       })
       router.push(`/courses/${course.id}`)
     } catch (error: any) {
-      console.error('Failed to generate course:', error)
       setGenerationProgress(null)
       toast({
         variant: 'destructive',

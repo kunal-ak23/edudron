@@ -36,7 +36,6 @@ export function IssueReportDialog({ isOpen, onClose, onSubmit }: IssueReportDial
       setIssueType('OTHER')
       onClose()
     } catch (error) {
-      console.error('Failed to report issue:', error)
     } finally {
       setIsSubmitting(false)
     }

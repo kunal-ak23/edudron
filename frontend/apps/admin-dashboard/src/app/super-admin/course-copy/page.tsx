@@ -207,7 +207,6 @@ export default function CourseCopyPage() {
           })
         }
       } catch (error) {
-        console.error('Error polling job status:', error)
       }
     }, 2000) // Poll every 2 seconds
   }

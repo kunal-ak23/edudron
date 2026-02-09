@@ -184,7 +184,6 @@ export default function QuestionBankPage() {
         setCourses(courses)
       }
     } catch (error) {
-      console.error('Failed to load courses:', error)
     }
   }, [])
 
@@ -208,7 +207,6 @@ export default function QuestionBankPage() {
         })
       }
     } catch (error) {
-      console.error('Failed to load sections:', error)
     }
   }, [])
 
@@ -282,7 +280,6 @@ export default function QuestionBankPage() {
       setTotalElements(pageTotalElements)
       setTotalPages(pageTotalPages)
     } catch (error) {
-      console.error('Failed to load questions:', error)
       toast({
         title: 'Error',
         description: 'Failed to load questions',
@@ -396,7 +393,6 @@ export default function QuestionBankPage() {
       resetForm()
       loadQuestions()
     } catch (error) {
-      console.error('Failed to create question:', error)
       toast({
         title: 'Error',
         description: 'Failed to create question',
@@ -422,7 +418,6 @@ export default function QuestionBankPage() {
       setQuestionToDelete(null)
       loadQuestions()
     } catch (error) {
-      console.error('Failed to delete question:', error)
       toast({
         title: 'Error',
         description: 'Failed to delete question',
@@ -467,7 +462,6 @@ export default function QuestionBankPage() {
         description: 'Template downloaded successfully'
       })
     } catch (error) {
-      console.error('Failed to download template:', error)
       toast({
         title: 'Error',
         description: 'Failed to download template',
@@ -512,7 +506,6 @@ export default function QuestionBankPage() {
         description: `Exported ${questions.length} questions successfully`
       })
     } catch (error) {
-      console.error('Failed to export questions:', error)
       toast({
         title: 'Error',
         description: 'Failed to export questions',

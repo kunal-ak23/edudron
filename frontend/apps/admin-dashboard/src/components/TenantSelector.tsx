@@ -43,7 +43,6 @@ export function TenantSelector() {
       // Reload the page to update all tenant-scoped data
       window.location.reload()
     } catch (error) {
-      console.error('Error selecting tenant:', error)
     }
   }
 
@@ -86,14 +85,12 @@ export function TenantSelector() {
                 window.location.reload()
               }, 100)
             }).catch(error => {
-              console.error('Error auto-selecting tenant:', error)
             })
           } else {
             setSelectedTenant(null)
           }
         }
       } catch (error) {
-        console.error('Error loading tenants:', error)
       } finally {
         setLoading(false)
       }

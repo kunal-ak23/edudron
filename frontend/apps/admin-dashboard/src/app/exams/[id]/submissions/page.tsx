@@ -92,7 +92,6 @@ export default function ExamSubmissionsPage() {
       setSubmissions(submissionsData)
       setFilteredSubmissions(submissionsData)
     } catch (error) {
-      console.error('Failed to load exam submissions:', error)
       toast({
         title: 'Error',
         description: 'Failed to load submissions',
@@ -167,7 +166,6 @@ export default function ExamSubmissionsPage() {
       setSelectedSubmissions(new Set())
       await loadData()
     } catch (error) {
-      console.error('Failed to bulk re-grade:', error)
       toast({
         title: 'Error',
         description: 'Failed to re-grade submissions',
@@ -197,7 +195,6 @@ export default function ExamSubmissionsPage() {
       })
       await loadData()
     } catch (error) {
-      console.error('Failed to grade all MCQ:', error)
       toast({
         title: 'Error',
         description: 'Failed to grade submissions',
@@ -221,7 +218,6 @@ export default function ExamSubmissionsPage() {
       
       await loadData()
     } catch (error) {
-      console.error('Failed to re-grade submission:', error)
       toast({
         title: 'Error',
         description: 'Failed to re-grade submission',
@@ -248,7 +244,6 @@ export default function ExamSubmissionsPage() {
       })
       await loadData()
     } catch (error) {
-      console.error('Failed to update cheating flag:', error)
       toast({
         title: 'Error',
         description: 'Failed to update cheating flag',

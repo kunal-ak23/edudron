@@ -106,7 +106,6 @@ export default function NewExamPage() {
       const data = await coursesApi.listCourses()
       setCourses(Array.isArray(data) ? data : [])
     } catch (error) {
-      console.error('Failed to load courses:', error)
     }
   }
 
@@ -115,7 +114,6 @@ export default function NewExamPage() {
       const data = await coursesApi.getChapters(courseId)
       setSections(Array.isArray(data) ? data : [])
     } catch (error) {
-      console.error('Failed to load sections:', error)
       setSections([])
     }
   }
@@ -126,7 +124,6 @@ export default function NewExamPage() {
       const data = Array.isArray(response) ? response : (response as any)?.data || []
       setBatches(data)
     } catch (error) {
-      console.error('Failed to load batches:', error)
       setBatches([])
     }
   }
@@ -137,7 +134,6 @@ export default function NewExamPage() {
       const data = Array.isArray(response) ? response : (response as any)?.data || []
       setClasses(data)
     } catch (error) {
-      console.error('Failed to load classes:', error)
       setClasses([])
     }
   }
@@ -188,7 +184,6 @@ export default function NewExamPage() {
       })
       router.push(`/exams/${exam.id}`)
     } catch (error) {
-      console.error('Failed to create exam:', error)
       toast({
         title: 'Error',
         description: 'Failed to create exam',
@@ -260,7 +255,6 @@ export default function NewExamPage() {
       })
       router.push(`/exams/${exam.id}`)
     } catch (error) {
-      console.error('Failed to generate exam:', error)
       toast({
         title: 'Error',
         description: 'Failed to generate exam',
@@ -386,7 +380,6 @@ export default function NewExamPage() {
         })
       }
     } catch (error: any) {
-      console.error('Failed to batch generate exams:', error)
       toast({
         title: 'Error',
         description: error?.message || 'Failed to batch generate exams',

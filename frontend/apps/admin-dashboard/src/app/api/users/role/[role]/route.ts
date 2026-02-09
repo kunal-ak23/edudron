@@ -34,7 +34,6 @@ export async function GET(
     const users = await response.json()
     return NextResponse.json(users)
   } catch (error) {
-    console.error('Error fetching users by role:', error)
     return NextResponse.json(
       { error: 'Failed to fetch users' },
       { status: 500 }

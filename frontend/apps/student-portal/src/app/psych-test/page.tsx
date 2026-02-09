@@ -43,7 +43,6 @@ export default function PsychTestStartPage() {
 
       router.push(`/psych-test/run/${sessionId}`)
     } catch (e: any) {
-      console.error(e)
       setError('Failed to start the test. Please try again.')
     } finally {
       setLoading(false)

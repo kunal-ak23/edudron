@@ -121,7 +121,6 @@ export default function CoursesPage() {
           const accessResponse = await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
           allowedCourseIds = new Set(accessResponse.data.allowedCourseIds || [])
         } catch (err) {
-          console.error('Failed to load instructor access:', err)
           allowedCourseIds = new Set()
         }
       }

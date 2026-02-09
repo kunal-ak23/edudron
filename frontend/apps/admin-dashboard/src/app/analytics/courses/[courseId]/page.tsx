@@ -45,7 +45,6 @@ export default function CourseAnalyticsPage() {
         setCourse(courseData)
         setAnalytics(analyticsData)
       } catch (error) {
-        console.error('Failed to load data:', error)
       } finally {
         setLoading(false)
       }

@@ -67,7 +67,6 @@ export default function ClassSectionsPage() {
           const accessResponse = await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
           allowedSectionIds = new Set(accessResponse.data.allowedSectionIds || [])
         } catch (err) {
-          console.error('Failed to load instructor access:', err)
           allowedSectionIds = new Set()
         }
       }
@@ -88,7 +87,6 @@ export default function ClassSectionsPage() {
       }
       setSections(filteredSections)
     } catch (err: any) {
-      console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -132,7 +130,6 @@ export default function ClassSectionsPage() {
       
       setStudents(studentsData)
     } catch (err: any) {
-      console.error('Error loading students:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

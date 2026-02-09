@@ -91,7 +91,6 @@ export default function LoginPage() {
         router.push('/dashboard')
       }
     } catch (error) {
-      console.error('Error selecting tenant:', error)
       setError('Failed to select tenant')
     }
   }

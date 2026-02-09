@@ -53,7 +53,6 @@ export function CourseStructureTree({ courseId }: CourseStructureTreeProps) {
         const data = await coursesApi.getSections(courseId)
         setSections(data.map(s => ({ ...s, lecturesLoaded: false, lecturesLoading: false })))
       } catch (error) {
-        console.error('Failed to fetch sections:', error)
         toast({
           title: 'Error',
           description: 'Failed to load course structure',
@@ -84,7 +83,6 @@ export function CourseStructureTree({ courseId }: CourseStructureTreeProps) {
         } : s
       ))
     } catch (error) {
-      console.error('Failed to fetch lectures:', error)
       setSections(prev => prev.map(s => 
         s.id === sectionId ? { ...s, lecturesLoading: false } : s
       ))
@@ -128,7 +126,6 @@ export function CourseStructureTree({ courseId }: CourseStructureTreeProps) {
             lecturesLoading: false
           }
         } catch (error) {
-          console.error(`Failed to fetch lectures for section ${section.id}:`, error)
         }
       }
     }
@@ -186,7 +183,6 @@ export function CourseStructureTree({ courseId }: CourseStructureTreeProps) {
       })
       setTimeout(() => setCopiedAll(false), 2000)
     } catch (error) {
-      console.error('Failed to copy all IDs:', error)
       toast({
         title: 'Error',
         description: 'Failed to copy IDs',

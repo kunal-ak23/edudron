@@ -102,7 +102,6 @@ export default function CourseEditPage() {
             const lectures = await lecturesApi.getSubLecturesByLecture(courseId, section.id)
             return { ...section, lectures }
           } catch (error) {
-            console.error(`Failed to load sub-lectures for lecture ${section.id}:`, error)
             return { ...section, lectures: [] }
           }
         })
@@ -112,7 +111,6 @@ export default function CourseEditPage() {
       // Expand all sections by default
       setExpandedSections(new Set(sectionsWithLectures.map(s => s.id)))
     } catch (error) {
-      console.error('Failed to load course sections:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to load course structure',
@@ -139,7 +137,6 @@ export default function CourseEditPage() {
       })
       setHasUnsavedChanges(false)
     } catch (error) {
-      console.error('Failed to load course:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to load course',
@@ -174,7 +171,6 @@ export default function CourseEditPage() {
       }
       setSections(allSections)
     } catch (err) {
-      console.error('Failed to load hierarchy data:', err)
     }
   }, [])
 
@@ -261,7 +257,6 @@ export default function CourseEditPage() {
         // Stay on the current page - no redirect
       }
     } catch (error) {
-      console.error('Failed to save course:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to save course',
@@ -317,7 +312,6 @@ export default function CourseEditPage() {
       })
       setLectureTitle('')
     } catch (error) {
-      console.error('Failed to create lecture:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to create lecture',
@@ -410,7 +404,6 @@ export default function CourseEditPage() {
       setAiPdfFile(null)
       setAiDialogType(null)
     } catch (error) {
-      console.error('Failed to generate with AI:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to generate with AI',
@@ -442,7 +435,6 @@ export default function CourseEditPage() {
       })
       setLectureToDelete(null)
     } catch (error) {
-      console.error('Failed to delete lecture:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to delete lecture',
@@ -474,7 +466,6 @@ export default function CourseEditPage() {
       })
       setLectureToDelete(null)
     } catch (error) {
-      console.error('Failed to delete sub-lecture:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to delete sub-lecture',
@@ -539,7 +530,6 @@ export default function CourseEditPage() {
         description: 'The course has been published and is now visible to students.',
       })
     } catch (error) {
-      console.error('Failed to publish course:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to publish course',
@@ -570,7 +560,6 @@ export default function CourseEditPage() {
         description: 'The course has been unpublished and is no longer visible to students.',
       })
     } catch (error) {
-      console.error('Failed to unpublish course:', error)
       toast({
         variant: 'destructive',
         title: 'Failed to unpublish course',
@@ -634,7 +623,6 @@ export default function CourseEditPage() {
         description: 'The course book PDF has been generated and saved. Download started.',
       })
     } catch (error) {
-      console.error('Failed to generate course book PDF:', error)
       const blobMessage = await extractAxiosBlobError(error)
       toast({
         variant: 'destructive',
@@ -657,7 +645,6 @@ export default function CourseEditPage() {
       const blob = response.data as any as Blob
       downloadBlob(blob, `course-book-${courseId}.pdf`)
     } catch (error) {
-      console.error('Failed to download course book PDF:', error)
       const status = (error as any)?.response?.status
       if (status === 404) {
         toast({

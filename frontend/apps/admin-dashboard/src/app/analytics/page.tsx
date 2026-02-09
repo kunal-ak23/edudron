@@ -50,7 +50,6 @@ export default function AnalyticsPage() {
       setCourses(coursesData.filter(c => c.isPublished && c.status !== 'ARCHIVED'))
       setSections(sectionsData.filter(s => s.isActive))
     } catch (error) {
-      console.error('Failed to load data:', error)
     } finally {
       setLoading(false)
     }
@@ -62,7 +61,6 @@ export default function AnalyticsPage() {
       const analyticsData = await analyticsApi.getCourseAnalytics(courseId)
       setAnalytics(analyticsData)
     } catch (error) {
-      console.error('Failed to load analytics:', error)
     } finally {
       setLoadingAnalytics(false)
     }

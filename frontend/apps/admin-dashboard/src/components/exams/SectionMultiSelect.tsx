@@ -42,7 +42,6 @@ export function SectionMultiSelect({ courseId, selectedIds, onChange, disabled }
       const data = Array.isArray(response) ? response : (response as any)?.data || []
       setSections(data)
     } catch (error) {
-      console.error('Failed to load sections:', error)
       setSections([])
     } finally {
       setLoading(false)

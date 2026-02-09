@@ -121,7 +121,6 @@ export default function DashboardPage() {
           )
           access = accessRes.data
         } catch (err) {
-          console.error('Failed to load instructor access:', err)
           access = { allowedClassIds: [], allowedSectionIds: [], allowedCourseIds: [] }
         }
 
@@ -199,7 +198,6 @@ export default function DashboardPage() {
         setActiveSectionCount(resolvedActiveSectionCount)
       }
     } catch (error) {
-      console.error('Failed to load dashboard data:', error)
     } finally {
       setLoading(false)
     }

@@ -29,7 +29,6 @@ export function usePsychometricTestFeature() {
         const isEnabled = await tenantFeaturesApi.isFeatureEnabled(TenantFeatureType.PSYCHOMETRIC_TEST)
         setEnabled(isEnabled)
       } catch (err) {
-        console.error('Failed to check psychometric test feature:', err)
         setError(err instanceof Error ? err : new Error('Unknown error'))
         setEnabled(false)
       } finally {

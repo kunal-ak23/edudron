@@ -78,7 +78,6 @@ export function D3TreeView({
       })
       setTimeout(() => setCopiedId(null), 2000)
     } catch (err) {
-      console.error('Failed to copy:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to copy',

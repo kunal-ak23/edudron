@@ -53,13 +53,11 @@ export default function ClassesListPage() {
           const instituteClasses = await classesApi.listClassesByInstitute(institute.id)
           allClasses.push(...instituteClasses)
         } catch (err) {
-          console.error(`Failed to load classes for institute ${institute.id}:`, err)
         }
       }
       
       setClasses(allClasses)
     } catch (error) {
-      console.error('Failed to load data:', error)
     } finally {
       setLoading(false)
     }

@@ -127,7 +127,6 @@ export default function EditQuestionPage() {
         setSections(courseSections.map(s => ({ id: s.id, title: s.title, courseId: s.courseId })))
       }
     } catch (error) {
-      console.error('Failed to load sections:', error)
     } finally {
       setLoadingSections(false)
     }
@@ -153,7 +152,6 @@ export default function EditQuestionPage() {
       }
       setLectures(allLectures)
     } catch (error) {
-      console.error('Failed to load lectures:', error)
     }
   }, [])
 
@@ -205,7 +203,6 @@ export default function EditQuestionPage() {
             ]
       })
     } catch (error) {
-      console.error('Failed to load question:', error)
       toast({
         title: 'Error',
         description: 'Failed to load question',
@@ -291,7 +288,6 @@ export default function EditQuestionPage() {
       // Navigate back with course context preserved
       router.push(getBackUrl())
     } catch (error) {
-      console.error('Failed to update question:', error)
       toast({
         title: 'Error',
         description: 'Failed to update question',
@@ -315,7 +311,6 @@ export default function EditQuestionPage() {
       // Navigate back with course context preserved
       router.push(getBackUrl())
     } catch (error) {
-      console.error('Failed to delete question:', error)
       toast({
         title: 'Error',
         description: 'Failed to delete question',

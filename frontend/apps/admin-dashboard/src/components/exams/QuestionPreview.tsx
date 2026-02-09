@@ -59,9 +59,7 @@ export function QuestionPreview({ courseId, moduleIds, numberOfQuestions, diffic
       setLoading(true)
       try {
         const url = '/api/question-bank/modules?moduleIds=' + moduleIds.join(',')
-        console.log('QuestionPreview: fetching from', url)
         const response = await apiClient.get<QuestionBank[]>(url)
-        console.log('QuestionPreview: raw response', response, typeof response)
         
         // Handle both direct array response and wrapped {data: [...]} response
         let allQuestions: QuestionBank[] = []
@@ -78,7 +76,6 @@ export function QuestionPreview({ courseId, moduleIds, numberOfQuestions, diffic
           }
         }
         
-        console.log('QuestionPreview: loaded', allQuestions.length, 'questions from', moduleIds.length, 'modules')
         
         // Calculate stats from all questions
         const calculatedStats: QuestionStats = {
@@ -107,8 +104,6 @@ export function QuestionPreview({ courseId, moduleIds, numberOfQuestions, diffic
         // Take sample questions (first 5)
         setQuestions(allQuestions.slice(0, 5))
       } catch (error) {
-        console.error('Failed to load questions:', error)
-        console.error('Error details:', error)
         setQuestions([])
         setStats(null)
       } finally {

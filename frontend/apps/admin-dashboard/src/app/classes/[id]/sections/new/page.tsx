@@ -41,7 +41,6 @@ export default function CreateSectionPage() {
       const instituteData = await institutesApi.getInstitute(classData.instituteId)
       setInstitute(instituteData)
     } catch (err: any) {
-      console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -73,7 +72,6 @@ export default function CreateSectionPage() {
       })
       router.push(`/classes/${classId}/sections`)
     } catch (err: any) {
-      console.error('Error creating section:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

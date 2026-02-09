@@ -105,7 +105,6 @@ export default function QuestionBankImportPage() {
         setCourses(courses)
       }
     } catch (error) {
-      console.error('Failed to load courses:', error)
       toast({
         title: 'Error',
         description: 'Failed to load courses',
@@ -136,7 +135,6 @@ export default function QuestionBankImportPage() {
         setSections([])
       }
     } catch (error) {
-      console.error('Failed to load sections:', error)
       setSections([])
     } finally {
       setLoadingSections(false)
@@ -199,7 +197,6 @@ export default function QuestionBankImportPage() {
       document.body.removeChild(a)
       window.URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('Failed to download template:', error)
       toast({
         title: 'Error',
         description: 'Failed to download template',
@@ -270,7 +267,6 @@ export default function QuestionBankImportPage() {
         })
       }
     } catch (error: any) {
-      console.error('Failed to import questions:', error)
       const errorMessage = error?.response?.data?.error || error?.message || 'Failed to import questions'
       toast({
         title: 'Import failed',

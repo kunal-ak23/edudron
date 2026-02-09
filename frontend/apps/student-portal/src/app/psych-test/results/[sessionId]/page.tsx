@@ -120,7 +120,6 @@ export default function PsychTestResultsPage() {
           setIsPolling(false)
         }
       } catch (e: any) {
-        console.error(e)
         if (cancelled) return
 
         // If results are still being generated, poll briefly instead of failing.

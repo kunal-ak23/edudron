@@ -118,7 +118,6 @@ export default function InstructorAssignmentsPage() {
       setSections(sectionsRes.data || [])
       setCourses(coursesRes.data?.content || [])
     } catch (error: any) {
-      console.error('Failed to load data:', error)
       toast({
         title: 'Error',
         description: extractErrorMessage(error),
@@ -194,7 +193,6 @@ export default function InstructorAssignmentsPage() {
       resetForm()
       loadData()
     } catch (error: any) {
-      console.error('Failed to create assignment:', error)
       toast({
         title: 'Error',
         description: extractErrorMessage(error),
@@ -220,7 +218,6 @@ export default function InstructorAssignmentsPage() {
 
       loadData()
     } catch (error: any) {
-      console.error('Failed to delete assignment:', error)
       toast({
         title: 'Error',
         description: extractErrorMessage(error),

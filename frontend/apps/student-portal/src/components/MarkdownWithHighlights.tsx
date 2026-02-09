@@ -1016,7 +1016,6 @@ export function MarkdownWithHighlights({
 
         return () => clearTimeout(timeoutId)
       } catch (error) {
-        console.error('[MarkdownWithHighlights] Error applying highlights:', error)
         isApplyingHighlightsRef.current = false
       }
     }
@@ -1292,7 +1291,6 @@ export function MarkdownWithHighlights({
       setShowColorPicker(false)
       setCommentText('')
     } catch (error) {
-      console.error('Failed to add note:', error)
     }
   }
 
@@ -1304,7 +1302,6 @@ export function MarkdownWithHighlights({
       setEditingNoteId(null)
       setEditingText('')
     } catch (error) {
-      console.error('Failed to update note:', error)
     }
   }
 
@@ -1316,7 +1313,6 @@ export function MarkdownWithHighlights({
       setActiveNoteId(null)
       setShowCommentBubble(false)
     } catch (error) {
-      console.error('Failed to delete note:', error)
     }
   }
 

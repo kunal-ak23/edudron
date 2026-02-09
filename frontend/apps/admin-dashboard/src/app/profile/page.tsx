@@ -48,7 +48,6 @@ export default function ProfilePage() {
       const profileData = 'data' in response ? response.data : response
       setProfile(profileData)
     } catch (error: any) {
-      console.error('Failed to load profile:', error)
       const errorMessage = extractErrorMessage(error)
       toast({
         variant: 'destructive',
@@ -107,7 +106,6 @@ export default function ProfilePage() {
         await loadProfile()
       }
     } catch (error: any) {
-      console.error('Failed to change password:', error)
       const errorMessage = extractErrorMessage(error)
       toast({
         variant: 'destructive',

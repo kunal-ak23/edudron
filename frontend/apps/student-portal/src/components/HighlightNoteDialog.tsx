@@ -41,7 +41,6 @@ export function HighlightNoteDialog({
       setSelectedColor(HIGHLIGHT_COLORS[0].value)
       onClose()
     } catch (error) {
-      console.error('Failed to save note:', error)
     } finally {
       setIsSubmitting(false)
     }

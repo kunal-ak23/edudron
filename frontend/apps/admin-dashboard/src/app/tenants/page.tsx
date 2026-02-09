@@ -60,7 +60,6 @@ export default function TenantsPage() {
       const allTenants = await tenantsApi.listTenants()
       setTenants(allTenants || [])
     } catch (err: any) {
-      console.error('Error loading tenants:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

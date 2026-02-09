@@ -96,7 +96,6 @@ export function QuestionPicker({ examId, courseId, moduleIds, open, onClose, onQ
         setSections(filteredSections)
       }
     } catch (error) {
-      console.error('Failed to load sections:', error)
     }
   }, [courseId, moduleIds])
 
@@ -109,7 +108,6 @@ export function QuestionPicker({ examId, courseId, moduleIds, open, onClose, onQ
         setExistingQuestionIds(ids)
       }
     } catch (error) {
-      console.error('Failed to load existing questions:', error)
     }
   }, [examId])
 
@@ -145,7 +143,6 @@ export function QuestionPicker({ examId, courseId, moduleIds, open, onClose, onQ
       
       setQuestions(filteredQuestions)
     } catch (error) {
-      console.error('Failed to load questions:', error)
       setQuestions([])
     } finally {
       setLoading(false)
@@ -211,7 +208,6 @@ export function QuestionPicker({ examId, courseId, moduleIds, open, onClose, onQ
       onQuestionsAdded()
       onClose()
     } catch (error) {
-      console.error('Failed to add questions:', error)
       toast({
         title: 'Error',
         description: 'Failed to add questions to exam',
@@ -242,7 +238,6 @@ export function QuestionPicker({ examId, courseId, moduleIds, open, onClose, onQ
       onQuestionsAdded()
       onClose()
     } catch (error: any) {
-      console.error('Failed to generate exam paper:', error)
       toast({
         title: 'Error',
         description: error?.message || 'Failed to generate exam paper',

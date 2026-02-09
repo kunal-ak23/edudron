@@ -69,7 +69,6 @@ export default function MyCoursesPage() {
       })
       setProgressData(progressMap)
     } catch (error) {
-      console.error('Failed to load enrollments:', error)
     } finally {
       setLoading(false)
     }

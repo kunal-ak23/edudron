@@ -59,7 +59,6 @@ export default function InstituteClassesPage() {
           const accessResponse = await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
           allowedClassIds = new Set(accessResponse.data.allowedClassIds || [])
         } catch (err) {
-          console.error('Failed to load instructor access:', err)
           allowedClassIds = new Set()
         }
       }
@@ -77,7 +76,6 @@ export default function InstituteClassesPage() {
       }
       setClasses(filteredClasses)
     } catch (err: any) {
-      console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
       setError(errorMessage)
       toast({

@@ -94,7 +94,6 @@ export function HighlightedContent({
 
     fetchHighlights(documentId, userId)
       .then(setHighlights)
-      .catch(err => console.error('Failed to fetch highlights:', err))
   }, [documentId, userId])
 
   // Build text index when content is ready
@@ -250,7 +249,6 @@ export function HighlightedContent({
       setShowPopover(false)
       setEditingHighlightId(null)
     } catch (error) {
-      console.error('Failed to save highlight:', error)
     }
   }, [selectionRef.current, textIndex, selectedColor, noteText, editingHighlightId, documentId])
 
@@ -261,7 +259,6 @@ export function HighlightedContent({
       setShowPopover(false)
       setEditingHighlightId(null)
     } catch (error) {
-      console.error('Failed to delete highlight:', error)
     }
   }, [])
 

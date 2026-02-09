@@ -72,8 +72,6 @@ export default function ExamsPage() {
       setExams(uniqueExams)
       setIsInitialLoad(false)
     } catch (error: any) {
-      console.error('Failed to load exams:', error)
-      console.error('Error details:', error?.message, error?.response)
       setExams([])
       setIsInitialLoad(false)
     } finally {
@@ -109,7 +107,6 @@ export default function ExamsPage() {
           clearTimeout(loadingTimeout)
         }
       } catch (error) {
-        console.error('Error in fetchExams:', error)
         if (mounted) {
           setLoading(false)
           setIsInitialLoad(false)

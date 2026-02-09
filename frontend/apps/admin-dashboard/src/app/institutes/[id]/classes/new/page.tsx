@@ -38,7 +38,6 @@ export default function CreateClassPage() {
       const data = await institutesApi.getInstitute(instituteId)
       setInstitute(data)
     } catch (err: any) {
-      console.error('Error loading institute:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -70,7 +69,6 @@ export default function CreateClassPage() {
       })
       router.push(`/institutes/${instituteId}/classes`)
     } catch (err: any) {
-      console.error('Error creating class:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

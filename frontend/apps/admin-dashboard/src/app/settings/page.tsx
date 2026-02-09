@@ -29,7 +29,6 @@ export default function SettingsPage() {
       const featuresData = await tenantFeaturesApi.getAllFeatures()
       setFeatures(featuresData)
     } catch (error) {
-      console.error('Failed to load features:', error)
       toast({
         title: 'Error',
         description: 'Failed to load feature settings',
@@ -61,7 +60,6 @@ export default function SettingsPage() {
         description: 'Feature setting updated successfully'
       })
     } catch (error) {
-      console.error('Failed to update feature:', error)
       toast({
         title: 'Error',
         description: 'Failed to update feature setting',
@@ -85,7 +83,6 @@ export default function SettingsPage() {
         description: 'Feature reset to default value'
       })
     } catch (error) {
-      console.error('Failed to reset feature:', error)
       toast({
         title: 'Error',
         description: 'Failed to reset feature setting',

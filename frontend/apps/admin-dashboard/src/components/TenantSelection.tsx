@@ -28,7 +28,6 @@ export function TenantSelection({ tenants, onTenantSelect, userEmail, title, sub
       const result = onTenantSelect(tenants[0].id)
       if (result && typeof result.then === 'function') {
         result.catch((error) => {
-          console.error('Error auto-selecting tenant:', error)
           setAutoSelecting(false)
           setIsLoading(false)
         })

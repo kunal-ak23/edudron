@@ -57,7 +57,6 @@ export default function CourseIndexPage() {
       const data = await courseGenerationIndexApi.listIndexes()
       setIndexes(data)
     } catch (error) {
-      console.error('Failed to load indexes:', error)
     } finally {
       setLoading(false)
     }
@@ -114,7 +113,6 @@ export default function CourseIndexPage() {
         description: 'Index uploaded successfully',
       })
     } catch (error: any) {
-      console.error('Failed to upload:', error)
       const errorMessage = extractErrorMessage(error)
       toast({
         variant: 'destructive',

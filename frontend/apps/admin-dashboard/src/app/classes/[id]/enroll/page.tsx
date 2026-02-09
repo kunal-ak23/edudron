@@ -138,11 +138,9 @@ export default function ClassEnrollPage() {
         const enrolledIds = new Set(enrollmentsResponse.content.map(e => e.courseId))
         setEnrolledCourseIds(enrolledIds)
       } catch (err) {
-        console.error('Error loading existing enrollments:', err)
         // Continue without pre-populating enrolled courses
       }
     } catch (err: any) {
-      console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -209,7 +207,6 @@ export default function ClassEnrollPage() {
         }
       }
     } catch (err: any) {
-      console.error(`Error ${isCurrentlyEnrolled ? 'unenrolling' : 'enrolling'} class:`, err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

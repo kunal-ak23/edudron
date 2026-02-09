@@ -51,7 +51,6 @@ export default function CoursePreviewPage() {
         setSections(sectionsData as any)
       }
     } catch (error) {
-      console.error('Failed to load course:', error)
     } finally {
       setLoading(false)
     }

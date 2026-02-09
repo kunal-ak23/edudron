@@ -144,7 +144,6 @@ export function BatchCreateSectionsDialog({
         onSuccess()
       }
     } catch (err: any) {
-      console.error('Error creating sections:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to create sections',

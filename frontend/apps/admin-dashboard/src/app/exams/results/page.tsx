@@ -97,7 +97,6 @@ export default function ExamResultsPage() {
       setResults(resultsData)
       setFilteredResults(resultsData)
     } catch (error) {
-      console.error('Failed to load exam results:', error)
       toast({
         title: 'Error',
         description: 'Failed to load exam results',
@@ -177,7 +176,6 @@ export default function ExamResultsPage() {
       setSelectedSubmissions(new Set())
       await loadResults()
     } catch (error) {
-      console.error('Failed to trigger bulk review:', error)
       toast({
         title: 'Error',
         description: 'Failed to trigger bulk review',
@@ -239,7 +237,6 @@ export default function ExamResultsPage() {
           totalSuccess += result.successCount || 0
           totalFailed += result.failureCount || 0
         } catch (error) {
-          console.error(`Failed to re-grade submissions for exam ${examId}:`, error)
           totalFailed += submissionIds.length
         }
       }
@@ -252,7 +249,6 @@ export default function ExamResultsPage() {
       setSelectedSubmissions(new Set())
       await loadResults()
     } catch (error) {
-      console.error('Failed to trigger bulk re-grade:', error)
       toast({
         title: 'Error',
         description: 'Failed to trigger bulk re-grade',
@@ -276,7 +272,6 @@ export default function ExamResultsPage() {
       
       await loadResults()
     } catch (error) {
-      console.error('Failed to re-grade submission:', error)
       toast({
         title: 'Error',
         description: 'Failed to re-grade submission',

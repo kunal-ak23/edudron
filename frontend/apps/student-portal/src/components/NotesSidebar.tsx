@@ -47,7 +47,6 @@ export function NotesSidebar({
       setEditingNoteId(null)
       setEditingText('')
     } catch (error) {
-      console.error('Failed to update note:', error)
     }
   }
 
@@ -62,7 +61,6 @@ export function NotesSidebar({
       await onDeleteNote(deleteNoteId)
       setDeleteNoteId(null)
     } catch (error) {
-      console.error('Failed to delete note:', error)
       // Keep dialog open on error so user can retry
     }
   }

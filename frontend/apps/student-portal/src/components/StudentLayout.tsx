@@ -85,7 +85,6 @@ export function StudentLayout({ children }: StudentLayoutProps) {
       await logout()
       router.push('/login')
     } catch (error) {
-      console.error('Logout error:', error)
       // Force redirect even if logout fails
       localStorage.clear()
       router.push('/login')

@@ -206,7 +206,6 @@ export function GoogleDocsStyleHighlighter({
       setShowColorPicker(false)
       setCommentText('')
     } catch (error) {
-      console.error('Failed to add note:', error)
     }
   }
 
@@ -218,7 +217,6 @@ export function GoogleDocsStyleHighlighter({
       setEditingNoteId(null)
       setEditingText('')
     } catch (error) {
-      console.error('Failed to update note:', error)
     }
   }
 
@@ -230,7 +228,6 @@ export function GoogleDocsStyleHighlighter({
       setActiveNoteId(null)
       setShowCommentBubble(false)
     } catch (error) {
-      console.error('Failed to delete note:', error)
     }
   }
 

@@ -47,7 +47,6 @@ export default function InstituteTreePage() {
           allowedClassIds = new Set(accessResponse.data.allowedClassIds || [])
           allowedSectionIds = new Set(accessResponse.data.allowedSectionIds || [])
         } catch (err) {
-          console.error('Failed to load instructor access:', err)
           // If we can't load access, show nothing for safety
           allowedClassIds = new Set()
           allowedSectionIds = new Set()
@@ -79,7 +78,6 @@ export default function InstituteTreePage() {
             }
             return { classId: cls.id, sections: sections || [] }
           } catch (err) {
-            console.error(`Error loading sections for class ${cls.id}:`, err)
             return { classId: cls.id, sections: [] }
           }
         })
@@ -90,7 +88,6 @@ export default function InstituteTreePage() {
       }
       setSectionsByClass(sectionsMap)
     } catch (err: any) {
-      console.error('Error loading data:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

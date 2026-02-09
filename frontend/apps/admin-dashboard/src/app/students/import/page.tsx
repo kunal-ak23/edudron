@@ -112,7 +112,6 @@ Bob Johnson,bob.johnson@example.com,,,,inst_123,,,`
         description: `Successfully imported ${importResult.successfulRows} of ${importResult.totalRows} students`,
       })
     } catch (err: any) {
-      console.error('Error importing students:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

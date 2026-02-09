@@ -120,7 +120,6 @@ export function Reader({
 
     fetchHighlights(documentId, userId)
       .then(setHighlights)
-      .catch(err => console.error('Failed to fetch highlights:', err))
   }, [documentId, userId])
 
   // Resolve and render highlights when index or highlights change
@@ -315,7 +314,6 @@ export function Reader({
       setShowPopover(false)
       setEditingHighlightId(null)
     } catch (error) {
-      console.error('Failed to save highlight:', error)
     }
   }, [selectionRef.current, textIndex, selectedColor, noteText, editingHighlightId, documentId])
 
@@ -327,7 +325,6 @@ export function Reader({
       setShowPopover(false)
       setEditingHighlightId(null)
     } catch (error) {
-      console.error('Failed to delete highlight:', error)
     }
   }, [])
 

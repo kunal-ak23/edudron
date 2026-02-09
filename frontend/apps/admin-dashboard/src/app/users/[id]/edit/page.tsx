@@ -121,7 +121,6 @@ export default function EditUserPage() {
         
         setSelectedInstituteIds(userData.instituteIds || [])
       } catch (err: any) {
-        console.error('Failed to load user:', err)
         const errorMessage = extractErrorMessage(err)
         toast({
           variant: 'destructive',
@@ -144,7 +143,6 @@ export default function EditUserPage() {
         const data = await institutesApi.listInstitutes()
         setInstitutes(data)
       } catch (err) {
-        console.error('Failed to load institutes:', err)
       } finally {
         setLoadingInstitutes(false)
       }
@@ -225,7 +223,6 @@ export default function EditUserPage() {
       })
       router.push('/users')
     } catch (err: any) {
-      console.error('Failed to update user:', err)
       const errorMessage = extractErrorMessage(err)
       setError(errorMessage)
       toast({

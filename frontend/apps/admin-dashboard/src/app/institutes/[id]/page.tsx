@@ -54,7 +54,6 @@ export default function InstituteDetailPage() {
         isActive: data.isActive
       })
     } catch (err: any) {
-      console.error('Error loading institute:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -85,7 +84,6 @@ export default function InstituteDetailPage() {
         description: `${updated.name} has been updated successfully.`,
       })
     } catch (err: any) {
-      console.error('Error updating institute:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',
@@ -106,7 +104,6 @@ export default function InstituteDetailPage() {
       })
       router.push('/institutes')
     } catch (err: any) {
-      console.error('Error deleting institute:', err)
       const errorMessage = extractErrorMessage(err)
       toast({
         variant: 'destructive',

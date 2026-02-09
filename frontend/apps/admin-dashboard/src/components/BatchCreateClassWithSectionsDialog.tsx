@@ -142,7 +142,6 @@ export function BatchCreateClassWithSectionsDialog({
         onSuccess()
       }
     } catch (err: any) {
-      console.error('Error creating class with sections:', err)
       toast({
         variant: 'destructive',
         title: 'Failed to create class',

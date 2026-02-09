@@ -57,7 +57,6 @@ export default function CourseLearnPreviewPage() {
         }
       }
     } catch (error) {
-      console.error('Failed to load course data:', error)
       setCourse(null)
     } finally {
       setLoading(false)
@@ -85,7 +84,6 @@ export default function CourseLearnPreviewPage() {
             setLoadingTranscript(false)
           })
           .catch(err => {
-            console.error('Failed to load transcript:', err)
             setTranscriptText(null)
             setLoadingTranscript(false)
           })

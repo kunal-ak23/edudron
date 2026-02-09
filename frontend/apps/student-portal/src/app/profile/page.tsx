@@ -58,7 +58,6 @@ export default function ProfilePage() {
       const profileData = 'data' in response ? response.data : response
       setProfile(profileData)
     } catch (error: any) {
-      console.error('Failed to load profile:', error)
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to load profile'
       setError(errorMessage)
     } finally {
@@ -102,7 +101,6 @@ export default function ProfilePage() {
         updatedProfileData = 'data' in updatedProfile ? updatedProfile.data : updatedProfile
         setProfile(updatedProfileData)
       } catch (err) {
-        console.error('Failed to reload profile:', err)
         // Still proceed with updating user data
       }
       
@@ -133,7 +131,6 @@ export default function ProfilePage() {
               return // Exit early since we're reloading
             }
           } catch (err) {
-            console.error('Failed to update user data:', err)
             // Still redirect even if update fails
             if (profile?.passwordResetRequired) {
               setTimeout(() => {
@@ -144,7 +141,6 @@ export default function ProfilePage() {
         }
       }
     } catch (error: any) {
-      console.error('Failed to change password:', error)
       const errorMessage = error?.response?.data?.message || error?.message || 'Failed to change password'
       setError(errorMessage)
     } finally {
