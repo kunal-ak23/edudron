@@ -100,7 +100,7 @@ public class AssessmentJourneyService {
         event.setAssessmentId(assessmentId);
         event.setStudentId(studentId);
         event.setEventType(eventType);
-        event.setSeverity(severity);
+        event.setSeverity(severity != null && !severity.isBlank() ? severity : "INFO");
         if (metadata != null && !metadata.isEmpty()) {
             JsonNode metadataNode = objectMapper.valueToTree(metadata);
             event.setMetadata(metadataNode);
@@ -113,14 +113,20 @@ public class AssessmentJourneyService {
 
     /**
      * Get all journey events for a submission (for teachers/admins).
-     * Caller must have permission to view the submission.
+     * Resolves client_id from the submission so events are returned even when the request
+     * tenant context (X-Client-Id) is missing or differs. Caller must have permission to view the submission.
      */
     public List<AssessmentJourneyEvent> getJourneyEvents(String submissionId) {
+        AssessmentSubmission submission = submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
+        UUID clientId = submission.getClientId();
         String clientIdStr = TenantContext.getClientId();
-        if (clientIdStr == null) {
-            throw new IllegalStateException("Tenant context is not set");
+        if (clientIdStr != null) {
+            UUID requestClientId = UUID.fromString(clientIdStr);
+            if (!requestClientId.equals(clientId)) {
+                throw new IllegalArgumentException("Submission not found: " + submissionId);
+            }
         }
-        UUID clientId = UUID.fromString(clientIdStr);
         return journeyEventRepository.findByClientIdAndSubmissionIdOrderByCreatedAtAsc(clientId, submissionId);
     }
 }

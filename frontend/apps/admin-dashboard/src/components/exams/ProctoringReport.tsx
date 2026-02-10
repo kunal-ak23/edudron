@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,16 +33,22 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
   const [journeyEvents, setJourneyEvents] = useState<JourneyEvent[]>([])
   const [journeyLoading, setJourneyLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('events')
+  const journeyFetchedForRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (activeTab === 'journey' && journeyEvents.length === 0 && !journeyLoading) {
-      setJourneyLoading(true)
-      getJourneyEvents(examId, submissionId)
-        .then((data) => setJourneyEvents(data))
-        .catch(() => {})
-        .finally(() => setJourneyLoading(false))
-    }
-  }, [activeTab, examId, submissionId, journeyEvents.length, journeyLoading])
+    journeyFetchedForRef.current = null
+    setJourneyEvents([])
+  }, [submissionId])
+
+  useEffect(() => {
+    if (activeTab !== 'journey' || journeyFetchedForRef.current === submissionId) return
+    journeyFetchedForRef.current = submissionId
+    setJourneyLoading(true)
+    getJourneyEvents(examId, submissionId)
+      .then((data) => setJourneyEvents(data))
+      .catch(() => {})
+      .finally(() => setJourneyLoading(false))
+  }, [activeTab, examId, submissionId])
 
   useEffect(() => {
     const loadReport = async () => {
@@ -59,14 +65,14 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
   }, [examId, submissionId])
 
   const getStatusBadge = (status: string) => {
-    const config = {
-      CLEAR: { variant: 'default' as const, icon: CheckCircle, label: 'Clear', color: 'text-green-600' },
-      FLAGGED: { variant: 'secondary' as const, icon: AlertTriangle, label: 'Flagged', color: 'text-yellow-600' },
-      SUSPICIOUS: { variant: 'secondary' as const, icon: AlertCircle, label: 'Suspicious', color: 'text-orange-600' },
-      VIOLATION: { variant: 'destructive' as const, icon: XCircle, label: 'Violation', color: 'text-red-600' }
+    const config: Record<string, { variant: 'default' | 'secondary' | 'destructive'; icon: typeof CheckCircle; label: string; color: string }> = {
+      CLEAR: { variant: 'default', icon: CheckCircle, label: 'Clear', color: 'text-green-600' },
+      FLAGGED: { variant: 'secondary', icon: AlertTriangle, label: 'Flagged', color: 'text-yellow-600' },
+      SUSPICIOUS: { variant: 'secondary', icon: AlertCircle, label: 'Suspicious', color: 'text-orange-600' },
+      VIOLATION: { variant: 'destructive', icon: XCircle, label: 'Violation', color: 'text-red-600' }
     }
-
-    const { variant, icon: Icon, label, color } = config[status as keyof typeof config]
+    const entry = config[status] ?? { variant: 'secondary' as const, icon: AlertCircle, label: status || 'Unknown', color: 'text-gray-600' }
+    const { variant, icon: Icon, label, color } = entry
 
     return (
       <Badge variant={variant} className="flex items-center gap-1">
@@ -76,14 +82,20 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
     )
   }
 
-  const getSeverityBadge = (severity: string) => {
-    const variants = {
-      INFO: { variant: 'default' as const, color: 'text-primary-600' },
-      WARNING: { variant: 'secondary' as const, color: 'text-yellow-600' },
-      VIOLATION: { variant: 'destructive' as const, color: 'text-red-600' }
+  const getSeverityBadge = (severity: string | null | undefined) => {
+    const normalized = (severity != null && String(severity).trim()) ? String(severity).trim().toUpperCase() : null
+    const variants: Record<string, { variant: 'default' | 'secondary' | 'destructive'; color: string }> = {
+      INFO: { variant: 'default', color: 'text-primary-foreground' },
+      WARNING: { variant: 'secondary', color: 'text-yellow-600' },
+      VIOLATION: { variant: 'destructive', color: 'text-destructive-foreground' }
     }
-    const { variant, color } = variants[severity as keyof typeof variants]
-    return <Badge variant={variant} className={color}>{severity}</Badge>
+    const displaySeverity = normalized || 'INFO'
+    const entry = variants[displaySeverity] ?? { variant: 'secondary' as const, color: 'text-muted-foreground' }
+    return (
+      <Badge variant={entry.variant} className={entry.color}>
+        {displaySeverity}
+      </Badge>
+    )
   }
 
   if (loading) {
@@ -120,19 +132,19 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
           <div className="grid grid-cols-4 gap-4">
             <div>
               <div className="text-sm text-gray-500">Tab Switches</div>
-              <div className="text-2xl font-bold">{report.tabSwitchCount}</div>
+              <div className="text-2xl font-bold">{report.tabSwitchCount ?? 0}</div>
             </div>
             <div>
               <div className="text-sm text-gray-500">Copy Attempts</div>
-              <div className="text-2xl font-bold">{report.copyAttemptCount}</div>
+              <div className="text-2xl font-bold">{report.copyAttemptCount ?? 0}</div>
             </div>
             <div>
               <div className="text-sm text-gray-500">Warnings</div>
-              <div className="text-2xl font-bold text-yellow-600">{report.eventCounts.warning}</div>
+              <div className="text-2xl font-bold text-yellow-600">{report.eventCounts?.warning ?? 0}</div>
             </div>
             <div>
               <div className="text-sm text-gray-500">Violations</div>
-              <div className="text-2xl font-bold text-red-600">{report.eventCounts.violation}</div>
+              <div className="text-2xl font-bold text-red-600">{report.eventCounts?.violation ?? 0}</div>
             </div>
           </div>
         </CardContent>
@@ -142,7 +154,7 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="events">
-            Events ({report.events.length})
+            Events ({report.events?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="journey">
             Assessment journey
@@ -152,16 +164,19 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
           </TabsTrigger>
         </TabsList>
 
-        {/* Events Tab */}
+        {/* Events Tab: proctoring violations (tab switches, copy attempts, etc.) */}
         <TabsContent value="events">
           <Card>
             <CardHeader>
               <CardTitle>Proctoring Events</CardTitle>
+              <p className="text-sm text-gray-500 mt-1">
+                Tab switches, copy attempts, and other proctoring violations. Zero entries means no such events were recorded (student followed exam rules).
+              </p>
             </CardHeader>
             <CardContent>
-              {report.events.length === 0 ? (
+              {(report.events ?? []).length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  No proctoring events recorded
+                  No proctoring violations recorded (e.g. tab switches, copy attempts). This is normal when the student followed exam rules.
                 </div>
               ) : (
                 <Table>
@@ -174,7 +189,7 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {report.events.map((event) => (
+                    {(report.events ?? []).map((event) => (
                       <TableRow key={event.id}>
                         <TableCell>
                           {new Date(event.createdAt).toLocaleString()}
@@ -241,9 +256,7 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
                               <div className="font-medium text-sm text-gray-900">{label}</div>
                               <div className="text-xs text-gray-500 mt-0.5">
                                 {new Date(evt.createdAt).toLocaleString()}
-                                {evt.severity && (
-                                  <Badge variant="secondary" className="ml-2 text-xs">{evt.severity}</Badge>
-                                )}
+                                <span className="ml-2 inline-block">{getSeverityBadge(evt.severity)}</span>
                               </div>
                               {evt.metadata && Object.keys(evt.metadata).length > 0 && (
                                 <details className="mt-2">
@@ -283,7 +296,7 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
                             <TableCell className="font-medium text-sm">
                               {evt.eventType.replace(/_/g, ' ')}
                             </TableCell>
-                            <TableCell>{evt.severity ? getSeverityBadge(evt.severity) : '-'}</TableCell>
+                            <TableCell>{getSeverityBadge(evt.severity)}</TableCell>
                             <TableCell className="text-sm text-gray-600">
                               {evt.metadata && Object.keys(evt.metadata).length > 0 ? (
                                 <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(evt.metadata)}</pre>
