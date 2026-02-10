@@ -194,6 +194,30 @@ public class AssessmentSubmissionService {
     }
 
     /**
+     * Discard an in-progress submission (completedAt == null) so the student can start a new attempt.
+     * Validates tenant and that the submission belongs to the given assessment.
+     */
+    public void discardInProgressSubmission(String assessmentId, String submissionId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        AssessmentSubmission submission = submissionRepository.findById(submissionId)
+            .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
+        if (!submission.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Submission not found: " + submissionId);
+        }
+        if (!assessmentId.equals(submission.getAssessmentId())) {
+            throw new IllegalArgumentException("Submission does not belong to this assessment");
+        }
+        if (submission.getCompletedAt() != null) {
+            throw new IllegalArgumentException("Only in-progress attempts can be discarded; submission already completed");
+        }
+        submissionRepository.delete(submission);
+    }
+
+    /**
      * Get all assessment/exam submissions for a student (admin/instructor view).
      */
     public List<AssessmentSubmissionDTO> getSubmissionsByStudentId(String studentId) {

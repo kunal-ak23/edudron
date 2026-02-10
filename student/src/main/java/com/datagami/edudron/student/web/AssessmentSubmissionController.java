@@ -121,6 +121,15 @@ public class AssessmentSubmissionController {
         }
     }
 
+    @DeleteMapping("/assessments/{assessmentId}/submissions/{submissionId}")
+    @Operation(summary = "Discard in-progress submission", description = "Remove an in-progress attempt so the student can retry (instructor/admin only). Only submissions with completedAt == null can be discarded.")
+    public ResponseEntity<Void> discardInProgressSubmission(
+            @PathVariable String assessmentId,
+            @PathVariable String submissionId) {
+        submissionService.discardInProgressSubmission(assessmentId, submissionId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PutMapping("/assessments/submissions/{submissionId}/mark-cheating")
     @Operation(summary = "Mark submission as cheating", description = "Set or clear the marked-as-cheating flag (instructor/admin only)")
     public ResponseEntity<AssessmentSubmissionDTO> markAsCheating(

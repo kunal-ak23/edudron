@@ -127,7 +127,8 @@ public class ExamController {
             );
             if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
                 Map<String, Object> user = resp.getBody();
-                String name = user.get("name") != null ? user.get("name").toString() : null;
+                String name = user.get("name") != null ? user.get("name").toString()
+                    : (user.get("fullName") != null ? user.get("fullName").toString() : null);
                 String email = user.get("email") != null ? user.get("email").toString() : null;
                 if (name != null || email != null) {
                     java.util.Map<String, String> info = new java.util.HashMap<>();
@@ -577,6 +578,39 @@ public class ExamController {
                     studentInfo.put(studentId, info);
                 }
             }
+            // Batch fallback: when exam has a section, fill missing names from section students
+            java.util.Optional<Assessment> examOpt = assessmentRepository.findById(id);
+            if (examOpt.isPresent() && examOpt.get().getSectionId() != null && !examOpt.get().getSectionId().isBlank()) {
+                String sectionId = examOpt.get().getSectionId();
+                try {
+                    String sectionStudentsUrl = gatewayUrl + "/api/sections/" + sectionId + "/students";
+                    org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>> sectionListType =
+                        new org.springframework.core.ParameterizedTypeReference<List<Map<String, Object>>>() {};
+                    ResponseEntity<List<Map<String, Object>>> sectionResp = getRestTemplate().exchange(
+                        sectionStudentsUrl,
+                        HttpMethod.GET,
+                        new HttpEntity<>(headers),
+                        sectionListType
+                    );
+                    if (sectionResp.getBody() != null) {
+                        for (Map<String, Object> stu : sectionResp.getBody()) {
+                            String sid = stu.get("id") != null ? stu.get("id").toString() : null;
+                            if (sid != null && !studentInfo.containsKey(sid)) {
+                                String sname = stu.get("name") != null ? stu.get("name").toString() : null;
+                                String semail = stu.get("email") != null ? stu.get("email").toString() : null;
+                                if (sname != null || semail != null) {
+                                    java.util.Map<String, String> info = new java.util.HashMap<>();
+                                    info.put("name", sname);
+                                    info.put("email", semail);
+                                    studentInfo.put(sid, info);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    logger.debug("Could not fetch section students for section {}: {}", sectionId, e.getMessage());
+                }
+            }
             
             // Filter out deeply nested JSON fields and add student name/email
             List<Map<String, Object>> simplifiedSubmissions = new ArrayList<>();
@@ -630,6 +664,34 @@ public class ExamController {
             return ResponseEntity.ok(submission);
         } catch (Exception e) {
             logger.error("Failed to fetch submission details for examId: {}, submissionId: {}", id, submissionId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @DeleteMapping("/{id}/submissions/{submissionId}")
+    @Operation(summary = "Discard in-progress submission", description = "Remove an in-progress attempt so the student can retry (instructor/admin only)")
+    public ResponseEntity<Void> discardInProgressSubmission(
+            @PathVariable String id,
+            @PathVariable String submissionId) {
+        try {
+            String url = gatewayUrl + "/api/assessments/" + id + "/submissions/" + submissionId;
+            getRestTemplate().exchange(
+                url,
+                HttpMethod.DELETE,
+                new HttpEntity<>(new HttpHeaders()),
+                Void.class
+            );
+            return ResponseEntity.noContent().build();
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                return ResponseEntity.notFound().build();
+            }
+            if (e.getStatusCode() == HttpStatus.BAD_REQUEST) {
+                return ResponseEntity.badRequest().build();
+            }
+            throw e;
+        } catch (Exception e) {
+            logger.error("Failed to discard submission {} for exam {}", submissionId, id, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

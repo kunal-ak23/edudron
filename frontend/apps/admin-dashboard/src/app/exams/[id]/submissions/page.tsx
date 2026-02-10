@@ -25,7 +25,8 @@ import {
   Download,
   CheckSquare,
   AlertTriangle,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient } from '@/lib/api'
@@ -43,6 +44,7 @@ interface Submission {
   reviewStatus: string
   submittedAt: string
   gradedAt?: string
+  completedAt?: string | null
   answersJson: any
   markedAsCheating?: boolean
 }
@@ -72,6 +74,7 @@ export default function ExamSubmissionsPage() {
   const [gradingMcq, setGradingMcq] = useState(false)
   const [regradingSubmissions, setRegradingSubmissions] = useState<Set<string>>(new Set())
   const [markingCheatingSubmissions, setMarkingCheatingSubmissions] = useState<Set<string>>(new Set())
+  const [discardingSubmissions, setDiscardingSubmissions] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
 
   const loadData = useCallback(async () => {
@@ -258,6 +261,32 @@ export default function ExamSubmissionsPage() {
     }
   }
 
+  const handleDiscardSubmission = async (submissionId: string) => {
+    if (!confirm('Remove this in-progress attempt? The student will be able to start the exam again.')) return
+    setDiscardingSubmissions(prev => new Set(prev).add(submissionId))
+    try {
+      await apiClient.delete(`/api/exams/${examId}/submissions/${submissionId}`)
+      toast({
+        title: 'Success',
+        description: 'In-progress attempt removed. Student can retry.'
+      })
+      await loadData()
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || error?.message || 'Failed to remove attempt'
+      toast({
+        title: 'Error',
+        description: msg,
+        variant: 'destructive'
+      })
+    } finally {
+      setDiscardingSubmissions(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(submissionId)
+        return newSet
+      })
+    }
+  }
+
   const exportToCSV = () => {
     const csvRows = []
     
@@ -269,6 +298,7 @@ export default function ExamSubmissionsPage() {
       'Score',
       'Max Score',
       'Percentage',
+      'Attempt',
       'Status',
       'Review Status',
       'Marked as cheating',
@@ -285,6 +315,7 @@ export default function ExamSubmissionsPage() {
         submission.score !== null ? submission.score : 'N/A',
         submission.maxScore !== null ? submission.maxScore : 'N/A',
         submission.percentage !== null ? submission.percentage.toFixed(2) + '%' : 'N/A',
+        submission.completedAt == null ? 'In progress' : 'Submitted',
         submission.isPassed ? 'Passed' : 'Failed',
         submission.reviewStatus,
         submission.markedAsCheating ? 'Yes' : 'No',
@@ -479,6 +510,7 @@ export default function ExamSubmissionsPage() {
                   <TableHead>Student</TableHead>
                   <TableHead>Score</TableHead>
                   <TableHead>Percentage</TableHead>
+                  <TableHead>Attempt</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Review Status</TableHead>
                   <TableHead>Cheating</TableHead>
@@ -498,9 +530,18 @@ export default function ExamSubmissionsPage() {
                       />
                     </TableCell>
                     <TableCell className="text-sm">
-                      <span title={submission.studentId}>
-                        {submission.studentName || submission.studentEmail || `${submission.studentId.substring(0, 12)}...`}
-                      </span>
+                      <div className="flex flex-col" title={submission.studentId}>
+                        {(submission.studentName || submission.studentEmail) ? (
+                          <>
+                            {submission.studentName && <span className="font-medium">{submission.studentName}</span>}
+                            {submission.studentEmail && (
+                              <span className="text-muted-foreground text-xs">{submission.studentEmail}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">{submission.studentId?.substring(0, 12)}...</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {submission.score !== null && submission.score !== undefined
@@ -511,6 +552,19 @@ export default function ExamSubmissionsPage() {
                       {submission.percentage !== null && submission.percentage !== undefined
                         ? `${submission.percentage.toFixed(1)}%`
                         : '-'}
+                    </TableCell>
+                    <TableCell>
+                      {submission.completedAt == null ? (
+                        <Badge variant="secondary" className="gap-1">
+                          <Clock className="h-3 w-3" />
+                          In progress
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Submitted
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {submission.score !== null && submission.score !== undefined ? (
@@ -568,6 +622,24 @@ export default function ExamSubmissionsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {submission.completedAt == null && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDiscardSubmission(submission.id)}
+                            disabled={discardingSubmissions.has(submission.id)}
+                            title="Remove in-progress attempt so student can retry"
+                          >
+                            {discardingSubmissions.has(submission.id) ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Trash2 className="h-4 w-4 mr-1" />
+                                Discard
+                              </>
+                            )}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"

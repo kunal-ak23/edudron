@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -81,10 +81,25 @@ interface Option {
 
 export const dynamic = 'force-dynamic'
 
+const VALID_TABS = ['details', 'questions', 'submissions'] as const
+type ExamTab = typeof VALID_TABS[number]
+
+function tabFromSearchParams(searchParams: ReturnType<typeof useSearchParams>): ExamTab {
+  const t = searchParams.get('tab')
+  if (t && VALID_TABS.includes(t as ExamTab)) return t as ExamTab
+  return 'details'
+}
+
 export default function ExamDetailPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const examId = params.id as string
+  const activeTab = tabFromSearchParams(searchParams)
+
+  const setExamTab = (tab: ExamTab) => {
+    router.replace(`/exams/${examId}?tab=${tab}`, { scroll: false })
+  }
   const { toast } = useToast()
   const { user } = useAuth()
   const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
@@ -700,7 +715,7 @@ export default function ExamDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue="details" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={(v) => setExamTab(v as ExamTab)} className="space-y-4">
           <TabsList>
             <TabsTrigger value="details">Details</TabsTrigger>
             <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
@@ -2009,7 +2024,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Student ID</TableHead>
+              <TableHead>Student</TableHead>
               <TableHead>Score</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Review Status</TableHead>
@@ -2020,7 +2035,20 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
           <TableBody>
             {submissionsArray.map((submission) => (
               <TableRow key={submission.id}>
-                <TableCell>{submission.studentId}</TableCell>
+                <TableCell className="text-sm">
+                  <div className="flex flex-col" title={submission.studentId}>
+                    {(submission.studentName || submission.studentEmail) ? (
+                      <>
+                        {submission.studentName && <span className="font-medium">{submission.studentName}</span>}
+                        {submission.studentEmail && (
+                          <span className="text-muted-foreground text-xs">{submission.studentEmail}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">{submission.studentId?.substring(0, 12)}...</span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   {submission.score !== null && submission.score !== undefined 
                     ? `${submission.score} / ${submission.maxScore}` 
