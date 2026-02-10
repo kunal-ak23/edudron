@@ -6,6 +6,7 @@ import { Button } from '@kunal-ak23/edudron-ui-components'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Camera, CheckCircle, AlertCircle, Loader2, Clock, Monitor, Copy, Eye, Maximize, ChevronRight } from 'lucide-react'
 import { proctoringApi } from '@/lib/proctoring-api'
+import { logJourneyEvent } from '@/lib/journey-api'
 
 interface ExamSettings {
   blockCopyPaste?: boolean
@@ -74,6 +75,14 @@ export function ProctoringSetupDialog({
       setStep('preview')
       setLoading(false)
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (!isPreview && submissionId) {
+        logJourneyEvent(examId, submissionId, {
+          eventType: 'PERMISSION_DENIED_VIDEO',
+          severity: 'WARNING',
+          metadata: { reason: 'camera_denied', error: message }
+        })
+      }
       setError('Camera access denied. Please allow camera access to proceed with this proctored exam.')
       setLoading(false)
     }

@@ -13,10 +13,13 @@ import {
   Camera,
   Eye,
   Download,
-  Loader2
+  Loader2,
+  GitBranch,
+  List
 } from 'lucide-react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { proctoringApi, type ProctoringReport as ProctoringReportType, type ProctoringEvent } from '@/lib/proctoring-api'
+import { getJourneyEvents, type JourneyEvent } from '@/lib/journey-api'
 
 interface ProctoringReportProps {
   examId: string
@@ -27,6 +30,19 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
   const [report, setReport] = useState<ProctoringReportType | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null)
+  const [journeyEvents, setJourneyEvents] = useState<JourneyEvent[]>([])
+  const [journeyLoading, setJourneyLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState('events')
+
+  useEffect(() => {
+    if (activeTab === 'journey' && journeyEvents.length === 0 && !journeyLoading) {
+      setJourneyLoading(true)
+      getJourneyEvents(examId, submissionId)
+        .then((data) => setJourneyEvents(data))
+        .catch(() => {})
+        .finally(() => setJourneyLoading(false))
+    }
+  }, [activeTab, examId, submissionId, journeyEvents.length, journeyLoading])
 
   useEffect(() => {
     const loadReport = async () => {
@@ -123,10 +139,13 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
       </Card>
 
       {/* Tabs for detailed view */}
-      <Tabs defaultValue="events">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="events">
             Events ({report.events.length})
+          </TabsTrigger>
+          <TabsTrigger value="journey">
+            Assessment journey
           </TabsTrigger>
           <TabsTrigger value="photos">
             Photos ({report.proctoringData?.photos?.length || 0})
@@ -175,6 +194,109 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
                     ))}
                   </TableBody>
                 </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Assessment journey tab: timeline + flowchart */}
+        <TabsContent value="journey">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <GitBranch className="h-5 w-5" />
+                Assessment journey
+              </CardTitle>
+              <p className="text-sm text-gray-500">
+                Timeline of actions from Take test through Submit (including permission denials, auto-submit reason, drop-off).
+              </p>
+            </CardHeader>
+            <CardContent>
+              {journeyLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                </div>
+              ) : journeyEvents.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  No journey events recorded for this submission
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {/* Vertical flowchart */}
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
+                      <GitBranch className="h-4 w-4" />
+                      Flow
+                    </h4>
+                    <div className="relative pl-6 border-l-2 border-gray-200 space-y-0">
+                      {journeyEvents.map((evt, idx) => {
+                        const reason = evt.metadata?.reason as string | undefined
+                        const label = reason
+                          ? `${evt.eventType.replace(/_/g, ' ')} (${reason})`
+                          : evt.eventType.replace(/_/g, ' ')
+                        return (
+                          <div key={evt.id} className="relative flex gap-4 pb-6 last:pb-0">
+                            <div className="absolute -left-6 top-2 w-3 h-3 rounded-full bg-primary-500 border-2 border-white shadow" />
+                            <div className="flex-1 min-w-0 rounded-lg border bg-gray-50/50 px-3 py-2">
+                              <div className="font-medium text-sm text-gray-900">{label}</div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {new Date(evt.createdAt).toLocaleString()}
+                                {evt.severity && (
+                                  <Badge variant="secondary" className="ml-2 text-xs">{evt.severity}</Badge>
+                                )}
+                              </div>
+                              {evt.metadata && Object.keys(evt.metadata).length > 0 && (
+                                <details className="mt-2">
+                                  <summary className="text-xs text-gray-500 cursor-pointer">Metadata</summary>
+                                  <pre className="text-xs mt-1 p-2 bg-gray-100 rounded overflow-auto max-h-24">
+                                    {JSON.stringify(evt.metadata, null, 2)}
+                                  </pre>
+                                </details>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  {/* Table timeline */}
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-4 flex items-center gap-2">
+                      <List className="h-4 w-4" />
+                      Event log
+                    </h4>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Timestamp</TableHead>
+                          <TableHead>Event type</TableHead>
+                          <TableHead>Severity</TableHead>
+                          <TableHead>Details</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {journeyEvents.map((evt) => (
+                          <TableRow key={evt.id}>
+                            <TableCell className="text-sm">
+                              {new Date(evt.createdAt).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="font-medium text-sm">
+                              {evt.eventType.replace(/_/g, ' ')}
+                            </TableCell>
+                            <TableCell>{evt.severity ? getSeverityBadge(evt.severity) : '-'}</TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {evt.metadata && Object.keys(evt.metadata).length > 0 ? (
+                                <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(evt.metadata)}</pre>
+                              ) : (
+                                '-'
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>

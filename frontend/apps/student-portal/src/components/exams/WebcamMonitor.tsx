@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Camera, Video, VideoOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { proctoringApi } from '@/lib/proctoring-api'
+import { logJourneyEvent } from '@/lib/journey-api'
 
 interface WebcamMonitorProps {
   submissionId: string
@@ -51,6 +52,14 @@ export function WebcamMonitor({
         
         setIsActive(true)
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        if (!isPreview && submissionId) {
+          logJourneyEvent(examId, submissionId, {
+            eventType: 'PERMISSION_DENIED_VIDEO',
+            severity: 'WARNING',
+            metadata: { reason: 'webcam_access_failed', error: message }
+          })
+        }
         onError?.('Failed to access webcam. Proctoring may be affected.')
       }
     }

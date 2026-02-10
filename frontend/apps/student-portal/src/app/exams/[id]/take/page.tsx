@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast'
 import { ProctoringSetupDialog } from '@/components/exams/ProctoringSetupDialog'
 import { WebcamMonitor } from '@/components/exams/WebcamMonitor'
 import { proctoringApi } from '@/lib/proctoring-api'
+import { logJourneyEvent, sendJourneyEventBeacon } from '@/lib/journey-api'
 
 interface Exam {
   id: string
@@ -186,7 +187,9 @@ export default function TakeExamPage() {
         if (!isPreviewMode && hasUnsavedChangesRef.current && submissionId) {
           saveProgress()
         }
-        
+        if (!isPreviewMode && submissionId) {
+          logJourneyEvent(examId, submissionId, { eventType: 'PAGE_VISIBILITY_HIDDEN', severity: 'INFO', metadata: { unsavedChanges: hasUnsavedChangesRef.current } })
+        }
         // Increment tab switch count directly (not using setState callback to avoid double execution)
         const newCount = tabSwitchCount + 1
         setTabSwitchCount(newCount)
@@ -233,7 +236,8 @@ export default function TakeExamPage() {
             })
             setShowTabSwitchWarning(true)
             // Auto-submit after showing warning (not in preview mode)
-            if (!isPreviewMode) {
+            if (!isPreviewMode && submissionId) {
+              logJourneyEvent(examId, submissionId, { eventType: 'AUTO_SUBMIT_TRIGGERED', severity: 'WARNING', metadata: { reason: 'BLOCK_TAB_SWITCH', tabSwitchCount } })
               setTimeout(() => handleSubmit(), 2000)
             }
           } else if (remaining <= 0) {
@@ -245,7 +249,8 @@ export default function TakeExamPage() {
             })
             setShowTabSwitchWarning(true)
             // Auto-submit after showing warning (not in preview mode)
-            if (!isPreviewMode) {
+            if (!isPreviewMode && submissionId) {
+              logJourneyEvent(examId, submissionId, { eventType: 'AUTO_SUBMIT_TRIGGERED', severity: 'WARNING', metadata: { reason: 'TAB_SWITCH_MAX_EXCEEDED', tabSwitchCount, maxAllowed } })
               setTimeout(() => handleSubmit(), 3000)
             }
           } else {
@@ -273,6 +278,12 @@ export default function TakeExamPage() {
     if (isPreviewMode) return
     
     const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
+      if (submissionId) {
+        sendJourneyEventBeacon(examId, submissionId, {
+          eventType: 'PAGE_UNLOAD',
+          metadata: { unsavedChanges: hasUnsavedChangesRef.current, reason: 'user_closed_tab' }
+        })
+      }
       if (hasUnsavedChangesRef.current && submissionId) {
         // Try to save synchronously before leaving
         e.preventDefault()
@@ -364,6 +375,23 @@ export default function TakeExamPage() {
       window.removeEventListener('focus', handleFocus)
     }
   }, [exam, logProctoringEvent])
+
+  // Network online/offline for journey log
+  useEffect(() => {
+    if (!submissionId || isPreviewMode) return
+    const handleOnline = () => {
+      logJourneyEvent(examId, submissionId, { eventType: 'NETWORK_RESTORED', severity: 'INFO' })
+    }
+    const handleOffline = () => {
+      logJourneyEvent(examId, submissionId, { eventType: 'NETWORK_OFFLINE', severity: 'WARNING' })
+    }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [examId, submissionId, isPreviewMode])
 
   const loadExam = async () => {
     // Guard against double loading from React Strict Mode
@@ -681,6 +709,12 @@ export default function TakeExamPage() {
       // Start auto-save only if we have a submission ID
       if (submissionIdValue) {
         startAutoSave()
+        if (!isPreviewMode) {
+          logJourneyEvent(examId, submissionIdValue, { eventType: 'EXAM_PAGE_LOADED', severity: 'INFO' })
+          if (examWithQuestions.enableProctoring) {
+            logJourneyEvent(examId, submissionIdValue, { eventType: 'PROCTORING_SETUP_STARTED', severity: 'INFO' })
+          }
+        }
       } else {
       }
     } catch (error) {
@@ -701,7 +735,8 @@ export default function TakeExamPage() {
       if (exam && (exam as any).endTime) {
         const endTime = new Date((exam as any).endTime)
         const now = new Date()
-        if (now > endTime) {
+        if (now > endTime && submissionId) {
+          logJourneyEvent(examId, submissionId, { eventType: 'AUTO_SUBMIT_TRIGGERED', severity: 'INFO', metadata: { reason: 'EXAM_END_TIME_PASSED' } })
           handleSubmit()
           return
         }
@@ -835,6 +870,9 @@ export default function TakeExamPage() {
     }
 
     setSubmitting(true)
+    if (submissionId && !isPreviewMode) {
+      logJourneyEvent(examId, submissionId, { eventType: 'SUBMIT_CLICKED', severity: 'INFO' })
+    }
     try {
       const response = await apiClient.post(`/api/student/exams/${examId}/submit`, {
         submissionId,
@@ -876,6 +914,9 @@ export default function TakeExamPage() {
       }
       
       // Keep dialog open on error so user can try again or cancel
+      if (submissionId && !isPreviewMode) {
+        logJourneyEvent(examId, submissionId, { eventType: 'SUBMIT_FAILED', severity: 'WARNING', metadata: { error: errorMessage } })
+      }
       toast({
         title: 'Submission Failed',
         description: errorMessage || `Failed to submit exam (${error?.response?.status || 'Unknown error'}). Please try again.`,
@@ -888,6 +929,9 @@ export default function TakeExamPage() {
   }
 
   const handleTimeUp = () => {
+    if (submissionId && !isPreviewMode) {
+      logJourneyEvent(examId, submissionId, { eventType: 'AUTO_SUBMIT_TRIGGERED', severity: 'INFO', metadata: { reason: 'TIMER_EXPIRED' } })
+    }
     setShowSubmitDialog(true)
     handleSubmit()
   }
@@ -914,7 +958,9 @@ export default function TakeExamPage() {
       
       await elem.requestFullscreen()
       setIsFullscreen(true)
-      
+      if (submissionId && !isPreviewMode) {
+        logJourneyEvent(examId, submissionId, { eventType: 'FULLSCREEN_ENTERED', severity: 'INFO' })
+      }
       // Reset the flag after a longer delay to allow the transition to fully complete
       setTimeout(() => {
         isFullscreenTransitionRef.current = false
@@ -955,6 +1001,9 @@ export default function TakeExamPage() {
           logProctoringEvent('FULLSCREEN_EXIT', 'WARNING', {
             message: 'Student exited fullscreen mode'
           })
+          if (submissionId) {
+            logJourneyEvent(examId, submissionId, { eventType: 'FULLSCREEN_EXIT', severity: 'WARNING', metadata: { message: 'Student exited fullscreen mode' } })
+          }
         }
       }
       
@@ -969,7 +1018,7 @@ export default function TakeExamPage() {
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }
-  }, [exam?.enableProctoring, isPreviewMode, proctoringComplete])
+  }, [exam?.enableProctoring, isPreviewMode, proctoringComplete, examId, submissionId])
 
   // Ensure questions is always an array
   const questions = Array.isArray(exam?.questions) ? exam.questions : []
@@ -1430,6 +1479,10 @@ export default function TakeExamPage() {
                           if (hasUnsavedChangesRef.current && submissionId) {
                             await saveProgress(true)
                           }
+                          const nextIndex = Math.max(0, currentQuestionIndex - 1)
+                          if (submissionId && !isPreviewMode) {
+                            logJourneyEvent(examId, submissionId, { eventType: 'QUESTION_NAVIGATED', metadata: { fromIndex: currentQuestionIndex, toIndex: nextIndex, trigger: 'prev' } })
+                          }
                           setCurrentQuestionIndex(prev => Math.max(0, prev - 1))
                         }}
                         disabled={currentQuestionIndex === 0}
@@ -1442,7 +1495,10 @@ export default function TakeExamPage() {
                           if (hasUnsavedChangesRef.current && submissionId) {
                             await saveProgress(true)
                           }
-                          
+                          const nextIndex = currentQuestionIndex < totalQuestions - 1 ? currentQuestionIndex + 1 : currentQuestionIndex
+                          if (submissionId && !isPreviewMode) {
+                            logJourneyEvent(examId, submissionId, { eventType: 'QUESTION_NAVIGATED', metadata: { fromIndex: currentQuestionIndex, toIndex: nextIndex, trigger: currentQuestionIndex < totalQuestions - 1 ? 'next' : 'review' } })
+                          }
                           if (currentQuestionIndex < totalQuestions - 1) {
                             setCurrentQuestionIndex(prev => prev + 1)
                           } else {

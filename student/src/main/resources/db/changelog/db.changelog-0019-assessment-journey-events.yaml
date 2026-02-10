@@ -1,0 +1,74 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0019-create-assessment-journey-events-table
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - onError: HALT
+        - not:
+            - tableExists:
+                tableName: assessment_journey_events
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: assessment_journey_events
+            schemaName: student
+            columns:
+              - column:
+                  name: id
+                  type: varchar(26)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: submission_id
+                  type: varchar(26)
+                  remarks: "Nullable for events before submission exists (e.g. EXAM_TAKE_CLICKED)"
+              - column:
+                  name: assessment_id
+                  type: varchar(26)
+                  remarks: "Exam/assessment ID for events without submission_id"
+              - column:
+                  name: student_id
+                  type: varchar(26)
+                  remarks: "Student ID for events without submission_id"
+              - column:
+                  name: event_type
+                  type: varchar(80)
+                  constraints:
+                    nullable: false
+                  remarks: "e.g. EXAM_TAKE_CLICKED, EXAM_STARTED, AUTO_SUBMIT_TRIGGERED"
+              - column:
+                  name: severity
+                  type: varchar(20)
+                  remarks: "Optional: INFO, WARNING, VIOLATION"
+              - column:
+                  name: metadata
+                  type: jsonb
+                  remarks: "reason, details, trigger, etc."
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  defaultValueComputed: now()
+                  constraints:
+                    nullable: false
+        - createIndex:
+            tableName: assessment_journey_events
+            schemaName: student
+            indexName: idx_assessment_journey_events_client_submission_created
+            columns:
+              - column: { name: client_id }
+              - column: { name: submission_id }
+              - column: { name: created_at }
+        - createIndex:
+            tableName: assessment_journey_events
+            schemaName: student
+            indexName: idx_assessment_journey_events_submission_created
+            columns:
+              - column: { name: submission_id }
+              - column: { name: created_at }

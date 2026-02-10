@@ -9,6 +9,7 @@ import { Clock, Calendar, CheckCircle, Loader2, PlayCircle, ClipboardList, Chevr
 import { StudentLayout } from '@/components/StudentLayout'
 import { ProtectedRoute } from '@kunal-ak23/edudron-ui-components'
 import { apiClient } from '@/lib/api'
+import { logJourneyEventWithoutSubmission } from '@/lib/journey-api'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 
 interface Exam {
@@ -356,7 +357,10 @@ export default function ExamsPage() {
                             )}
                           </div>
                           <Button 
-                            onClick={() => router.push(`/exams/${exam.id}/take`)}
+                            onClick={() => {
+                              logJourneyEventWithoutSubmission(exam.id, { eventType: 'EXAM_TAKE_CLICKED', severity: 'INFO' })
+                              router.push(`/exams/${exam.id}/take`)
+                            }}
                             disabled={
                               !!(exam.timingMode !== 'FLEXIBLE_START' && exam.endTime && new Date() > new Date(exam.endTime)) ||
                               !!(exam.maxAttempts && exam.attemptsTaken && exam.attemptsTaken >= exam.maxAttempts)
@@ -439,6 +443,7 @@ export default function ExamsPage() {
                               if (isAvailable) {
                                 return (
                                   <Button onClick={() => {
+                                    logJourneyEventWithoutSubmission(exam.id, { eventType: 'EXAM_TAKE_CLICKED', severity: 'INFO' })
                                     router.push(`/exams/${exam.id}/take`)
                                   }}>
                                     Take Exam

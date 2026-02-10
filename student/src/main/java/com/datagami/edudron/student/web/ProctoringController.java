@@ -1,6 +1,8 @@
 package com.datagami.edudron.student.web;
 
+import com.datagami.edudron.student.domain.AssessmentJourneyEvent;
 import com.datagami.edudron.student.domain.ProctoringEvent;
+import com.datagami.edudron.student.service.AssessmentJourneyService;
 import com.datagami.edudron.student.service.ProctoringPhotoService;
 import com.datagami.edudron.student.service.ProctoringService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,6 +31,9 @@ public class ProctoringController {
     
     @Autowired
     private ProctoringPhotoService proctoringPhotoService;
+
+    @Autowired
+    private AssessmentJourneyService assessmentJourneyService;
     
     @PostMapping("/{examId}/submissions/{submissionId}/proctoring/log-event")
     @Operation(summary = "Log a proctoring event", description = "Records a proctoring event during exam taking")
@@ -189,6 +194,77 @@ public class ProctoringController {
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
             logger.error("Error getting proctoring events", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    // ----- Assessment journey events (full timeline from Take test to Submit) -----
+
+    @PostMapping("/{examId}/submissions/{submissionId}/journey/events")
+    @Operation(summary = "Log assessment journey event", description = "Records a journey event for the submission (student)")
+    public ResponseEntity<AssessmentJourneyEvent> logJourneyEvent(
+            @PathVariable String examId,
+            @PathVariable String submissionId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            String eventType = (String) request.get("eventType");
+            if (eventType == null || eventType.isBlank()) {
+                return ResponseEntity.badRequest().build();
+            }
+            String severity = request.get("severity") != null ? request.get("severity").toString() : null;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metadata = request.get("metadata") != null ?
+                    (Map<String, Object>) request.get("metadata") : new HashMap<>();
+            AssessmentJourneyEvent event = assessmentJourneyService.recordEvent(
+                    submissionId, eventType, severity, metadata);
+            return ResponseEntity.ok(event);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Journey event validation failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            logger.error("Error logging journey event", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/{examId}/journey/events")
+    @Operation(summary = "Log early journey event", description = "Records a journey event before submission exists (e.g. EXAM_TAKE_CLICKED)")
+    public ResponseEntity<AssessmentJourneyEvent> logJourneyEventWithoutSubmission(
+            @PathVariable String examId,
+            @RequestBody Map<String, Object> request) {
+        try {
+            String eventType = (String) request.get("eventType");
+            if (eventType == null || eventType.isBlank()) {
+                return ResponseEntity.badRequest().build();
+            }
+            String severity = request.get("severity") != null ? request.get("severity").toString() : null;
+            @SuppressWarnings("unchecked")
+            Map<String, Object> metadata = request.get("metadata") != null ?
+                    (Map<String, Object>) request.get("metadata") : new HashMap<>();
+            AssessmentJourneyEvent event = assessmentJourneyService.recordEventWithoutSubmission(
+                    examId, eventType, severity, metadata);
+            return ResponseEntity.ok(event);
+        } catch (IllegalArgumentException e) {
+            logger.warn("Journey event validation failed: {}", e.getMessage());
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            logger.error("Error logging journey event", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/{examId}/submissions/{submissionId}/journey/events")
+    @Operation(summary = "Get assessment journey events", description = "Returns timeline of journey events for a submission (teachers/admins)")
+    public ResponseEntity<List<AssessmentJourneyEvent>> getJourneyEvents(
+            @PathVariable String examId,
+            @PathVariable String submissionId) {
+        try {
+            List<AssessmentJourneyEvent> events = assessmentJourneyService.getJourneyEvents(submissionId);
+            return ResponseEntity.ok(events);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        } catch (Exception e) {
+            logger.error("Error getting journey events", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
