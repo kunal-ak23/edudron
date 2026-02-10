@@ -15,8 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, Loader2, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone, Play, Square } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, questionsApi, type QuestionData } from '@/lib/api'
-import { proctoringApi } from '@/lib/proctoring-api'
-import { ProctoringImagesViewer, type ProctoringImageItem } from '@/components/exams/ProctoringImagesViewer'
+import { ProctoringReport } from '@/components/exams/ProctoringReport'
 import { QuestionEditor } from '@/components/exams/QuestionEditor'
 import {
   Dialog,
@@ -1916,8 +1915,6 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
   })
   const [questionGrades, setQuestionGrades] = useState<Record<string, { score: string; feedback: string }>>({})
   const [savingGrade, setSavingGrade] = useState(false)
-  const [proctoringReportLoading, setProctoringReportLoading] = useState(false)
-  const [proctoringImages, setProctoringImages] = useState<ProctoringImageItem[]>([])
   const [markingCheating, setMarkingCheating] = useState(false)
   const { toast } = useToast()
 
@@ -1949,39 +1946,6 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
   useEffect(() => {
     loadSubmissions()
   }, [examId, loadSubmissions])
-
-  useEffect(() => {
-    if (!showProctoringImagesDialog || !proctoringImagesSubmissionId) {
-      setProctoringImages([])
-      return
-    }
-    let cancelled = false
-    setProctoringReportLoading(true)
-    setProctoringImages([])
-    proctoringApi.getReport(examId, proctoringImagesSubmissionId)
-      .then((response) => {
-        if (cancelled) return
-        const report = (response as any)?.data ?? response
-        const images: ProctoringImageItem[] = []
-        if (report?.identityVerificationPhotoUrl) {
-          images.push({
-            url: report.identityVerificationPhotoUrl,
-            label: 'Identity verification'
-          })
-        }
-        report?.proctoringData?.photos?.forEach((p: { url: string; capturedAt: string }) => {
-          images.push({ url: p.url, capturedAt: p.capturedAt })
-        })
-        setProctoringImages(images)
-      })
-      .catch(() => {
-        if (!cancelled) setProctoringImages([])
-      })
-      .finally(() => {
-        if (!cancelled) setProctoringReportLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [showProctoringImagesDialog, proctoringImagesSubmissionId, examId])
 
   if (loading) {
     return (
@@ -2699,22 +2663,13 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
       >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Proctoring images</DialogTitle>
+            <DialogTitle>Proctoring report</DialogTitle>
             <DialogDescription>
               {proctoringImagesSubmissionId && `Submission: ${proctoringImagesSubmissionId}`}
             </DialogDescription>
           </DialogHeader>
-          {proctoringReportLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-            </div>
-          ) : proctoringImages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-              <Camera className="h-12 w-12 mb-2 opacity-50" />
-              <p>No proctoring data or images captured for this submission</p>
-            </div>
-          ) : (
-            <ProctoringImagesViewer images={proctoringImages} />
+          {proctoringImagesSubmissionId && (
+            <ProctoringReport examId={examId} submissionId={proctoringImagesSubmissionId} />
           )}
         </DialogContent>
       </Dialog>
