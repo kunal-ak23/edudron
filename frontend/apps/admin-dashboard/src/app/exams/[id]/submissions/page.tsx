@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,6 +15,13 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { 
   Loader2, 
   ArrowLeft, 
@@ -29,8 +36,15 @@ import {
   Trash2
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { apiClient } from '@/lib/api'
+import { apiClient, enrollmentsApi } from '@/lib/api'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@kunal-ak23/edudron-shared-utils'
+
+/** Eligible student (section/class have name+email; course-wide may have id only) */
+interface EligibleStudent {
+  id: string
+  name?: string
+  email?: string
+}
 
 interface Submission {
   id: string
@@ -55,6 +69,9 @@ interface Exam {
   description?: string
   reviewMethod?: string
   isMcqOnly?: boolean
+  courseId?: string
+  sectionId?: string
+  classId?: string
 }
 
 export const dynamic = 'force-dynamic'
@@ -67,7 +84,6 @@ export default function ExamSubmissionsPage() {
   
   const [exam, setExam] = useState<Exam | null>(null)
   const [submissions, setSubmissions] = useState<Submission[]>([])
-  const [filteredSubmissions, setFilteredSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(new Set())
   const [regrading, setRegrading] = useState(false)
@@ -76,24 +92,73 @@ export default function ExamSubmissionsPage() {
   const [markingCheatingSubmissions, setMarkingCheatingSubmissions] = useState<Set<string>>(new Set())
   const [discardingSubmissions, setDiscardingSubmissions] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
+  const [attemptFilter, setAttemptFilter] = useState<'all' | 'discardable'>('all')
+  const [pendingSearchQuery, setPendingSearchQuery] = useState('')
+  const [eligibleStudents, setEligibleStudents] = useState<EligibleStudent[] | null>(null)
 
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      
+      setEligibleStudents(null)
+
       // Load exam details
       const examResponse = await apiClient.get<any>(`/api/exams/${examId}`)
       const examData = (examResponse as any)?.data || examResponse
       setExam(examData)
-      
+
       // Load submissions
       const submissionsResponse = await apiClient.get<any>(`/api/exams/${examId}/submissions`)
-      const submissionsData = Array.isArray(submissionsResponse) 
-        ? submissionsResponse 
+      const submissionsData = Array.isArray(submissionsResponse)
+        ? submissionsResponse
         : (submissionsResponse as any)?.data || []
-      
       setSubmissions(submissionsData)
-      setFilteredSubmissions(submissionsData)
+
+      // Fetch eligible students (section / class / course) for appeared vs pending
+      if (examData?.sectionId) {
+        try {
+          const sectionStudents = await enrollmentsApi.getStudentsBySection(examData.sectionId)
+          setEligibleStudents(
+            (sectionStudents || []).map((s: { id: string; name?: string; email?: string }) => ({
+              id: s.id,
+              name: s.name,
+              email: s.email
+            }))
+          )
+        } catch {
+          setEligibleStudents(null)
+        }
+      } else if (examData?.classId) {
+        try {
+          const classStudents = await enrollmentsApi.getStudentsByClass(examData.classId)
+          setEligibleStudents(
+            (classStudents || []).map((s: { id: string; name?: string; email?: string }) => ({
+              id: s.id,
+              name: s.name,
+              email: s.email
+            }))
+          )
+        } catch {
+          setEligibleStudents(null)
+        }
+      } else if (examData?.courseId) {
+        try {
+          const { content } = await enrollmentsApi.listAllEnrollmentsPaginated(0, 500, {
+            courseId: examData.courseId
+          })
+          const byId = new Map<string, EligibleStudent>()
+          ;(content || []).forEach((e: { studentId: string; studentEmail?: string }) => {
+            if (e.studentId && !byId.has(e.studentId)) {
+              byId.set(e.studentId, {
+                id: e.studentId,
+                email: e.studentEmail
+              })
+            }
+          })
+          setEligibleStudents(Array.from(byId.values()))
+        } catch {
+          setEligibleStudents(null)
+        }
+      }
     } catch (error) {
       toast({
         title: 'Error',
@@ -109,21 +174,47 @@ export default function ExamSubmissionsPage() {
     loadData()
   }, [loadData])
 
-  useEffect(() => {
-    // Filter submissions by search query (student ID, name or email)
+  const filteredSubmissions = useMemo(() => {
+    let list = submissions
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      setFilteredSubmissions(
-        submissions.filter(s =>
+      list = list.filter(
+        (s) =>
           s.studentId.toLowerCase().includes(query) ||
           (s.studentName?.toLowerCase().includes(query)) ||
           (s.studentEmail?.toLowerCase().includes(query))
-        )
       )
-    } else {
-      setFilteredSubmissions(submissions)
     }
-  }, [submissions, searchQuery])
+    if (attemptFilter === 'discardable') {
+      list = list.filter((s) => s.completedAt == null)
+    }
+    return list
+  }, [submissions, searchQuery, attemptFilter])
+
+  const appearedSet = useMemo(
+    () => new Set(submissions.map((s) => s.studentId)),
+    [submissions]
+  )
+  const pendingList = useMemo(
+    () =>
+      eligibleStudents
+        ? eligibleStudents.filter((e) => !appearedSet.has(e.id))
+        : [],
+    [eligibleStudents, appearedSet]
+  )
+  const filteredPendingList = useMemo(() => {
+    if (!pendingSearchQuery.trim()) return pendingList
+    const q = pendingSearchQuery.toLowerCase().trim()
+    return pendingList.filter(
+      (s) =>
+        (s.name?.toLowerCase().includes(q)) ||
+        (s.email?.toLowerCase().includes(q)) ||
+        s.id.toLowerCase().includes(q)
+    )
+  }, [pendingList, pendingSearchQuery])
+  const eligibleCount = eligibleStudents?.length ?? 0
+  const appearedCount = appearedSet.size
+  const showEligiblePending = eligibleStudents != null
 
   const toggleSubmission = (submissionId: string) => {
     const newSelected = new Set(selectedSubmissions)
@@ -471,17 +562,69 @@ export default function ExamSubmissionsPage() {
         </Card>
       </div>
 
-      {/* Search Filter */}
+      {showEligiblePending && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Eligible
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{eligibleCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">Students who can take this exam</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Appeared
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{appearedCount}</div>
+              <p className="text-xs text-muted-foreground mt-1">At least one submission (in progress or submitted)</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Pending
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingList.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">Eligible but not yet appeared</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Search and attempt filter */}
       <Card>
         <CardContent className="pt-6">
-          <div className="max-w-md">
-            <Label htmlFor="search">Search by student ID, name or email</Label>
-            <Input
-              id="search"
-              placeholder="Student ID, name or email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex-1 max-w-md">
+              <Label htmlFor="search">Search by student ID, name or email</Label>
+              <Input
+                id="search"
+                placeholder="Student ID, name or email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            <div className="w-full sm:w-56">
+              <Label>Show</Label>
+              <Select value={attemptFilter} onValueChange={(v: 'all' | 'discardable') => setAttemptFilter(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All submissions</SelectItem>
+                  <SelectItem value="discardable">Discardable only (in progress)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -491,7 +634,13 @@ export default function ExamSubmissionsPage() {
         <CardContent className="p-0">
           {filteredSubmissions.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
-              {searchQuery ? 'No submissions found matching your search' : 'No submissions yet'}
+              {attemptFilter === 'discardable'
+                ? searchQuery
+                  ? 'No discardable (in progress) submissions match your search.'
+                  : 'No discardable submissions. All attempts are submitted.'
+                : searchQuery
+                  ? 'No submissions found matching your search.'
+                  : 'No submissions yet.'}
             </div>
           ) : (
             <Table>
@@ -688,6 +837,65 @@ export default function ExamSubmissionsPage() {
           )}
         </CardContent>
       </Card>
+
+      {showEligiblePending && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending students</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Eligible for this exam but have not yet appeared (no submission)
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {pendingList.length > 0 && (
+              <div className="max-w-md">
+                <Label htmlFor="pending-search">Search by name, email or student ID</Label>
+                <Input
+                  id="pending-search"
+                  placeholder="Name, email or student ID..."
+                  value={pendingSearchQuery}
+                  onChange={(e) => setPendingSearchQuery(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+            )}
+            {pendingList.length === 0 ? (
+              <p className="text-muted-foreground text-center py-6">
+                No pending students. All eligible students have at least one submission.
+              </p>
+            ) : filteredPendingList.length === 0 ? (
+              <p className="text-muted-foreground text-center py-6">
+                No pending students match your search.
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Student ID</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredPendingList.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="text-sm font-medium">
+                        {student.name ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {student.email ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground font-mono">
+                        {student.id}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
