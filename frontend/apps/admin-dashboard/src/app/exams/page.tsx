@@ -190,6 +190,15 @@ export default function ExamsPage() {
 
   const hasActiveFilters = debouncedSearch || statusFilter !== 'all' || timingModeFilter !== 'all'
 
+  // Status tab options: all | scheduled (DRAFT + SCHEDULED) | active (LIVE) | completed
+  const statusTabs = [
+    { value: 'all', label: 'All', count: statusCounts.all ?? totalElements },
+    { value: 'DRAFT', label: 'Draft', count: statusCounts.DRAFT || 0 },
+    { value: 'SCHEDULED', label: 'Scheduled', count: statusCounts.SCHEDULED || 0 },
+    { value: 'LIVE', label: 'Active', count: statusCounts.LIVE || 0 },
+    { value: 'COMPLETED', label: 'Completed', count: statusCounts.COMPLETED || 0 },
+  ]
+
   const clearFilters = () => {
     setSearchQuery('')
     setDebouncedSearch('')
@@ -222,6 +231,24 @@ export default function ExamsPage() {
         )}
       </div>
 
+      {/* Status Tabs */}
+      <div className="flex flex-wrap gap-1 border-b border-gray-200 pb-2">
+        {statusTabs.map((tab) => (
+          <Button
+            key={tab.value}
+            variant={statusFilter === tab.value ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setStatusFilter(tab.value)}
+            className="gap-1.5"
+          >
+            {tab.label}
+            <Badge variant={statusFilter === tab.value ? 'secondary' : 'outline'} className="ml-0.5 text-xs">
+              {tab.value === 'all' ? (statusCounts.all ?? totalElements) : tab.count}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
       {/* Filters */}
       <Card>
         <CardContent className="py-4">
@@ -237,16 +264,16 @@ export default function ExamsPage() {
               />
             </div>
             
-            {/* Status Filter */}
+            {/* Status Filter (dropdown mirror of tabs) */}
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-full md:w-[180px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status ({statusCounts.all || 0})</SelectItem>
+                <SelectItem value="all">All Status ({statusCounts.all ?? totalElements})</SelectItem>
                 <SelectItem value="DRAFT">Draft ({statusCounts.DRAFT || 0})</SelectItem>
                 <SelectItem value="SCHEDULED">Scheduled ({statusCounts.SCHEDULED || 0})</SelectItem>
-                <SelectItem value="LIVE">Live ({statusCounts.LIVE || 0})</SelectItem>
+                <SelectItem value="LIVE">Active ({statusCounts.LIVE || 0})</SelectItem>
                 <SelectItem value="COMPLETED">Completed ({statusCounts.COMPLETED || 0})</SelectItem>
               </SelectContent>
             </Select>
