@@ -22,7 +22,7 @@ import { useToast } from '@/hooks/use-toast'
 import { ProctoringSetupDialog } from '@/components/exams/ProctoringSetupDialog'
 import { WebcamMonitor } from '@/components/exams/WebcamMonitor'
 import { proctoringApi } from '@/lib/proctoring-api'
-import { logJourneyEvent, sendJourneyEventBeacon } from '@/lib/journey-api'
+import { logJourneyEvent, logJourneyEventQuestionNavThrottled, sendJourneyEventBeacon } from '@/lib/journey-api'
 
 interface Exam {
   id: string
@@ -1481,7 +1481,7 @@ export default function TakeExamPage() {
                           }
                           const nextIndex = Math.max(0, currentQuestionIndex - 1)
                           if (submissionId && !isPreviewMode) {
-                            logJourneyEvent(examId, submissionId, { eventType: 'QUESTION_NAVIGATED', metadata: { fromIndex: currentQuestionIndex, toIndex: nextIndex, trigger: 'prev' } })
+                            logJourneyEventQuestionNavThrottled(examId, submissionId, { fromIndex: currentQuestionIndex, toIndex: nextIndex, trigger: 'prev' })
                           }
                           setCurrentQuestionIndex(prev => Math.max(0, prev - 1))
                         }}
@@ -1497,7 +1497,7 @@ export default function TakeExamPage() {
                           }
                           const nextIndex = currentQuestionIndex < totalQuestions - 1 ? currentQuestionIndex + 1 : currentQuestionIndex
                           if (submissionId && !isPreviewMode) {
-                            logJourneyEvent(examId, submissionId, { eventType: 'QUESTION_NAVIGATED', metadata: { fromIndex: currentQuestionIndex, toIndex: nextIndex, trigger: currentQuestionIndex < totalQuestions - 1 ? 'next' : 'review' } })
+                            logJourneyEventQuestionNavThrottled(examId, submissionId, { fromIndex: currentQuestionIndex, toIndex: nextIndex, trigger: currentQuestionIndex < totalQuestions - 1 ? 'next' : 'review' })
                           }
                           if (currentQuestionIndex < totalQuestions - 1) {
                             setCurrentQuestionIndex(prev => prev + 1)

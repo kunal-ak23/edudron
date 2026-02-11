@@ -116,12 +116,8 @@ public class ExamSubmissionService {
                 }
                 logger.info("Resuming exam attempt: {} for student: {} with {} seconds remaining", 
                     examId, studentId, submission.getTimeRemainingSeconds());
-                try {
-                    assessmentJourneyService.recordEvent(submission.getId(), "EXAM_STARTED", "INFO",
-                            Map.of("resumed", true, "timeRemainingSeconds", submission.getTimeRemainingSeconds()));
-                } catch (Exception e) {
-                    logger.warn("Failed to log EXAM_STARTED (resume) journey event", e);
-                }
+                assessmentJourneyService.recordEventAsync(submission.getId(), "EXAM_STARTED", "INFO",
+                        Map.of("resumed", true, "timeRemainingSeconds", submission.getTimeRemainingSeconds() != null ? submission.getTimeRemainingSeconds() : 0));
                 return submission;
             }
             
@@ -180,12 +176,8 @@ public class ExamSubmissionService {
         AssessmentSubmission saved = submissionRepository.save(submission);
         logger.info("Started exam attempt: {} for student: {} with {} seconds (timingMode: {})", 
             examId, studentId, effectiveTimeLimit, timingMode);
-        try {
-            assessmentJourneyService.recordEvent(saved.getId(), "EXAM_STARTED", "INFO",
-                    Map.of("timingMode", timingMode.name(), "timeLimitSeconds", effectiveTimeLimit));
-        } catch (Exception e) {
-            logger.warn("Failed to log EXAM_STARTED journey event", e);
-        }
+        assessmentJourneyService.recordEventAsync(saved.getId(), "EXAM_STARTED", "INFO",
+                Map.of("timingMode", timingMode.name(), "timeLimitSeconds", effectiveTimeLimit != null ? effectiveTimeLimit : 0));
         return saved;
     }
     
@@ -288,12 +280,8 @@ public class ExamSubmissionService {
         }
         
         AssessmentSubmission saved = submissionRepository.save(submission);
-        try {
-            assessmentJourneyService.recordEvent(submissionId, "SAVE_PROGRESS", "INFO",
-                    Map.of("trigger", "api", "timeRemainingSeconds", timeRemainingSeconds != null ? timeRemainingSeconds : 0));
-        } catch (Exception e) {
-            logger.warn("Failed to log SAVE_PROGRESS journey event", e);
-        }
+        assessmentJourneyService.recordEventAsync(submissionId, "SAVE_PROGRESS", "INFO",
+                Map.of("trigger", "api", "timeRemainingSeconds", timeRemainingSeconds != null ? timeRemainingSeconds : 0));
         return saved;
     }
     
@@ -344,12 +332,8 @@ public class ExamSubmissionService {
             passed,
             submissionData
         );
-        try {
-            assessmentJourneyService.recordEvent(submissionId, "SUBMIT_SUCCESS", "INFO",
-                    Map.of("score", score != null ? score : 0, "maxScore", maxScore != null ? maxScore : 0, "passed", passed));
-        } catch (Exception e) {
-            logger.warn("Failed to log SUBMIT_SUCCESS journey event", e);
-        }
+        assessmentJourneyService.recordEventAsync(submissionId, "SUBMIT_SUCCESS", "INFO",
+                Map.of("score", score != null ? score : 0, "maxScore", maxScore != null ? maxScore : 0, "passed", passed));
         return saved;
     }
     

@@ -46,6 +46,46 @@ export async function logJourneyEventWithoutSubmission(
   }
 }
 
+/** Throttle interval for QUESTION_NAVIGATED to avoid flooding the API (ms). */
+const QUESTION_NAV_THROTTLE_MS = 2500
+
+let questionNavPending: {
+  examId: string
+  submissionId: string
+  metadata: Record<string, unknown>
+} | null = null
+let questionNavTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Log QUESTION_NAVIGATED at most once per QUESTION_NAV_THROTTLE_MS.
+ * Rapid prev/next clicks send a single event with the latest metadata after the throttle window.
+ */
+export function logJourneyEventQuestionNavThrottled(
+  examId: string,
+  submissionId: string,
+  metadata: Record<string, unknown>
+): void {
+  const payload = { eventType: 'QUESTION_NAVIGATED', severity: 'INFO' as const, metadata }
+  questionNavPending = { examId, submissionId, metadata }
+
+  const flush = () => {
+    if (questionNavPending) {
+      logJourneyEvent(examId, submissionId, {
+        eventType: 'QUESTION_NAVIGATED',
+        severity: 'INFO',
+        metadata: questionNavPending.metadata
+      })
+      questionNavPending = null
+    }
+    questionNavTimer = null
+  }
+
+  if (questionNavTimer !== null) {
+    return // already scheduled
+  }
+  questionNavTimer = setTimeout(flush, QUESTION_NAV_THROTTLE_MS)
+}
+
 /**
  * Send a journey event via sendBeacon (for page unload / visibility hidden).
  * Use when the page may be closing and fetch might be cancelled.

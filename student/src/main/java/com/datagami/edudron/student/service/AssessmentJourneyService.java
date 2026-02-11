@@ -11,7 +11,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
@@ -59,6 +61,38 @@ public class AssessmentJourneyService {
         }
 
         return doRecord(clientId, submissionId, submission.getAssessmentId(), studentId, eventType, severity, metadata);
+    }
+
+    /**
+     * Record a journey event asynchronously in a new transaction (releases caller's connection quickly).
+     * Use from services that are inside a long transaction (e.g. startExam, saveProgress, submitExam).
+     * Does not use TenantContext (runs in a different thread); loads submission to get client/student/assessment ids.
+     */
+    @Async("eventTaskExecutor")
+    public void recordEventAsync(
+            String submissionId,
+            String eventType,
+            String severity,
+            Map<String, Object> metadata) {
+        try {
+            doRecordInNewTransaction(submissionId, eventType, severity, metadata);
+        } catch (Exception e) {
+            logger.warn("Failed to record journey event async: {} for submission: {}", eventType, submissionId, e);
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = false)
+    public void doRecordInNewTransaction(String submissionId, String eventType, String severity, Map<String, Object> metadata) {
+        AssessmentSubmission submission = submissionRepository.findById(submissionId)
+                .orElse(null);
+        if (submission == null) {
+            logger.debug("Submission not found for async journey event: {}", submissionId);
+            return;
+        }
+        UUID clientId = submission.getClientId();
+        String studentId = submission.getStudentId();
+        String assessmentId = submission.getAssessmentId();
+        doRecord(clientId, submissionId, assessmentId, studentId, eventType, severity, metadata);
     }
 
     /**
