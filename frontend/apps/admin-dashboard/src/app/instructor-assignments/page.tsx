@@ -33,6 +33,7 @@ import { Plus, Loader2, Trash2, Users, BookOpen, GraduationCap } from 'lucide-re
 import { apiClient } from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +90,8 @@ export default function InstructorAssignmentsPage() {
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [assignmentToDelete, setAssignmentToDelete] = useState<string | null>(null)
 
   // Form state
   const [selectedInstructor, setSelectedInstructor] = useState('')
@@ -203,11 +206,17 @@ export default function InstructorAssignmentsPage() {
     }
   }
 
-  const handleDeleteAssignment = async (assignmentId: string) => {
-    if (!confirm('Are you sure you want to remove this assignment?')) {
+  const openDeleteAssignmentDialog = (assignmentId: string) => {
+    setAssignmentToDelete(assignmentId)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleDeleteAssignment = async () => {
+    if (!assignmentToDelete) {
+      setDeleteDialogOpen(false)
       return
     }
-
+    const assignmentId = assignmentToDelete
     try {
       await apiClient.delete(`/api/instructor-assignments/${assignmentId}`)
 
@@ -223,6 +232,9 @@ export default function InstructorAssignmentsPage() {
         description: extractErrorMessage(error),
         variant: 'destructive',
       })
+    } finally {
+      setDeleteDialogOpen(false)
+      setAssignmentToDelete(null)
     }
   }
 
@@ -352,7 +364,7 @@ export default function InstructorAssignmentsPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteAssignment(assignment.id)}
+                              onClick={() => openDeleteAssignmentDialog(assignment.id)}
                             >
                               <Trash2 className="w-4 h-4 text-destructive" />
                             </Button>
@@ -475,6 +487,23 @@ export default function InstructorAssignmentsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmationDialog
+        isOpen={deleteDialogOpen && !!assignmentToDelete}
+        onClose={() => {
+          if (!submitting) {
+            setDeleteDialogOpen(false)
+            setAssignmentToDelete(null)
+          }
+        }}
+        onConfirm={handleDeleteAssignment}
+        title="Remove assignment"
+        description="Are you sure you want to remove this instructor assignment?"
+        confirmText="Remove"
+        cancelText="Cancel"
+        variant="destructive"
+        isLoading={submitting}
+      />
     </div>
   )
 }

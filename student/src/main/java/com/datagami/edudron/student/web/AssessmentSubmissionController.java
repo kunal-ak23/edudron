@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -128,6 +129,23 @@ public class AssessmentSubmissionController {
             @PathVariable String submissionId) {
         submissionService.discardInProgressSubmission(assessmentId, submissionId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/assessments/{assessmentId}/submissions/reset-bulk")
+    @Operation(summary = "Bulk reset test for students", description = "Delete multiple submissions so those students can take the test again. Max 500 per request (instructor/admin only).")
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<?> resetSubmissionsBulk(
+            @PathVariable String assessmentId,
+            @RequestBody Map<String, Object> request) {
+        List<String> submissionIds = request != null ? (List<String>) request.get("submissionIds") : null;
+        if (submissionIds == null || submissionIds.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "submissionIds must not be null or empty"));
+        }
+        try {
+            return ResponseEntity.ok(submissionService.resetSubmissionsBulk(assessmentId, submissionIds));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @PutMapping("/assessments/submissions/{submissionId}/mark-cheating")

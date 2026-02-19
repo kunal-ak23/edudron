@@ -29,6 +29,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, enrollmentsApi } from '@/lib/api'
+import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@kunal-ak23/edudron-shared-utils'
 
 /** Eligible student (section/class have name+email; course-wide may have id only) */
@@ -83,6 +84,10 @@ export default function ExamSubmissionsPage() {
   const [regradingSubmissions, setRegradingSubmissions] = useState<Set<string>>(new Set())
   const [markingCheatingSubmissions, setMarkingCheatingSubmissions] = useState<Set<string>>(new Set())
   const [resettingSubmissions, setResettingSubmissions] = useState<Set<string>>(new Set())
+  const [resettingBulk, setResettingBulk] = useState(false)
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
+  const [resetTargetSubmissionId, setResetTargetSubmissionId] = useState<string | null>(null)
+  const [bulkResetDialogOpen, setBulkResetDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [pendingSearchQuery, setPendingSearchQuery] = useState('')
   const [eligibleStudents, setEligibleStudents] = useState<EligibleStudent[] | null>(null)
@@ -258,6 +263,51 @@ export default function ExamSubmissionsPage() {
     }
   }
 
+  const openBulkResetDialog = () => {
+    if (selectedSubmissions.size === 0) {
+      toast({
+        title: 'No submissions selected',
+        description: 'Please select submissions to reset',
+        variant: 'destructive'
+      })
+      return
+    }
+    setBulkResetDialogOpen(true)
+  }
+
+  const handleBulkResetConfirmed = async () => {
+    if (selectedSubmissions.size === 0) {
+      setBulkResetDialogOpen(false)
+      return
+    }
+    setResettingBulk(true)
+    try {
+      const response = await apiClient.post(`/api/exams/${examId}/submissions/reset-bulk`, {
+        submissionIds: Array.from(selectedSubmissions)
+      })
+      
+      const result = (response as any)?.data ?? (response as any)
+      const successCount = result?.successCount ?? 0
+      const failureCount = result?.failureCount ?? 0
+      toast({
+        title: 'Reset complete',
+        description: `Reset ${successCount} submission(s).${failureCount > 0 ? ` ${failureCount} failed or not found.` : ''}`
+      })
+      setSelectedSubmissions(new Set())
+      await loadData()
+    } catch (error: any) {
+      const msg = error?.response?.data?.error || error?.message || 'Failed to reset submissions'
+      toast({
+        title: 'Error',
+        description: msg,
+        variant: 'destructive'
+      })
+    } finally {
+      setResettingBulk(false)
+      setBulkResetDialogOpen(false)
+    }
+  }
+
   const handleGradeAllMcq = async () => {
     setGradingMcq(true)
     try {
@@ -340,8 +390,17 @@ export default function ExamSubmissionsPage() {
     }
   }
 
-  const handleResetSubmission = async (submissionId: string) => {
-    if (!confirm('Reset this attempt? The submission will be removed and the student can take the test again.')) return
+  const openResetDialog = (submissionId: string) => {
+    setResetTargetSubmissionId(submissionId)
+    setResetDialogOpen(true)
+  }
+
+  const handleResetSubmission = async () => {
+    if (!resetTargetSubmissionId) {
+      setResetDialogOpen(false)
+      return
+    }
+    const submissionId = resetTargetSubmissionId
     setResettingSubmissions(prev => new Set(prev).add(submissionId))
     try {
       await apiClient.delete(`/api/exams/${examId}/submissions/${submissionId}`)
@@ -363,6 +422,8 @@ export default function ExamSubmissionsPage() {
         newSet.delete(submissionId)
         return newSet
       })
+      setResetTargetSubmissionId(null)
+      setResetDialogOpen(false)
     }
   }
 
@@ -480,6 +541,21 @@ export default function ExamSubmissionsPage() {
                 <RefreshCw className="h-4 w-4 mr-2" />
               )}
               Re-grade Selected ({selectedSubmissions.size})
+            </Button>
+          )}
+          {selectedSubmissions.size > 0 && (
+            <Button 
+              onClick={openBulkResetDialog} 
+              disabled={resettingBulk}
+              variant="outline"
+              title="Remove selected attempts so students can take the test again (max 500)"
+            >
+              {resettingBulk ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Reset selected ({selectedSubmissions.size})
             </Button>
           )}
           <Button onClick={exportToCSV} variant="outline">
@@ -744,7 +820,7 @@ export default function ExamSubmissionsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleResetSubmission(submission.id)}
+                          onClick={() => openResetDialog(submission.id)}
                           disabled={resettingSubmissions.has(submission.id)}
                           title="Reset test for this student so they can take it again"
                         >
@@ -864,6 +940,35 @@ export default function ExamSubmissionsPage() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmationDialog
+        isOpen={bulkResetDialogOpen}
+        onClose={() => setBulkResetDialogOpen(false)}
+        onConfirm={handleBulkResetConfirmed}
+        title={`Reset ${selectedSubmissions.size} attempt${selectedSubmissions.size === 1 ? '' : 's'}`}
+        description="These submissions will be removed and the students will be able to take the test again. Max 500 resets per request."
+        confirmText="Reset attempts"
+        cancelText="Cancel"
+        variant="destructive"
+        isLoading={resettingBulk}
+      />
+
+      <ConfirmationDialog
+        isOpen={resetDialogOpen && !!resetTargetSubmissionId}
+        onClose={() => {
+          if (!resettingSubmissions.size) {
+            setResetDialogOpen(false)
+            setResetTargetSubmissionId(null)
+          }
+        }}
+        onConfirm={handleResetSubmission}
+        title="Reset attempt"
+        description="This submission will be removed and the student will be able to take the test again."
+        confirmText="Reset attempt"
+        cancelText="Cancel"
+        variant="destructive"
+        isLoading={resetTargetSubmissionId ? resettingSubmissions.has(resetTargetSubmissionId) : false}
+      />
     </div>
   )
 }

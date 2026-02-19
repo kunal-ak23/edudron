@@ -19,8 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -213,6 +216,45 @@ public class AssessmentSubmissionService {
             throw new IllegalArgumentException("Submission does not belong to this assessment");
         }
         submissionRepository.delete(submission);
+    }
+
+    private static final int MAX_BULK_RESET = 500;
+
+    /**
+     * Bulk reset: delete multiple submissions for an assessment so those students can take the test again.
+     * Only submissions that belong to the current tenant and the given assessment are deleted.
+     * Validates batch size (max 500). Returns counts and per-id failures for IDs not found or not belonging to assessment.
+     */
+    public Map<String, Object> resetSubmissionsBulk(String assessmentId, List<String> submissionIds) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        if (submissionIds == null || submissionIds.isEmpty()) {
+            throw new IllegalArgumentException("submissionIds must not be null or empty");
+        }
+        if (submissionIds.size() > MAX_BULK_RESET) {
+            throw new IllegalArgumentException("Cannot reset more than " + MAX_BULK_RESET + " submissions at once; requested " + submissionIds.size());
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        List<AssessmentSubmission> toDelete = submissionRepository.findByClientIdAndAssessmentIdAndIdIn(clientId, assessmentId, submissionIds);
+        Set<String> deletedIds = toDelete.stream().map(AssessmentSubmission::getId).collect(Collectors.toSet());
+        submissionRepository.deleteAll(toDelete);
+        int failureCount = submissionIds.size() - deletedIds.size();
+        List<Map<String, Object>> results = new ArrayList<>();
+        for (String id : submissionIds) {
+            if (deletedIds.contains(id)) {
+                results.add(Map.of("submissionId", id, "status", "success"));
+            } else {
+                results.add(Map.of("submissionId", id, "status", "error", "error", "Not found or does not belong to this assessment"));
+            }
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("totalCount", submissionIds.size());
+        response.put("successCount", toDelete.size());
+        response.put("failureCount", failureCount);
+        response.put("results", results);
+        return response;
     }
 
     /**

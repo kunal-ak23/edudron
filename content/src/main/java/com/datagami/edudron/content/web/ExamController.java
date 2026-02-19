@@ -14,6 +14,7 @@ import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.content.domain.QuizOption;
 import com.datagami.edudron.content.repo.AssessmentRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -803,6 +804,50 @@ public class ExamController {
             logger.error("Failed to process bulk re-grade request for exam {}", id, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("error", "Failed to process bulk re-grade: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/submissions/reset-bulk")
+    @Operation(summary = "Bulk reset test for students", description = "Delete multiple submissions so those students can take the test again. Forwards to student service (admin only).")
+    public ResponseEntity<?> resetBulkSubmissions(
+            @PathVariable String id,
+            @RequestBody Map<String, Object> request) {
+        try {
+            @SuppressWarnings("unchecked")
+            List<String> submissionIds = request != null ? (List<String>) request.get("submissionIds") : null;
+            if (submissionIds == null || submissionIds.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "No submission IDs provided"));
+            }
+            String url = gatewayUrl + "/api/assessments/" + id + "/submissions/reset-bulk";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+            String bodyStr = objectMapper.writeValueAsString(Map.of("submissionIds", submissionIds));
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                url,
+                HttpMethod.POST,
+                new HttpEntity<>(bodyStr, headers),
+                new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+            return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            if (e.getStatusCode() == HttpStatus.BAD_REQUEST) {
+                try {
+                    Map<String, Object> errorBody = e.getResponseBodyAsString() != null && !e.getResponseBodyAsString().isEmpty()
+                        ? objectMapper.readValue(e.getResponseBodyAsString(), new TypeReference<Map<String, Object>>() {}) : Map.of("error", e.getMessage());
+                    return ResponseEntity.badRequest().body(errorBody);
+                } catch (Exception ignored) {
+                    return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+                }
+            }
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+                return ResponseEntity.notFound().build();
+            }
+            throw e;
+        } catch (Exception e) {
+            logger.error("Failed to bulk reset submissions for exam {}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(Map.of("error", "Failed to bulk reset: " + e.getMessage()));
         }
     }
     
