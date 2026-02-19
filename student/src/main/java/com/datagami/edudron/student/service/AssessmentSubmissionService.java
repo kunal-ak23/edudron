@@ -194,7 +194,8 @@ public class AssessmentSubmissionService {
     }
 
     /**
-     * Discard an in-progress submission (completedAt == null) so the student can start a new attempt.
+     * Reset test for a student: delete this submission so the student can take the test again.
+     * Available for all students who have taken the test (in progress or already submitted).
      * Validates tenant and that the submission belongs to the given assessment.
      */
     public void discardInProgressSubmission(String assessmentId, String submissionId) {
@@ -210,9 +211,6 @@ public class AssessmentSubmissionService {
         }
         if (!assessmentId.equals(submission.getAssessmentId())) {
             throw new IllegalArgumentException("Submission does not belong to this assessment");
-        }
-        if (submission.getCompletedAt() != null) {
-            throw new IllegalArgumentException("Only in-progress attempts can be discarded; submission already completed");
         }
         submissionRepository.delete(submission);
     }

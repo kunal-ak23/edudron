@@ -669,7 +669,7 @@ public class ExamController {
     }
 
     @DeleteMapping("/{id}/submissions/{submissionId}")
-    @Operation(summary = "Discard in-progress submission", description = "Remove an in-progress attempt so the student can retry (instructor/admin only)")
+    @Operation(summary = "Reset test for student", description = "Delete this submission so the student can take the test again. Available for all students who have taken the test (instructor/admin only).")
     public ResponseEntity<Void> discardInProgressSubmission(
             @PathVariable String id,
             @PathVariable String submissionId) {
@@ -691,7 +691,7 @@ public class ExamController {
             }
             throw e;
         } catch (Exception e) {
-            logger.error("Failed to discard submission {} for exam {}", submissionId, id, e);
+            logger.error("Failed to reset submission {} for exam {}", submissionId, id, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }

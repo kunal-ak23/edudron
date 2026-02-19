@@ -122,7 +122,7 @@ public class AssessmentSubmissionController {
     }
 
     @DeleteMapping("/assessments/{assessmentId}/submissions/{submissionId}")
-    @Operation(summary = "Discard in-progress submission", description = "Remove an in-progress attempt so the student can retry (instructor/admin only). Only submissions with completedAt == null can be discarded.")
+    @Operation(summary = "Reset test for student", description = "Delete this submission so the student can take the test again. Available for all students who have taken the test (instructor/admin only).")
     public ResponseEntity<Void> discardInProgressSubmission(
             @PathVariable String assessmentId,
             @PathVariable String submissionId) {

@@ -15,13 +15,6 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { 
   Loader2, 
   ArrowLeft, 
@@ -32,8 +25,7 @@ import {
   Download,
   CheckSquare,
   AlertTriangle,
-  ShieldCheck,
-  Trash2
+  ShieldCheck
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, enrollmentsApi } from '@/lib/api'
@@ -90,9 +82,8 @@ export default function ExamSubmissionsPage() {
   const [gradingMcq, setGradingMcq] = useState(false)
   const [regradingSubmissions, setRegradingSubmissions] = useState<Set<string>>(new Set())
   const [markingCheatingSubmissions, setMarkingCheatingSubmissions] = useState<Set<string>>(new Set())
-  const [discardingSubmissions, setDiscardingSubmissions] = useState<Set<string>>(new Set())
+  const [resettingSubmissions, setResettingSubmissions] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
-  const [attemptFilter, setAttemptFilter] = useState<'all' | 'discardable'>('all')
   const [pendingSearchQuery, setPendingSearchQuery] = useState('')
   const [eligibleStudents, setEligibleStudents] = useState<EligibleStudent[] | null>(null)
 
@@ -185,11 +176,8 @@ export default function ExamSubmissionsPage() {
           (s.studentEmail?.toLowerCase().includes(query))
       )
     }
-    if (attemptFilter === 'discardable') {
-      list = list.filter((s) => s.completedAt == null)
-    }
     return list
-  }, [submissions, searchQuery, attemptFilter])
+  }, [submissions, searchQuery])
 
   const appearedSet = useMemo(
     () => new Set(submissions.map((s) => s.studentId)),
@@ -352,25 +340,25 @@ export default function ExamSubmissionsPage() {
     }
   }
 
-  const handleDiscardSubmission = async (submissionId: string) => {
-    if (!confirm('Remove this in-progress attempt? The student will be able to start the exam again.')) return
-    setDiscardingSubmissions(prev => new Set(prev).add(submissionId))
+  const handleResetSubmission = async (submissionId: string) => {
+    if (!confirm('Reset this attempt? The submission will be removed and the student can take the test again.')) return
+    setResettingSubmissions(prev => new Set(prev).add(submissionId))
     try {
       await apiClient.delete(`/api/exams/${examId}/submissions/${submissionId}`)
       toast({
         title: 'Success',
-        description: 'In-progress attempt removed. Student can retry.'
+        description: 'Test reset. Student can take the test again.'
       })
       await loadData()
     } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.message || 'Failed to remove attempt'
+      const msg = error?.response?.data?.error || error?.message || 'Failed to reset test'
       toast({
         title: 'Error',
         description: msg,
         variant: 'destructive'
       })
     } finally {
-      setDiscardingSubmissions(prev => {
+      setResettingSubmissions(prev => {
         const newSet = new Set(prev)
         newSet.delete(submissionId)
         return newSet
@@ -600,7 +588,7 @@ export default function ExamSubmissionsPage() {
         </div>
       )}
 
-      {/* Search and attempt filter */}
+      {/* Search */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -613,18 +601,6 @@ export default function ExamSubmissionsPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <div className="w-full sm:w-56">
-              <Label>Show</Label>
-              <Select value={attemptFilter} onValueChange={(v: 'all' | 'discardable') => setAttemptFilter(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All submissions</SelectItem>
-                  <SelectItem value="discardable">Discardable only (in progress)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -634,13 +610,7 @@ export default function ExamSubmissionsPage() {
         <CardContent className="p-0">
           {filteredSubmissions.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
-              {attemptFilter === 'discardable'
-                ? searchQuery
-                  ? 'No discardable (in progress) submissions match your search.'
-                  : 'No discardable submissions. All attempts are submitted.'
-                : searchQuery
-                  ? 'No submissions found matching your search.'
-                  : 'No submissions yet.'}
+              {searchQuery ? 'No submissions found matching your search.' : 'No submissions yet.'}
             </div>
           ) : (
             <Table>
@@ -771,24 +741,22 @@ export default function ExamSubmissionsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {submission.completedAt == null && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDiscardSubmission(submission.id)}
-                            disabled={discardingSubmissions.has(submission.id)}
-                            title="Remove in-progress attempt so student can retry"
-                          >
-                            {discardingSubmissions.has(submission.id) ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <>
-                                <Trash2 className="h-4 w-4 mr-1" />
-                                Discard
-                              </>
-                            )}
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResetSubmission(submission.id)}
+                          disabled={resettingSubmissions.has(submission.id)}
+                          title="Reset test for this student so they can take it again"
+                        >
+                          {resettingSubmissions.has(submission.id) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 mr-1" />
+                              Reset test
+                            </>
+                          )}
+                        </Button>
                         <Button
                           variant="ghost"
                           size="sm"
