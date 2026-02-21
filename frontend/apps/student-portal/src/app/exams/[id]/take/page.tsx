@@ -90,18 +90,18 @@ export default function TakeExamPage() {
   const lastSaveTimeRef = useRef<number>(0)
   const isSubmittingRef = useRef(false) // Synchronous guard to prevent double submission
   const isLoadingExamRef = useRef(false) // Guard to prevent double loading from React Strict Mode
-  
+
   // Proctoring state
   const [showProctoringSetup, setShowProctoringSetup] = useState(false)
   const [proctoringComplete, setProctoringComplete] = useState(false)
   const [tabSwitchCount, setTabSwitchCount] = useState(0)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showTabSwitchWarning, setShowTabSwitchWarning] = useState(false)
-  const [tabSwitchWarningData, setTabSwitchWarningData] = useState<{count: number, remaining: number, isLastWarning: boolean} | null>(null)
+  const [tabSwitchWarningData, setTabSwitchWarningData] = useState<{ count: number, remaining: number, isLastWarning: boolean } | null>(null)
   const [showFullscreenWarning, setShowFullscreenWarning] = useState(false) // Dialog when user exits fullscreen
   const isFullscreenTransitionRef = useRef(false) // Flag to ignore visibility changes during fullscreen transitions
   const lastTabSwitchTimeRef = useRef<number>(0) // Debounce tab switches to prevent double counting
-  
+
   // Log requestFullscreen availability on mount
   useEffect(() => {
   }, [])
@@ -113,12 +113,12 @@ export default function TakeExamPage() {
     metadata: Record<string, any> = {}
   ) => {
     if (!exam?.enableProctoring || !submissionId) return
-    
+
     // In preview mode, skip API call
     if (isPreviewMode) {
       return
     }
-    
+
     try {
       await proctoringApi.logEvent(examId, submissionId, {
         eventType,
@@ -136,19 +136,19 @@ export default function TakeExamPage() {
   useEffect(() => {
     loadExam()
   }, [examId])
-  
+
   // Separate effect for visibility change detection (tab switching)
   useEffect(() => {
     if (!exam?.enableProctoring) return
-    
+
     const handleVisibilityChange = () => {
       const isCurrentlyFullscreen = !!document.fullscreenElement
-      
+
       // Only count tab switches after proctoring setup is complete
       if (!proctoringComplete) {
         return
       }
-      
+
       // Determine if this is a real tab switch
       // A real tab switch means: document is hidden AND we're NOT in fullscreen
       // If document is hidden but we ARE in fullscreen, it's a false positive from fullscreen transition
@@ -160,12 +160,12 @@ export default function TakeExamPage() {
         // Document is hidden AND not in fullscreen - this is a real tab switch
       } else {
         // Document is NOT hidden (user returned or is still on page)
-        
+
         // Ignore visibility changes during fullscreen transitions when returning
         if (isFullscreenTransitionRef.current) {
           return
         }
-        
+
         // Also ignore if this is likely a fullscreen toggle (not a real tab switch)
         // When entering/exiting fullscreen, the document might briefly become "hidden"
         // but we're still on the same page
@@ -173,7 +173,7 @@ export default function TakeExamPage() {
           return
         }
       }
-      
+
       if (document.hidden) {
         // Debounce: ignore if last tab switch was less than 500ms ago (prevents React Strict Mode double counting)
         const now = Date.now()
@@ -181,8 +181,8 @@ export default function TakeExamPage() {
           return
         }
         lastTabSwitchTimeRef.current = now
-        
-        
+
+
         // Save when user switches tabs or minimizes (not in preview mode)
         if (!isPreviewMode && hasUnsavedChangesRef.current && submissionId) {
           saveProgress()
@@ -193,14 +193,14 @@ export default function TakeExamPage() {
         // Increment tab switch count directly (not using setState callback to avoid double execution)
         const newCount = tabSwitchCount + 1
         setTabSwitchCount(newCount)
-        
+
         const maxAllowed = exam.maxTabSwitchesAllowed || 3
-        
+
         logProctoringEvent('TAB_SWITCH', 'WARNING', {
           count: newCount,
           maxAllowed: maxAllowed
         })
-        
+
         // Check if max switches exceeded (log only, not in preview)
         if (!isPreviewMode) {
           if (exam.blockTabSwitch) {
@@ -222,11 +222,11 @@ export default function TakeExamPage() {
         if (tabSwitchCount > 0) {
           const maxAllowed = exam.maxTabSwitchesAllowed || 3
           const remaining = maxAllowed - tabSwitchCount
-          
-          
+
+
           // Close fullscreen warning if open - tab switch warning takes priority
           setShowFullscreenWarning(false)
-          
+
           // If blockTabSwitch is enabled, auto-submit immediately (not in preview)
           if (exam.blockTabSwitch) {
             setTabSwitchWarningData({
@@ -265,18 +265,18 @@ export default function TakeExamPage() {
         }
       }
     }
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [exam?.enableProctoring, exam?.blockTabSwitch, exam?.maxTabSwitchesAllowed, isPreviewMode, submissionId, proctoringComplete, tabSwitchCount])
-  
+
   // Handle before unload
   useEffect(() => {
     if (isPreviewMode) return
-    
+
     const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
       if (submissionId) {
         sendJourneyEventBeacon(examId, submissionId, {
@@ -288,7 +288,7 @@ export default function TakeExamPage() {
         // Try to save synchronously before leaving
         e.preventDefault()
         e.returnValue = 'Saving your progress...'
-        
+
         // Use sendBeacon for reliable save on page unload
         try {
           const saveData = JSON.stringify({
@@ -304,9 +304,9 @@ export default function TakeExamPage() {
         }
       }
     }
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload)
-    
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       if (autoSaveIntervalRef.current) {
@@ -321,11 +321,11 @@ export default function TakeExamPage() {
       }
     }
   }, [examId, isPreviewMode, submissionId, answers, timeRemaining])
-  
+
   // Copy/Paste detection
   useEffect(() => {
     if (!exam?.enableProctoring || !exam?.blockCopyPaste) return
-    
+
     const handleCopy = (e: ClipboardEvent) => {
       e.preventDefault()
       logProctoringEvent('COPY_ATTEMPT', 'WARNING')
@@ -335,7 +335,7 @@ export default function TakeExamPage() {
         variant: 'warning'
       })
     }
-    
+
     const handlePaste = (e: ClipboardEvent) => {
       e.preventDefault()
       logProctoringEvent('PASTE_ATTEMPT', 'WARNING')
@@ -345,31 +345,31 @@ export default function TakeExamPage() {
         variant: 'warning'
       })
     }
-    
+
     document.addEventListener('copy', handleCopy)
     document.addEventListener('paste', handlePaste)
-    
+
     return () => {
       document.removeEventListener('copy', handleCopy)
       document.removeEventListener('paste', handlePaste)
     }
   }, [exam, logProctoringEvent])
-  
+
   // Window blur/focus detection
   useEffect(() => {
     if (!exam?.enableProctoring) return
-    
+
     const handleBlur = () => {
       logProctoringEvent('WINDOW_BLUR', 'WARNING')
     }
-    
+
     const handleFocus = () => {
       logProctoringEvent('WINDOW_FOCUS', 'INFO')
     }
-    
+
     window.addEventListener('blur', handleBlur)
     window.addEventListener('focus', handleFocus)
-    
+
     return () => {
       window.removeEventListener('blur', handleBlur)
       window.removeEventListener('focus', handleFocus)
@@ -399,21 +399,21 @@ export default function TakeExamPage() {
       return
     }
     isLoadingExamRef.current = true
-    
+
     try {
       setLoading(true)
-      
+
       // Get exam details - use admin API in preview mode to get all proctoring settings
-      const endpoint = isPreviewMode 
+      const endpoint = isPreviewMode
         ? `/api/exams/${examId}` // Admin endpoint with full exam details
         : `/api/student/exams/${examId}` // Student endpoint
-      
+
       const examResponse = await apiClient.get<Exam>(endpoint)
-      
+
       // Handle response - apiClient might return data directly or wrapped
       let exam = (examResponse as any)?.data || examResponse
       exam = exam as Exam
-      
+
       // Real-time check: if exam has ended, redirect to results
       if ((exam as any).endTime) {
         const endTime = new Date((exam as any).endTime)
@@ -423,7 +423,7 @@ export default function TakeExamPage() {
           return
         }
       }
-      
+
       // Ensure questions is always an array
       // Handle both: direct array, nested { questions: [...] }, or single question object
       let questionsArray: Question[] = []
@@ -438,7 +438,7 @@ export default function TakeExamPage() {
           questionsArray = [exam.questions as Question]
         }
       }
-      
+
       // Normalize options for each question (handle nested { options: [...] } structure)
       questionsArray = questionsArray.map(q => {
         let normalizedOptions: Option[] | undefined = undefined
@@ -454,12 +454,12 @@ export default function TakeExamPage() {
         }
         return { ...q, options: normalizedOptions }
       })
-      
+
       const examWithQuestions = {
         ...exam,
         questions: questionsArray
       }
-      
+
       // When exam is not available for take (not begun or ended), show message only; do not load submission or questions
       if (!isPreviewMode && (examWithQuestions as any).availableForTake === false) {
         setExam({
@@ -472,10 +472,10 @@ export default function TakeExamPage() {
         isLoadingExamRef.current = false
         return
       }
-      
+
       if (examWithQuestions.questions.length === 0) {
       }
-      
+
       // In preview mode, replace real questions with dummy ones
       if (isPreviewMode) {
         const dummyQuestions: Question[] = [
@@ -530,22 +530,22 @@ export default function TakeExamPage() {
             ]
           }
         ]
-        
+
         const previewExam = {
           ...examWithQuestions,
           questions: dummyQuestions
         }
-        
+
         setExam(previewExam)
-        
+
         // Set dummy submission ID for proctoring to work
         setSubmissionId('preview-submission-' + Date.now())
-        
+
         // Set initial time for display purposes
         if (previewExam.timeLimitSeconds) {
           setTimeRemaining(previewExam.timeLimitSeconds)
         }
-        
+
         // Show proctoring setup if enabled
         if (previewExam.enableProctoring && !proctoringComplete) {
           setShowProctoringSetup(true)
@@ -553,14 +553,14 @@ export default function TakeExamPage() {
           // No proctoring in preview - request fullscreen immediately
           requestFullscreen()
         }
-        
+
         setLoading(false)
         isLoadingExamRef.current = false
         return
       }
-      
+
       setExam(examWithQuestions)
-      
+
       // Check if proctoring is enabled and show setup dialog
       if (examWithQuestions.enableProctoring && !proctoringComplete) {
         setShowProctoringSetup(true)
@@ -575,10 +575,10 @@ export default function TakeExamPage() {
         const response = await apiClient.get<any>(`/api/student/exams/${examId}/submission`)
         // Handle response - apiClient might return data directly or wrapped
         const submission = ((response as any)?.data || response) as any
-        
+
         submissionIdValue = submission?.id || submission?.submissionId || null
         setSubmissionId(submissionIdValue)
-        
+
         if (submission?.answersJson) {
           setAnswers(submission.answersJson)
         }
@@ -596,9 +596,9 @@ export default function TakeExamPage() {
           })
           // Handle response - apiClient might return data directly or wrapped
           const submission = ((response as any)?.data || response) as any
-          
+
           submissionIdValue = submission?.id || submission?.submissionId || null
-          
+
           if (!submissionIdValue) {
             // Try alternative extraction methods
             if (submission && typeof submission === 'object') {
@@ -612,21 +612,21 @@ export default function TakeExamPage() {
               }
             }
           }
-          
+
           if (!submissionIdValue) {
             throw new Error('Could not extract submission ID from start exam response')
           }
-          
+
           setSubmissionId(submissionIdValue)
           setTimeRemaining(submission?.timeRemainingSeconds || examWithQuestions.timeLimitSeconds || 0)
-          
+
           // Re-fetch exam details to get randomized question/option order
           // The backend applies randomization based on the submission
           try {
             const refreshedExamResponse = await apiClient.get<Exam>(`/api/student/exams/${examId}`)
             let refreshedExam = (refreshedExamResponse as any)?.data || refreshedExamResponse
             refreshedExam = refreshedExam as Exam
-            
+
             // Normalize questions array
             let refreshedQuestions: Question[] = []
             if (Array.isArray(refreshedExam?.questions)) {
@@ -638,7 +638,7 @@ export default function TakeExamPage() {
                 refreshedQuestions = [refreshedExam.questions as Question]
               }
             }
-            
+
             // Normalize options for each question
             refreshedQuestions = refreshedQuestions.map(q => {
               let normalizedOptions: Option[] | undefined = undefined
@@ -653,16 +653,16 @@ export default function TakeExamPage() {
               }
               return { ...q, options: normalizedOptions }
             })
-            
+
             const refreshedExamWithQuestions = {
               ...refreshedExam,
               questions: refreshedQuestions
             }
-            
+
             setExam(refreshedExamWithQuestions)
           } catch (refreshError) {
           }
-          
+
           // Immediately save empty answers to ensure submission exists
           if (submissionIdValue) {
             try {
@@ -675,7 +675,7 @@ export default function TakeExamPage() {
             }
           }
         } catch (startError: any) {
-          
+
           // Check if it's a max attempts error (409 Conflict)
           if (startError?.response?.status === 409 || startError?.status === 409) {
             toast({
@@ -686,7 +686,7 @@ export default function TakeExamPage() {
             router.push('/exams')
             return
           }
-          
+
           // Check if exam not available (403 Forbidden) – show backend message
           if (startError?.response?.status === 403 || startError?.status === 403) {
             const data = startError?.response?.data
@@ -701,7 +701,7 @@ export default function TakeExamPage() {
             router.push('/exams')
             return
           }
-          
+
           // Don't throw - let the page continue to load even if starting fails
         }
       }
@@ -741,7 +741,7 @@ export default function TakeExamPage() {
           return
         }
       }
-      
+
       if (hasUnsavedChangesRef.current && submissionId) {
         saveProgress()
       }
@@ -764,13 +764,13 @@ export default function TakeExamPage() {
         setSaving(true)
       }
       lastSaveTimeRef.current = now
-      
+
       await apiClient.post(`/api/student/exams/${examId}/save-progress`, {
         submissionId,
         answers,
         timeRemainingSeconds: timeRemaining
       })
-      
+
       hasUnsavedChangesRef.current = false
     } catch (error: any) {
       // Don't clear the unsaved changes flag on error so we can retry
@@ -788,12 +788,12 @@ export default function TakeExamPage() {
       [questionId]: value
     }))
     hasUnsavedChangesRef.current = true
-    
+
     // Debounced save: save 2 seconds after user stops typing/changing answers
     if (debounceSaveRef.current) {
       clearTimeout(debounceSaveRef.current)
     }
-    
+
     debounceSaveRef.current = setTimeout(() => {
       if (submissionId && hasUnsavedChangesRef.current) {
         saveProgress(true) // Silent save (no loading indicator)
@@ -806,13 +806,13 @@ export default function TakeExamPage() {
     if (isPreviewMode) {
       return
     }
-    
+
     // Synchronous guard to prevent multiple submission attempts
     if (isSubmittingRef.current) {
       return
     }
     isSubmittingRef.current = true
-    
+
     // Final save before submission
     if (hasUnsavedChangesRef.current && submissionId) {
       await saveProgress()
@@ -879,27 +879,27 @@ export default function TakeExamPage() {
         answers,
         reviewMethod: exam?.reviewMethod
       })
-      
+
       // Clear unsaved changes flag
       hasUnsavedChangesRef.current = false
-      
+
       // Close dialog before navigation
       setShowSubmitDialog(false)
-      
+
       // Small delay to ensure dialog closes smoothly
       setTimeout(() => {
         router.push(`/exams/${examId}/results`)
       }, 100)
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.message || 
-                          error?.response?.data?.error || 
-                          error?.message || ''
-      
+      const errorMessage = error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message || ''
+
       // Check if exam was already submitted - redirect to results instead of showing error
-      const isAlreadySubmitted = errorMessage.toLowerCase().includes('already') && 
-                                 (errorMessage.toLowerCase().includes('submitted') || 
-                                  errorMessage.toLowerCase().includes('completed'))
-      
+      const isAlreadySubmitted = errorMessage.toLowerCase().includes('already') &&
+        (errorMessage.toLowerCase().includes('submitted') ||
+          errorMessage.toLowerCase().includes('completed'))
+
       if (isAlreadySubmitted) {
         toast({
           title: 'Exam Submitted',
@@ -912,7 +912,7 @@ export default function TakeExamPage() {
         }, 1000)
         return
       }
-      
+
       // Keep dialog open on error so user can try again or cancel
       if (submissionId && !isPreviewMode) {
         logJourneyEvent(examId, submissionId, { eventType: 'SUBMIT_FAILED', severity: 'WARNING', metadata: { error: errorMessage } })
@@ -935,16 +935,16 @@ export default function TakeExamPage() {
     setShowSubmitDialog(true)
     handleSubmit()
   }
-  
+
   // Request fullscreen mode
   const requestFullscreen = async () => {
-    
+
     // Set flag to ignore visibility changes during fullscreen transition
     isFullscreenTransitionRef.current = true
-    
+
     try {
       const elem = document.documentElement
-      
+
       // Check browser support
       if (!elem.requestFullscreen) {
         toast({
@@ -955,7 +955,7 @@ export default function TakeExamPage() {
         isFullscreenTransitionRef.current = false
         return
       }
-      
+
       await elem.requestFullscreen()
       setIsFullscreen(true)
       if (submissionId && !isPreviewMode) {
@@ -966,10 +966,10 @@ export default function TakeExamPage() {
         isFullscreenTransitionRef.current = false
       }, 1000) // Increased to 1 second
     } catch (err: any) {
-      
+
       // Reset the flag on error
       isFullscreenTransitionRef.current = false
-      
+
       // Show user-friendly error
       if (err?.name === 'TypeError' && err?.message?.includes('fullscreen')) {
         toast({
@@ -980,22 +980,22 @@ export default function TakeExamPage() {
       }
     }
   }
-  
+
   // Handle fullscreen change
   useEffect(() => {
-    
+
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement
-      
+
       // Set transition flag to prevent false tab switch detection during fullscreen changes
       isFullscreenTransitionRef.current = true
-      
+
       setIsFullscreen(isNowFullscreen)
-      
+
       // Show warning dialog if user exits fullscreen during proctored exam (after setup is complete)
       if (!isNowFullscreen && exam?.enableProctoring && proctoringComplete) {
         setShowFullscreenWarning(true)
-        
+
         // Log the event (not in preview mode)
         if (!isPreviewMode) {
           logProctoringEvent('FULLSCREEN_EXIT', 'WARNING', {
@@ -1006,15 +1006,15 @@ export default function TakeExamPage() {
           }
         }
       }
-      
+
       // Reset the transition flag after a delay
       setTimeout(() => {
         isFullscreenTransitionRef.current = false
       }, 1000)
     }
-    
+
     document.addEventListener('fullscreenchange', handleFullscreenChange)
-    
+
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }
@@ -1131,7 +1131,7 @@ export default function TakeExamPage() {
                   <div>
                     <div className="font-bold text-xl">Preview Mode - Testing User Flow</div>
                     <div className="text-sm text-primary-100 mt-1">
-                      Experience the complete exam flow with dummy questions. Test proctoring settings, interface, and student experience. 
+                      Experience the complete exam flow with dummy questions. Test proctoring settings, interface, and student experience.
                       <span className="font-semibold"> No responses saved.</span>
                     </div>
                   </div>
@@ -1183,25 +1183,37 @@ export default function TakeExamPage() {
                 }
               }}
             />
-            
+
             {/* Webcam Monitor (during exam) */}
-            {proctoringComplete && 
-             exam.proctoringMode === 'WEBCAM_RECORDING' && 
-             submissionId && (
-              <WebcamMonitor
-                examId={examId}
-                submissionId={submissionId}
-                photoIntervalSeconds={exam.photoIntervalSeconds || 120}
-                isPreview={isPreviewMode}
-                onPhotoCapture={(timestamp) => {
-                }}
-                onError={(error) => {
-                }}
-              />
-            )}
+            {proctoringComplete &&
+              (exam.proctoringMode === 'WEBCAM_RECORDING' || exam.proctoringMode === 'LIVE_PROCTORING') &&
+              submissionId && (
+                <WebcamMonitor
+                  examId={examId}
+                  submissionId={submissionId}
+                  photoIntervalSeconds={exam.photoIntervalSeconds || 120}
+                  isPreview={isPreviewMode}
+                  onPhotoCapture={(timestamp) => {
+                  }}
+                  onError={(error) => {
+                    toast({
+                      title: 'Webcam Error',
+                      description: 'Your camera could not be accessed for proctoring. Please check your camera permissions and refresh the page.',
+                      variant: 'destructive',
+                    })
+                    if (submissionId && !isPreviewMode) {
+                      logJourneyEvent(examId, submissionId, {
+                        eventType: 'WEBCAM_ERROR',
+                        severity: 'WARNING',
+                        metadata: { error }
+                      })
+                    }
+                  }}
+                />
+              )}
           </>
         )}
-        
+
         <div className="flex h-full min-h-0 bg-white">
           {/* Left Sidebar - Questions Navigation */}
           <div className="w-80 border-r bg-white border-gray-200 transition-all duration-300 flex-shrink-0 relative flex flex-col">
@@ -1214,7 +1226,7 @@ export default function TakeExamPage() {
                   {exam.title}
                 </h3>
               </div>
-              
+
               {/* Timer */}
               {exam.timeLimitSeconds && (
                 <div className="mb-4 pb-4 border-b border-gray-200">
@@ -1257,23 +1269,21 @@ export default function TakeExamPage() {
                         <button
                           key={q.id}
                           onClick={() => setCurrentQuestionIndex(index)}
-                          className={`w-full text-left px-3 py-2 rounded text-xs transition-colors relative ${
-                            isCurrent
-                              ? 'bg-primary-50 text-primary-700'
-                              : 'text-gray-600 hover:bg-gray-50'
-                          }`}
+                          className={`w-full text-left px-3 py-2 rounded text-xs transition-colors relative ${isCurrent
+                            ? 'bg-primary-50 text-primary-700'
+                            : 'text-gray-600 hover:bg-gray-50'
+                            }`}
                         >
                           {isCurrent && (
                             <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-600 rounded-r"></div>
                           )}
                           <div className="flex items-center space-x-2">
-                            <div className={`flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-xs font-medium ${
-                              isCurrent
-                                ? 'bg-primary-600 text-white'
-                                : isAnswered
+                            <div className={`flex-shrink-0 w-6 h-6 rounded flex items-center justify-center text-xs font-medium ${isCurrent
+                              ? 'bg-primary-600 text-white'
+                              : isAnswered
                                 ? 'bg-green-100 text-green-700'
                                 : 'bg-gray-100 text-gray-600'
-                            }`}>
+                              }`}>
                               {index + 1}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -1363,7 +1373,7 @@ export default function TakeExamPage() {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Fullscreen Warning */}
                 {!isFullscreen && exam?.enableProctoring && !isPreviewMode && (
                   <div className="mb-6 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4">
@@ -1378,8 +1388,8 @@ export default function TakeExamPage() {
                         <div className="text-sm text-yellow-700 mb-2">
                           This proctored exam must be taken in fullscreen mode. Exiting fullscreen may be logged as suspicious activity.
                         </div>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           onClick={requestFullscreen}
                           className="bg-yellow-600 hover:bg-yellow-700"
                         >
@@ -1389,7 +1399,7 @@ export default function TakeExamPage() {
                     </div>
                   </div>
                 )}
-                
+
                 {questions.length === 0 ? (
                   <div className="text-center py-12">
                     <p className="text-gray-500 text-lg">No questions available for this exam</p>
@@ -1453,8 +1463,8 @@ export default function TakeExamPage() {
                             answers[currentQuestion.id] === undefined || answers[currentQuestion.id] === null
                               ? ''
                               : answers[currentQuestion.id] === true || answers[currentQuestion.id] === 'true'
-                              ? 'true'
-                              : 'false'
+                                ? 'true'
+                                : 'false'
                           }
                           onValueChange={(value) => handleAnswerChange(currentQuestion.id, value === 'true')}
                         >
@@ -1573,8 +1583,8 @@ export default function TakeExamPage() {
               </p>
             </div>
             <DialogFooter>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => setShowSubmitDialog(false)}
                 disabled={submitting}
               >
@@ -1639,7 +1649,7 @@ export default function TakeExamPage() {
                       You have switched tabs {tabSwitchWarningData.count} time{tabSwitchWarningData.count !== 1 ? 's' : ''}.
                     </p>
                     <p className="text-red-700 mt-2">
-                      {exam?.blockTabSwitch 
+                      {exam?.blockTabSwitch
                         ? 'Tab switching is not allowed during this exam.'
                         : `You have exceeded the maximum allowed tab switches (${exam?.maxTabSwitchesAllowed || 3}).`
                       }
@@ -1725,7 +1735,7 @@ export default function TakeExamPage() {
               )}
             </div>
             <DialogFooter>
-              <Button 
+              <Button
                 onClick={async () => {
                   // Request fullscreen first (needs user gesture), then close dialog
                   try {

@@ -1,0 +1,26 @@
+databaseChangeLog:
+  - changeSet:
+      id: 20240325-01
+      author: antigravity
+      changes:
+        - addColumn:
+            tableName: assessment_submissions
+            columns:
+              - column:
+                  name: version
+                  type: BIGINT
+                  defaultValueNumeric: 0
+  - changeSet:
+      id: 20240325-02
+      author: antigravity
+      changes:
+        - createIndex:
+            tableName: assessment_submissions
+            indexName: idx_assessment_submissions_client_student_assessment
+            columns:
+              - column:
+                  name: client_id
+              - column:
+                  name: student_id
+              - column:
+                  name: assessment_id

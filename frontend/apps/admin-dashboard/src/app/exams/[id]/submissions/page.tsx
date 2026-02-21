@@ -7,30 +7,39 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table'
-import { 
-  Loader2, 
-  ArrowLeft, 
-  RefreshCw, 
-  CheckCircle, 
+import {
+  Loader2,
+  ArrowLeft,
+  RefreshCw,
+  CheckCircle,
   XCircle,
   Clock,
   Download,
   CheckSquare,
   AlertTriangle,
-  ShieldCheck
+  ShieldCheck,
+  Camera
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, enrollmentsApi } from '@/lib/api'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@kunal-ak23/edudron-shared-utils'
+import { ProctoringReport } from '@/components/exams/ProctoringReport'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 /** Eligible student (section/class have name+email; course-wide may have id only) */
 interface EligibleStudent {
@@ -65,6 +74,7 @@ interface Exam {
   courseId?: string
   sectionId?: string
   classId?: string
+  enableProctoring?: boolean
 }
 
 export const dynamic = 'force-dynamic'
@@ -74,7 +84,7 @@ export default function ExamSubmissionsPage() {
   const router = useRouter()
   const examId = params.id as string
   const { toast } = useToast()
-  
+
   const [exam, setExam] = useState<Exam | null>(null)
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,6 +101,8 @@ export default function ExamSubmissionsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [pendingSearchQuery, setPendingSearchQuery] = useState('')
   const [eligibleStudents, setEligibleStudents] = useState<EligibleStudent[] | null>(null)
+  const [showProctoringDialog, setShowProctoringDialog] = useState(false)
+  const [proctoringSubmissionId, setProctoringSubmissionId] = useState<string | null>(null)
 
   const loadData = useCallback(async () => {
     try {
@@ -142,14 +154,14 @@ export default function ExamSubmissionsPage() {
             courseId: examData.courseId
           })
           const byId = new Map<string, EligibleStudent>()
-          ;(content || []).forEach((e: { studentId: string; studentEmail?: string }) => {
-            if (e.studentId && !byId.has(e.studentId)) {
-              byId.set(e.studentId, {
-                id: e.studentId,
-                email: e.studentEmail
-              })
-            }
-          })
+            ; (content || []).forEach((e: { studentId: string; studentEmail?: string }) => {
+              if (e.studentId && !byId.has(e.studentId)) {
+                byId.set(e.studentId, {
+                  id: e.studentId,
+                  email: e.studentEmail
+                })
+              }
+            })
           setEligibleStudents(Array.from(byId.values()))
         } catch {
           setEligibleStudents(null)
@@ -242,14 +254,14 @@ export default function ExamSubmissionsPage() {
       const response = await apiClient.post(`/api/exams/${examId}/submissions/regrade-bulk`, {
         submissionIds: Array.from(selectedSubmissions)
       })
-      
+
       const result = response as any
-      
+
       toast({
         title: 'Re-grading Complete',
         description: `Successfully re-graded ${result.successCount || 0} submission(s). ${result.failureCount > 0 ? `${result.failureCount} failed.` : ''}`
       })
-      
+
       setSelectedSubmissions(new Set())
       await loadData()
     } catch (error) {
@@ -285,7 +297,7 @@ export default function ExamSubmissionsPage() {
       const response = await apiClient.post(`/api/exams/${examId}/submissions/reset-bulk`, {
         submissionIds: Array.from(selectedSubmissions)
       })
-      
+
       const result = (response as any)?.data ?? (response as any)
       const successCount = result?.successCount ?? 0
       const failureCount = result?.failureCount ?? 0
@@ -339,15 +351,15 @@ export default function ExamSubmissionsPage() {
 
   const handleRegradeSubmission = async (submissionId: string) => {
     setRegradingSubmissions(prev => new Set(prev).add(submissionId))
-    
+
     try {
       await apiClient.post(`/api/exams/${examId}/submissions/${submissionId}/regrade`, {})
-      
+
       toast({
         title: 'Success',
         description: 'Submission re-graded successfully'
       })
-      
+
       await loadData()
     } catch (error) {
       toast({
@@ -429,7 +441,7 @@ export default function ExamSubmissionsPage() {
 
   const exportToCSV = () => {
     const csvRows = []
-    
+
     // Header
     csvRows.push([
       'Student ID',
@@ -445,7 +457,7 @@ export default function ExamSubmissionsPage() {
       'Submitted At',
       'Graded At'
     ].join(','))
-    
+
     // Data rows
     for (const submission of filteredSubmissions) {
       csvRows.push([
@@ -463,7 +475,7 @@ export default function ExamSubmissionsPage() {
         submission.gradedAt ? new Date(submission.gradedAt).toLocaleString() : 'N/A'
       ].join(','))
     }
-    
+
     const csvContent = csvRows.join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv' })
     const url = window.URL.createObjectURL(blob)
@@ -474,7 +486,7 @@ export default function ExamSubmissionsPage() {
     a.click()
     document.body.removeChild(a)
     window.URL.revokeObjectURL(url)
-    
+
     toast({
       title: 'Success',
       description: 'Submissions exported to CSV'
@@ -530,8 +542,8 @@ export default function ExamSubmissionsPage() {
             </TooltipProvider>
           )}
           {selectedSubmissions.size > 0 && (exam?.reviewMethod === 'AI' || exam?.reviewMethod === 'BOTH') && (
-            <Button 
-              onClick={handleBulkRegrade} 
+            <Button
+              onClick={handleBulkRegrade}
               disabled={regrading}
               variant="outline"
             >
@@ -544,8 +556,8 @@ export default function ExamSubmissionsPage() {
             </Button>
           )}
           {selectedSubmissions.size > 0 && (
-            <Button 
-              onClick={openBulkResetDialog} 
+            <Button
+              onClick={openBulkResetDialog}
               disabled={resettingBulk}
               variant="outline"
               title="Remove selected attempts so students can take the test again (max 500)"
@@ -599,11 +611,11 @@ export default function ExamSubmissionsPage() {
             <div className="text-2xl font-bold">
               {submissions.length > 0 && submissions.filter(s => s.percentage !== null).length > 0
                 ? (
-                    submissions
-                      .filter(s => s.percentage !== null)
-                      .reduce((acc, s) => acc + (s.percentage || 0), 0) /
-                    submissions.filter(s => s.percentage !== null).length
-                  ).toFixed(1)
+                  submissions
+                    .filter(s => s.percentage !== null)
+                    .reduce((acc, s) => acc + (s.percentage || 0), 0) /
+                  submissions.filter(s => s.percentage !== null).length
+                ).toFixed(1)
                 : '0'}
               %
             </div>
@@ -779,12 +791,12 @@ export default function ExamSubmissionsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge 
+                      <Badge
                         variant={
-                          submission.reviewStatus === 'COMPLETED' || 
-                          submission.reviewStatus === 'AI_REVIEWED' ||
-                          submission.reviewStatus === 'INSTRUCTOR_REVIEWED'
-                            ? 'default' 
+                          submission.reviewStatus === 'COMPLETED' ||
+                            submission.reviewStatus === 'AI_REVIEWED' ||
+                            submission.reviewStatus === 'INSTRUCTOR_REVIEWED'
+                            ? 'default'
                             : 'outline'
                         }
                         className="gap-1"
@@ -870,6 +882,20 @@ export default function ExamSubmissionsPage() {
                                 Re-grade
                               </>
                             )}
+                          </Button>
+                        )}
+                        {exam?.enableProctoring && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setProctoringSubmissionId(submission.id)
+                              setShowProctoringDialog(true)
+                            }}
+                            title="View proctoring report"
+                          >
+                            <Camera className="h-4 w-4 mr-1" />
+                            Proctoring
                           </Button>
                         )}
                       </div>
@@ -969,6 +995,27 @@ export default function ExamSubmissionsPage() {
         variant="destructive"
         isLoading={resetTargetSubmissionId ? resettingSubmissions.has(resetTargetSubmissionId) : false}
       />
+
+      {/* Proctoring Report Dialog */}
+      <Dialog
+        open={showProctoringDialog}
+        onOpenChange={(open) => {
+          setShowProctoringDialog(open)
+          if (!open) setProctoringSubmissionId(null)
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Proctoring report</DialogTitle>
+            <DialogDescription>
+              {proctoringSubmissionId && `Submission: ${proctoringSubmissionId}`}
+            </DialogDescription>
+          </DialogHeader>
+          {proctoringSubmissionId && examId && (
+            <ProctoringReport examId={examId} submissionId={proctoringSubmissionId} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

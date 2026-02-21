@@ -39,3 +39,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0018-marked-as-cheating.yaml
   - include:
       file: db/changelog/db.changelog-0019-assessment-journey-events.yaml
+  - include:
+      file: db/changelog/db.changelog-0020-optimistic-locking-and-indexes.yaml
