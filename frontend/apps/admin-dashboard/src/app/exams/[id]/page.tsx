@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, Loader2, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone, Play, Square } from 'lucide-react'
+import { ArrowLeft, Loader2, Clock, Users, Edit, Save, Sparkles, Eye, Plus, Trash2, Shield, Shuffle, CheckCircle2, XCircle, AlertCircle, AlertTriangle, Lock, Camera, UserCheck, ClipboardX, TabletSmartphone, Play, Square, RefreshCw } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiClient, questionsApi, type QuestionData } from '@/lib/api'
 import { ProctoringReport } from '@/components/exams/ProctoringReport'
@@ -102,7 +102,7 @@ export default function ExamDetailPage() {
   const { toast } = useToast()
   const { user } = useAuth()
   const canUseAI = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
-  
+
   // Check if user can edit exams
   const isInstructor = user?.role === 'INSTRUCTOR'
   const isSupportStaff = user?.role === 'SUPPORT_STAFF'
@@ -110,7 +110,9 @@ export default function ExamDetailPage() {
   // Instructors can publish and complete exams within their assigned scope
   // The backend will verify the instructor's access to the specific exam
   const canPublishComplete = !isSupportStaff // Admin, ContentManager, and Instructors can try to publish/complete
-  
+  // Only SYSTEM_ADMIN and TENANT_ADMIN can republish completed exams
+  const canRepublish = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
+
   const [exam, setExam] = useState<Exam | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -138,9 +140,11 @@ export default function ExamDetailPage() {
   const [publishing, setPublishing] = useState(false)
   const [unpublishing, setUnpublishing] = useState(false)
   const [completing, setCompleting] = useState(false)
+  const [republishing, setRepublishing] = useState(false)
   const [showPublishDialog, setShowPublishDialog] = useState(false)
   const [showUnpublishDialog, setShowUnpublishDialog] = useState(false)
   const [showCompleteDialog, setShowCompleteDialog] = useState(false)
+  const [showRepublishDialog, setShowRepublishDialog] = useState(false)
   const [showAdjustScheduleDialog, setShowAdjustScheduleDialog] = useState(false)
   const [adjustScheduleForm, setAdjustScheduleForm] = useState({ startTime: '', endTime: '' })
   const [savingSchedule, setSavingSchedule] = useState(false)
@@ -160,7 +164,7 @@ export default function ExamDetailPage() {
     classId: '',
     sectionId: ''
   })
-  
+
   // State for classes and sections (for assignment editing)
   const [classes, setClasses] = useState<any[]>([])
   const [sections, setSections] = useState<any[]>([])
@@ -194,7 +198,7 @@ export default function ExamDetailPage() {
       const sectionsResponse = await apiClient.get(`/api/exams/courses/${courseId}/sections`)
       const sectionsData = Array.isArray(sectionsResponse) ? sectionsResponse : (sectionsResponse as any)?.data || []
       setSections(sectionsData)
-      
+
       // Load classes
       const classesResponse = await apiClient.get(`/api/exams/courses/${courseId}/classes`)
       const classesData = Array.isArray(classesResponse) ? classesResponse : (classesResponse as any)?.data || []
@@ -287,7 +291,7 @@ export default function ExamDetailPage() {
       } else if (exam.classId) {
         assignmentType = 'class'
       }
-      
+
       // Convert ISO datetime to datetime-local format for the input
       let startTimeLocal = ''
       let endTimeLocal = ''
@@ -301,7 +305,7 @@ export default function ExamDetailPage() {
         endTimeLocal = new Date(endDate.getTime() - endDate.getTimezoneOffset() * 60000)
           .toISOString().slice(0, 16)
       }
-      
+
       // Initialize form with current exam data
       setEditForm({
         title: exam.title,
@@ -397,7 +401,7 @@ export default function ExamDetailPage() {
       })
       return
     }
-    
+
     // Validate based on timing mode
     if (editForm.timingMode === 'FLEXIBLE_START' && (!editForm.durationMinutes || editForm.durationMinutes < 1)) {
       toast({
@@ -407,7 +411,7 @@ export default function ExamDetailPage() {
       })
       return
     }
-    
+
     if (editForm.timingMode === 'FIXED_WINDOW' && editForm.startTime && editForm.endTime) {
       const start = new Date(editForm.startTime)
       const end = new Date(editForm.endTime)
@@ -436,27 +440,27 @@ export default function ExamDetailPage() {
         classId: editForm.assignmentType === 'class' ? editForm.classId : null,
         sectionId: editForm.assignmentType === 'section' ? editForm.sectionId : null
       }
-      
+
       // Only include duration for FLEXIBLE_START mode
       if (editForm.timingMode === 'FLEXIBLE_START') {
         updateData.timeLimitSeconds = editForm.durationMinutes * 60
       }
-      
+
       const response = await apiClient.put(`/api/exams/${examId}`, updateData)
       let updated = (response as any)?.data || response
-      
+
       // If FIXED_WINDOW mode and times are set, also schedule the exam
       if (editForm.timingMode === 'FIXED_WINDOW' && editForm.startTime && editForm.endTime) {
         const startTimeISO = convertToISOWithTimezone(editForm.startTime)
         const endTimeISO = convertToISOWithTimezone(editForm.endTime)
-        
+
         const scheduleResponse = await apiClient.put(`/api/exams/${examId}/schedule`, {
           startTime: startTimeISO,
           endTime: endTimeISO
         })
         updated = (scheduleResponse as any)?.data || scheduleResponse
       }
-      
+
       setExam(updated as unknown as Exam)
       setShowEditDialog(false)
       toast({
@@ -479,14 +483,14 @@ export default function ExamDetailPage() {
     try {
       const response = await apiClient.delete<{ action: string; message: string }>(`/api/exams/${examId}`)
       const result = (response as any)?.data || response
-      
+
       toast({
         title: result.action === 'deleted' ? 'Exam Deleted' : 'Exam Archived',
-        description: result.message || (result.action === 'deleted' 
+        description: result.message || (result.action === 'deleted'
           ? 'The exam has been permanently deleted'
           : 'The exam has been archived because it has submissions'),
       })
-      
+
       router.push('/exams')
     } catch (error) {
       toast({
@@ -507,11 +511,11 @@ export default function ExamDetailPage() {
       const updated = (response as any)?.data || response
       setExam(updated as unknown as Exam)
       setShowPublishDialog(false)
-      
+
       const newStatus = (updated as any)?.status
       toast({
         title: newStatus === 'SCHEDULED' ? 'Exam Scheduled' : 'Exam Published',
-        description: newStatus === 'SCHEDULED' 
+        description: newStatus === 'SCHEDULED'
           ? 'The exam is scheduled and will go live at the start time'
           : 'The exam is now live and available to students',
       })
@@ -533,7 +537,7 @@ export default function ExamDetailPage() {
       const updated = (response as any)?.data || response
       setExam(updated as unknown as Exam)
       setShowUnpublishDialog(false)
-      
+
       toast({
         title: 'Exam Unpublished',
         description: 'The exam has been moved back to draft status',
@@ -556,7 +560,7 @@ export default function ExamDetailPage() {
       const updated = (response as any)?.data || response
       setExam(updated as unknown as Exam)
       setShowCompleteDialog(false)
-      
+
       toast({
         title: 'Exam Completed',
         description: 'The exam has been marked as completed. No further submissions will be accepted.',
@@ -572,19 +576,49 @@ export default function ExamDetailPage() {
     }
   }
 
+  const handleRepublishExam = async () => {
+    setRepublishing(true)
+    try {
+      const response = await apiClient.put<Exam>(`/api/exams/${examId}/republish`)
+      const updated = (response as any)?.data || response
+      setExam(updated as unknown as Exam)
+      setShowRepublishDialog(false)
+
+      const newStatus = (updated as any)?.status
+      toast({
+        title: newStatus === 'SCHEDULED' ? 'Exam Republished as Scheduled' : 'Exam Republished',
+        description: newStatus === 'SCHEDULED'
+          ? 'The exam has been republished and is scheduled to go live at the start time.'
+          : 'The exam has been republished and is now live again. Students can take it.',
+      })
+    } catch (error: any) {
+      const serverMsg =
+        error?.response?.headers?.['x-error-message'] ||
+        error?.response?.data?.message ||
+        error?.message
+      toast({
+        title: 'Error',
+        description: serverMsg || 'Failed to republish exam. The exam may need to be rescheduled first.',
+        variant: 'destructive'
+      })
+    } finally {
+      setRepublishing(false)
+    }
+  }
+
   // Helper function to convert datetime-local string to ISO 8601 with timezone
   // datetime-local gives "YYYY-MM-DDTHH:mm" in user's local timezone
   const convertToISOWithTimezone = (datetimeLocal: string): string => {
     // Create a Date object from the datetime-local string (interpreted as local time)
     const date = new Date(datetimeLocal)
-    
+
     // Get timezone offset in minutes (negative means ahead of UTC)
     const offsetMinutes = -date.getTimezoneOffset()
     const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60)
     const offsetMins = Math.abs(offsetMinutes) % 60
     const sign = offsetMinutes >= 0 ? '+' : '-'
     const offsetString = `${sign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`
-    
+
     // Format as ISO 8601: YYYY-MM-DDTHH:mm:ss+HH:mm
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -592,7 +626,7 @@ export default function ExamDetailPage() {
     const hours = String(date.getHours()).padStart(2, '0')
     const minutes = String(date.getMinutes()).padStart(2, '0')
     const seconds = String(date.getSeconds()).padStart(2, '0')
-    
+
     return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}${offsetString}`
   }
 
@@ -603,7 +637,7 @@ export default function ExamDetailPage() {
       LIVE: 'default',
       COMPLETED: 'outline'
     }
-    
+
     return (
       <Badge variant={variants[status] || 'outline'}>
         {status}
@@ -647,7 +681,7 @@ export default function ExamDetailPage() {
             {/* Publish button - only for DRAFT exams */}
             {/* Instructors can publish exams within their assigned scope - backend verifies access */}
             {exam.status === 'DRAFT' && (
-              <Button 
+              <Button
                 onClick={() => setShowPublishDialog(true)}
                 className="bg-green-600 hover:bg-green-700"
               >
@@ -657,7 +691,7 @@ export default function ExamDetailPage() {
             )}
             {/* Unpublish button - for SCHEDULED or LIVE exams */}
             {(exam.status === 'SCHEDULED' || exam.status === 'LIVE') && (
-              <Button 
+              <Button
                 onClick={() => setShowUnpublishDialog(true)}
                 variant="outline"
               >
@@ -667,7 +701,7 @@ export default function ExamDetailPage() {
             )}
             {/* Complete button - for LIVE exams (especially useful for FLEXIBLE_START) */}
             {exam.status === 'LIVE' && (
-              <Button 
+              <Button
                 onClick={() => setShowCompleteDialog(true)}
                 variant="secondary"
               >
@@ -675,8 +709,23 @@ export default function ExamDetailPage() {
                 Complete Exam
               </Button>
             )}
-            <Button 
-              variant="outline" 
+            {/* Republish button - for COMPLETED exams, SYSTEM_ADMIN and TENANT_ADMIN only */}
+            {exam.status === 'COMPLETED' && canRepublish && (
+              <Button
+                onClick={() => setShowRepublishDialog(true)}
+                className="bg-blue-600 hover:bg-blue-700"
+                disabled={republishing}
+              >
+                {republishing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Republish Exam
+              </Button>
+            )}
+            <Button
+              variant="outline"
               onClick={() => {
                 // Open exam in preview mode in student portal (new tab)
                 const studentPortalUrl = process.env.NEXT_PUBLIC_STUDENT_PORTAL_URL || 'http://localhost:3001'
@@ -715,1182 +764,1219 @@ export default function ExamDetailPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setExamTab(v as ExamTab)} className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
-            <TabsTrigger value="submissions">Submissions</TabsTrigger>
-          </TabsList>
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
+          <TabsTrigger value="submissions">Submissions</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="details" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Exam Information</CardTitle>
-                  {canManageExams && (
-                    <Button variant="outline" size="sm" onClick={handleOpenEditDialog}>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Title</Label>
-                  <div className="mt-1 text-lg font-semibold">{exam.title}</div>
-                </div>
-                {exam.description && (
-                  <div>
-                    <Label>Description</Label>
-                    <div className="mt-1 text-gray-700">{exam.description}</div>
-                  </div>
+        <TabsContent value="details" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Exam Information</CardTitle>
+                {canManageExams && (
+                  <Button variant="outline" size="sm" onClick={handleOpenEditDialog}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
                 )}
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                  <div>
-                    <Label>Status</Label>
-                    <div className="mt-1">{getStatusBadge(exam.status)}</div>
-                  </div>
-                  <div>
-                    <Label>Review Method</Label>
-                    <div className="mt-1 font-medium">{exam.reviewMethod}</div>
-                  </div>
-                  <div>
-                    <Label className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      Timing Mode
-                    </Label>
-                    <div className="mt-1">
-                      <Badge variant={exam.timingMode === 'FLEXIBLE_START' ? 'default' : 'secondary'}>
-                        {exam.timingMode === 'FLEXIBLE_START' ? 'Flexible Start' : 'Fixed Window'}
-                      </Badge>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {exam.timingMode === 'FLEXIBLE_START' 
-                          ? 'Each student gets full duration from when they start'
-                          : 'Exam runs between scheduled start and end times'}
-                      </p>
-                    </div>
-                  </div>
-                  {exam.timingMode === 'FLEXIBLE_START' && (
-                    <div>
-                      <Label>Duration</Label>
-                      <div className="mt-1 font-medium">
-                        {exam.timeLimitSeconds 
-                          ? `${Math.floor(exam.timeLimitSeconds / 60)} minutes`
-                          : 'Not set'}
-                      </div>
-                    </div>
-                  )}
-                  <div className="col-span-2">
-                    <Label className="flex items-center gap-2">
-                      <Shuffle className="h-4 w-4" />
-                      Randomization
-                    </Label>
-                    <div className="mt-2">
-                      {exam.randomizeQuestions || exam.randomizeMcqOptions ? (
-                        <div className="space-y-2">
-                          {exam.randomizeQuestions && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg">
-                              <CheckCircle2 className="h-4 w-4 text-primary-600 flex-shrink-0" />
-                              <span className="text-sm font-medium text-primary-900">Questions appear in random order</span>
-                            </div>
-                          )}
-                          {exam.randomizeMcqOptions && (
-                            <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg">
-                              <CheckCircle2 className="h-4 w-4 text-primary-600 flex-shrink-0" />
-                              <span className="text-sm font-medium text-primary-900">Multiple choice options shuffled</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-                          <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                          <span className="text-sm text-gray-600">No randomization enabled</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <Label>Available To</Label>
-                    <div className="mt-1">
-                      {exam.sectionId ? (
-                        <Badge variant="secondary">Specific Section</Badge>
-                      ) : exam.classId ? (
-                        <Badge variant="default">Class-Wide</Badge>
-                      ) : (
-                        <Badge variant="outline">All Students</Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div></div>
-                  {exam.startTime && (
-                    <div>
-                      <Label>Start Time</Label>
-                      <div className="mt-1 font-medium">
-                        {new Date(exam.startTime).toLocaleString()}
-                      </div>
-                    </div>
-                  )}
-                  {exam.endTime && (
-                    <div>
-                      <Label>End Time</Label>
-                      <div className="mt-1 font-medium">
-                        {new Date(exam.endTime).toLocaleString()}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {exam.instructions && (
-                  <div>
-                    <Label>Instructions</Label>
-                    <div className="mt-1 text-gray-700 whitespace-pre-wrap">
-                      {exam.instructions}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Proctoring Settings Card */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5" />
-                    <CardTitle>Proctoring Settings</CardTitle>
-                  </div>
-                  {canManageExams && (
-                    <Button variant="outline" size="sm" onClick={handleOpenProctoringDialog}>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Configure
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                {exam.enableProctoring ? (
-                  <div className="space-y-4">
-                    {/* Proctoring Mode Badge */}
-                    <div>
-                      <Label className="text-xs text-gray-500 uppercase mb-2 block">Active Mode</Label>
-                      <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-lg">
-                        <Camera className="h-5 w-5 text-primary-600" />
-                        <span className="font-semibold text-primary-900">
-                          {exam.proctoringMode === 'BASIC_MONITORING' && 'Basic Monitoring'}
-                          {exam.proctoringMode === 'WEBCAM_RECORDING' && 'Webcam Recording'}
-                          {exam.proctoringMode === 'LIVE_PROCTORING' && 'Live Proctoring'}
-                        </span>
-                        {exam.proctoringMode === 'WEBCAM_RECORDING' && (
-                          <Badge variant="secondary" className="ml-2">
-                            <Clock className="h-3 w-3 mr-1" />
-                            {exam.photoIntervalSeconds}s interval
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Security Features */}
-                    <div>
-                      <Label className="text-xs text-gray-500 uppercase mb-2 block">Security Features</Label>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {exam.requireIdentityVerification && (
-                          <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
-                            <UserCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
-                            <span className="text-sm font-medium text-emerald-900">Identity Verification</span>
-                          </div>
-                        )}
-                        {exam.blockCopyPaste && (
-                          <div className="flex items-center gap-2 px-3 py-2 bg-teal-50 border border-teal-200 rounded-lg">
-                            <ClipboardX className="h-4 w-4 text-teal-600 flex-shrink-0" />
-                            <span className="text-sm font-medium text-teal-900">Copy/Paste Blocked</span>
-                          </div>
-                        )}
-                        {exam.blockTabSwitch ? (
-                          <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
-                            <Lock className="h-4 w-4 text-red-600 flex-shrink-0" />
-                            <span className="text-sm font-medium text-red-900">Auto-Submit on Tab Switch</span>
-                          </div>
-                        ) : exam.maxTabSwitchesAllowed !== undefined && exam.maxTabSwitchesAllowed > 0 && (
-                          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
-                            <TabletSmartphone className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                            <span className="text-sm font-medium text-amber-900">Max {exam.maxTabSwitchesAllowed} Tab Switches</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-                    <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    <span className="text-sm text-gray-600">Proctoring is disabled for this exam</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="questions" className="space-y-4">
-            {exam.status === 'DRAFT' && canManageExams && (
-              <div className="flex justify-end">
-                <Button onClick={() => {
-                  setIsCreatingQuestion(true)
-                  setEditingQuestion(null)
-                  setShowQuestionEditor(true)
-                }}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Question
-                </Button>
               </div>
-            )}
-            {questions.length > 0 ? (
-              <div className="space-y-4">
-                {questions.map((question, index) => (
-                  <Card key={question.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <CardTitle className="text-lg">
-                          Question {index + 1} ({question.points} points)
-                        </CardTitle>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">{question.questionType}</Badge>
-                          {exam.status === 'DRAFT' && canManageExams && (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setEditingQuestion(question)
-                                  setIsCreatingQuestion(false)
-                                  setShowQuestionEditor(true)
-                                }}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setQuestionToDelete(question)
-                                  setShowDeleteQuestionDialog(true)
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label>Title</Label>
+                <div className="mt-1 text-lg font-semibold">{exam.title}</div>
+              </div>
+              {exam.description && (
+                <div>
+                  <Label>Description</Label>
+                  <div className="mt-1 text-gray-700">{exam.description}</div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                <div>
+                  <Label>Status</Label>
+                  <div className="mt-1">{getStatusBadge(exam.status)}</div>
+                </div>
+                <div>
+                  <Label>Review Method</Label>
+                  <div className="mt-1 font-medium">{exam.reviewMethod}</div>
+                </div>
+                <div>
+                  <Label className="flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Timing Mode
+                  </Label>
+                  <div className="mt-1">
+                    <Badge variant={exam.timingMode === 'FLEXIBLE_START' ? 'default' : 'secondary'}>
+                      {exam.timingMode === 'FLEXIBLE_START' ? 'Flexible Start' : 'Fixed Window'}
+                    </Badge>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {exam.timingMode === 'FLEXIBLE_START'
+                        ? 'Each student gets full duration from when they start'
+                        : 'Exam runs between scheduled start and end times'}
+                    </p>
+                  </div>
+                </div>
+                {exam.timingMode === 'FLEXIBLE_START' && (
+                  <div>
+                    <Label>Duration</Label>
+                    <div className="mt-1 font-medium">
+                      {exam.timeLimitSeconds
+                        ? `${Math.floor(exam.timeLimitSeconds / 60)} minutes`
+                        : 'Not set'}
+                    </div>
+                  </div>
+                )}
+                <div className="col-span-2">
+                  <Label className="flex items-center gap-2">
+                    <Shuffle className="h-4 w-4" />
+                    Randomization
+                  </Label>
+                  <div className="mt-2">
+                    {exam.randomizeQuestions || exam.randomizeMcqOptions ? (
+                      <div className="space-y-2">
+                        {exam.randomizeQuestions && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg">
+                            <CheckCircle2 className="h-4 w-4 text-primary-600 flex-shrink-0" />
+                            <span className="text-sm font-medium text-primary-900">Questions appear in random order</span>
+                          </div>
+                        )}
+                        {exam.randomizeMcqOptions && (
+                          <div className="flex items-center gap-2 px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg">
+                            <CheckCircle2 className="h-4 w-4 text-primary-600 flex-shrink-0" />
+                            <span className="text-sm font-medium text-primary-900">Multiple choice options shuffled</span>
+                          </div>
+                        )}
                       </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div>
-                        <p className="font-medium">{question.questionText}</p>
+                    ) : (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                        <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <span className="text-sm text-gray-600">No randomization enabled</span>
                       </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Label>Available To</Label>
+                  <div className="mt-1">
+                    {exam.sectionId ? (
+                      <Badge variant="secondary">Specific Section</Badge>
+                    ) : exam.classId ? (
+                      <Badge variant="default">Class-Wide</Badge>
+                    ) : (
+                      <Badge variant="outline">All Students</Badge>
+                    )}
+                  </div>
+                </div>
+                <div></div>
+                {exam.startTime && (
+                  <div>
+                    <Label>Start Time</Label>
+                    <div className="mt-1 font-medium">
+                      {new Date(exam.startTime).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+                {exam.endTime && (
+                  <div>
+                    <Label>End Time</Label>
+                    <div className="mt-1 font-medium">
+                      {new Date(exam.endTime).toLocaleString()}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {exam.instructions && (
+                <div>
+                  <Label>Instructions</Label>
+                  <div className="mt-1 text-gray-700 whitespace-pre-wrap">
+                    {exam.instructions}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-                      {question.questionType === 'MULTIPLE_CHOICE' && question.options && (
-                        <div className="space-y-2">
-                          {question.options.map((option, optIndex) => (
-                            <div
-                              key={option.id}
-                              className={`p-2 rounded border ${
-                                option.isCorrect ? 'bg-green-50 border-green-200' : 'bg-gray-50'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{String.fromCharCode(65 + optIndex)}.</span>
-                                <span>{option.optionText}</span>
-                                {option.isCorrect && (
-                                  <Badge variant="default" className="ml-auto">Correct</Badge>
-                                )}
-                              </div>
-                            </div>
-                          ))}
+          {/* Proctoring Settings Card */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  <CardTitle>Proctoring Settings</CardTitle>
+                </div>
+                {canManageExams && (
+                  <Button variant="outline" size="sm" onClick={handleOpenProctoringDialog}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    Configure
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {exam.enableProctoring ? (
+                <div className="space-y-4">
+                  {/* Proctoring Mode Badge */}
+                  <div>
+                    <Label className="text-xs text-gray-500 uppercase mb-2 block">Active Mode</Label>
+                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-50 to-primary-100 border border-primary-200 rounded-lg">
+                      <Camera className="h-5 w-5 text-primary-600" />
+                      <span className="font-semibold text-primary-900">
+                        {exam.proctoringMode === 'BASIC_MONITORING' && 'Basic Monitoring'}
+                        {exam.proctoringMode === 'WEBCAM_RECORDING' && 'Webcam Recording'}
+                        {exam.proctoringMode === 'LIVE_PROCTORING' && 'Live Proctoring'}
+                      </span>
+                      {exam.proctoringMode === 'WEBCAM_RECORDING' && (
+                        <Badge variant="secondary" className="ml-2">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {exam.photoIntervalSeconds}s interval
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Security Features */}
+                  <div>
+                    <Label className="text-xs text-gray-500 uppercase mb-2 block">Security Features</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {exam.requireIdentityVerification && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg">
+                          <UserCheck className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                          <span className="text-sm font-medium text-emerald-900">Identity Verification</span>
                         </div>
                       )}
+                      {exam.blockCopyPaste && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-teal-50 border border-teal-200 rounded-lg">
+                          <ClipboardX className="h-4 w-4 text-teal-600 flex-shrink-0" />
+                          <span className="text-sm font-medium text-teal-900">Copy/Paste Blocked</span>
+                        </div>
+                      )}
+                      {exam.blockTabSwitch ? (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg">
+                          <Lock className="h-4 w-4 text-red-600 flex-shrink-0" />
+                          <span className="text-sm font-medium text-red-900">Auto-Submit on Tab Switch</span>
+                        </div>
+                      ) : exam.maxTabSwitchesAllowed !== undefined && exam.maxTabSwitchesAllowed > 0 && (
+                        <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                          <TabletSmartphone className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                          <span className="text-sm font-medium text-amber-900">Max {exam.maxTabSwitchesAllowed} Tab Switches</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                  <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                  <span className="text-sm text-gray-600">Proctoring is disabled for this exam</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                      {(question.questionType === 'SHORT_ANSWER' || question.questionType === 'ESSAY') && (
-                        <div className="space-y-2">
-                          <div>
-                            <Label className="text-sm font-medium">Tentative Answer</Label>
-                            <div className="mt-1 p-3 bg-gray-50 rounded border">
-                              {question.editedTentativeAnswer || question.tentativeAnswer || 
-                               'No tentative answer available'}
-                            </div>
-                          </div>
-                          {exam.status === 'DRAFT' && canManageExams && (
+        <TabsContent value="questions" className="space-y-4">
+          {exam.status === 'DRAFT' && canManageExams && (
+            <div className="flex justify-end">
+              <Button onClick={() => {
+                setIsCreatingQuestion(true)
+                setEditingQuestion(null)
+                setShowQuestionEditor(true)
+              }}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Question
+              </Button>
+            </div>
+          )}
+          {questions.length > 0 ? (
+            <div className="space-y-4">
+              {questions.map((question, index) => (
+                <Card key={question.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <CardTitle className="text-lg">
+                        Question {index + 1} ({question.points} points)
+                      </CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{question.questionType}</Badge>
+                        {exam.status === 'DRAFT' && canManageExams && (
+                          <>
                             <Button
-                              variant="outline"
+                              variant="ghost"
                               size="sm"
                               onClick={() => {
                                 setEditingQuestion(question)
-                                setShowTentativeAnswerDialog(true)
+                                setIsCreatingQuestion(false)
+                                setShowQuestionEditor(true)
                               }}
                             >
-                              <Edit className="h-4 w-4 mr-2" />
-                              Edit Tentative Answer
+                              <Edit className="h-4 w-4" />
                             </Button>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-gray-500 mb-4">No questions added yet</p>
-                  {canManageExams && (
-                    <div className="flex gap-2 justify-center">
-                      <Button onClick={() => {
-                        setIsCreatingQuestion(true)
-                        setEditingQuestion(null)
-                        setShowQuestionEditor(true)
-                      }}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Question Manually
-                      </Button>
-                      {canUseAI && exam.moduleIds && exam.moduleIds.length > 0 && (
-                        <Button onClick={async () => {
-                          setSaving(true)
-                          try {
-                            await apiClient.post(`/api/exams/${examId}/generate`, {
-                              numberOfQuestions: 10,
-                              difficulty: 'INTERMEDIATE'
-                            })
-                            await loadExam()
-                            toast({
-                              title: 'Success',
-                              description: 'Questions generated successfully'
-                            })
-                          } catch (error) {
-                            toast({
-                              title: 'Error',
-                              description: 'Failed to generate questions',
-                              variant: 'destructive'
-                            })
-                          } finally {
-                            setSaving(false)
-                          }
-                        }} disabled={saving} variant="outline">
-                          {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : 
-                           <Sparkles className="h-4 w-4 mr-2" />}
-                          Generate Questions with AI
-                        </Button>
-                      )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setQuestionToDelete(question)
+                                setShowDeleteQuestionDialog(true)
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <p className="font-medium">{question.questionText}</p>
+                    </div>
 
-          <TabsContent value="submissions">
-            <SubmissionsList examId={examId} questions={questions} reviewMethod={exam.reviewMethod} passingScorePercentage={exam.passingScorePercentage || 70} enableProctoring={exam.enableProctoring} />
-          </TabsContent>
-        </Tabs>
+                    {question.questionType === 'MULTIPLE_CHOICE' && question.options && (
+                      <div className="space-y-2">
+                        {question.options.map((option, optIndex) => (
+                          <div
+                            key={option.id}
+                            className={`p-2 rounded border ${option.isCorrect ? 'bg-green-50 border-green-200' : 'bg-gray-50'
+                              }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{String.fromCharCode(65 + optIndex)}.</span>
+                              <span>{option.optionText}</span>
+                              {option.isCorrect && (
+                                <Badge variant="default" className="ml-auto">Correct</Badge>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-        {/* Tentative Answer Edit Dialog */}
-        <Dialog open={showTentativeAnswerDialog} onOpenChange={setShowTentativeAnswerDialog}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Edit Tentative Answer</DialogTitle>
-              <DialogDescription>
-                Edit the expected answer for this question
-              </DialogDescription>
-            </DialogHeader>
-            {editingQuestion && (
-              <div className="space-y-4">
-                <div>
-                  <Label>Question</Label>
-                  <p className="mt-1 text-sm text-gray-700">{editingQuestion.questionText}</p>
-                </div>
-                <div>
-                  <Label htmlFor="tentativeAnswer">Tentative Answer</Label>
-                  <Textarea
-                    id="tentativeAnswer"
-                    rows={10}
-                    defaultValue={editingQuestion.editedTentativeAnswer || editingQuestion.tentativeAnswer || ''}
-                    onChange={(e) => {
-                      // Store in state for submission
-                      setEditingQuestion(prev => prev ? {
-                        ...prev,
-                        editedTentativeAnswer: e.target.value
-                      } : null)
-                    }}
-                  />
-                </div>
+                    {(question.questionType === 'SHORT_ANSWER' || question.questionType === 'ESSAY') && (
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-sm font-medium">Tentative Answer</Label>
+                          <div className="mt-1 p-3 bg-gray-50 rounded border">
+                            {question.editedTentativeAnswer || question.tentativeAnswer ||
+                              'No tentative answer available'}
+                          </div>
+                        </div>
+                        {exam.status === 'DRAFT' && canManageExams && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingQuestion(question)
+                              setShowTentativeAnswerDialog(true)
+                            }}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit Tentative Answer
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <p className="text-gray-500 mb-4">No questions added yet</p>
+                {canManageExams && (
+                  <div className="flex gap-2 justify-center">
+                    <Button onClick={() => {
+                      setIsCreatingQuestion(true)
+                      setEditingQuestion(null)
+                      setShowQuestionEditor(true)
+                    }}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Question Manually
+                    </Button>
+                    {canUseAI && exam.moduleIds && exam.moduleIds.length > 0 && (
+                      <Button onClick={async () => {
+                        setSaving(true)
+                        try {
+                          await apiClient.post(`/api/exams/${examId}/generate`, {
+                            numberOfQuestions: 10,
+                            difficulty: 'INTERMEDIATE'
+                          })
+                          await loadExam()
+                          toast({
+                            title: 'Success',
+                            description: 'Questions generated successfully'
+                          })
+                        } catch (error) {
+                          toast({
+                            title: 'Error',
+                            description: 'Failed to generate questions',
+                            variant: 'destructive'
+                          })
+                        } finally {
+                          setSaving(false)
+                        }
+                      }} disabled={saving} variant="outline">
+                        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> :
+                          <Sparkles className="h-4 w-4 mr-2" />}
+                        Generate Questions with AI
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="submissions">
+          <SubmissionsList examId={examId} questions={questions} reviewMethod={exam.reviewMethod} passingScorePercentage={exam.passingScorePercentage || 70} enableProctoring={exam.enableProctoring} />
+        </TabsContent>
+      </Tabs>
+
+      {/* Tentative Answer Edit Dialog */}
+      <Dialog open={showTentativeAnswerDialog} onOpenChange={setShowTentativeAnswerDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Tentative Answer</DialogTitle>
+            <DialogDescription>
+              Edit the expected answer for this question
+            </DialogDescription>
+          </DialogHeader>
+          {editingQuestion && (
+            <div className="space-y-4">
+              <div>
+                <Label>Question</Label>
+                <p className="mt-1 text-sm text-gray-700">{editingQuestion.questionText}</p>
               </div>
-            )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setShowTentativeAnswerDialog(false)
-                setEditingQuestion(null)
-              }}>
-                Cancel
-              </Button>
-              <Button onClick={() => {
-                if (editingQuestion) {
-                  handleUpdateTentativeAnswer(
-                    editingQuestion.id,
-                    editingQuestion.editedTentativeAnswer || ''
-                  )
-                }
-              }} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <div>
+                <Label htmlFor="tentativeAnswer">Tentative Answer</Label>
+                <Textarea
+                  id="tentativeAnswer"
+                  rows={10}
+                  defaultValue={editingQuestion.editedTentativeAnswer || editingQuestion.tentativeAnswer || ''}
+                  onChange={(e) => {
+                    // Store in state for submission
+                    setEditingQuestion(prev => prev ? {
+                      ...prev,
+                      editedTentativeAnswer: e.target.value
+                    } : null)
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowTentativeAnswerDialog(false)
+              setEditingQuestion(null)
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              if (editingQuestion) {
+                handleUpdateTentativeAnswer(
+                  editingQuestion.id,
+                  editingQuestion.editedTentativeAnswer || ''
+                )
+              }
+            }} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {/* Question Editor Dialog */}
-        <Dialog open={showQuestionEditor} onOpenChange={setShowQuestionEditor}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <QuestionEditor
-              question={editingQuestion ? {
-                id: editingQuestion.id,
-                questionType: editingQuestion.questionType,
-                questionText: editingQuestion.questionText,
-                points: editingQuestion.points,
-                options: editingQuestion.options,
-                tentativeAnswer: editingQuestion.editedTentativeAnswer || editingQuestion.tentativeAnswer
-              } : undefined}
-              onSave={async (questionData: QuestionData) => {
-                try {
-                  if (isCreatingQuestion) {
-                    await questionsApi.create(examId, questionData)
-                    toast({
-                      title: 'Success',
-                      description: 'Question added successfully'
-                    })
-                  } else if (editingQuestion) {
-                    await questionsApi.update(examId, editingQuestion.id, questionData)
-                    toast({
-                      title: 'Success',
-                      description: 'Question updated successfully'
-                    })
-                  }
-                  await loadExam()
-                  setShowQuestionEditor(false)
-                  setEditingQuestion(null)
-                  setIsCreatingQuestion(false)
-                } catch (error) {
+      {/* Question Editor Dialog */}
+      <Dialog open={showQuestionEditor} onOpenChange={setShowQuestionEditor}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <QuestionEditor
+            question={editingQuestion ? {
+              id: editingQuestion.id,
+              questionType: editingQuestion.questionType,
+              questionText: editingQuestion.questionText,
+              points: editingQuestion.points,
+              options: editingQuestion.options,
+              tentativeAnswer: editingQuestion.editedTentativeAnswer || editingQuestion.tentativeAnswer
+            } : undefined}
+            onSave={async (questionData: QuestionData) => {
+              try {
+                if (isCreatingQuestion) {
+                  await questionsApi.create(examId, questionData)
                   toast({
-                    title: 'Error',
-                    description: isCreatingQuestion ? 'Failed to add question' : 'Failed to update question',
-                    variant: 'destructive'
+                    title: 'Success',
+                    description: 'Question added successfully'
                   })
-                  throw error
+                } else if (editingQuestion) {
+                  await questionsApi.update(examId, editingQuestion.id, questionData)
+                  toast({
+                    title: 'Success',
+                    description: 'Question updated successfully'
+                  })
                 }
-              }}
-              onCancel={() => {
+                await loadExam()
                 setShowQuestionEditor(false)
                 setEditingQuestion(null)
                 setIsCreatingQuestion(false)
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+              } catch (error) {
+                toast({
+                  title: 'Error',
+                  description: isCreatingQuestion ? 'Failed to add question' : 'Failed to update question',
+                  variant: 'destructive'
+                })
+                throw error
+              }
+            }}
+            onCancel={() => {
+              setShowQuestionEditor(false)
+              setEditingQuestion(null)
+              setIsCreatingQuestion(false)
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
-        {/* Proctoring Settings Dialog */}
-        <Dialog open={showProctoringDialog} onOpenChange={setShowProctoringDialog}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Configure Proctoring Settings
-                </div>
-              </DialogTitle>
-              <DialogDescription>
-                Configure how students will be monitored during this exam
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="enableProctoring">Enable Proctoring</Label>
-                  <p className="text-sm text-gray-500">Monitor students during the exam</p>
-                </div>
-                <Switch
-                  id="enableProctoring"
-                  checked={proctoringForm.enableProctoring}
-                  onCheckedChange={(checked) => 
-                    setProctoringForm(prev => ({ ...prev, enableProctoring: checked }))
-                  }
-                />
+      {/* Proctoring Settings Dialog */}
+      <Dialog open={showProctoringDialog} onOpenChange={setShowProctoringDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Configure Proctoring Settings
               </div>
-
-              {proctoringForm.enableProctoring && (
-                <div className="space-y-4 pt-4 border-t">
-                  <div>
-                    <Label htmlFor="proctoringMode">Proctoring Mode</Label>
-                    <Select 
-                      value={proctoringForm.proctoringMode} 
-                      onValueChange={(value: any) => 
-                        setProctoringForm(prev => ({ ...prev, proctoringMode: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="BASIC_MONITORING">Basic Monitoring (Events only)</SelectItem>
-                        <SelectItem value="WEBCAM_RECORDING">Webcam Recording</SelectItem>
-                        <SelectItem value="LIVE_PROCTORING">Live Proctoring (Future)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {proctoringForm.proctoringMode === 'WEBCAM_RECORDING' && (
-                    <div>
-                      <Label htmlFor="photoInterval">Photo Capture Interval (seconds)</Label>
-                      <Input
-                        id="photoInterval"
-                        type="number"
-                        value={proctoringForm.photoIntervalSeconds}
-                        onChange={(e) => setProctoringForm(prev => ({ 
-                          ...prev, 
-                          photoIntervalSeconds: parseInt(e.target.value) || 30 
-                        }))}
-                        min={10}
-                        max={300}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Between 10 and 300 seconds</p>
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="requireIdentityVerification">Require Identity Verification</Label>
-                      <p className="text-sm text-gray-500">Student must take a photo before starting</p>
-                    </div>
-                    <Switch
-                      id="requireIdentityVerification"
-                      checked={proctoringForm.requireIdentityVerification}
-                      onCheckedChange={(checked) => 
-                        setProctoringForm(prev => ({ ...prev, requireIdentityVerification: checked }))
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="blockCopyPaste">Block Copy & Paste</Label>
-                      <p className="text-sm text-gray-500">Prevent copying/pasting during exam</p>
-                    </div>
-                    <Switch
-                      id="blockCopyPaste"
-                      checked={proctoringForm.blockCopyPaste}
-                      onCheckedChange={(checked) => 
-                        setProctoringForm(prev => ({ ...prev, blockCopyPaste: checked }))
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="blockTabSwitch">Auto-Submit on Tab Switch</Label>
-                      <p className="text-sm text-gray-500">Automatically submit exam if student switches tabs</p>
-                    </div>
-                    <Switch
-                      id="blockTabSwitch"
-                      checked={proctoringForm.blockTabSwitch}
-                      onCheckedChange={(checked) => 
-                        setProctoringForm(prev => ({ ...prev, blockTabSwitch: checked }))
-                      }
-                    />
-                  </div>
-
-                  {!proctoringForm.blockTabSwitch && (
-                    <div>
-                      <Label htmlFor="maxTabSwitches">Maximum Tab Switches Allowed</Label>
-                      <Input
-                        id="maxTabSwitches"
-                        type="number"
-                        value={proctoringForm.maxTabSwitchesAllowed}
-                        onChange={(e) => setProctoringForm(prev => ({ 
-                          ...prev, 
-                          maxTabSwitchesAllowed: parseInt(e.target.value) || 3 
-                        }))}
-                        min={0}
-                        max={20}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">0 = unlimited, 1-20 = max allowed</p>
-                    </div>
-                  )}
-                </div>
-              )}
+            </DialogTitle>
+            <DialogDescription>
+              Configure how students will be monitored during this exam
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="enableProctoring">Enable Proctoring</Label>
+                <p className="text-sm text-gray-500">Monitor students during the exam</p>
+              </div>
+              <Switch
+                id="enableProctoring"
+                checked={proctoringForm.enableProctoring}
+                onCheckedChange={(checked) =>
+                  setProctoringForm(prev => ({ ...prev, enableProctoring: checked }))
+                }
+              />
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowProctoringDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveProctoring} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
-        {/* Edit Exam Details Dialog */}
-        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Edit Exam Details</DialogTitle>
-              <DialogDescription>
-                Update exam information, review method, and randomization settings
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 pt-4">
-              <div>
-                <Label htmlFor="editTitle">Exam Title *</Label>
-                <Input
-                  id="editTitle"
-                  value={editForm.title}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Enter exam title"
-                />
+            {proctoringForm.enableProctoring && (
+              <div className="space-y-4 pt-4 border-t">
+                <div>
+                  <Label htmlFor="proctoringMode">Proctoring Mode</Label>
+                  <Select
+                    value={proctoringForm.proctoringMode}
+                    onValueChange={(value: any) =>
+                      setProctoringForm(prev => ({ ...prev, proctoringMode: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BASIC_MONITORING">Basic Monitoring (Events only)</SelectItem>
+                      <SelectItem value="WEBCAM_RECORDING">Webcam Recording</SelectItem>
+                      <SelectItem value="LIVE_PROCTORING">Live Proctoring (Future)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {proctoringForm.proctoringMode === 'WEBCAM_RECORDING' && (
+                  <div>
+                    <Label htmlFor="photoInterval">Photo Capture Interval (seconds)</Label>
+                    <Input
+                      id="photoInterval"
+                      type="number"
+                      value={proctoringForm.photoIntervalSeconds}
+                      onChange={(e) => setProctoringForm(prev => ({
+                        ...prev,
+                        photoIntervalSeconds: parseInt(e.target.value) || 30
+                      }))}
+                      min={10}
+                      max={300}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Between 10 and 300 seconds</p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="requireIdentityVerification">Require Identity Verification</Label>
+                    <p className="text-sm text-gray-500">Student must take a photo before starting</p>
+                  </div>
+                  <Switch
+                    id="requireIdentityVerification"
+                    checked={proctoringForm.requireIdentityVerification}
+                    onCheckedChange={(checked) =>
+                      setProctoringForm(prev => ({ ...prev, requireIdentityVerification: checked }))
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="blockCopyPaste">Block Copy & Paste</Label>
+                    <p className="text-sm text-gray-500">Prevent copying/pasting during exam</p>
+                  </div>
+                  <Switch
+                    id="blockCopyPaste"
+                    checked={proctoringForm.blockCopyPaste}
+                    onCheckedChange={(checked) =>
+                      setProctoringForm(prev => ({ ...prev, blockCopyPaste: checked }))
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="blockTabSwitch">Auto-Submit on Tab Switch</Label>
+                    <p className="text-sm text-gray-500">Automatically submit exam if student switches tabs</p>
+                  </div>
+                  <Switch
+                    id="blockTabSwitch"
+                    checked={proctoringForm.blockTabSwitch}
+                    onCheckedChange={(checked) =>
+                      setProctoringForm(prev => ({ ...prev, blockTabSwitch: checked }))
+                    }
+                  />
+                </div>
+
+                {!proctoringForm.blockTabSwitch && (
+                  <div>
+                    <Label htmlFor="maxTabSwitches">Maximum Tab Switches Allowed</Label>
+                    <Input
+                      id="maxTabSwitches"
+                      type="number"
+                      value={proctoringForm.maxTabSwitchesAllowed}
+                      onChange={(e) => setProctoringForm(prev => ({
+                        ...prev,
+                        maxTabSwitchesAllowed: parseInt(e.target.value) || 3
+                      }))}
+                      min={0}
+                      max={20}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">0 = unlimited, 1-20 = max allowed</p>
+                  </div>
+                )}
               </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProctoringDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveProctoring} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Exam Details Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Exam Details</DialogTitle>
+            <DialogDescription>
+              Update exam information, review method, and randomization settings
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div>
+              <Label htmlFor="editTitle">Exam Title *</Label>
+              <Input
+                id="editTitle"
+                value={editForm.title}
+                onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="Enter exam title"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="editDescription">Description</Label>
+              <Textarea
+                id="editDescription"
+                value={editForm.description}
+                onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                placeholder="Brief description of the exam"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="editInstructions">Instructions</Label>
+              <Textarea
+                id="editInstructions"
+                value={editForm.instructions}
+                onChange={(e) => setEditForm(prev => ({ ...prev, instructions: e.target.value }))}
+                placeholder="Detailed instructions for students"
+                rows={5}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="editPassingScore">Passing Score (%)</Label>
+              <Input
+                id="editPassingScore"
+                type="number"
+                value={editForm.passingScorePercentage}
+                onChange={(e) => setEditForm(prev => ({
+                  ...prev,
+                  passingScorePercentage: Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
+                }))}
+                min={0}
+                max={100}
+                placeholder="70"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Students must score at least this percentage to pass
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="reviewMethod">Review Method</Label>
+              <Select
+                value={editForm.reviewMethod}
+                onValueChange={(value: any) =>
+                  setEditForm(prev => ({ ...prev, reviewMethod: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="INSTRUCTOR">Instructor Review Only</SelectItem>
+                  <SelectItem value="AI">AI Review Only</SelectItem>
+                  <SelectItem value="BOTH">AI + Instructor Review</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500 mt-1">
+                How should answers be reviewed and graded?
+              </p>
+            </div>
+
+            <div className="space-y-3 pt-2 border-t">
+              <Label>Timing Settings</Label>
 
               <div>
-                <Label htmlFor="editDescription">Description</Label>
-                <Textarea
-                  id="editDescription"
-                  value={editForm.description}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Brief description of the exam"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="editInstructions">Instructions</Label>
-                <Textarea
-                  id="editInstructions"
-                  value={editForm.instructions}
-                  onChange={(e) => setEditForm(prev => ({ ...prev, instructions: e.target.value }))}
-                  placeholder="Detailed instructions for students"
-                  rows={5}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="editPassingScore">Passing Score (%)</Label>
-                <Input
-                  id="editPassingScore"
-                  type="number"
-                  value={editForm.passingScorePercentage}
-                  onChange={(e) => setEditForm(prev => ({ 
-                    ...prev, 
-                    passingScorePercentage: Math.min(100, Math.max(0, parseInt(e.target.value) || 0))
-                  }))}
-                  min={0}
-                  max={100}
-                  placeholder="70"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Students must score at least this percentage to pass
-                </p>
-              </div>
-
-              <div>
-                <Label htmlFor="reviewMethod">Review Method</Label>
-                <Select 
-                  value={editForm.reviewMethod} 
-                  onValueChange={(value: any) => 
-                    setEditForm(prev => ({ ...prev, reviewMethod: value }))
+                <Label htmlFor="editTimingMode">Timing Mode</Label>
+                <Select
+                  value={editForm.timingMode}
+                  onValueChange={(value: any) =>
+                    setEditForm(prev => ({ ...prev, timingMode: value }))
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="INSTRUCTOR">Instructor Review Only</SelectItem>
-                    <SelectItem value="AI">AI Review Only</SelectItem>
-                    <SelectItem value="BOTH">AI + Instructor Review</SelectItem>
+                    <SelectItem value="FIXED_WINDOW">Fixed Window</SelectItem>
+                    <SelectItem value="FLEXIBLE_START">Flexible Start</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500 mt-1">
-                  How should answers be reviewed and graded?
+                  {editForm.timingMode === 'FIXED_WINDOW'
+                    ? 'Exam has a fixed start and end time. All students must complete within this window.'
+                    : 'Each student gets a fixed duration from when they start the exam.'}
                 </p>
               </div>
 
-              <div className="space-y-3 pt-2 border-t">
-                <Label>Timing Settings</Label>
-                
+              {editForm.timingMode === 'FLEXIBLE_START' ? (
                 <div>
-                  <Label htmlFor="editTimingMode">Timing Mode</Label>
-                  <Select 
-                    value={editForm.timingMode} 
-                    onValueChange={(value: any) => 
-                      setEditForm(prev => ({ ...prev, timingMode: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FIXED_WINDOW">Fixed Window</SelectItem>
-                      <SelectItem value="FLEXIBLE_START">Flexible Start</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="editDurationMinutes">
+                    Exam Duration (minutes) <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="editDurationMinutes"
+                    type="number"
+                    value={editForm.durationMinutes}
+                    onChange={(e) => setEditForm(prev => ({
+                      ...prev,
+                      durationMinutes: parseInt(e.target.value) || 60
+                    }))}
+                    min={1}
+                    max={480}
+                    placeholder="60"
+                  />
                   <p className="text-xs text-gray-500 mt-1">
-                    {editForm.timingMode === 'FIXED_WINDOW' 
-                      ? 'Exam has a fixed start and end time. All students must complete within this window.'
-                      : 'Each student gets a fixed duration from when they start the exam.'}
+                    Each student gets this many minutes from when they start.
                   </p>
-                </div>
-
-                {editForm.timingMode === 'FLEXIBLE_START' ? (
-                  <div>
-                    <Label htmlFor="editDurationMinutes">
-                      Exam Duration (minutes) <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="editDurationMinutes"
-                      type="number"
-                      value={editForm.durationMinutes}
-                      onChange={(e) => setEditForm(prev => ({ 
-                        ...prev, 
-                        durationMinutes: parseInt(e.target.value) || 60 
-                      }))}
-                      min={1}
-                      max={480}
-                      placeholder="60"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Each student gets this many minutes from when they start.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div>
-                      <Label htmlFor="editStartTime">Start Time</Label>
-                      <Input
-                        id="editStartTime"
-                        type="datetime-local"
-                        value={editForm.startTime}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, startTime: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="editEndTime">End Time</Label>
-                      <Input
-                        id="editEndTime"
-                        type="datetime-local"
-                        value={editForm.endTime}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, endTime: e.target.value }))}
-                      />
-                    </div>
-                    <p className="text-xs text-gray-500">
-                      The exam will be available between these times. Duration is calculated automatically.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3 pt-2 border-t">
-                <Label>Student Assignment</Label>
-                
-                <div>
-                  <Label htmlFor="editAssignmentType">Assign To</Label>
-                  <Select 
-                    value={editForm.assignmentType} 
-                    onValueChange={(value: any) => 
-                      setEditForm(prev => ({ ...prev, assignmentType: value, classId: '', sectionId: '' }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Students in Course</SelectItem>
-                      <SelectItem value="class">Specific Class</SelectItem>
-                      <SelectItem value="section">Specific Section/Batch</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {editForm.assignmentType === 'class' && (
-                  <div>
-                    <Label htmlFor="editClassId">Select Class</Label>
-                    <Select 
-                      value={editForm.classId} 
-                      onValueChange={(value) => 
-                        setEditForm(prev => ({ ...prev, classId: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a class" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {classes.length === 0 ? (
-                          <SelectItem value="__none__" disabled>No classes found</SelectItem>
-                        ) : (
-                          classes.map((cls: any) => (
-                            <SelectItem key={cls.id} value={cls.id}>
-                              {cls.name} {cls.code ? `(${cls.code})` : ''}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                {editForm.assignmentType === 'section' && (
-                  <div>
-                    <Label htmlFor="editSectionId">Select Section/Batch</Label>
-                    <Select 
-                      value={editForm.sectionId} 
-                      onValueChange={(value) => 
-                        setEditForm(prev => ({ ...prev, sectionId: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose a section" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sections.length === 0 ? (
-                          <SelectItem value="__none__" disabled>No sections found</SelectItem>
-                        ) : (
-                          sections.map((section: any) => (
-                            <SelectItem key={section.id} value={section.id}>
-                              {section.name}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3 pt-2 border-t">
-                <Label>Randomization Options</Label>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="randomizeQuestions">Randomize Question Order</Label>
-                    <p className="text-sm text-gray-500">Each student sees questions in different order</p>
-                  </div>
-                  <Switch
-                    id="randomizeQuestions"
-                    checked={editForm.randomizeQuestions}
-                    onCheckedChange={(checked) => 
-                      setEditForm(prev => ({ ...prev, randomizeQuestions: checked }))
-                    }
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="randomizeMcqOptions">Randomize MCQ Options</Label>
-                    <p className="text-sm text-gray-500">Multiple choice options appear in random order</p>
-                  </div>
-                  <Switch
-                    id="randomizeMcqOptions"
-                    checked={editForm.randomizeMcqOptions}
-                    onCheckedChange={(checked) => 
-                      setEditForm(prev => ({ ...prev, randomizeMcqOptions: checked }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveEdit} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Save Changes
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Adjust schedule dialog (instructor, fixed-window only) */}
-        <Dialog open={showAdjustScheduleDialog} onOpenChange={setShowAdjustScheduleDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Adjust date & time
-              </DialogTitle>
-              <DialogDescription>
-                Change the start and end times for this fixed-window exam.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div>
-                <Label htmlFor="adjustStartTime">Start Time</Label>
-                <Input
-                  id="adjustStartTime"
-                  type="datetime-local"
-                  value={adjustScheduleForm.startTime}
-                  onChange={(e) => setAdjustScheduleForm(prev => ({ ...prev, startTime: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label htmlFor="adjustEndTime">End Time</Label>
-                <Input
-                  id="adjustEndTime"
-                  type="datetime-local"
-                  value={adjustScheduleForm.endTime}
-                  onChange={(e) => setAdjustScheduleForm(prev => ({ ...prev, endTime: e.target.value }))}
-                />
-              </div>
-              <p className="text-xs text-gray-500">
-                The exam will be available between these times.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAdjustScheduleDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveAdjustSchedule} disabled={savingSchedule}>
-                {savingSchedule ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Save schedule
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-destructive">
-                <AlertCircle className="h-5 w-5" />
-                Delete Exam
-              </DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete &quot;{exam.title}&quot;?
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-amber-800">
-                  <strong>Note:</strong> If this exam has student submissions, it will be 
-                  <strong> archived</strong> instead of permanently deleted. Archived exams 
-                  can be restored later. Exams without submissions will be permanently deleted.
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDeleteExam} disabled={deleting}>
-                {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                {deleting ? 'Deleting...' : 'Delete Exam'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Publish Confirmation Dialog */}
-        <Dialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-green-600">
-                <Play className="h-5 w-5" />
-                Publish Exam
-              </DialogTitle>
-              <DialogDescription>
-                Are you sure you want to publish &quot;{exam.title}&quot;?
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              {exam.timingMode === 'FIXED_WINDOW' ? (
-                <div className="space-y-3">
-                  {exam.startTime && exam.endTime ? (
-                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                      <p className="text-sm text-green-800">
-                        <strong>Fixed Window Exam</strong><br />
-                        Start: {new Date(exam.startTime).toLocaleString()}<br />
-                        End: {new Date(exam.endTime).toLocaleString()}
-                      </p>
-                      <p className="text-sm text-green-700 mt-2">
-                        {new Date() < new Date(exam.startTime) 
-                          ? 'The exam will be scheduled and go live at the start time.'
-                          : 'The exam will go live immediately.'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                      <p className="text-sm text-amber-800">
-                        <strong>Warning:</strong> Start and end times are not set. 
-                        Please edit the exam details to set the schedule before publishing.
-                      </p>
-                    </div>
-                  )}
                 </div>
               ) : (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    <strong>Flexible Start Exam</strong><br />
-                    Duration: {exam.timeLimitSeconds ? `${Math.floor(exam.timeLimitSeconds / 60)} minutes` : 'Not set'}
-                  </p>
-                  <p className="text-sm text-blue-700 mt-2">
-                    The exam will go live immediately. Each student will get the full duration from when they start.
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="editStartTime">Start Time</Label>
+                    <Input
+                      id="editStartTime"
+                      type="datetime-local"
+                      value={editForm.startTime}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, startTime: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="editEndTime">End Time</Label>
+                    <Input
+                      id="editEndTime"
+                      type="datetime-local"
+                      value={editForm.endTime}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, endTime: e.target.value }))}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    The exam will be available between these times. Duration is calculated automatically.
                   </p>
                 </div>
               )}
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowPublishDialog(false)} disabled={publishing}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handlePublishExam} 
-                disabled={publishing || (exam.timingMode === 'FIXED_WINDOW' && (!exam.startTime || !exam.endTime))}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
-                {publishing ? 'Publishing...' : 'Publish Exam'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
-        {/* Unpublish Confirmation Dialog */}
-        <Dialog open={showUnpublishDialog} onOpenChange={setShowUnpublishDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-amber-600">
-                <ArrowLeft className="h-5 w-5" />
-                Unpublish Exam
-              </DialogTitle>
-              <DialogDescription>
-                Are you sure you want to unpublish &quot;{exam.title}&quot;?
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-amber-800">
-                  <strong>Current Status:</strong> {exam.status}
-                </p>
-                <p className="text-sm text-amber-700 mt-2">
-                  The exam will be moved back to <strong>DRAFT</strong> status. 
-                  Students will no longer be able to access it until you publish it again.
-                </p>
+            <div className="space-y-3 pt-2 border-t">
+              <Label>Student Assignment</Label>
+
+              <div>
+                <Label htmlFor="editAssignmentType">Assign To</Label>
+                <Select
+                  value={editForm.assignmentType}
+                  onValueChange={(value: any) =>
+                    setEditForm(prev => ({ ...prev, assignmentType: value, classId: '', sectionId: '' }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Students in Course</SelectItem>
+                    <SelectItem value="class">Specific Class</SelectItem>
+                    <SelectItem value="section">Specific Section/Batch</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowUnpublishDialog(false)} disabled={unpublishing}>
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleUnpublishExam} 
-                disabled={unpublishing}
-                variant="destructive"
-              >
-                {unpublishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowLeft className="h-4 w-4 mr-2" />}
-                {unpublishing ? 'Unpublishing...' : 'Unpublish Exam'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
-        {/* Complete Confirmation Dialog */}
-        <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Square className="h-5 w-5" />
-                Complete Exam
-              </DialogTitle>
-              <DialogDescription>
-                Are you sure you want to mark &quot;{exam.title}&quot; as completed?
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4">
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-amber-800">
-                  <strong>Warning:</strong> Once completed, no more students will be able to 
-                  start or submit the exam. This action cannot be undone easily.
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowCompleteDialog(false)} disabled={completing}>
-                Cancel
-              </Button>
-              <Button onClick={handleCompleteExam} disabled={completing} variant="secondary">
-                {completing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Square className="h-4 w-4 mr-2" />}
-                {completing ? 'Completing...' : 'Complete Exam'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Question Confirmation Dialog */}
-        <Dialog open={showDeleteQuestionDialog} onOpenChange={setShowDeleteQuestionDialog}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-destructive">
-                <AlertCircle className="h-5 w-5" />
-                Delete Question
-              </DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this question from the exam?
-              </DialogDescription>
-            </DialogHeader>
-            {questionToDelete && (
-              <div className="py-4">
-                <div className="p-4 bg-gray-50 border rounded-lg">
-                  <p className="text-sm text-gray-600 line-clamp-3">
-                    {questionToDelete.questionText}
-                  </p>
+              {editForm.assignmentType === 'class' && (
+                <div>
+                  <Label htmlFor="editClassId">Select Class</Label>
+                  <Select
+                    value={editForm.classId}
+                    onValueChange={(value) =>
+                      setEditForm(prev => ({ ...prev, classId: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No classes found</SelectItem>
+                      ) : (
+                        classes.map((cls: any) => (
+                          <SelectItem key={cls.id} value={cls.id}>
+                            {cls.name} {cls.code ? `(${cls.code})` : ''}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
+              )}
+
+              {editForm.assignmentType === 'section' && (
+                <div>
+                  <Label htmlFor="editSectionId">Select Section/Batch</Label>
+                  <Select
+                    value={editForm.sectionId}
+                    onValueChange={(value) =>
+                      setEditForm(prev => ({ ...prev, sectionId: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Choose a section" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sections.length === 0 ? (
+                        <SelectItem value="__none__" disabled>No sections found</SelectItem>
+                      ) : (
+                        sections.map((section: any) => (
+                          <SelectItem key={section.id} value={section.id}>
+                            {section.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3 pt-2 border-t">
+              <Label>Randomization Options</Label>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="randomizeQuestions">Randomize Question Order</Label>
+                  <p className="text-sm text-gray-500">Each student sees questions in different order</p>
+                </div>
+                <Switch
+                  id="randomizeQuestions"
+                  checked={editForm.randomizeQuestions}
+                  onCheckedChange={(checked) =>
+                    setEditForm(prev => ({ ...prev, randomizeQuestions: checked }))
+                  }
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label htmlFor="randomizeMcqOptions">Randomize MCQ Options</Label>
+                  <p className="text-sm text-gray-500">Multiple choice options appear in random order</p>
+                </div>
+                <Switch
+                  id="randomizeMcqOptions"
+                  checked={editForm.randomizeMcqOptions}
+                  onCheckedChange={(checked) =>
+                    setEditForm(prev => ({ ...prev, randomizeMcqOptions: checked }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust schedule dialog (instructor, fixed-window only) */}
+      <Dialog open={showAdjustScheduleDialog} onOpenChange={setShowAdjustScheduleDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Adjust date & time
+            </DialogTitle>
+            <DialogDescription>
+              Change the start and end times for this fixed-window exam.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="adjustStartTime">Start Time</Label>
+              <Input
+                id="adjustStartTime"
+                type="datetime-local"
+                value={adjustScheduleForm.startTime}
+                onChange={(e) => setAdjustScheduleForm(prev => ({ ...prev, startTime: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="adjustEndTime">End Time</Label>
+              <Input
+                id="adjustEndTime"
+                type="datetime-local"
+                value={adjustScheduleForm.endTime}
+                onChange={(e) => setAdjustScheduleForm(prev => ({ ...prev, endTime: e.target.value }))}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              The exam will be available between these times.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAdjustScheduleDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveAdjustSchedule} disabled={savingSchedule}>
+              {savingSchedule ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save schedule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Delete Exam
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{exam.title}&quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                <strong>Note:</strong> If this exam has student submissions, it will be
+                <strong> archived</strong> instead of permanently deleted. Archived exams
+                can be restored later. Exams without submissions will be permanently deleted.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteExam} disabled={deleting}>
+              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              {deleting ? 'Deleting...' : 'Delete Exam'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Publish Confirmation Dialog */}
+      <Dialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600">
+              <Play className="h-5 w-5" />
+              Publish Exam
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to publish &quot;{exam.title}&quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {exam.timingMode === 'FIXED_WINDOW' ? (
+              <div className="space-y-3">
+                {exam.startTime && exam.endTime ? (
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      <strong>Fixed Window Exam</strong><br />
+                      Start: {new Date(exam.startTime).toLocaleString()}<br />
+                      End: {new Date(exam.endTime).toLocaleString()}
+                    </p>
+                    <p className="text-sm text-green-700 mt-2">
+                      {new Date() < new Date(exam.startTime)
+                        ? 'The exam will be scheduled and go live at the start time.'
+                        : 'The exam will go live immediately.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-sm text-amber-800">
+                      <strong>Warning:</strong> Start and end times are not set.
+                      Please edit the exam details to set the schedule before publishing.
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Flexible Start Exam</strong><br />
+                  Duration: {exam.timeLimitSeconds ? `${Math.floor(exam.timeLimitSeconds / 60)} minutes` : 'Not set'}
+                </p>
+                <p className="text-sm text-blue-700 mt-2">
+                  The exam will go live immediately. Each student will get the full duration from when they start.
+                </p>
               </div>
             )}
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => {
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPublishDialog(false)} disabled={publishing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handlePublishExam}
+              disabled={publishing || (exam.timingMode === 'FIXED_WINDOW' && (!exam.startTime || !exam.endTime))}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {publishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
+              {publishing ? 'Publishing...' : 'Publish Exam'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Unpublish Confirmation Dialog */}
+      <Dialog open={showUnpublishDialog} onOpenChange={setShowUnpublishDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <ArrowLeft className="h-5 w-5" />
+              Unpublish Exam
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to unpublish &quot;{exam.title}&quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                <strong>Current Status:</strong> {exam.status}
+              </p>
+              <p className="text-sm text-amber-700 mt-2">
+                The exam will be moved back to <strong>DRAFT</strong> status.
+                Students will no longer be able to access it until you publish it again.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowUnpublishDialog(false)} disabled={unpublishing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUnpublishExam}
+              disabled={unpublishing}
+              variant="destructive"
+            >
+              {unpublishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ArrowLeft className="h-4 w-4 mr-2" />}
+              {unpublishing ? 'Unpublishing...' : 'Unpublish Exam'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Complete Confirmation Dialog */}
+      <Dialog open={showCompleteDialog} onOpenChange={setShowCompleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Square className="h-5 w-5" />
+              Complete Exam
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to mark &quot;{exam.title}&quot; as completed?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                <strong>Warning:</strong> Once completed, no more students will be able to
+                start or submit the exam. This action cannot be undone easily.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCompleteDialog(false)} disabled={completing}>
+              Cancel
+            </Button>
+            <Button onClick={handleCompleteExam} disabled={completing} variant="secondary">
+              {completing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Square className="h-4 w-4 mr-2" />}
+              {completing ? 'Completing...' : 'Complete Exam'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Republish Exam Confirmation Dialog */}
+      <Dialog open={showRepublishDialog} onOpenChange={setShowRepublishDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-blue-600" />
+              Republish Exam
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to republish &quot;{exam.title}&quot;?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> Republishing will make this exam available to students again.
+                {exam.timingMode === 'FIXED_WINDOW'
+                  ? ' For Fixed Window exams, the exam will be set to SCHEDULED or LIVE based on the existing schedule. If the end time has passed, you must reschedule the exam first.'
+                  : ' The exam will immediately go live and students will be able to take it.'}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRepublishDialog(false)} disabled={republishing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRepublishExam}
+              disabled={republishing}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {republishing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+              {republishing ? 'Republishing...' : 'Republish Exam'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Question Confirmation Dialog */}
+      <Dialog open={showDeleteQuestionDialog} onOpenChange={setShowDeleteQuestionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Delete Question
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this question from the exam?
+            </DialogDescription>
+          </DialogHeader>
+          {questionToDelete && (
+            <div className="py-4">
+              <div className="p-4 bg-gray-50 border rounded-lg">
+                <p className="text-sm text-gray-600 line-clamp-3">
+                  {questionToDelete.questionText}
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowDeleteQuestionDialog(false)
+                setQuestionToDelete(null)
+              }}
+              disabled={deletingQuestion}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!questionToDelete) return
+                setDeletingQuestion(true)
+                try {
+                  await questionsApi.delete(examId, questionToDelete.id)
+                  await loadExam()
+                  toast({
+                    title: 'Success',
+                    description: 'Question deleted successfully'
+                  })
                   setShowDeleteQuestionDialog(false)
                   setQuestionToDelete(null)
-                }} 
-                disabled={deletingQuestion}
-              >
-                Cancel
-              </Button>
-              <Button 
-                variant="destructive" 
-                onClick={async () => {
-                  if (!questionToDelete) return
-                  setDeletingQuestion(true)
-                  try {
-                    await questionsApi.delete(examId, questionToDelete.id)
-                    await loadExam()
-                    toast({
-                      title: 'Success',
-                      description: 'Question deleted successfully'
-                    })
-                    setShowDeleteQuestionDialog(false)
-                    setQuestionToDelete(null)
-                  } catch (error) {
-                    toast({
-                      title: 'Error',
-                      description: 'Failed to delete question',
-                      variant: 'destructive'
-                    })
-                  } finally {
-                    setDeletingQuestion(false)
-                  }
-                }} 
-                disabled={deletingQuestion}
-              >
-                {deletingQuestion ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-                {deletingQuestion ? 'Deleting...' : 'Delete Question'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                } catch (error) {
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to delete question',
+                    variant: 'destructive'
+                  })
+                } finally {
+                  setDeletingQuestion(false)
+                }
+              }}
+              disabled={deletingQuestion}
+            >
+              {deletingQuestion ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              {deletingQuestion ? 'Deleting...' : 'Delete Question'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1929,7 +2015,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
       setSubmissions(submissionsArray)
     } catch (error: any) {
       // Check if it's a JSON parsing error
-      const errorMessage = error?.message?.includes('JSON') 
+      const errorMessage = error?.message?.includes('JSON')
         ? 'Failed to parse submissions data. The response may be too large or malformed.'
         : 'Failed to load submissions'
       toast({
@@ -1975,8 +2061,8 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>Submissions ({submissionsArray.length})</CardTitle>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => router.push(`/exams/${examId}/submissions`)}
           >
             <Users className="h-4 w-4 mr-2" />
@@ -2014,8 +2100,8 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                   </div>
                 </TableCell>
                 <TableCell>
-                  {submission.score !== null && submission.score !== undefined 
-                    ? `${submission.score} / ${submission.maxScore}` 
+                  {submission.score !== null && submission.score !== undefined
+                    ? `${submission.score} / ${submission.maxScore}`
                     : 'Not graded'}
                 </TableCell>
                 <TableCell>
@@ -2108,7 +2194,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
           </TableBody>
         </Table>
       </CardContent>
-      
+
       {/* Review Dialog */}
       <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -2202,7 +2288,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                   </div>
                 )}
               </div>
-              
+
               {(() => {
                 // Parse answersJson if it's a string, otherwise use as-is
                 let answersJson = selectedSubmission?.answersJson
@@ -2213,7 +2299,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                     answersJson = null
                   }
                 }
-                
+
                 if (!answersJson || (typeof answersJson === 'object' && Object.keys(answersJson).length === 0)) {
                   return (
                     <div className="p-4 bg-yellow-50 border border-yellow-200 rounded">
@@ -2223,7 +2309,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                     </div>
                   )
                 }
-                
+
                 if (questions.length === 0) {
                   return (
                     <div className="p-4 bg-yellow-50 border border-yellow-200 rounded">
@@ -2233,127 +2319,125 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                     </div>
                   )
                 }
-                
+
                 return (
                   <div className="space-y-4">
                     <Label className="text-lg font-semibold">Questions & Answers</Label>
                     <div className="space-y-4">
                       {questions.map((question, index) => {
                         const answerValue = answersJson[question.id]
-                      let answerDisplay: string | null = null
-                      let isCorrect: boolean | null = null
-                      
-                      if (answerValue) {
-                        if (question.questionType === 'MULTIPLE_CHOICE' && question.options) {
-                          // Find the selected option
-                          const selectedOption = question.options.find(opt => opt.id === answerValue)
-                          if (selectedOption) {
-                            answerDisplay = selectedOption.optionText
-                            isCorrect = selectedOption.isCorrect
+                        let answerDisplay: string | null = null
+                        let isCorrect: boolean | null = null
+
+                        if (answerValue) {
+                          if (question.questionType === 'MULTIPLE_CHOICE' && question.options) {
+                            // Find the selected option
+                            const selectedOption = question.options.find(opt => opt.id === answerValue)
+                            if (selectedOption) {
+                              answerDisplay = selectedOption.optionText
+                              isCorrect = selectedOption.isCorrect
+                            } else {
+                              answerDisplay = `Selected option ID: ${answerValue} (not found)`
+                            }
                           } else {
-                            answerDisplay = `Selected option ID: ${answerValue} (not found)`
+                            // For SHORT_ANSWER, ESSAY, TRUE_FALSE - display the text answer
+                            answerDisplay = String(answerValue)
                           }
-                        } else {
-                          // For SHORT_ANSWER, ESSAY, TRUE_FALSE - display the text answer
-                          answerDisplay = String(answerValue)
                         }
-                      }
-                      
-                      return (
-                        <Card key={question.id}>
-                          <CardHeader>
-                            <div className="flex items-start justify-between">
-                              <CardTitle className="text-base">
-                                Question {index + 1} ({question.points} points)
-                              </CardTitle>
-                              <Badge variant="outline">{question.questionType}</Badge>
-                            </div>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Question:</Label>
-                              <p className="mt-1 text-sm">{question.questionText}</p>
-                            </div>
-                            
-                            {question.questionType === 'MULTIPLE_CHOICE' && question.options && (
-                              <div className="space-y-2">
-                                <Label className="text-sm font-medium text-gray-700">Options:</Label>
-                                {question.options.map((option, optIndex) => {
-                                  const isSelected = option.id === answerValue
-                                  return (
-                                    <div
-                                      key={option.id}
-                                      className={`p-2 rounded border text-sm ${
-                                        isSelected
+
+                        return (
+                          <Card key={question.id}>
+                            <CardHeader>
+                              <div className="flex items-start justify-between">
+                                <CardTitle className="text-base">
+                                  Question {index + 1} ({question.points} points)
+                                </CardTitle>
+                                <Badge variant="outline">{question.questionType}</Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                              <div>
+                                <Label className="text-sm font-medium text-gray-700">Question:</Label>
+                                <p className="mt-1 text-sm">{question.questionText}</p>
+                              </div>
+
+                              {question.questionType === 'MULTIPLE_CHOICE' && question.options && (
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium text-gray-700">Options:</Label>
+                                  {question.options.map((option, optIndex) => {
+                                    const isSelected = option.id === answerValue
+                                    return (
+                                      <div
+                                        key={option.id}
+                                        className={`p-2 rounded border text-sm ${isSelected
                                           ? option.isCorrect
                                             ? 'bg-green-50 border-green-300'
                                             : 'bg-red-50 border-red-300'
                                           : option.isCorrect
                                             ? 'bg-primary-50 border-primary-200'
                                             : 'bg-gray-50'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="font-medium">
-                                          {String.fromCharCode(65 + optIndex)}.
-                                        </span>
-                                        <span>{option.optionText}</span>
-                                        {isSelected && (
-                                          <Badge variant="default" className="ml-auto">Selected</Badge>
-                                        )}
-                                        {option.isCorrect && (
-                                          <Badge variant="default" className="bg-green-600">Correct</Badge>
-                                        )}
+                                          }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-medium">
+                                            {String.fromCharCode(65 + optIndex)}.
+                                          </span>
+                                          <span>{option.optionText}</span>
+                                          {isSelected && (
+                                            <Badge variant="default" className="ml-auto">Selected</Badge>
+                                          )}
+                                          {option.isCorrect && (
+                                            <Badge variant="default" className="bg-green-600">Correct</Badge>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                            
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Student&apos;s Answer:</Label>
-                              {answerDisplay ? (
-                                <div className={`mt-1 p-3 rounded border text-sm ${
-                                  isCorrect === true
-                                    ? 'bg-green-50 border-green-200'
-                                    : isCorrect === false
-                                    ? 'bg-red-50 border-red-200'
-                                    : 'bg-gray-50'
-                                }`}>
-                                  {answerDisplay}
-                                  {isCorrect === true && (
-                                    <Badge variant="default" className="ml-2 bg-green-600">Correct</Badge>
-                                  )}
-                                  {isCorrect === false && (
-                                    <Badge variant="destructive" className="ml-2">Incorrect</Badge>
-                                  )}
-                                </div>
-                              ) : (
-                                <div className="mt-1 p-3 bg-gray-50 rounded border text-sm text-gray-500">
-                                  No answer provided
+                                    )
+                                  })}
                                 </div>
                               )}
-                            </div>
-                            
-                            {(question.questionType === 'SHORT_ANSWER' || question.questionType === 'ESSAY') && 
-                             (question.editedTentativeAnswer || question.tentativeAnswer) && (
+
                               <div>
-                                <Label className="text-sm font-medium text-gray-700">Expected Answer:</Label>
-                                <div className="mt-1 p-3 bg-primary-50 rounded border border-primary-200 text-sm">
-                                  {question.editedTentativeAnswer || question.tentativeAnswer}
-                                </div>
+                                <Label className="text-sm font-medium text-gray-700">Student&apos;s Answer:</Label>
+                                {answerDisplay ? (
+                                  <div className={`mt-1 p-3 rounded border text-sm ${isCorrect === true
+                                    ? 'bg-green-50 border-green-200'
+                                    : isCorrect === false
+                                      ? 'bg-red-50 border-red-200'
+                                      : 'bg-gray-50'
+                                    }`}>
+                                    {answerDisplay}
+                                    {isCorrect === true && (
+                                      <Badge variant="default" className="ml-2 bg-green-600">Correct</Badge>
+                                    )}
+                                    {isCorrect === false && (
+                                      <Badge variant="destructive" className="ml-2">Incorrect</Badge>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div className="mt-1 p-3 bg-gray-50 rounded border text-sm text-gray-500">
+                                    No answer provided
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </CardContent>
-                        </Card>
-                      )
-                    })}
+
+                              {(question.questionType === 'SHORT_ANSWER' || question.questionType === 'ESSAY') &&
+                                (question.editedTentativeAnswer || question.tentativeAnswer) && (
+                                  <div>
+                                    <Label className="text-sm font-medium text-gray-700">Expected Answer:</Label>
+                                    <div className="mt-1 p-3 bg-primary-50 rounded border border-primary-200 text-sm">
+                                      {question.editedTentativeAnswer || question.tentativeAnswer}
+                                    </div>
+                                  </div>
+                                )}
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
                 )
               })()}
-              
+
               {selectedSubmission.aiReviewFeedback && (
                 <div>
                   <Label className="text-lg font-semibold">AI Review Feedback</Label>
@@ -2364,21 +2448,21 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                   </div>
                 </div>
               )}
-              
+
               {/* Manual Grading Section */}
               <div className="border-t pt-4 mt-4">
                 <div className="flex items-center justify-between mb-4">
                   <Label className="text-lg font-semibold">Grade Submission</Label>
                   {!manualGrading && (
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       size="sm"
                       onClick={() => {
                         setManualGrading(true)
                         // Initialize question grades from existing AI review or empty
                         const initialGrades: Record<string, { score: string; feedback: string }> = {}
                         const existingReviews = selectedSubmission.aiReviewFeedback?.questionReviews || []
-                        
+
                         questions.forEach((q: any) => {
                           const existingReview = existingReviews.find((r: any) => r.questionId === q.id)
                           initialGrades[q.id] = {
@@ -2400,7 +2484,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                     </Button>
                   )}
                 </div>
-                
+
                 {manualGrading ? (
                   <div className="space-y-4">
                     {/* Per-Question Grading */}
@@ -2411,7 +2495,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                         try { answersJson = JSON.parse(answersJson) } catch (e) { answersJson = {} }
                       }
                       const passingPercentage = passingScorePercentage
-                      
+
                       // Calculate totals
                       let totalEarned = 0
                       let totalMax = 0
@@ -2441,10 +2525,10 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                           }
                         }
                       })
-                      
+
                       const percentage = totalMax > 0 ? (totalEarned / totalMax) * 100 : 0
                       const willPass = percentage >= passingPercentage
-                      
+
                       return (
                         <>
                           <div className="bg-gray-50 p-4 rounded-lg mb-4">
@@ -2465,12 +2549,12 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                               </div>
                             </div>
                           </div>
-                          
+
                           <div className="space-y-3 max-h-[300px] overflow-y-auto">
                             {examQuestions.map((question: any, index: number) => {
                               const isObjective = question.questionType === 'MULTIPLE_CHOICE' || question.questionType === 'TRUE_FALSE'
                               const answer = answersJson[question.id]
-                              
+
                               // Calculate auto-grade for objective questions
                               let autoScore = 0
                               let isCorrect = false
@@ -2489,7 +2573,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                                   }
                                 }
                               }
-                              
+
                               return (
                                 <div key={question.id} className="border rounded p-3 bg-white">
                                   <div className="flex items-start justify-between gap-4">
@@ -2523,7 +2607,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                                             value={questionGrades[question.id]?.score || '0'}
                                             onChange={(e) => {
                                               const val = Math.min(
-                                                parseFloat(e.target.value) || 0, 
+                                                parseFloat(e.target.value) || 0,
                                                 question.points || 1
                                               )
                                               setQuestionGrades(prev => ({
@@ -2544,7 +2628,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                               )
                             })}
                           </div>
-                          
+
                           <div>
                             <Label htmlFor="instructorFeedback">Overall Feedback (Optional)</Label>
                             <Textarea
@@ -2559,9 +2643,9 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                         </>
                       )
                     })()}
-                    
+
                     <div className="flex gap-2 pt-2">
-                      <Button 
+                      <Button
                         disabled={savingGrade}
                         onClick={async () => {
                           try {
@@ -2569,7 +2653,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                             // Build questionGrades payload for subjective questions only
                             const examQuestions = questions
                             const subjectiveGrades: Record<string, { score: number; feedback?: string }> = {}
-                            
+
                             examQuestions.forEach((q: any) => {
                               const isObjective = q.questionType === 'MULTIPLE_CHOICE' || q.questionType === 'TRUE_FALSE'
                               if (!isObjective && questionGrades[q.id]) {
@@ -2579,17 +2663,17 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                                 }
                               }
                             })
-                            
+
                             await apiClient.put(`/api/exams/${examId}/submissions/${selectedSubmission.id}/manual-grade`, {
                               questionGrades: subjectiveGrades,
                               instructorFeedback: manualGradeData.instructorFeedback || undefined
                             })
-                            
+
                             toast({
                               title: 'Success',
                               description: 'Submission graded successfully'
                             })
-                            
+
                             setManualGrading(false)
                             await loadSubmissions()
                             setShowReviewDialog(false)
@@ -2612,7 +2696,7 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                         )}
                         Save Grades
                       </Button>
-                      <Button 
+                      <Button
                         variant="outline"
                         onClick={() => setManualGrading(false)}
                         disabled={savingGrade}
@@ -2623,11 +2707,11 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
                   </div>
                 ) : (
                   <div className="text-sm text-gray-600">
-                    <p>Current Score: {selectedSubmission.score !== null && selectedSubmission.score !== undefined 
-                      ? `${selectedSubmission.score} / ${selectedSubmission.maxScore} (${selectedSubmission.percentage?.toFixed(1)}%)` 
+                    <p>Current Score: {selectedSubmission.score !== null && selectedSubmission.score !== undefined
+                      ? `${selectedSubmission.score} / ${selectedSubmission.maxScore} (${selectedSubmission.percentage?.toFixed(1)}%)`
                       : 'Not graded'}</p>
-                    <p>Status: {selectedSubmission.isPassed ? 
-                      <Badge className="bg-green-600 ml-2">Passed</Badge> : 
+                    <p>Status: {selectedSubmission.isPassed ?
+                      <Badge className="bg-green-600 ml-2">Passed</Badge> :
                       <Badge className="bg-red-600 ml-2">Not Passed</Badge>}
                     </p>
                     {selectedSubmission.aiReviewFeedback?.instructorFeedback && (
