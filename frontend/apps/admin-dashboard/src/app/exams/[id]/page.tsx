@@ -593,7 +593,6 @@ export default function ExamDetailPage() {
       })
     } catch (error: any) {
       const serverMsg =
-        error?.response?.headers?.['x-error-message'] ||
         error?.response?.data?.message ||
         error?.message
       toast({

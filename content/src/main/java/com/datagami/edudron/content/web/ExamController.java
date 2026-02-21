@@ -1224,7 +1224,7 @@ public class ExamController {
 
     @PutMapping("/{id}/republish")
     @Operation(summary = "Republish exam", description = "Re-publish a completed exam (SYSTEM_ADMIN and TENANT_ADMIN only)")
-    public ResponseEntity<ExamDetailDTO> republishExam(@PathVariable String id) {
+    public ResponseEntity<?> republishExam(@PathVariable String id) {
         try {
             examService.republishExam(id);
             // Reload with questions
@@ -1233,12 +1233,12 @@ public class ExamController {
             return ResponseEntity.ok(dto);
         } catch (IllegalArgumentException e) {
             logger.warn("Republish exam forbidden: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {
             logger.warn("Republish exam invalid state: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .header("X-Error-Message", e.getMessage())
-                    .build();
+                    .body(Map.of("message", e.getMessage()));
         }
     }
 
