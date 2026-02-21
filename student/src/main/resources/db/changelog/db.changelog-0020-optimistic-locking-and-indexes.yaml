@@ -4,6 +4,7 @@ databaseChangeLog:
       author: antigravity
       changes:
         - addColumn:
+            schemaName: student
             tableName: assessment_submissions
             columns:
               - column:
@@ -15,6 +16,7 @@ databaseChangeLog:
       author: antigravity
       changes:
         - createIndex:
+            schemaName: student
             tableName: assessment_submissions
             indexName: idx_assessment_submissions_client_student_assessment
             columns:
