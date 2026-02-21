@@ -5,17 +5,17 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { tenantsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
-import { 
-  Building2, 
-  ChevronDown, 
+import {
+  Building2,
+  ChevronDown,
   Check,
   Loader2
 } from 'lucide-react'
@@ -32,16 +32,10 @@ export function TenantSelector() {
   const handleTenantSelect = async (tenant: Tenant) => {
     try {
       await selectTenant(tenant.id)
-      
-      // Verify tenant ID was stored
-      const storedTenantId = localStorage.getItem('tenant_id') || 
-                            localStorage.getItem('clientId') || 
-                            localStorage.getItem('selectedTenantId')
-      
       setSelectedTenant(tenant)
       setIsOpen(false)
-      // Reload the page to update all tenant-scoped data
-      window.location.reload()
+      // Navigate to dashboard so all tenant-scoped data is loaded fresh
+      router.push('/dashboard')
     } catch (error) {
     }
   }
@@ -52,20 +46,20 @@ export function TenantSelector() {
         setLoading(true)
         const allTenants = await tenantsApi.listTenants()
         setTenants(allTenants || [])
-        
+
         // Find selected tenant from localStorage
-        const currentTenantId = tenantId || 
-                               localStorage.getItem('tenant_id') ||
-                               localStorage.getItem('clientId') ||
-                               localStorage.getItem('selectedTenantId')
-        
+        const currentTenantId = tenantId ||
+          localStorage.getItem('tenant_id') ||
+          localStorage.getItem('clientId') ||
+          localStorage.getItem('selectedTenantId')
+
         // Validate tenant ID is not a placeholder
-        const isValidTenantId = currentTenantId && 
-                               currentTenantId !== 'PENDING_TENANT_SELECTION' && 
-                               currentTenantId !== 'SYSTEM' &&
-                               currentTenantId !== 'null' &&
-                               currentTenantId !== ''
-        
+        const isValidTenantId = currentTenantId &&
+          currentTenantId !== 'PENDING_TENANT_SELECTION' &&
+          currentTenantId !== 'SYSTEM' &&
+          currentTenantId !== 'null' &&
+          currentTenantId !== ''
+
         if (isValidTenantId && allTenants) {
           const found = allTenants.find(t => t.id === currentTenantId)
           if (found) {
@@ -77,13 +71,10 @@ export function TenantSelector() {
         } else if (allTenants && allTenants.length > 0) {
           // No valid tenant selected - auto-select first tenant if only one exists
           if (allTenants.length === 1) {
-            // Auto-select without reload to avoid infinite loop
+            // Auto-select and navigate to dashboard
             selectTenant(allTenants[0].id).then(() => {
               setSelectedTenant(allTenants[0])
-              // Small delay before reload to ensure state is saved
-              setTimeout(() => {
-                window.location.reload()
-              }, 100)
+              router.push('/dashboard')
             }).catch(error => {
             })
           } else {
@@ -124,8 +115,8 @@ export function TenantSelector() {
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="flex items-center space-x-2 min-w-[200px] justify-between"
         >
           <div className="flex items-center space-x-2">
@@ -164,7 +155,7 @@ export function TenantSelector() {
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem 
+        <DropdownMenuItem
           className="text-muted-foreground cursor-pointer"
           onClick={() => router.push('/tenants')}
         >
