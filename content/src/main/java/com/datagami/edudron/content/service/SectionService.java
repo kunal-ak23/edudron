@@ -36,24 +36,28 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class SectionService {
-    
+
     private static final Logger log = LoggerFactory.getLogger(SectionService.class);
-    
+
     @Autowired
     private SectionRepository sectionRepository;
-    
+
     @Autowired
     private CourseRepository courseRepository;
 
     @Autowired
     private ContentAuditService auditService;
-    
+
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private LectureService lectureService;
+
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
-    
+
     private volatile RestTemplate restTemplate;
     private final Object restTemplateLock = new Object();
-    
+
     private RestTemplate getRestTemplate() {
         // Double-checked locking for thread safety
         if (restTemplate == null) {
@@ -66,7 +70,8 @@ public class SectionService {
                     // Add interceptor to forward JWT token (Authorization header)
                     interceptors.add((request, body, execution) -> {
                         // Get current request to extract Authorization header
-                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
+                                .getRequestAttributes();
                         if (attributes != null) {
                             HttpServletRequest currentRequest = attributes.getRequest();
                             String authHeader = currentRequest.getHeader("Authorization");
@@ -74,9 +79,11 @@ public class SectionService {
                                 // Only add if not already present
                                 if (!request.getHeaders().containsKey("Authorization")) {
                                     request.getHeaders().add("Authorization", authHeader);
-                                    log.debug("Propagated Authorization header (JWT token) to identity service: {}", request.getURI());
+                                    log.debug("Propagated Authorization header (JWT token) to identity service: {}",
+                                            request.getURI());
                                 } else {
-                                    log.debug("Authorization header already present in request to {}", request.getURI());
+                                    log.debug("Authorization header already present in request to {}",
+                                            request.getURI());
                                 }
                             } else {
                                 log.debug("No Authorization header found in current request");
@@ -87,34 +94,37 @@ public class SectionService {
                         return execution.execute(request, body);
                     });
                     template.setInterceptors(interceptors);
-                    log.debug("RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
+                    log.debug(
+                            "RestTemplate initialized with TenantContextRestTemplateInterceptor and JWT token forwarding");
                     restTemplate = template;
                 }
             }
         }
         return restTemplate;
     }
-    
+
     public SectionDTO createSection(String courseId, String title, String description) {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create sections
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create
+        // sections
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot create sections");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot create sections");
         }
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         // Verify course exists
         courseRepository.findByIdAndClientId(courseId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Course not found: " + courseId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Course not found: " + courseId));
+
         // Get next sequence
         Integer maxSequence = sectionRepository.findMaxSequenceByCourseIdAndClientId(courseId, clientId);
         int nextSequence = (maxSequence != null ? maxSequence : 0) + 1;
-        
+
         Section section = new Section();
         section.setId(UlidGenerator.nextUlid());
         section.setClientId(clientId);
@@ -122,86 +132,91 @@ public class SectionService {
         section.setTitle(title);
         section.setDescription(description);
         section.setSequence(nextSequence);
-        
+
         Section saved = sectionRepository.save(section);
         auditService.logCrud(clientId, "CREATE", "Section", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
-            Map.of("courseId", courseId, "title", title != null ? title : ""));
+                Map.of("courseId", courseId, "title", title != null ? title : ""));
         return toDTO(saved);
     }
-    
+
     public List<SectionDTO> getSectionsByCourse(String courseId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         List<Section> sections = sectionRepository.findByCourseIdAndClientIdOrderBySequenceAsc(courseId, clientId);
         return sections.stream().map(this::toDTO).collect(Collectors.toList());
     }
-    
+
     public SectionDTO getSectionById(String id) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         Section section = sectionRepository.findByIdAndClientId(id, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + id));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Section not found: " + id));
+
         return toDTO(section);
     }
-    
+
     public SectionDTO updateSection(String id, String title, String description) {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update sections
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update
+        // sections
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot update sections");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot update sections");
         }
-        
+
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         Section section = sectionRepository.findByIdAndClientId(id, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + id));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Section not found: " + id));
+
         if (title != null) {
             section.setTitle(title);
         }
         if (description != null) {
             section.setDescription(description);
         }
-        
+
         Section saved = sectionRepository.save(section);
         auditService.logCrud(clientId, "UPDATE", "Section", id, getCurrentUserId(), getCurrentUserEmail(),
-            Map.of("title", title != null ? title : "", "courseId", section.getCourseId()));
+                Map.of("title", title != null ? title : "", "courseId", section.getCourseId()));
         return toDTO(saved);
     }
-    
+
     public void deleteSection(String id) {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot delete sections
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot delete
+        // sections
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot delete sections");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot delete sections");
         }
-        
+
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         Section section = sectionRepository.findByIdAndClientId(id, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Section not found: " + id));
         auditService.logCrud(clientId, "DELETE", "Section", id, getCurrentUserId(), getCurrentUserEmail(),
-            Map.of("courseId", section.getCourseId(), "title", section.getTitle() != null ? section.getTitle() : ""));
+                Map.of("courseId", section.getCourseId(), "title",
+                        section.getTitle() != null ? section.getTitle() : ""));
         sectionRepository.delete(section);
     }
-    
+
     private String getCurrentUserId() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -212,17 +227,19 @@ public class SectionService {
         }
         return null;
     }
-    
+
     private String getCurrentUserEmail() {
         try {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName())) return null;
+            if (auth == null || auth.getName() == null || "anonymousUser".equals(auth.getName()))
+                return null;
             String meUrl = gatewayUrl + "/idp/users/me";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
-                meUrl, HttpMethod.GET, new HttpEntity<>(headers),
-                new ParameterizedTypeReference<Map<String, Object>>() {});
+                    meUrl, HttpMethod.GET, new HttpEntity<>(headers),
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    });
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object email = response.getBody().get("email");
                 return email != null ? email.toString() : null;
@@ -232,7 +249,7 @@ public class SectionService {
         }
         return null;
     }
-    
+
     /**
      * Get the current user's role from the identity service
      * Returns null if unable to determine role (e.g., anonymous user)
@@ -240,24 +257,24 @@ public class SectionService {
     public String getCurrentUserRole() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication == null || authentication.getName() == null || 
-                "anonymousUser".equals(authentication.getName())) {
+            if (authentication == null || authentication.getName() == null ||
+                    "anonymousUser".equals(authentication.getName())) {
                 return null;
             }
-            
+
             // Get user info from identity service
             String meUrl = gatewayUrl + "/idp/users/me";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
-            
+
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
-                meUrl,
-                HttpMethod.GET,
-                entity,
-                new ParameterizedTypeReference<Map<String, Object>>() {}
-            );
-            
+                    meUrl,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    });
+
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object role = response.getBody().get("role");
                 return role != null ? role.toString() : null;
@@ -267,7 +284,7 @@ public class SectionService {
         }
         return null;
     }
-    
+
     private SectionDTO toDTO(Section section) {
         SectionDTO dto = new SectionDTO();
         dto.setId(section.getId());
@@ -279,7 +296,12 @@ public class SectionService {
         dto.setIsPublished(section.getIsPublished());
         dto.setCreatedAt(section.getCreatedAt());
         dto.setUpdatedAt(section.getUpdatedAt());
+        // Populate nested lectures so analytics service can resolve lecture titles
+        try {
+            dto.setLectures(lectureService.getLecturesBySection(section.getId()));
+        } catch (Exception e) {
+            log.warn("Failed to load lectures for section {}: {}", section.getId(), e.getMessage());
+        }
         return dto;
     }
 }
-

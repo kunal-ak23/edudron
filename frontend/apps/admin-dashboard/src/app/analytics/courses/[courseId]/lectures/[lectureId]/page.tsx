@@ -231,23 +231,30 @@ export default function LectureAnalyticsPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {analytics.recentSessions.slice(0, 20).map((session) => (
-                        <TableRow key={session.id}>
-                          <TableCell className="font-medium">{session.studentId}</TableCell>
-                          <TableCell>{formatDate(session.sessionStartedAt)}</TableCell>
-                          <TableCell>{formatDate(session.sessionEndedAt)}</TableCell>
-                          <TableCell>{formatDuration(session.durationSeconds)}</TableCell>
-                          <TableCell>{session.progressAtStart.toFixed(0)}%</TableCell>
-                          <TableCell>{session.progressAtEnd?.toFixed(0) || '—'}%</TableCell>
-                          <TableCell>
-                            {session.isCompletedInSession ? (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <XCircle className="h-4 w-4 text-gray-400" />
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {(() => {
+                        const emailMap = new Map(
+                          (analytics.studentEngagements || []).map(e => [e.studentId, e.studentEmail])
+                        )
+                        return analytics.recentSessions.slice(0, 20).map((session) => (
+                          <TableRow key={session.id}>
+                            <TableCell className="font-medium">
+                              {emailMap.get(session.studentId) || session.studentId}
+                            </TableCell>
+                            <TableCell>{formatDate(session.sessionStartedAt)}</TableCell>
+                            <TableCell>{formatDate(session.sessionEndedAt)}</TableCell>
+                            <TableCell>{formatDuration(session.durationSeconds)}</TableCell>
+                            <TableCell>{session.progressAtStart.toFixed(0)}%</TableCell>
+                            <TableCell>{session.progressAtEnd?.toFixed(0) || '—'}%</TableCell>
+                            <TableCell>
+                              {session.isCompletedInSession ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <XCircle className="h-4 w-4 text-gray-400" />
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      })()}
                     </TableBody>
                   </Table>
                 </div>
