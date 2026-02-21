@@ -132,8 +132,8 @@ export default function AnalyticsPage() {
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Select a section" />
                 </SelectTrigger>
-                <SelectContent>
-                  {sections.slice(0, 10).map(section => (
+                <SelectContent className="max-h-60 overflow-y-auto">
+                  {sections.map(section => (
                     <SelectItem key={section.id} value={section.id}>
                       {section.name}
                     </SelectItem>
@@ -160,9 +160,9 @@ export default function AnalyticsPage() {
             <p className="text-sm text-muted-foreground mb-3">
               View aggregated analytics by class
             </p>
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="w-full"
               onClick={() => router.push('/classes')}
             >
