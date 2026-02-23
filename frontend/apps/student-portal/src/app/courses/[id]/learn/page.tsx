@@ -34,27 +34,27 @@ export default function LearnPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('transcript')
   const [searchQuery, setSearchQuery] = useState('')
-  
+
   // Feedback state
   const [currentFeedback, setCurrentFeedback] = useState<Feedback | null>(null)
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false)
   const [pendingFeedbackType, setPendingFeedbackType] = useState<FeedbackType | null>(null)
-  
+
   // Issue report state
   const [showIssueDialog, setShowIssueDialog] = useState(false)
-  
+
   // Notes state
   const [notes, setNotes] = useState<Note[]>([])
   const [showNotesSidebar, setShowNotesSidebar] = useState(false)
-  
+
   // Transcript state
   const [transcriptText, setTranscriptText] = useState<string | null>(null)
   const [loadingTranscript, setLoadingTranscript] = useState(false)
-  
+
   // Attachments state
   const [attachments, setAttachments] = useState<LectureContent[]>([])
   const [loadingAttachments, setLoadingAttachments] = useState(false)
-  
+
   // Session tracking state
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const sessionStartTimeRef = useRef<number | null>(null)
@@ -65,12 +65,12 @@ export default function LearnPage() {
   const activeSessionLectureIdRef = useRef<string | null>(null) // Store the lecture ID for the active session
   const completedLecturesRef = useRef<Set<string>>(completedLectures)
   const endingSessionsRef = useRef<Set<string>>(new Set()) // Track sessions currently being ended to prevent duplicates
-  
+
   // Keep refs in sync with state
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId
   }, [activeSessionId])
-  
+
   useEffect(() => {
     completedLecturesRef.current = completedLectures
   }, [completedLectures])
@@ -117,7 +117,7 @@ export default function LearnPage() {
       if (!fileUrl) return
 
       let downloadUrl = fileUrl
-      
+
       // For PDFs, use the watermarked version through the API
       if (isPDF) {
         const watermarkedUrl = buildWatermarkedPdfUrl(fileUrl)
@@ -136,18 +136,18 @@ export default function LearnPage() {
         document.body.removeChild(link)
       } else {
         // For cross-origin URLs (Azure blob storage), fetch and create blob
-        const response = await fetch(downloadUrl, { 
+        const response = await fetch(downloadUrl, {
           mode: 'cors',
           credentials: 'omit'
         })
-        
+
         if (!response.ok) {
           throw new Error(`Failed to fetch file: ${response.statusText}`)
         }
-        
+
         const blob = await response.blob()
         const blobUrl = window.URL.createObjectURL(blob)
-        
+
         // Create download link
         const link = document.createElement('a')
         link.href = blobUrl
@@ -155,7 +155,7 @@ export default function LearnPage() {
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
-        
+
         // Clean up blob URL after a short delay
         setTimeout(() => {
           window.URL.revokeObjectURL(blobUrl)
@@ -276,7 +276,7 @@ export default function LearnPage() {
   const loadCourseData = useCallback(async () => {
     try {
       setLoading(true)
-      
+
       let courseData: Course | null = null
       try {
         courseData = await coursesApi.getCourse(courseId)
@@ -285,19 +285,19 @@ export default function LearnPage() {
         setLoading(false)
         return
       }
-      
+
       if (!courseData) {
         setCourse(null)
         setLoading(false)
         return
       }
-      
+
       setCourse(courseData)
-      
+
       let sectionsData: any[] = []
       let progressData: any = null
       let lectureProgressData: any[] = []
-      
+
       try {
         const fetchedSections = await coursesApi.getChapters(courseId).catch(() => [])
         sectionsData = await Promise.all(
@@ -312,12 +312,12 @@ export default function LearnPage() {
         )
       } catch (error) {
       }
-      
+
       try {
         progressData = await enrollmentsApi.getProgress(courseId).catch(() => null)
       } catch (error) {
       }
-      
+
       try {
         if (enrollmentsApi && typeof enrollmentsApi.getLectureProgress === 'function') {
           lectureProgressData = await enrollmentsApi.getLectureProgress(courseId).catch(() => [])
@@ -327,7 +327,7 @@ export default function LearnPage() {
       } catch (error) {
         lectureProgressData = []
       }
-      
+
       setSections(sectionsData as any)
       setProgress(progressData)
 
@@ -356,7 +356,7 @@ export default function LearnPage() {
 
         // Try to find last accessed lecture from progress data
         restoredLecture = findLastAccessedLecture(lectureProgressData, sectionsData)
-        
+
         // If not found in progress, try localStorage
         if (!restoredLecture) {
           const storagePosition = restorePositionFromStorage(sectionsData)
@@ -509,7 +509,7 @@ export default function LearnPage() {
     `
     style.setAttribute('data-videojs-theme', 'true')
     document.head.appendChild(style)
-    
+
     return () => {
       const existingStyle = document.head.querySelector('style[data-videojs-theme]')
       if (existingStyle) {
@@ -522,38 +522,38 @@ export default function LearnPage() {
   useEffect(() => {
     const currentLectureId = selectedLecture?.id
     const currentActiveSessionId = activeSessionIdRef.current
-    
+
     // Only end if:
     // 1. We have an active session (from ref to avoid dependency issues)
     // 2. We have a previous lecture ID (not the first time)
     // 3. The lecture actually changed (different from previous)
     // 4. We're not already in the process of ending a session
     // 5. We're not currently updating completion (to avoid triggering when marking complete)
-    if (currentActiveSessionId && 
-        previousLectureIdRef.current && 
-        currentLectureId &&
-        previousLectureIdRef.current !== currentLectureId &&
-        !isEndingSessionRef.current &&
-        !isUpdatingCompletionRef.current) {
+    if (currentActiveSessionId &&
+      previousLectureIdRef.current &&
+      currentLectureId &&
+      previousLectureIdRef.current !== currentLectureId &&
+      !isEndingSessionRef.current &&
+      !isUpdatingCompletionRef.current) {
       const lectureIdToEnd = previousLectureIdRef.current
       const sessionIdToEnd = currentActiveSessionId
-      
+
       // Prevent duplicate end calls for the same session - check BEFORE setting flags
       if (endingSessionsRef.current.has(sessionIdToEnd)) {
         return
       }
-      
+
       // Mark as ending BEFORE async operation
       isEndingSessionRef.current = true
       endingSessionsRef.current.add(sessionIdToEnd)
-      
+
       const endSession = async () => {
-        
+
         try {
           // Use the lecture ID that the session was actually started for (from the session itself)
           // This prevents using the wrong lecture ID if the state changed
           const actualLectureId = activeSessionLectureIdRef.current || lectureIdToEnd
-          
+
           // Get progress for the previous lecture (read from ref to get latest value)
           const isCompleted = completedLecturesRef.current.has(actualLectureId)
           const progress = isCompleted ? 100 : 0
@@ -561,7 +561,7 @@ export default function LearnPage() {
             progressAtEnd: progress,
             isCompleted
           })
-          
+
           // Update previous lecture ID ONLY after successfully ending the session
           previousLectureIdRef.current = currentLectureId
         } catch (error) {
@@ -576,7 +576,7 @@ export default function LearnPage() {
           sessionStartTimeRef.current = null
         }
       }
-      
+
       endSession()
     } else if (currentLectureId && !previousLectureIdRef.current) {
       // First time setting a lecture - just update the ref
@@ -591,7 +591,7 @@ export default function LearnPage() {
     const startSession = async () => {
       const currentLectureId = selectedLecture?.id
       const currentActiveSessionId = activeSessionIdRef.current
-      
+
       // Only start if:
       // 1. We have a selected lecture
       // 2. We're not updating completion
@@ -600,17 +600,17 @@ export default function LearnPage() {
       // 5. The current session is not in the process of being ended
       if (selectedLecture && !isUpdatingCompletionRef.current && !isEndingSessionRef.current) {
         // Check if we already have an active session for this lecture
-        if (currentActiveSessionId && 
-            activeSessionLectureIdRef.current === currentLectureId &&
-            !endingSessionsRef.current.has(currentActiveSessionId)) {
+        if (currentActiveSessionId &&
+          activeSessionLectureIdRef.current === currentLectureId &&
+          !endingSessionsRef.current.has(currentActiveSessionId)) {
           return
         }
-        
+
         // Don't start if we're ending a session for this lecture
         if (currentActiveSessionId && endingSessionsRef.current.has(currentActiveSessionId)) {
           return
         }
-        
+
         try {
           // Read from ref to get latest value
           const progress = currentLectureId && completedLecturesRef.current.has(currentLectureId) ? 100 : 0
@@ -637,38 +637,38 @@ export default function LearnPage() {
       } else {
       }
     }
-    
+
     // Small delay to ensure previous session cleanup completes first (if lecture changed)
     // Increase delay if we're ending a session to give it more time
     const delay = isEndingSessionRef.current || (activeSessionIdRef.current && endingSessionsRef.current.has(activeSessionIdRef.current)) ? 500 : 300
     const timeoutId = setTimeout(() => {
       startSession()
     }, delay)
-    
+
     return () => clearTimeout(timeoutId)
   }, [selectedLecture?.id, courseId]) // Removed activeSessionId and completedLectures to prevent re-triggering
 
   // Handle page unload - end session (using fetch with keepalive for reliability)
   useEffect(() => {
     let hasUnloaded = false
-    
+
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       // Only process if we haven't already handled this unload
       if (hasUnloaded) return
       hasUnloaded = true
-      
+
       const currentSessionId = activeSessionIdRef.current
       // Use the lecture ID that the session was actually started for, not the current/previous lecture
       const sessionLectureId = activeSessionLectureIdRef.current
-      
+
       if (currentSessionId && sessionLectureId && !isEndingSessionRef.current && !endingSessionsRef.current.has(currentSessionId)) {
         // Mark as ending to prevent duplicate calls
         endingSessionsRef.current.add(currentSessionId)
-        
+
         // Read completedLectures from ref at unload time (always has latest value)
         const isCompleted = completedLecturesRef.current.has(sessionLectureId)
         const progress = isCompleted ? 100 : 0
-        
+
         // Use fetch with keepalive for reliable unload tracking
         try {
           const data = JSON.stringify({
@@ -676,16 +676,16 @@ export default function LearnPage() {
             isCompleted
           })
           const url = `${process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080'}/api/lectures/${sessionLectureId}/sessions/${currentSessionId}/end`
-          
+
           // Add auth token and tenant ID to the request
           const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
-          const tenantId = typeof window !== 'undefined' ? 
+          const tenantId = typeof window !== 'undefined' ?
             (localStorage.getItem('clientId') || localStorage.getItem('selectedTenantId') || localStorage.getItem('tenant_id')) : null
-          
+
           fetch(url, {
             method: 'POST',
             body: data,
-            headers: { 
+            headers: {
               'Content-Type': 'application/json',
               ...(token && { 'Authorization': `Bearer ${token}` }),
               ...(tenantId && { 'X-Client-Id': tenantId })
@@ -702,7 +702,7 @@ export default function LearnPage() {
       } else {
       }
     }
-    
+
     // Also handle visibility change (tab switch, minimize) as a fallback
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -710,10 +710,10 @@ export default function LearnPage() {
         // This is just for logging
       }
     }
-    
+
     window.addEventListener('beforeunload', handleBeforeUnload)
     document.addEventListener('visibilitychange', handleVisibilityChange)
-    
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -725,7 +725,7 @@ export default function LearnPage() {
     const handleVisibilityChange = () => {
       isTabVisibleRef.current = !document.hidden
     }
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
@@ -740,7 +740,7 @@ export default function LearnPage() {
       enrollmentsApi.updateProgress(courseId, {
         lectureId: selectedLecture.id,
         progressPercentage: completedLectures.has(selectedLecture.id) ? 100 : 0
-      }).catch(() => {})
+      }).catch(() => { })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedLecture, courseId, savePositionToStorage])
@@ -751,7 +751,7 @@ export default function LearnPage() {
       setLoadingAttachments(true)
       const media = await lecturesApi.getLectureMedia(lectureId)
       // Filter out VIDEO and TEXT content types - only show attachments (PDF, IMAGE, AUDIO, etc.)
-      const attachmentItems = media.filter((item: LectureContent) => 
+      const attachmentItems = media.filter((item: LectureContent) =>
         item.contentType !== 'VIDEO' && item.contentType !== 'TEXT'
       )
       setAttachments(attachmentItems)
@@ -791,7 +791,7 @@ export default function LearnPage() {
         // Also scroll window as fallback
         window.scrollTo({ top: 0, behavior: 'smooth' })
       })
-      
+
       // Also try after a small delay to catch any late DOM updates
       const timeoutId = setTimeout(() => {
         if (mainContentRef.current) {
@@ -802,7 +802,7 @@ export default function LearnPage() {
         }
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }, 100)
-      
+
       return () => clearTimeout(timeoutId)
     }
   }, [selectedLecture])
@@ -811,11 +811,11 @@ export default function LearnPage() {
   // Load transcript when selectedLecture changes
   useEffect(() => {
     if (selectedLecture?.contentType === 'VIDEO') {
-      const videoContent = selectedLecture.contents?.find((c: any) => 
+      const videoContent = selectedLecture.contents?.find((c: any) =>
         c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
       )
       const transcriptUrl = (videoContent as any)?.transcriptUrl
-      
+
       if (transcriptUrl) {
         setLoadingTranscript(true)
         fetch(transcriptUrl)
@@ -846,7 +846,7 @@ export default function LearnPage() {
     // Position will be saved via useEffect hook
     // Notes will be loaded via useEffect hook when selectedLecture changes
     // Transcript will be loaded via useEffect hook when selectedLecture changes
-    
+
     // Smoothly scroll to top
     requestAnimationFrame(() => {
       if (mainContentRef.current) {
@@ -868,7 +868,7 @@ export default function LearnPage() {
   // Handle feedback submission
   const handleFeedbackSubmit = async (type: FeedbackType, comment?: string) => {
     if (!selectedLecture) return
-    
+
     try {
       const feedback = await feedbackApi.createOrUpdateFeedback(selectedLecture.id, {
         lectureId: selectedLecture.id,
@@ -885,7 +885,7 @@ export default function LearnPage() {
   // Handle issue report
   const handleReportIssue = async (issueType: IssueType, description: string) => {
     if (!selectedLecture) return
-    
+
     try {
       await issuesApi.reportIssue(selectedLecture.id, {
         lectureId: selectedLecture.id,
@@ -932,7 +932,7 @@ export default function LearnPage() {
         noteText: noteText || undefined,
         context: note.context
       })
-      
+
       // Reload notes to ensure consistency
       await loadFeedbackAndNotes(selectedLecture.id)
     } catch (error) {
@@ -976,7 +976,7 @@ export default function LearnPage() {
     try {
       // Set flag to prevent useEffect from interfering
       isUpdatingCompletionRef.current = true
-      
+
       const newCompleted = new Set(completedLectures)
       if (isCompleted) {
         newCompleted.add(lectureId)
@@ -1005,7 +1005,7 @@ export default function LearnPage() {
         }
       } else {
       }
-      
+
       // Reset flag after a short delay to allow state updates to complete
       setTimeout(() => {
         isUpdatingCompletionRef.current = false
@@ -1013,21 +1013,21 @@ export default function LearnPage() {
 
       let updatedProgress = null
       let updatedLectureProgress: any[] = []
-      
+
       try {
         updatedProgress = await enrollmentsApi.getProgress(courseId).catch(() => null)
       } catch (error) {
       }
-      
+
       try {
         if (enrollmentsApi && typeof enrollmentsApi.getLectureProgress === 'function') {
           updatedLectureProgress = await enrollmentsApi.getLectureProgress(courseId).catch(() => [])
         }
       } catch (error) {
       }
-      
+
       setProgress(updatedProgress)
-      
+
       const completed = new Set<string>()
       updatedLectureProgress.forEach((lp: any) => {
         if (lp.isCompleted && lp.lectureId) {
@@ -1171,7 +1171,7 @@ export default function LearnPage() {
                     <div className="space-y-4">
                       {sections.map((section, sectionIdx) => {
                         if (!section.lectures || section.lectures.length === 0) return null
-                        
+
                         return (
                           <div key={section.id} className="mb-4">
                             {/* Module Header - Clickable */}
@@ -1179,20 +1179,18 @@ export default function LearnPage() {
                               <TooltipTrigger asChild>
                                 <button
                                   onClick={() => handleSectionSelect(section)}
-                                  className={`w-full text-left mb-2 px-2 py-1.5 rounded transition-colors ${
-                                    selectedSection?.id === section.id
+                                  className={`w-full text-left mb-2 px-2 py-1.5 rounded transition-colors ${selectedSection?.id === section.id
                                       ? 'bg-primary-50'
                                       : 'hover:bg-gray-50'
-                                  }`}
+                                    }`}
                                 >
                                   <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                                     Module {sectionIdx + 1}
                                   </h4>
-                                  <p className={`text-sm font-medium mt-0.5 truncate ${
-                                    selectedSection?.id === section.id
+                                  <p className={`text-sm font-medium mt-0.5 truncate ${selectedSection?.id === section.id
                                       ? 'text-primary-700'
                                       : 'text-gray-900'
-                                  }`}>
+                                    }`}>
                                     {section.title}
                                   </p>
                                 </button>
@@ -1201,7 +1199,7 @@ export default function LearnPage() {
                                 <p>{section.title}</p>
                               </TooltipContent>
                             </Tooltip>
-                            
+
                             {/* Lessons in this module */}
                             <div className="space-y-1">
                               {section.lectures.map((lecture: any) => {
@@ -1214,11 +1212,10 @@ export default function LearnPage() {
                                     <TooltipTrigger asChild>
                                       <button
                                         onClick={() => handleLectureSelect(lecture)}
-                                        className={`w-full text-left px-3 py-2 rounded text-xs transition-colors relative ${
-                                          isSelected
+                                        className={`w-full text-left px-3 py-2 rounded text-xs transition-colors relative ${isSelected
                                             ? 'bg-primary-50 text-primary-700'
                                             : 'text-gray-600 hover:bg-gray-50'
-                                        }`}
+                                          }`}
                                       >
                                         {isSelected && (
                                           <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary-600 rounded-r"></div>
@@ -1297,7 +1294,7 @@ export default function LearnPage() {
                     <h1 className="text-4xl font-bold text-gray-900 mb-4">
                       {selectedSection.title}
                     </h1>
-                    
+
                     {selectedSection.description && (
                       <div className="text-gray-600 mb-8 text-lg leading-relaxed">
                         <MarkdownRenderer content={selectedSection.description} />
@@ -1312,7 +1309,7 @@ export default function LearnPage() {
                         {selectedSection.lectures?.map((lecture: any, lectureIdx: number) => {
                           const isCompleted = completedLectures.has(lecture.id)
                           const contentType = lecture.contentType || 'TEXT'
-                          
+
                           return (
                             <div
                               key={lecture.id}
@@ -1389,12 +1386,12 @@ export default function LearnPage() {
                 <div className="bg-white flex-shrink-0 flex items-center justify-center relative" style={{ minHeight: '60vh', maxHeight: '80vh' }}>
                   {selectedLecture.contentType === 'VIDEO' ? (() => {
                     // Find video URL from contents array
-                    const videoContent = selectedLecture.contents?.find((c: any) => 
+                    const videoContent = selectedLecture.contents?.find((c: any) =>
                       c.contentType === 'VIDEO' && (c.videoUrl || c.fileUrl)
                     )
                     // Prefer fileUrl over videoUrl since fileUrl points to storage account with CORS configured
                     const videoUrl = videoContent?.fileUrl || videoContent?.videoUrl || selectedLecture.contentUrl
-                    
+
                     return videoUrl ? (
                       <div className="w-full flex items-center justify-center p-4" style={{ maxHeight: '80vh', minHeight: '400px', width: '100%', overflow: 'hidden' }}>
                         <div className="w-full max-w-7xl flex items-center justify-center" style={{ maxHeight: '80vh', position: 'relative', width: '100%', overflow: 'hidden' }}>
@@ -1458,8 +1455,8 @@ export default function LearnPage() {
                                 {attachments.map((attachment) => {
                                   const fileUrl = attachment.fileUrl || attachment.videoUrl || attachment.externalUrl
                                   const fileName = attachment.title || `Attachment.${attachment.contentType?.toLowerCase() || 'file'}`
-                                  const isPDF = attachment.contentType === 'PDF'
-                                  
+                                  const isPDF = attachment.contentType === 'PDF' || (fileUrl?.toLowerCase().endsWith('.pdf') ?? false)
+
                                   return (
                                     <div
                                       key={attachment.id}
@@ -1516,7 +1513,7 @@ export default function LearnPage() {
                           {/* Save note and Report issue */}
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center space-x-4">
-                              <button 
+                              <button
                                 onClick={() => setShowIssueDialog(true)}
                                 className="text-sm text-gray-600 hover:text-gray-900"
                               >
@@ -1524,13 +1521,12 @@ export default function LearnPage() {
                               </button>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <button 
+                              <button
                                 onClick={() => setShowNotesSidebar(!showNotesSidebar)}
-                                className={`px-4 py-2 text-sm font-medium border rounded-md transition-colors ${
-                                  showNotesSidebar
+                                className={`px-4 py-2 text-sm font-medium border rounded-md transition-colors ${showNotesSidebar
                                     ? 'bg-primary-600 text-white border-primary-600'
                                     : 'text-primary-600 hover:text-primary-700 border-primary-600'
-                                }`}
+                                  }`}
                               >
                                 {showNotesSidebar ? 'Hide Notes' : `View Notes (${notes.length})`}
                               </button>
@@ -1539,26 +1535,24 @@ export default function LearnPage() {
 
                           {/* Engagement Buttons */}
                           <div className="flex items-center space-x-3 mb-4">
-                            <button 
+                            <button
                               onClick={() => handleFeedbackClick('LIKE')}
-                              className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${
-                                currentFeedback?.type === 'LIKE'
+                              className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${currentFeedback?.type === 'LIKE'
                                   ? 'bg-primary-50 text-primary-700'
                                   : 'text-gray-700 hover:bg-gray-100'
-                              }`}
+                                }`}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
                               </svg>
                               <span className="text-sm font-medium">Like</span>
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleFeedbackClick('DISLIKE')}
-                              className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${
-                                currentFeedback?.type === 'DISLIKE'
+                              className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${currentFeedback?.type === 'DISLIKE'
                                   ? 'bg-primary-50 text-primary-700'
                                   : 'text-gray-700 hover:bg-gray-100'
-                              }`}
+                                }`}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
@@ -1580,7 +1574,7 @@ export default function LearnPage() {
                                 checked={completedLectures.has(selectedLecture.id)}
                                 onCheckedChange={(checked) => handleMarkComplete(selectedLecture.id, checked)}
                               />
-                              <span 
+                              <span
                                 className="text-sm font-medium text-gray-700 cursor-pointer select-none"
                                 onClick={() => handleMarkComplete(selectedLecture.id, !completedLectures.has(selectedLecture.id))}
                               >
@@ -1637,14 +1631,14 @@ export default function LearnPage() {
                       <div className="border-t border-gray-200 bg-white">
                         <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-6">
                           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-4">{selectedLecture.title}</h2>
-                          
+
                           {/* Lecture Description */}
                           {selectedLecture.description && (
                             <div className="text-gray-700 mb-6 text-base sm:text-lg font-normal leading-relaxed">
                               <MarkdownRenderer content={selectedLecture.description} />
                             </div>
                           )}
-                          
+
                           {/* TEXT Content Items */}
                           {selectedLecture.contents && selectedLecture.contents.length > 0 && (
                             <div className="space-y-6">
@@ -1669,234 +1663,229 @@ export default function LearnPage() {
                         </div>
                       </div>
                     )}
-                    
+
                     {/* Tab Section */}
                     <div className="border-t border-gray-200 bg-white pb-20 md:pb-4">
                       <div className="mx-[36px] px-4 sm:px-6 lg:px-8 py-3">
                         {/* Tab Content */}
                         <div className="mb-6">
-                        {activeTab === 'transcript' && (
-                          <div>
-                            <div className="flex justify-between items-center mb-3">
-                              <div className="text-sm text-gray-600">0:00</div>
-                              <select className="text-sm text-gray-600 border border-gray-300 rounded px-2 py-1">
-                                <option>Transcript language: English</option>
-                              </select>
+                          {activeTab === 'transcript' && (
+                            <div>
+                              <div className="flex justify-between items-center mb-3">
+                                <div className="text-sm text-gray-600">0:00</div>
+                                <select className="text-sm text-gray-600 border border-gray-300 rounded px-2 py-1">
+                                  <option>Transcript language: English</option>
+                                </select>
+                              </div>
+                              <div className="text-gray-700">
+                                {loadingTranscript ? (
+                                  <p className="text-sm text-gray-500 mb-3">Loading transcript...</p>
+                                ) : transcriptText ? (
+                                  <div className="whitespace-pre-wrap text-sm leading-relaxed max-h-96 overflow-y-auto">
+                                    {transcriptText}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-gray-500 mb-3">
+                                    Transcript will be available here once the video transcript is uploaded.
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-gray-700">
-                              {loadingTranscript ? (
-                                <p className="text-sm text-gray-500 mb-3">Loading transcript...</p>
-                              ) : transcriptText ? (
-                                <div className="whitespace-pre-wrap text-sm leading-relaxed max-h-96 overflow-y-auto">
-                                  {transcriptText}
-                                </div>
-                              ) : (
-                                <p className="text-sm text-gray-500 mb-3">
-                                  Transcript will be available here once the video transcript is uploaded.
+                          )}
+
+                          {activeTab === 'notes' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Notes Section */}
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-3">Course Notes</h3>
+                                <p className="text-gray-700 mb-3 text-sm">
+                                  Click the &apos;Save Note&apos; button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you&apos;ve captured.
                                 </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
+                                <a href="#" className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center space-x-1">
+                                  <span>View all notes</span>
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              </div>
 
-                        {activeTab === 'notes' && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Notes Section */}
-                            <div>
-                              <h3 className="text-lg font-semibold text-gray-900 mb-3">Course Notes</h3>
-                              <p className="text-gray-700 mb-3 text-sm">
-                                Click the &apos;Save Note&apos; button below the lecture when you want to capture a screen. You can also highlight and save lines from the transcript. Add your own notes to anything you&apos;ve captured.
-                              </p>
-                              <a href="#" className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center space-x-1">
-                                <span>View all notes</span>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                              </a>
-                            </div>
-                            
-                            {/* Attachments Section */}
-                            <div>
-                              <h3 className="text-lg font-semibold text-gray-900 mb-3">Attachments</h3>
-                              {loadingAttachments ? (
-                                <p className="text-sm text-gray-500">Loading attachments...</p>
-                              ) : attachments.length > 0 ? (
-                                <div className="space-y-2">
-                                  {attachments.map((attachment) => {
-                                    const fileUrl = attachment.fileUrl || attachment.videoUrl || attachment.externalUrl
-                                    const fileName = attachment.title || `Attachment.${attachment.contentType?.toLowerCase() || 'file'}`
-                                    const isPDF = attachment.contentType === 'PDF'
-                                    
-                                    return (
-                                      <div
-                                        key={attachment.id}
-                                        onClick={() => {
-                                          if (!fileUrl) return
-                                          downloadFile(fileUrl, fileName, isPDF)
-                                        }}
-                                        className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors"
-                                      >
-                                        <div className="flex items-center space-x-3 flex-1 min-w-0">
-                                          {/* File type icon */}
-                                          {attachment.contentType === 'PDF' && (
-                                            <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                              {/* Attachments Section */}
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-3">Attachments</h3>
+                                {loadingAttachments ? (
+                                  <p className="text-sm text-gray-500">Loading attachments...</p>
+                                ) : attachments.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {attachments.map((attachment) => {
+                                      const fileUrl = attachment.fileUrl || attachment.videoUrl || attachment.externalUrl
+                                      const fileName = attachment.title || `Attachment.${attachment.contentType?.toLowerCase() || 'file'}`
+                                      const isPDF = attachment.contentType === 'PDF'
+
+                                      return (
+                                        <div
+                                          key={attachment.id}
+                                          onClick={() => {
+                                            if (!fileUrl) return
+                                            downloadFile(fileUrl, fileName, isPDF)
+                                          }}
+                                          className="flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 cursor-pointer transition-colors"
+                                        >
+                                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                                            {/* File type icon */}
+                                            {attachment.contentType === 'PDF' && (
+                                              <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                              </svg>
+                                            )}
+                                            {attachment.contentType === 'IMAGE' && (
+                                              <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                              </svg>
+                                            )}
+                                            {attachment.contentType === 'AUDIO' && (
+                                              <svg className="w-5 h-5 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                                              </svg>
+                                            )}
+                                            {!['PDF', 'IMAGE', 'AUDIO'].includes(attachment.contentType || '') && (
+                                              <svg className="w-5 h-5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                              </svg>
+                                            )}
+                                            <span className="text-gray-700 text-sm truncate">{fileName}</span>
+                                          </div>
+                                          {isPDF ? (
+                                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                          ) : (
+                                            <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                             </svg>
                                           )}
-                                          {attachment.contentType === 'IMAGE' && (
-                                            <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                            </svg>
-                                          )}
-                                          {attachment.contentType === 'AUDIO' && (
-                                            <svg className="w-5 h-5 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-                                            </svg>
-                                          )}
-                                          {!['PDF', 'IMAGE', 'AUDIO'].includes(attachment.contentType || '') && (
-                                            <svg className="w-5 h-5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                          )}
-                                          <span className="text-gray-700 text-sm truncate">{fileName}</span>
                                         </div>
-                                        {isPDF ? (
-                                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                          </svg>
-                                        ) : (
-                                          <svg className="w-4 h-4 text-gray-400 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                          </svg>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              ) : (
-                                <p className="text-sm text-gray-500">No attachments available for this lecture.</p>
-                              )}
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-gray-500">No attachments available for this lecture.</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Controls moved to end - Tabs, Save note, Report issue, Engagement buttons */}
+                        {/* Tabs */}
+                        <div className="border-t border-gray-200 pt-4 mt-6">
+                          <div className="border-b border-gray-200 mb-4">
+                            <div className="flex space-x-6">
+                              <button
+                                onClick={() => setActiveTab('transcript')}
+                                className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'transcript'
+                                    ? 'border-primary-600 text-primary-600'
+                                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                                  }`}
+                              >
+                                Transcript
+                              </button>
+                              <button
+                                onClick={() => setActiveTab('notes')}
+                                className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'notes'
+                                    ? 'border-primary-600 text-primary-600'
+                                    : 'border-transparent text-gray-600 hover:text-gray-900'
+                                  }`}
+                              >
+                                Notes
+                              </button>
                             </div>
                           </div>
-                        )}
-                      </div>
+                        </div>
 
-                    {/* Controls moved to end - Tabs, Save note, Report issue, Engagement buttons */}
-                    {/* Tabs */}
-                    <div className="border-t border-gray-200 pt-4 mt-6">
-                      <div className="border-b border-gray-200 mb-4">
-                        <div className="flex space-x-6">
+                        {/* Save note and Report issue */}
+                        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                          <div className="flex items-center space-x-4">
+                            <button
+                              onClick={() => setShowIssueDialog(true)}
+                              className="text-sm text-gray-600 hover:text-gray-900"
+                            >
+                              Report an issue
+                            </button>
+                          </div>
                           <button
-                            onClick={() => setActiveTab('transcript')}
-                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              activeTab === 'transcript'
-                                ? 'border-primary-600 text-primary-600'
-                                : 'border-transparent text-gray-600 hover:text-gray-900'
-                            }`}
+                            onClick={() => setShowNotesSidebar(!showNotesSidebar)}
+                            className={`px-4 py-2 text-sm font-medium border rounded-md transition-colors ${showNotesSidebar
+                                ? 'bg-primary-600 text-white border-primary-600'
+                                : 'text-primary-600 hover:text-primary-700 border-primary-600'
+                              }`}
                           >
-                            Transcript
+                            {showNotesSidebar ? 'Hide Notes' : `View Notes (${notes.length})`}
+                          </button>
+                        </div>
+
+                        {/* Engagement Buttons */}
+                        <div className="flex items-center space-x-3 pt-3">
+                          <button
+                            onClick={() => handleFeedbackClick('LIKE')}
+                            className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${currentFeedback?.type === 'LIKE'
+                                ? 'bg-primary-50 text-primary-700'
+                                : 'text-gray-700 hover:bg-gray-100'
+                              }`}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+                            </svg>
+                            <span className="text-sm font-medium">Like</span>
                           </button>
                           <button
-                            onClick={() => setActiveTab('notes')}
-                            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                              activeTab === 'notes'
-                                ? 'border-primary-600 text-primary-600'
-                                : 'border-transparent text-gray-600 hover:text-gray-900'
-                            }`}
+                            onClick={() => handleFeedbackClick('DISLIKE')}
+                            className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${currentFeedback?.type === 'DISLIKE'
+                                ? 'bg-primary-50 text-primary-700'
+                                : 'text-gray-700 hover:bg-gray-100'
+                              }`}
                           >
-                            Notes
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
+                            </svg>
+                            <span className="text-sm font-medium">Dislike</span>
                           </button>
+                          <button className="flex items-center space-x-2 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                            </svg>
+                            <span className="text-sm font-medium">Share</span>
+                          </button>
+                        </div>
+
+                        {/* Mark Complete and Next Button */}
+                        <div className="border-t border-gray-200 pt-3 mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                          <div className="flex items-center space-x-3">
+                            <Switch
+                              checked={completedLectures.has(selectedLecture.id)}
+                              onCheckedChange={(checked) => handleMarkComplete(selectedLecture.id, checked)}
+                            />
+                            <span
+                              className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                              onClick={() => handleMarkComplete(selectedLecture.id, !completedLectures.has(selectedLecture.id))}
+                            >
+                              {completedLectures.has(selectedLecture.id) ? 'Completed' : 'Mark as complete'}
+                            </span>
+                          </div>
+                          {nextLecture && (
+                            <button
+                              onClick={() => handleLectureSelect(nextLecture)}
+                              className="w-full sm:w-auto px-6 py-2 bg-primary-600 text-white font-medium rounded-md hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2 sm:ml-auto"
+                            >
+                              <span>Next</span>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
-
-                    {/* Save note and Report issue */}
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                      <div className="flex items-center space-x-4">
-                        <button 
-                          onClick={() => setShowIssueDialog(true)}
-                          className="text-sm text-gray-600 hover:text-gray-900"
-                        >
-                          Report an issue
-                        </button>
-                      </div>
-                      <button 
-                        onClick={() => setShowNotesSidebar(!showNotesSidebar)}
-                        className={`px-4 py-2 text-sm font-medium border rounded-md transition-colors ${
-                          showNotesSidebar
-                            ? 'bg-primary-600 text-white border-primary-600'
-                            : 'text-primary-600 hover:text-primary-700 border-primary-600'
-                        }`}
-                      >
-                        {showNotesSidebar ? 'Hide Notes' : `View Notes (${notes.length})`}
-                      </button>
-                    </div>
-
-                    {/* Engagement Buttons */}
-                    <div className="flex items-center space-x-3 pt-3">
-                      <button 
-                        onClick={() => handleFeedbackClick('LIKE')}
-                        className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${
-                          currentFeedback?.type === 'LIKE'
-                            ? 'bg-primary-50 text-primary-700'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-                        </svg>
-                        <span className="text-sm font-medium">Like</span>
-                      </button>
-                      <button 
-                        onClick={() => handleFeedbackClick('DISLIKE')}
-                        className={`flex items-center space-x-2 px-3 py-1.5 rounded-md transition-colors ${
-                          currentFeedback?.type === 'DISLIKE'
-                            ? 'bg-primary-50 text-primary-700'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14H5.236a2 2 0 01-1.789-2.894l3.5-7A2 2 0 018.736 3h4.018a2 2 0 01.485.06l3.76.94m-7 10v5a2 2 0 002 2h.096c.5 0 .905-.405.905-.904 0-.715.211-1.413.608-2.008L17 13V4m-7 10h2m5-10h2a2 2 0 012 2v6a2 2 0 01-2 2h-2.5" />
-                        </svg>
-                        <span className="text-sm font-medium">Dislike</span>
-                      </button>
-                      <button className="flex items-center space-x-2 px-3 py-1.5 text-gray-700 hover:bg-gray-100 rounded-md">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                        </svg>
-                        <span className="text-sm font-medium">Share</span>
-                      </button>
-                    </div>
-
-                    {/* Mark Complete and Next Button */}
-                    <div className="border-t border-gray-200 pt-3 mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-                      <div className="flex items-center space-x-3">
-                        <Switch
-                          checked={completedLectures.has(selectedLecture.id)}
-                          onCheckedChange={(checked) => handleMarkComplete(selectedLecture.id, checked)}
-                        />
-                        <span 
-                          className="text-sm font-medium text-gray-700 cursor-pointer select-none"
-                          onClick={() => handleMarkComplete(selectedLecture.id, !completedLectures.has(selectedLecture.id))}
-                        >
-                          {completedLectures.has(selectedLecture.id) ? 'Completed' : 'Mark as complete'}
-                        </span>
-                      </div>
-                      {nextLecture && (
-                        <button
-                          onClick={() => handleLectureSelect(nextLecture)}
-                          className="w-full sm:w-auto px-6 py-2 bg-primary-600 text-white font-medium rounded-md hover:bg-primary-700 transition-colors flex items-center justify-center space-x-2 sm:ml-auto"
-                        >
-                          <span>Next</span>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </button>
-                      )}
-                      </div>
-                    </div>
-                  </div>
                   </>
                 )}
               </>
@@ -1908,7 +1897,7 @@ export default function LearnPage() {
           </div>
 
           {/* Floating Chat Button */}
-          <button 
+          <button
             className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 w-12 h-12 sm:w-14 sm:h-14 bg-primary-600 text-white rounded-full shadow-lg hover:bg-primary-700 flex items-center justify-center z-50 transition-all hover:scale-105"
             aria-label="Open chat"
           >

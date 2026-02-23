@@ -92,21 +92,44 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Blob not found", { status: 404 });
     }
 
-    const originalPdf = await blobClient.downloadToBuffer();
-    const watermarkedPdf = await addEmailWatermarkToPdf(originalPdf, email);
+    const originalBuffer = await blobClient.downloadToBuffer();
+
+    // Safety check: only watermark if it's actually a PDF
+    const isPdf = blobName.toLowerCase().endsWith('.pdf');
+
+    let responseBuffer: Buffer;
+    if (isPdf) {
+      try {
+        const watermarkedPdf = await addEmailWatermarkToPdf(originalBuffer, email);
+        responseBuffer = Buffer.from(watermarkedPdf);
+      } catch (watermarkError) {
+        console.error("Watermarking failed, falling back to original:", watermarkError);
+        responseBuffer = originalBuffer;
+      }
+    } else {
+      responseBuffer = originalBuffer;
+    }
 
     // Get the filename from blob name for Content-Disposition
-    const filename = blobName.split("/").pop() || "document.pdf";
+    const filename = blobName.split("/").pop() || "document";
 
     // Check if download parameter is present to determine disposition
     const download = searchParams.get("download");
-    const disposition = download === "true" 
-      ? `attachment; filename="${filename}"` 
+    const disposition = download === "true"
+      ? `attachment; filename="${filename}"`
       : `inline; filename="${filename}"`;
 
-    return new NextResponse(Buffer.from(watermarkedPdf), {
+    // Determine content type
+    let contentType = "application/pdf";
+    if (blobName.toLowerCase().endsWith('.doc')) contentType = "application/msword";
+    else if (blobName.toLowerCase().endsWith('.docx')) contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    else if (blobName.toLowerCase().endsWith('.png')) contentType = "image/png";
+    else if (blobName.toLowerCase().endsWith('.jpg') || blobName.toLowerCase().endsWith('.jpeg')) contentType = "image/jpeg";
+    else if (blobName.toLowerCase().endsWith('.txt')) contentType = "text/plain";
+
+    return new NextResponse(new Uint8Array(responseBuffer), {
       headers: {
-        "Content-Type": "application/pdf",
+        "Content-Type": contentType,
         "Content-Disposition": disposition,
         "Cache-Control": "private, no-store",
         // optional hardening

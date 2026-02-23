@@ -20,54 +20,58 @@ import java.util.stream.Collectors;
 @Service
 @Transactional
 public class LectureMediaService {
-    
+
     @Autowired
     private LectureRepository lectureRepository;
-    
+
     @Autowired
     private LectureContentRepository lectureContentRepository;
-    
+
     @Autowired
     private MediaUploadService mediaUploadService;
-    
+
     @Autowired
     private LectureService lectureService; // Reuse getCurrentUserRole from LectureService
-    
+
     /**
      * Upload a single video or audio file for a lecture
      * Replaces any existing video/audio content
      */
-    public LectureContentDTO uploadVideoOrAudio(String lectureId, MultipartFile file, boolean isVideo) throws IOException {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload media
+    public LectureContentDTO uploadVideoOrAudio(String lectureId, MultipartFile file, boolean isVideo)
+            throws IOException {
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload
+        // media
         String userRole = lectureService.getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
         }
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         // Verify lecture exists
         Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
+
         // Delete existing video/audio content for this lecture
-        List<LectureContent> existingContent = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
+        List<LectureContent> existingContent = lectureContentRepository
+                .findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
         existingContent.stream()
-            .filter(content -> (isVideo && content.getContentType() == LectureContent.ContentType.VIDEO) ||
-                              (!isVideo && content.getContentType() == LectureContent.ContentType.AUDIO))
-            .forEach(content -> {
-                if (content.getVideoUrl() != null) {
-                    mediaUploadService.deleteMedia(content.getVideoUrl());
-                }
-                if (content.getFileUrl() != null) {
-                    mediaUploadService.deleteMedia(content.getFileUrl());
-                }
-                lectureContentRepository.delete(content);
-            });
-        
+                .filter(content -> (isVideo && content.getContentType() == LectureContent.ContentType.VIDEO) ||
+                        (!isVideo && content.getContentType() == LectureContent.ContentType.AUDIO))
+                .forEach(content -> {
+                    if (content.getVideoUrl() != null) {
+                        mediaUploadService.deleteMedia(content.getVideoUrl());
+                    }
+                    if (content.getFileUrl() != null) {
+                        mediaUploadService.deleteMedia(content.getFileUrl());
+                    }
+                    lectureContentRepository.delete(content);
+                });
+
         // Upload file to Azure Storage
         String folder = isVideo ? "lectures/videos" : "lectures/audio";
         String fileUrl;
@@ -77,7 +81,7 @@ public class LectureMediaService {
             // For audio, use generic upload method
             fileUrl = uploadGenericFile(file, folder);
         }
-        
+
         // Create new LectureContent
         LectureContent content = new LectureContent();
         content.setId(UlidGenerator.nextUlid());
@@ -86,57 +90,60 @@ public class LectureMediaService {
         content.setContentType(isVideo ? LectureContent.ContentType.VIDEO : LectureContent.ContentType.AUDIO);
         content.setTitle(lecture.getTitle());
         content.setDescription(lecture.getDescription());
-        
+
         if (isVideo) {
             content.setVideoUrl(fileUrl);
         } else {
             content.setFileUrl(fileUrl);
         }
-        
+
         content.setFileSizeBytes(file.getSize());
         content.setMimeType(file.getContentType());
         content.setSequence(0);
-        
+
         LectureContent saved = lectureContentRepository.save(content);
         return toDTO(saved);
     }
-    
+
     /**
      * Upload a single document file for a lecture
      * Replaces any existing document content
      */
     public LectureContentDTO uploadDocument(String lectureId, MultipartFile file) throws IOException {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload media
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload
+        // media
         String userRole = lectureService.getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
         }
-        
+
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         // Verify lecture exists
         Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
+
         // Delete existing PDF/document content for this lecture
-        List<LectureContent> existingContent = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
+        List<LectureContent> existingContent = lectureContentRepository
+                .findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
         existingContent.stream()
-            .filter(content -> content.getContentType() == LectureContent.ContentType.PDF)
-            .forEach(content -> {
-                if (content.getFileUrl() != null) {
-                    mediaUploadService.deleteMedia(content.getFileUrl());
-                }
-                lectureContentRepository.delete(content);
-            });
-        
+                .filter(content -> content.getContentType() == LectureContent.ContentType.PDF)
+                .forEach(content -> {
+                    if (content.getFileUrl() != null) {
+                        mediaUploadService.deleteMedia(content.getFileUrl());
+                    }
+                    lectureContentRepository.delete(content);
+                });
+
         // Upload file to Azure Storage
         String folder = "lectures/documents";
         String fileUrl = uploadGenericFile(file, folder);
-        
+
         // Create new LectureContent
         LectureContent content = new LectureContent();
         content.setId(UlidGenerator.nextUlid());
@@ -149,56 +156,58 @@ public class LectureMediaService {
         content.setFileSizeBytes(file.getSize());
         content.setMimeType(file.getContentType());
         content.setSequence(0);
-        
+
         LectureContent saved = lectureContentRepository.save(content);
         return toDTO(saved);
     }
-    
+
     /**
      * Upload multiple attachment files for a lecture
      */
     public List<LectureContentDTO> uploadAttachments(String lectureId, List<MultipartFile> files) throws IOException {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload media
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload
+        // media
         String userRole = lectureService.getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
         }
-        
+
         if (lectureId == null || lectureId.trim().isEmpty()) {
             throw new IllegalArgumentException("Lecture ID cannot be null or empty");
         }
         if (files == null || files.isEmpty()) {
             throw new IllegalArgumentException("Files list cannot be null or empty");
         }
-        
+
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         // Verify lecture exists
         Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
+
         // Get next sequence number
         Integer maxSequence = lectureContentRepository.findMaxSequenceByLectureIdAndClientId(lectureId, clientId);
         int nextSequence = (maxSequence != null ? maxSequence : 0) + 1;
-        
+
         List<LectureContentDTO> uploadedContents = new java.util.ArrayList<>();
-        
+
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) {
                 continue;
             }
-            
+
             // Determine content type based on file
             LectureContent.ContentType contentType = determineContentType(file);
-            
+
             // Upload file to Azure Storage
             String folder = "lectures/attachments";
             String fileUrl = uploadGenericFile(file, folder);
-            
+
             // Create LectureContent
             LectureContent content = new LectureContent();
             content.setId(UlidGenerator.nextUlid());
@@ -210,18 +219,18 @@ public class LectureMediaService {
             content.setFileSizeBytes(file.getSize());
             content.setMimeType(file.getContentType());
             content.setSequence(nextSequence++);
-            
+
             LectureContent saved = lectureContentRepository.save(content);
             uploadedContents.add(toDTO(saved));
         }
-        
+
         if (uploadedContents.isEmpty()) {
             throw new IllegalArgumentException("No valid files were uploaded");
         }
-        
+
         return uploadedContents;
     }
-    
+
     /**
      * Get all media content for a lecture
      */
@@ -231,32 +240,35 @@ public class LectureMediaService {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
-        List<LectureContent> contents = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
+
+        List<LectureContent> contents = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(lectureId,
+                clientId);
         return contents.stream()
-            .map(this::toDTO)
-            .collect(Collectors.toList());
+                .map(this::toDTO)
+                .collect(Collectors.toList());
     }
-    
+
     /**
      * Delete a media content item
      */
     public void deleteMedia(String contentId) {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot delete media
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot delete
+        // media
         String userRole = lectureService.getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot delete media");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot delete media");
         }
-        
+
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         LectureContent content = lectureContentRepository.findByIdAndClientId(contentId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Content not found: " + contentId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Content not found: " + contentId));
+
         // Delete from Azure Storage - handle all URL fields
         if (content.getVideoUrl() != null) {
             mediaUploadService.deleteMedia(content.getVideoUrl());
@@ -286,38 +298,40 @@ public class LectureMediaService {
                 System.err.println("Failed to delete subtitle URLs for content " + contentId + ": " + e.getMessage());
             }
         }
-        
+
         // Delete from database
         lectureContentRepository.delete(content);
     }
-    
+
     /**
      * Create a text content item for a lecture
      */
     public LectureContentDTO createTextContent(String lectureId, String textContent, String title, Integer sequence) {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create content
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot create
+        // content
         String userRole = lectureService.getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot create content");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot create content");
         }
-        
+
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         // Verify lecture exists
         Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
+
         // Get next sequence number if not provided
         Integer nextSequence = sequence;
         if (nextSequence == null) {
             Integer maxSequence = lectureContentRepository.findMaxSequenceByLectureIdAndClientId(lectureId, clientId);
             nextSequence = (maxSequence != null ? maxSequence : 0) + 1;
         }
-        
+
         // Create new LectureContent
         LectureContent content = new LectureContent();
         content.setId(UlidGenerator.nextUlid());
@@ -327,87 +341,92 @@ public class LectureMediaService {
         content.setTitle(title != null ? title : lecture.getTitle());
         content.setTextContent(textContent);
         content.setSequence(nextSequence);
-        
+
         LectureContent saved = lectureContentRepository.save(content);
         return toDTO(saved);
     }
-    
+
     /**
      * Update an existing text content item
      */
     public LectureContentDTO updateTextContent(String contentId, String textContent, String title) {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update content
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot update
+        // content
         String userRole = lectureService.getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot update content");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot update content");
         }
-        
+
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         LectureContent content = lectureContentRepository.findByIdAndClientId(contentId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Content not found: " + contentId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Content not found: " + contentId));
+
         if (content.getContentType() != LectureContent.ContentType.TEXT) {
             throw new IllegalArgumentException("Content is not a text content item");
         }
-        
+
         if (textContent != null) {
             content.setTextContent(textContent);
         }
         if (title != null) {
             content.setTitle(title);
         }
-        
+
         LectureContent saved = lectureContentRepository.save(content);
         return toDTO(saved);
     }
-    
+
     /**
      * Upload transcript file for a video lecture
      */
     public LectureContentDTO uploadTranscript(String lectureId, MultipartFile file) throws IOException {
-        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload media
+        // INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access - cannot upload
+        // media
         String userRole = lectureService.getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole) || "SUPPORT_STAFF".equals(userRole) || "STUDENT".equals(userRole)) {
-            throw new IllegalArgumentException("INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
+            throw new IllegalArgumentException(
+                    "INSTRUCTOR, SUPPORT_STAFF, and STUDENT have view-only access and cannot upload media");
         }
-        
+
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         // Verify lecture exists
         Lecture lecture = lectureRepository.findByIdAndClientId(lectureId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Lecture not found: " + lectureId));
+
         // Find existing video content for this lecture
-        List<LectureContent> existingContent = lectureContentRepository.findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
+        List<LectureContent> existingContent = lectureContentRepository
+                .findByLectureIdAndClientIdOrderBySequenceAsc(lectureId, clientId);
         LectureContent videoContent = existingContent.stream()
-            .filter(content -> content.getContentType() == LectureContent.ContentType.VIDEO)
-            .findFirst()
-            .orElseThrow(() -> new IllegalArgumentException("No video content found for lecture: " + lectureId));
-        
+                .filter(content -> content.getContentType() == LectureContent.ContentType.VIDEO)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No video content found for lecture: " + lectureId));
+
         // Upload transcript file to Azure Storage
         String folder = "lectures/transcripts";
         String transcriptUrl = uploadGenericFile(file, folder);
-        
+
         // Update video content with transcript URL
         videoContent.setTranscriptUrl(transcriptUrl);
-        
+
         LectureContent saved = lectureContentRepository.save(videoContent);
         return toDTO(saved);
     }
-    
+
     private LectureContent.ContentType determineContentType(MultipartFile file) {
         String contentType = file.getContentType();
         String filename = file.getOriginalFilename();
-        
+
         if (contentType != null) {
             if (contentType.startsWith("image/")) {
                 return LectureContent.ContentType.IMAGE;
@@ -419,32 +438,44 @@ public class LectureMediaService {
                 return LectureContent.ContentType.AUDIO;
             }
         }
-        
+
         // Fallback to filename extension
         if (filename != null) {
             String lower = filename.toLowerCase();
             if (lower.endsWith(".pdf")) {
                 return LectureContent.ContentType.PDF;
-            } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".gif")) {
+            } else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png")
+                    || lower.endsWith(".gif") || lower.endsWith(".webp")) {
                 return LectureContent.ContentType.IMAGE;
-            } else if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")) {
+            } else if (lower.endsWith(".mp4") || lower.endsWith(".mov") || lower.endsWith(".avi")
+                    || lower.endsWith(".mkv")) {
                 return LectureContent.ContentType.VIDEO;
-            } else if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".ogg")) {
+            } else if (lower.endsWith(".mp3") || lower.endsWith(".wav") || lower.endsWith(".ogg")
+                    || lower.endsWith(".m4a")) {
                 return LectureContent.ContentType.AUDIO;
+            } else if (lower.endsWith(".doc") || lower.endsWith(".docx") || lower.endsWith(".txt")
+                    || lower.endsWith(".rtf")) {
+                // Return generic document or PDF as fallback if DOCUMENT type is not in enum
+                // But wait, ContentType enum has PDF, IMAGE, VIDEO, AUDIO, TEXT, LINK, EMBEDDED
+                // Let's use TEXT or just stick with PDF but at least we tried to be more
+                // specific.
+                // Actually, if it's a .doc, it should probably be DOCUMENT if we had it,
+                // but since we only have these, PDF is the "file" fallback.
+                return LectureContent.ContentType.PDF;
             }
         }
-        
+
         // Default to PDF for unknown types
         return LectureContent.ContentType.PDF;
     }
-    
+
     /**
      * Generic file upload method that handles any file type
      */
     private String uploadGenericFile(MultipartFile file, String folder) throws IOException {
         return mediaUploadService.uploadFile(file, folder);
     }
-    
+
     private LectureContentDTO toDTO(LectureContent content) {
         LectureContentDTO dto = new LectureContentDTO();
         dto.setId(content.getId());
@@ -469,4 +500,3 @@ public class LectureMediaService {
         return dto;
     }
 }
-
