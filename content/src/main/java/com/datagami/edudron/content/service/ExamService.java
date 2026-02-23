@@ -70,6 +70,9 @@ public class ExamService {
     @Autowired
     private CacheManager cacheManager;
 
+    @Autowired
+    private ContentAuditService auditService;
+
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
 
@@ -186,6 +189,20 @@ public class ExamService {
                 : classId != null ? "class: " + classId : "all students";
         logger.info("Created exam with ID: {} for course: {}, {}",
                 saved.getId(), courseId, audience);
+
+        // Audit log for exam creation
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("courseId", courseId);
+        if (classId != null)
+            meta.put("classId", classId);
+        if (sectionId != null)
+            meta.put("sectionId", sectionId);
+        meta.put("title", title != null ? title : "");
+        meta.put("timingMode", exam.getTimingMode().name());
+
+        auditService.logCrud(clientId, "CREATE", "Exam", saved.getId(), getCurrentUserId(), getCurrentUserEmail(),
+                meta);
+
         return saved;
     }
 
@@ -292,6 +309,18 @@ public class ExamService {
         } else {
             logger.info("Scheduled exam: {} from {} to {}", examId, startTime, endTime);
         }
+
+        // Audit log for exam scheduling
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("courseId", updated.getCourseId());
+        meta.put("startTime", startTime.toString());
+        meta.put("endTime", endTime.toString());
+        meta.put("isReschedule", isReschedule);
+        meta.put("status", updated.getStatus().name());
+
+        auditService.logCrud(clientId, isReschedule ? "RESCHEDULE" : "SCHEDULE", "Exam", examId, getCurrentUserId(),
+                getCurrentUserEmail(), meta);
+
         evictExamCache(examId);
         return updated;
     }
@@ -974,6 +1003,20 @@ public class ExamService {
         }
 
         Assessment saved = assessmentRepository.save(exam);
+
+        // Audit log for exam update
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("courseId", saved.getCourseId());
+        meta.put("title", saved.getTitle());
+        meta.put("timingMode", saved.getTimingMode().name());
+        if (saved.getClassId() != null)
+            meta.put("classId", saved.getClassId());
+        if (saved.getSectionId() != null)
+            meta.put("sectionId", saved.getSectionId());
+
+        auditService.logCrud(saved.getClientId(), "UPDATE", "Exam", examId, getCurrentUserId(), getCurrentUserEmail(),
+                meta);
+
         evictExamCache(examId);
         return saved;
     }
@@ -1008,12 +1051,22 @@ public class ExamService {
             exam.setArchived(true);
             assessmentRepository.save(exam);
             logger.info("Archived exam {} with {} submissions", examId, submissionCount);
+
+            auditService.logCrud(exam.getClientId(), "ARCHIVE", "Exam", examId, getCurrentUserId(),
+                    getCurrentUserEmail(),
+                    Map.of("courseId", exam.getCourseId(), "submissionCount", submissionCount));
+
             evictExamCache(examId);
             return false; // indicates archived, not deleted
         } else {
             // No submissions, safe to delete
             assessmentRepository.delete(exam);
             logger.info("Deleted exam: {}", examId);
+
+            auditService.logCrud(exam.getClientId(), "DELETE", "Exam", examId, getCurrentUserId(),
+                    getCurrentUserEmail(),
+                    Map.of("courseId", exam.getCourseId()));
+
             evictExamCache(examId);
             return true; // indicates deleted
         }
@@ -1156,6 +1209,11 @@ public class ExamService {
         exam.setStatus(Assessment.ExamStatus.COMPLETED);
         Assessment updated = assessmentRepository.save(exam);
         logger.info("Exam {} marked as COMPLETED", examId);
+
+        auditService.logCrud(updated.getClientId(), "COMPLETE", "Exam", examId, getCurrentUserId(),
+                getCurrentUserEmail(),
+                Map.of("courseId", updated.getCourseId()));
+
         evictExamCache(examId);
         return updated;
     }
@@ -1792,6 +1850,41 @@ public class ExamService {
         if (value instanceof String)
             return Boolean.parseBoolean((String) value);
         return defaultValue;
+    }
+
+    /**
+     * Get the current user's email from the identity service
+     * Returns null if unable to determine email
+     */
+    private String getCurrentUserEmail() {
+        try {
+            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null ||
+                    "anonymousUser".equals(authentication.getName())) {
+                return null;
+            }
+
+            // Get user info from identity service
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                    meUrl,
+                    HttpMethod.GET,
+                    entity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    });
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object email = response.getBody().get("email");
+                return email != null ? email.toString() : null;
+            }
+        } catch (Exception e) {
+            logger.debug("Could not determine user email: {}", e.getMessage());
+        }
+        return null;
     }
 
     /**
