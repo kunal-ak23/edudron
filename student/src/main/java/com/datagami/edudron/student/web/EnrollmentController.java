@@ -53,8 +53,8 @@ public class EnrollmentController {
         List<EnrollmentDTO> enrollments = enrollmentService.getStudentEnrollments(studentId);
         log.info("GET /api/enrollments - Returning {} enrollments for student {}", enrollments.size(), studentId);
         if (!enrollments.isEmpty()) {
-            log.debug("GET /api/enrollments - Enrollment courseIds: {}", 
-                enrollments.stream().map(EnrollmentDTO::getCourseId).collect(java.util.stream.Collectors.toList()));
+            log.debug("GET /api/enrollments - Enrollment courseIds: {}",
+                    enrollments.stream().map(EnrollmentDTO::getCourseId).collect(java.util.stream.Collectors.toList()));
         } else {
             log.warn("GET /api/enrollments - No enrollments found for student {}", studentId);
         }
@@ -98,29 +98,37 @@ public class EnrollmentController {
             @RequestParam(required = false) String instituteId,
             @RequestParam(required = false) String classId,
             @RequestParam(required = false) String sectionId,
+            @RequestParam(required = false) String studentId,
             @RequestParam(required = false) String email) {
-        log.info("GET /api/enrollments/all/paged - Filters: courseId={}, instituteId={}, classId={}, sectionId={}, email={}, page={}, size={}", 
-            courseId, instituteId, classId, sectionId, email, pageable.getPageNumber(), pageable.getPageSize());
-        
-        // If email is provided, we need to find student IDs first
+        log.info(
+                "GET /api/enrollments/all/paged - Filters: courseId={}, instituteId={}, classId={}, sectionId={}, studentId={}, email={}, page={}, size={}",
+                courseId, instituteId, classId, sectionId, studentId, email, pageable.getPageNumber(),
+                pageable.getPageSize());
+
+        // If studentId or email is provided, we need to find student IDs filter
         List<String> studentIds = null;
-        if (email != null && !email.trim().isEmpty()) {
+        if (studentId != null && !studentId.trim().isEmpty()) {
+            log.info("Using direct studentId filter: {}", studentId.trim());
+            studentIds = java.util.Collections.singletonList(studentId.trim());
+        } else if (email != null && !email.trim().isEmpty()) {
             log.info("Searching for students with email: {}", email.trim());
             studentIds = enrollmentService.findStudentIdsByEmail(email.trim());
-            log.info("Found {} student IDs matching email '{}'", studentIds != null ? studentIds.size() : 0, email.trim());
+            log.info("Found {} student IDs matching email '{}'", studentIds != null ? studentIds.size() : 0,
+                    email.trim());
         }
-        
-        // Pass emailSearch for fallback filtering if identity service didn't find matches
-        String emailSearch = (studentIds != null && studentIds.isEmpty() && email != null && !email.trim().isEmpty()) 
-            ? email.trim() 
-            : null;
-        
+
+        // Pass emailSearch for fallback filtering if identity service didn't find
+        // matches
+        String emailSearch = (studentIds != null && studentIds.isEmpty() && email != null && !email.trim().isEmpty())
+                ? email.trim()
+                : null;
+
         Page<EnrollmentDTO> enrollments = enrollmentService.getAllEnrollments(
-            pageable, courseId, instituteId, classId, sectionId, studentIds, emailSearch);
-        
-        log.info("GET /api/enrollments/all/paged - Returning {} enrollments (total: {}, pages: {})", 
-            enrollments.getNumberOfElements(), enrollments.getTotalElements(), enrollments.getTotalPages());
-        
+                pageable, courseId, instituteId, classId, sectionId, studentIds, emailSearch);
+
+        log.info("GET /api/enrollments/all/paged - Returning {} enrollments (total: {}, pages: {})",
+                enrollments.getNumberOfElements(), enrollments.getTotalElements(), enrollments.getTotalPages());
+
         return ResponseEntity.ok(enrollments);
     }
 
@@ -152,7 +160,8 @@ public class EnrollmentController {
 
     @PostMapping("/enrollments/transfer/bulk")
     @Operation(summary = "Bulk transfer enrollments (admin)", description = "Transfer multiple enrollments to a destination section (and optionally change course for all). Admin/instructor only.")
-    public ResponseEntity<BulkTransferEnrollmentResponse> bulkTransferEnrollments(@Valid @RequestBody BulkTransferEnrollmentRequest request) {
+    public ResponseEntity<BulkTransferEnrollmentResponse> bulkTransferEnrollments(
+            @Valid @RequestBody BulkTransferEnrollmentRequest request) {
         BulkTransferEnrollmentResponse response = enrollmentService.bulkTransferEnrollments(request);
         return ResponseEntity.ok(response);
     }
@@ -221,5 +230,3 @@ public class EnrollmentController {
         return ResponseEntity.ok(students);
     }
 }
-
-

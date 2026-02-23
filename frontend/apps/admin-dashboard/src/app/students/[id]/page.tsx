@@ -143,7 +143,10 @@ export default function StudentDetailPage() {
 
   const loadEnrollments = useCallback(async (email: string, sid: string) => {
     try {
-      const result = await enrollmentsApi.listAllEnrollmentsPaginated(0, 50, { email })
+      const result = await enrollmentsApi.listAllEnrollmentsPaginated(0, 50, {
+        email,
+        studentId: sid
+      })
       setEnrollments(result.content || [])
       const courseIds = [...new Set((result.content || []).map((e) => e.courseId).filter(Boolean))]
       const map: CourseMap = {}

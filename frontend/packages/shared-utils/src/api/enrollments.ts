@@ -68,11 +68,11 @@ export interface SectionProgress {
 }
 
 export class EnrollmentsApi {
-  constructor(private apiClient: ApiClient) {}
+  constructor(private apiClient: ApiClient) { }
 
   async listEnrollments(): Promise<Enrollment[]> {
     const response = await this.apiClient.get<any>('/api/enrollments')
-    
+
     // Handle Spring Data Page response structure: {content: [...], totalElements: ...}
     if (response.data && response.data.content && Array.isArray(response.data.content)) {
       return response.data.content
@@ -90,13 +90,14 @@ export class EnrollmentsApi {
   }
 
   async listAllEnrollmentsPaginated(
-    page: number = 0, 
+    page: number = 0,
     size: number = 20,
     filters?: {
       courseId?: string
       instituteId?: string
       classId?: string
       sectionId?: string
+      studentId?: string
       email?: string
     }
   ): Promise<{
@@ -111,19 +112,20 @@ export class EnrollmentsApi {
     params.append('page', page.toString())
     params.append('size', size.toString())
     params.append('sort', 'enrolledAt,desc')
-    
+
     // Add filter parameters if provided
     if (filters) {
       if (filters.courseId) params.append('courseId', filters.courseId)
       if (filters.instituteId) params.append('instituteId', filters.instituteId)
       if (filters.classId) params.append('classId', filters.classId)
       if (filters.sectionId) params.append('sectionId', filters.sectionId)
+      if (filters.studentId) params.append('studentId', filters.studentId)
       if (filters.email) params.append('email', filters.email)
     }
-    
+
     const url = `/api/enrollments/all/paged?${params.toString()}`
     console.log('[EnrollmentsApi] Calling:', url)
-    
+
     const response = await this.apiClient.get<{
       content: Enrollment[]
       totalElements: number
@@ -131,7 +133,7 @@ export class EnrollmentsApi {
       size: number
       number: number
     }>(url)
-    
+
     console.log('[EnrollmentsApi] Raw response:', {
       hasData: !!response.data,
       hasContent: !!(response.data && response.data.content),
@@ -140,13 +142,13 @@ export class EnrollmentsApi {
       totalPages: response.data?.totalPages,
       responseKeys: response.data ? Object.keys(response.data) : []
     })
-    
+
     // Handle Spring Data Page response structure
     if (response.data && response.data.content) {
       console.log('[EnrollmentsApi] Returning paginated response with', response.data.content.length, 'items')
       return response.data
     }
-    
+
     // Fallback structure
     console.warn('[EnrollmentsApi] Response structure unexpected, using fallback')
     return {
@@ -212,7 +214,7 @@ export class EnrollmentsApi {
 
   // Section management (replaces legacy Batch management)
   async listSections(classId?: string): Promise<Batch[]> {
-    const url = classId 
+    const url = classId
       ? `/api/classes/${classId}/sections`
       : '/api/sections'
     const response = await this.apiClient.get<Batch[]>(url)
@@ -346,7 +348,7 @@ export class EnrollmentsApi {
     params.append('page', page.toString())
     params.append('size', size.toString())
     params.append('sort', 'name,asc')
-    
+
     const url = `/api/sections/${sectionId}/students/paged?${params.toString()}`
     const response = await this.apiClient.get<{
       content: SectionStudentDTO[]
@@ -355,11 +357,11 @@ export class EnrollmentsApi {
       size: number
       number: number
     }>(url)
-    
+
     if (response.data && response.data.content) {
       return response.data
     }
-    
+
     return {
       content: Array.isArray(response.data) ? response.data : [],
       totalElements: 0,
@@ -391,7 +393,7 @@ export class EnrollmentsApi {
     params.append('page', page.toString())
     params.append('size', size.toString())
     params.append('sort', 'name,asc')
-    
+
     const url = `/api/classes/${classId}/students/paged?${params.toString()}`
     const response = await this.apiClient.get<{
       content: ClassStudentDTO[]
@@ -400,11 +402,11 @@ export class EnrollmentsApi {
       size: number
       number: number
     }>(url)
-    
+
     if (response.data && response.data.content) {
       return response.data
     }
-    
+
     return {
       content: Array.isArray(response.data) ? response.data : [],
       totalElements: 0,
