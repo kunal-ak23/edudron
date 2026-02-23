@@ -1137,14 +1137,17 @@ public class AnalyticsService {
             StudentLectureEngagementDTO activity = new StudentLectureEngagementDTO();
             activity.setStudentId(studentId);
             activity.setStudentEmail(dto.getStudentEmail());
+            activity.setLectureId(lectureId);
 
             // Need lecture Title and Duration
             LectureMetadata lMeta = metadataMap.get(lectureId);
             if (lMeta != null) {
-                // Although StudentLectureEngagementDTO currently doesn't have lectureTitle and
-                // lectureDurationSeconds,
-                // it might be useful to add them later or rely on the frontend to map them if
-                // needed. (I'll add them to DTO later if needed)
+                activity.setLectureTitle(lMeta.title != null && !lMeta.title.trim().isEmpty()
+                        ? lMeta.title
+                        : "Lecture " + lectureId.substring(0, Math.min(8, lectureId.length())));
+                activity.setLectureDurationSeconds(lMeta.durationSeconds);
+            } else {
+                activity.setLectureTitle("Lecture " + lectureId.substring(0, Math.min(8, lectureId.length())));
             }
 
             activity.setTotalSessions((long) lSessions.size());
