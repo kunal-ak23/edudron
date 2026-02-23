@@ -1129,6 +1129,11 @@ public class ExamService {
         }
 
         Assessment saved = assessmentRepository.save(exam);
+
+        // Audit log for exam publication
+        auditService.logCrud(saved.getClientId(), "PUBLISH", "Exam", examId, getCurrentUserId(), getCurrentUserEmail(),
+                Map.of("courseId", saved.getCourseId(), "status", saved.getStatus().name()));
+
         evictExamCache(examId);
         return saved;
     }
@@ -1171,6 +1176,12 @@ public class ExamService {
         logger.info("Exam {} unpublished (was {})", examId, previousStatus);
 
         Assessment saved = assessmentRepository.save(exam);
+
+        // Audit log for exam unpublication
+        auditService.logCrud(saved.getClientId(), "UNPUBLISH", "Exam", examId, getCurrentUserId(),
+                getCurrentUserEmail(),
+                Map.of("courseId", saved.getCourseId(), "previousStatus", previousStatus.name()));
+
         evictExamCache(examId);
         return saved;
     }
@@ -1265,6 +1276,12 @@ public class ExamService {
         }
 
         Assessment saved = assessmentRepository.save(exam);
+
+        // Audit log for exam republication
+        auditService.logCrud(saved.getClientId(), "REPUBLISH", "Exam", examId, getCurrentUserId(),
+                getCurrentUserEmail(),
+                Map.of("courseId", saved.getCourseId(), "status", saved.getStatus().name()));
+
         evictExamCache(examId);
         return saved;
     }

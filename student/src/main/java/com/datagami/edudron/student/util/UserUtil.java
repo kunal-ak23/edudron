@@ -19,19 +19,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class UserUtil {
-    
+
     private static final Logger log = LoggerFactory.getLogger(UserUtil.class);
-    
+
     private static volatile RestTemplate restTemplate;
     private static final Object restTemplateLock = new Object();
     private static String gatewayUrl = System.getenv("GATEWAY_URL");
-    
+
     static {
         if (gatewayUrl == null || gatewayUrl.isEmpty()) {
             gatewayUrl = "http://localhost:8080"; // Default fallback
         }
     }
-    
+
     private static RestTemplate getRestTemplate() {
         // Double-checked locking for thread safety
         if (restTemplate == null) {
@@ -42,7 +42,8 @@ public class UserUtil {
                     interceptors.add(new com.datagami.edudron.common.TenantContextRestTemplateInterceptor());
                     // Add interceptor to forward JWT token
                     interceptors.add((request, body, execution) -> {
-                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
+                                .getRequestAttributes();
                         if (attributes != null) {
                             HttpServletRequest currentRequest = attributes.getRequest();
                             String authHeader = currentRequest.getHeader("Authorization");
@@ -61,75 +62,109 @@ public class UserUtil {
         }
         return restTemplate;
     }
-    
+
     /**
      * Get the current user ID from SecurityContext.
-     * The JWT subject contains the email, so we need to look up the user ID from identity service.
-     * This ensures consistency with enrollment records which use user ID, not email.
+     * The JWT subject contains the email, so we need to look up the user ID from
+     * identity service.
+     * This ensures consistency with enrollment records which use user ID, not
+     * email.
      */
     public static String getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || authentication.getPrincipal() == null) {
             throw new IllegalStateException("User not authenticated");
         }
-        
+
         String email = authentication.getName(); // This is the email from JWT subject
         log.debug("Getting user ID for email: {}", email);
-        
+
         // Try to get user ID from identity service using /me endpoint
         try {
             String meUrl = gatewayUrl + "/idp/users/me";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
-            
+
             ResponseEntity<UserResponse> response = getRestTemplate().exchange(
-                meUrl,
-                HttpMethod.GET,
-                entity,
-                UserResponse.class
-            );
-            
+                    meUrl,
+                    HttpMethod.GET,
+                    entity,
+                    UserResponse.class);
+
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 String userId = response.getBody().getId();
                 log.debug("Resolved user ID {} for email {} via /me endpoint", userId, email);
                 return userId;
             }
         } catch (Exception e) {
-            log.warn("Failed to resolve user ID from identity service for email {}. Using email as fallback: {}", 
-                email, e.getMessage());
+            log.warn("Failed to resolve user ID from identity service for email {}. Using email as fallback: {}",
+                    email, e.getMessage());
         }
-        
+
         // Fallback: use email as identifier (for backward compatibility)
-        // This might cause issues if enrollments use user ID, but it's better than failing
-        log.warn("Using email as user ID (fallback). This may cause enrollment lookup issues if enrollments use user ID instead of email.");
+        // This might cause issues if enrollments use user ID, but it's better than
+        // failing
+        log.warn(
+                "Using email as user ID (fallback). This may cause enrollment lookup issues if enrollments use user ID instead of email.");
         return email;
     }
-    
+
+    /**
+     * Get the current user email from identity service.
+     */
+    public static String getCurrentUserEmail() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getName() == null ||
+                "anonymousUser".equals(authentication.getName())) {
+            return null;
+        }
+
+        try {
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<UserResponse> response = getRestTemplate().exchange(
+                    meUrl,
+                    HttpMethod.GET,
+                    entity,
+                    UserResponse.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody().getEmail();
+            }
+        } catch (Exception e) {
+            log.debug("Could not determine user email: {}", e.getMessage());
+        }
+
+        return authentication.getName();
+    }
+
     /**
      * Get the current user's role from identity service.
      * Returns null if unable to determine role.
      */
     public static String getCurrentUserRole() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || authentication.getName() == null || 
-            "anonymousUser".equals(authentication.getName())) {
+        if (authentication == null || authentication.getName() == null ||
+                "anonymousUser".equals(authentication.getName())) {
             return null;
         }
-        
+
         try {
             String meUrl = gatewayUrl + "/idp/users/me";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
-            
+
             ResponseEntity<UserResponse> response = getRestTemplate().exchange(
-                meUrl,
-                HttpMethod.GET,
-                entity,
-                UserResponse.class
-            );
-            
+                    meUrl,
+                    HttpMethod.GET,
+                    entity,
+                    UserResponse.class);
+
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 return response.getBody().getRole();
             }
@@ -138,22 +173,35 @@ public class UserUtil {
         }
         return null;
     }
-    
+
     // Helper class for user response
     private static class UserResponse {
         private String id;
         private String email;
         private String role;
-        
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        
-        public String getEmail() { return email; }
-        public void setEmail(String email) { this.email = email; }
-        
-        public String getRole() { return role; }
-        public void setRole(String role) { this.role = role; }
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
+        }
+
+        public String getRole() {
+            return role;
+        }
+
+        public void setRole(String role) {
+            this.role = role;
+        }
     }
 }
-
-
