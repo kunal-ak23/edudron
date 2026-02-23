@@ -281,7 +281,7 @@ public class AnalyticsService {
         List<Object[]> timelineData = sessionRepository.getActivityTimelineByCourse(clientId, courseId);
         List<ActivityTimelinePointDTO> timeline = new ArrayList<>();
         for (Object[] row : timelineData) {
-            LocalDate date = ((java.sql.Date) row[0]).toLocalDate();
+            LocalDate date = convertToLocalDate(row[0]);
             long sessionCount = ((Number) row[1]).longValue();
             long uniqueStudents = ((Number) row[2]).longValue();
 
@@ -291,6 +291,46 @@ public class AnalyticsService {
         dto.setActivityTimeline(timeline);
 
         return dto;
+    }
+
+    /**
+     * Safely convert an object to OffsetDateTime.
+     * Handles java.sql.Timestamp and java.time.Instant.
+     */
+    private OffsetDateTime convertToOffsetDateTime(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof java.sql.Timestamp) {
+            return ((java.sql.Timestamp) value).toInstant().atOffset(ZoneOffset.UTC);
+        } else if (value instanceof java.time.Instant) {
+            return ((java.time.Instant) value).atOffset(ZoneOffset.UTC);
+        } else if (value instanceof OffsetDateTime) {
+            return (OffsetDateTime) value;
+        }
+        log.warn("Unknown temporal type for conversion to OffsetDateTime: {}", value.getClass().getName());
+        return null;
+    }
+
+    /**
+     * Safely convert an object to LocalDate.
+     * Handles java.sql.Date and java.time.LocalDate.
+     */
+    private LocalDate convertToLocalDate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof java.sql.Date) {
+            return ((java.sql.Date) value).toLocalDate();
+        } else if (value instanceof java.sql.Timestamp) {
+            return ((java.sql.Timestamp) value).toLocalDateTime().toLocalDate();
+        } else if (value instanceof java.time.LocalDate) {
+            return (LocalDate) value;
+        } else if (value instanceof java.time.Instant) {
+            return ((java.time.Instant) value).atZone(ZoneOffset.UTC).toLocalDate();
+        }
+        log.warn("Unknown temporal type for conversion to LocalDate: {}", value.getClass().getName());
+        return null;
     }
 
     /**
@@ -361,12 +401,10 @@ public class AnalyticsService {
         Object[] firstLast = sessionRepository.getFirstAndLastView(clientId, lectureId);
         if (firstLast != null && firstLast.length >= 2) {
             if (firstLast[0] != null) {
-                dto.setFirstViewAt(((java.sql.Timestamp) firstLast[0]).toInstant()
-                        .atOffset(ZoneOffset.UTC));
+                dto.setFirstViewAt(convertToOffsetDateTime(firstLast[0]));
             }
             if (firstLast[1] != null) {
-                dto.setLastViewAt(((java.sql.Timestamp) firstLast[1]).toInstant()
-                        .atOffset(ZoneOffset.UTC));
+                dto.setLastViewAt(convertToOffsetDateTime(firstLast[1]));
             }
         }
 
@@ -777,7 +815,7 @@ public class AnalyticsService {
         List<Object[]> timelineData = sessionRepository.getActivityTimelineBySection(clientId, sectionId);
         List<ActivityTimelinePointDTO> timeline = new ArrayList<>();
         for (Object[] row : timelineData) {
-            LocalDate date = ((java.sql.Date) row[0]).toLocalDate();
+            LocalDate date = convertToLocalDate(row[0]);
             long sessionCount = ((Number) row[1]).longValue();
             long uniqueStudents = ((Number) row[2]).longValue();
 
@@ -929,7 +967,7 @@ public class AnalyticsService {
         List<Object[]> timelineData = sessionRepository.getActivityTimelineByClass(clientId, classId);
         List<ActivityTimelinePointDTO> timeline = new ArrayList<>();
         for (Object[] row : timelineData) {
-            LocalDate date = ((java.sql.Date) row[0]).toLocalDate();
+            LocalDate date = convertToLocalDate(row[0]);
             long sessionCount = ((Number) row[1]).longValue();
             long uniqueStudents = ((Number) row[2]).longValue();
 
