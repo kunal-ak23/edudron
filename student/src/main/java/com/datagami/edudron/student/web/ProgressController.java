@@ -40,6 +40,17 @@ public class ProgressController {
         return ResponseEntity.ok(progress);
     }
 
+    @GetMapping("/students/{studentId}/courses/{courseId}/progress")
+    @Operation(summary = "Get student course progress", description = "Get overall progress for a course for a specific student (instructor/admin only)")
+    public ResponseEntity<CourseProgressDTO> getStudentCourseProgress(
+            @PathVariable String studentId,
+            @PathVariable String courseId) {
+        // Assume access control is handled by API Gateway or method level security if
+        // present
+        CourseProgressDTO progress = progressService.getCourseProgress(studentId, courseId);
+        return ResponseEntity.ok(progress);
+    }
+
     @GetMapping("/courses/{courseId}/lectures/progress")
     @Operation(summary = "Get lecture progress", description = "Get progress for all lectures in a course")
     public ResponseEntity<List<ProgressDTO>> getLectureProgress(@PathVariable String courseId) {
@@ -48,5 +59,3 @@ public class ProgressController {
         return ResponseEntity.ok(progress);
     }
 }
-
-

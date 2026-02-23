@@ -59,6 +59,17 @@ public class AnalyticsController {
         return ResponseEntity.ok(analytics);
     }
 
+    @GetMapping("/students/{studentId}/courses/{courseId}/analytics")
+    @Operation(summary = "Get student course analytics", description = "Get comprehensive analytics for a specific student in a course (instructor/admin only)")
+    public ResponseEntity<com.datagami.edudron.student.dto.StudentCourseAnalyticsDTO> getStudentCourseAnalytics(
+            @PathVariable String studentId,
+            @PathVariable String courseId) {
+        // Access control mapping is handled at the gateway or method level
+        com.datagami.edudron.student.dto.StudentCourseAnalyticsDTO analytics = analyticsService
+                .getStudentCourseAnalytics(studentId, courseId);
+        return ResponseEntity.ok(analytics);
+    }
+
     @GetMapping("/courses/{courseId}/analytics/skipped")
     @Operation(summary = "Get skipped lectures", description = "Get list of lectures that are commonly skipped")
     public ResponseEntity<List<SkippedLectureDTO>> getSkippedLectures(@PathVariable String courseId) {

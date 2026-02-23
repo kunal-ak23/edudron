@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import {
   Table,
   TableBody,
@@ -61,7 +62,7 @@ interface StudentDetail {
 }
 
 interface CourseMap {
-  [courseId: string]: { title: string }
+  [courseId: string]: { title: string; progress?: number }
 }
 
 interface StudentSubmission {
@@ -140,7 +141,7 @@ export default function StudentDetailPage() {
     }
   }, [studentId, toast, router])
 
-  const loadEnrollments = useCallback(async (email: string) => {
+  const loadEnrollments = useCallback(async (email: string, sid: string) => {
     try {
       const result = await enrollmentsApi.listAllEnrollmentsPaginated(0, 50, { email })
       setEnrollments(result.content || [])
@@ -148,12 +149,23 @@ export default function StudentDetailPage() {
       const map: CourseMap = {}
       await Promise.allSettled(
         courseIds.map(async (courseId) => {
+          let title = courseId
+          let progress = undefined
           try {
-            const course = await coursesApi.getCourse(courseId)
-            map[courseId] = { title: course.title || courseId }
+            const [courseRes, progressRes] = await Promise.allSettled([
+              coursesApi.getCourse(courseId),
+              apiClient.get(`/api/students/${sid}/courses/${courseId}/progress`)
+            ])
+            if (courseRes.status === 'fulfilled') {
+              title = courseRes.value.title || courseId
+            }
+            if (progressRes.status === 'fulfilled') {
+              progress = progressRes.value.data?.completionPercentage
+            }
           } catch {
-            map[courseId] = { title: courseId }
+            // Failed requests are caught and ignored
           }
+          map[courseId] = { title, progress }
         })
       )
       setCourseNames(map)
@@ -223,7 +235,7 @@ export default function StudentDetailPage() {
       const userData = await loadStudent()
       if (cancelled) return
       if (userData?.email) {
-        await loadEnrollments(userData.email)
+        await loadEnrollments(userData.email, studentId)
         await loadInstituteNames(userData.instituteIds)
       }
       if (studentId) await loadSubmissions(studentId)
@@ -444,36 +456,46 @@ export default function StudentDetailPage() {
                   <TableRow>
                     <TableHead>Course</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Progress</TableHead>
                     <TableHead>Enrolled</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {enrollments.map((enrollment) => (
-                    <TableRow key={enrollment.id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          href={`/courses/${enrollment.courseId}`}
-                          className="text-primary hover:underline"
-                        >
-                          {courseNames[enrollment.courseId]?.title ?? enrollment.courseId}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        {enrollment.status ? (
-                          <Badge variant={enrollment.status === 'ACTIVE' ? 'default' : 'secondary'}>
-                            {enrollment.status}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {enrollment.enrolledAt
-                          ? new Date(enrollment.enrolledAt).toLocaleDateString()
-                          : '—'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {enrollments.map((enrollment) => {
+                    const progressVal = courseNames[enrollment.courseId]?.progress ?? 0
+                    return (
+                      <TableRow key={enrollment.id}>
+                        <TableCell className="font-medium">
+                          <Link
+                            href={`/students/${studentId}/courses/${enrollment.courseId}`}
+                            className="text-primary hover:underline"
+                          >
+                            {courseNames[enrollment.courseId]?.title ?? enrollment.courseId}
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          {enrollment.status ? (
+                            <Badge variant={enrollment.status === 'ACTIVE' ? 'default' : 'secondary'}>
+                              {enrollment.status}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Progress value={progressVal} className="w-[60px] h-2" />
+                            <span className="text-xs text-muted-foreground">{Math.round(progressVal)}%</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {enrollment.enrolledAt
+                            ? new Date(enrollment.enrolledAt).toLocaleDateString()
+                            : '—'}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}

@@ -1050,4 +1050,154 @@ public class AnalyticsService {
 
         return dto;
     }
+
+    @Cacheable(value = "studentCourseAnalytics", key = "#studentId + '_' + #courseId", unless = "#result == null")
+    public StudentCourseAnalyticsDTO getStudentCourseAnalytics(String studentId, String courseId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        StudentCourseAnalyticsDTO dto = new StudentCourseAnalyticsDTO();
+        dto.setStudentId(studentId);
+        dto.setCourseId(courseId);
+
+        // Fetch student email
+        try {
+            String url = gatewayUrl + "/idp/users/" + studentId;
+            ResponseEntity<JsonNode> response = getRestTemplate().exchange(
+                    url, HttpMethod.GET, null, JsonNode.class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode user = response.getBody();
+                dto.setStudentEmail(user.has("email") ? user.get("email").asText() : studentId);
+            } else {
+                dto.setStudentEmail(studentId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to fetch student email for {}: {}", studentId, e.getMessage());
+            dto.setStudentEmail(studentId);
+        }
+
+        // Fetch course title
+        dto.setCourseTitle(fetchCourseTitle(courseId));
+
+        // Get aggregated stats for this student in this course
+        Object[] studentAggregates = null;
+        try {
+            studentAggregates = sessionRepository.getStudentCourseAggregates(clientId, courseId, studentId);
+        } catch (Exception e) {
+            log.error("Error executing student course aggregates query for courseId={}, studentId={}: {}", courseId,
+                    studentId, e.getMessage(), e);
+        }
+
+        if (studentAggregates != null && studentAggregates.length >= 4) {
+            long totalSessions = studentAggregates[0] != null ? ((Number) studentAggregates[0]).longValue() : 0L;
+            long totalDuration = studentAggregates[1] != null ? ((Number) studentAggregates[1]).longValue() : 0L;
+            Double avgDuration = studentAggregates[2] != null ? ((Number) studentAggregates[2]).doubleValue() : 0.0;
+            int hasCompleted = studentAggregates[3] != null ? ((Number) studentAggregates[3]).intValue() : 0;
+
+            dto.setTotalViewingSessions(totalSessions);
+            dto.setTotalDurationSeconds((int) totalDuration);
+            dto.setAverageSessionDurationSeconds(avgDuration.intValue());
+            // For course completion, this might be a complex calc, default to 100/0 for now
+            // based on hasCompleted flag
+            // A better approach would be to calculate the number of unique lectures
+            // completed/total lectures
+            dto.setCompletionPercentage(hasCompleted > 0 ? new BigDecimal("100.00") : BigDecimal.ZERO);
+        } else {
+            dto.setTotalViewingSessions(0L);
+            dto.setTotalDurationSeconds(0);
+            dto.setAverageSessionDurationSeconds(0);
+            dto.setCompletionPercentage(BigDecimal.ZERO);
+        }
+
+        // Calculate actual completion percentage by comparing completed lectures vs
+        // total lectures in course
+        Map<String, LectureMetadata> metadataMap = batchFetchLectureMetadata(courseId);
+        int totalLectures = metadataMap.size();
+
+        // Let's get sessions for the student in this course. Since not explicitly in
+        // repo, filter findByClientIdAndCourseId.
+        List<LectureViewSession> courseSessions = sessionRepository.findByClientIdAndCourseId(clientId, courseId);
+        List<LectureViewSession> studentSessions = courseSessions.stream()
+                .filter(s -> studentId.equals(s.getStudentId()))
+                .collect(Collectors.toList());
+
+        List<StudentLectureEngagementDTO> lectureActivities = new ArrayList<>();
+        Map<String, List<LectureViewSession>> sessionsByLecture = studentSessions.stream()
+                .collect(Collectors.groupingBy(LectureViewSession::getLectureId));
+
+        int completedLecturesCount = 0;
+
+        for (Map.Entry<String, List<LectureViewSession>> entry : sessionsByLecture.entrySet()) {
+            String lectureId = entry.getKey();
+            List<LectureViewSession> lSessions = entry.getValue();
+
+            StudentLectureEngagementDTO activity = new StudentLectureEngagementDTO();
+            activity.setStudentId(studentId);
+            activity.setStudentEmail(dto.getStudentEmail());
+
+            // Need lecture Title and Duration
+            LectureMetadata lMeta = metadataMap.get(lectureId);
+            if (lMeta != null) {
+                // Although StudentLectureEngagementDTO currently doesn't have lectureTitle and
+                // lectureDurationSeconds,
+                // it might be useful to add them later or rely on the frontend to map them if
+                // needed. (I'll add them to DTO later if needed)
+            }
+
+            activity.setTotalSessions((long) lSessions.size());
+
+            List<LectureViewSession> completedLSessions = lSessions.stream()
+                    .filter(s -> s.getSessionEndedAt() != null && s.getDurationSeconds() != null)
+                    .collect(Collectors.toList());
+
+            if (!completedLSessions.isEmpty()) {
+                int totDuration = completedLSessions.stream()
+                        .mapToInt(LectureViewSession::getDurationSeconds)
+                        .sum();
+                activity.setTotalDurationSeconds(totDuration);
+
+                double avgDuration = completedLSessions.stream()
+                        .mapToInt(LectureViewSession::getDurationSeconds)
+                        .average()
+                        .orElse(0.0);
+                activity.setAverageSessionDurationSeconds((int) avgDuration);
+            } else {
+                activity.setTotalDurationSeconds(0);
+                activity.setAverageSessionDurationSeconds(0);
+            }
+
+            Optional<OffsetDateTime> firstView = lSessions.stream()
+                    .map(LectureViewSession::getSessionStartedAt)
+                    .min(OffsetDateTime::compareTo);
+            activity.setFirstViewAt(firstView.orElse(null));
+
+            Optional<OffsetDateTime> lastView = lSessions.stream()
+                    .map(LectureViewSession::getSessionStartedAt)
+                    .max(OffsetDateTime::compareTo);
+            activity.setLastViewAt(lastView.orElse(null));
+
+            boolean isCompleted = lSessions.stream()
+                    .anyMatch(s -> s.getIsCompletedInSession() != null && s.getIsCompletedInSession());
+            activity.setIsCompleted(isCompleted);
+
+            if (isCompleted) {
+                completedLecturesCount++;
+            }
+
+            lectureActivities.add(activity);
+        }
+
+        if (totalLectures > 0) {
+            BigDecimal compRate = BigDecimal.valueOf(completedLecturesCount)
+                    .divide(BigDecimal.valueOf(totalLectures), 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+            dto.setCompletionPercentage(compRate);
+        }
+
+        dto.setLectureActivity(lectureActivities);
+        return dto;
+    }
 }
