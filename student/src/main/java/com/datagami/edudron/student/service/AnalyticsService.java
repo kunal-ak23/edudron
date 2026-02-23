@@ -243,6 +243,7 @@ public class AnalyticsService {
 
             LectureEngagementSummaryDTO summary = new LectureEngagementSummaryDTO();
             summary.setLectureId(aggregate.getLectureId());
+            summary.setCourseId(aggregate.getCourseId());
             summary.setLectureTitle(lectureTitle);
             summary.setTotalViews(aggregate.getTotalViews());
             summary.setUniqueViewers(aggregate.getUniqueViewers());
@@ -258,6 +259,7 @@ public class AnalyticsService {
                 if (skipRate.compareTo(BigDecimal.valueOf(50)) > 0) {
                     SkippedLectureDTO skipped = new SkippedLectureDTO();
                     skipped.setLectureId(aggregate.getLectureId());
+                    skipped.setCourseId(aggregate.getCourseId());
                     skipped.setLectureTitle(lectureTitle);
                     skipped.setLectureDurationSeconds(lectureDuration);
                     skipped.setTotalSessions(aggregate.getTotalSessions());
@@ -355,8 +357,8 @@ public class AnalyticsService {
         return new LectureMetadata(null, null);
     }
 
-    @Cacheable(value = "lectureAnalytics", key = "#lectureId", unless = "#result == null")
-    public LectureAnalyticsDTO getLectureEngagementMetrics(String lectureId) {
+    @Cacheable(value = "lectureAnalytics", key = "#lectureId + '_' + (#sectionId != null ? #sectionId : 'none') + '_' + (#classId != null ? #classId : 'none')", unless = "#result == null")
+    public LectureAnalyticsDTO getLectureEngagementMetrics(String lectureId, String sectionId, String classId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -364,8 +366,16 @@ public class AnalyticsService {
         UUID clientId = UUID.fromString(clientIdStr);
 
         // OPTIMIZED: Get courseId from first session with pagination (limit 1)
-        Page<LectureViewSession> sampleSessions = sessionRepository.findRecentSessionsByLectureId(
-                clientId, lectureId, PageRequest.of(0, 1));
+        Page<LectureViewSession> sampleSessions;
+        if (classId != null) {
+            sampleSessions = sessionRepository.findRecentSessionsByLectureIdAndClassId(clientId, lectureId, classId,
+                    PageRequest.of(0, 1));
+        } else if (sectionId != null) {
+            sampleSessions = sessionRepository.findRecentSessionsByLectureIdAndSectionId(clientId, lectureId, sectionId,
+                    PageRequest.of(0, 1));
+        } else {
+            sampleSessions = sessionRepository.findRecentSessionsByLectureId(clientId, lectureId, PageRequest.of(0, 1));
+        }
         String courseId = sampleSessions.isEmpty() ? null : sampleSessions.getContent().get(0).getCourseId();
 
         LectureAnalyticsDTO dto = new LectureAnalyticsDTO();
@@ -380,8 +390,16 @@ public class AnalyticsService {
 
         // OPTIMIZED: Get aggregated metrics from database
         Integer thresholdSeconds = metadata.durationSeconds != null ? (int) (metadata.durationSeconds * 0.1) : 60;
-        LectureEngagementAggregateDTO aggregate = sessionRepository.getLectureEngagementAggregate(
-                clientId, lectureId, thresholdSeconds);
+        LectureEngagementAggregateDTO aggregate;
+        if (classId != null) {
+            aggregate = sessionRepository.getLectureEngagementAggregateByClass(clientId, lectureId, thresholdSeconds,
+                    classId);
+        } else if (sectionId != null) {
+            aggregate = sessionRepository.getLectureEngagementAggregateBySection(clientId, lectureId, thresholdSeconds,
+                    sectionId);
+        } else {
+            aggregate = sessionRepository.getLectureEngagementAggregate(clientId, lectureId, thresholdSeconds);
+        }
 
         if (aggregate != null) {
             dto.setTotalViews(aggregate.getTotalViews());
@@ -398,7 +416,15 @@ public class AnalyticsService {
         }
 
         // OPTIMIZED: Get first and last view timestamps from database
-        Object[] firstLast = sessionRepository.getFirstAndLastView(clientId, lectureId);
+        List<Object[]> firstLastList;
+        if (classId != null) {
+            firstLastList = sessionRepository.getFirstAndLastViewByClassList(clientId, lectureId, classId);
+        } else if (sectionId != null) {
+            firstLastList = sessionRepository.getFirstAndLastViewBySectionList(clientId, lectureId, sectionId);
+        } else {
+            firstLastList = sessionRepository.getFirstAndLastViewList(clientId, lectureId);
+        }
+        Object[] firstLast = (firstLastList != null && !firstLastList.isEmpty()) ? firstLastList.get(0) : null;
         if (firstLast != null && firstLast.length >= 2) {
             if (firstLast[0] != null) {
                 dto.setFirstViewAt(convertToOffsetDateTime(firstLast[0]));
@@ -410,8 +436,16 @@ public class AnalyticsService {
 
         // OPTIMIZED: Get recent sessions with pagination (limit 20)
         Pageable pageable = PageRequest.of(0, 20);
-        Page<LectureViewSession> recentSessionsPage = sessionRepository.findRecentSessionsByLectureId(
-                clientId, lectureId, pageable);
+        Page<LectureViewSession> recentSessionsPage;
+        if (classId != null) {
+            recentSessionsPage = sessionRepository.findRecentSessionsByLectureIdAndClassId(clientId, lectureId, classId,
+                    pageable);
+        } else if (sectionId != null) {
+            recentSessionsPage = sessionRepository.findRecentSessionsByLectureIdAndSectionId(clientId, lectureId,
+                    sectionId, pageable);
+        } else {
+            recentSessionsPage = sessionRepository.findRecentSessionsByLectureId(clientId, lectureId, pageable);
+        }
         List<LectureViewSessionDTO> recentSessions = recentSessionsPage.getContent().stream()
                 .map(this::toSessionDTO)
                 .collect(Collectors.toList());
@@ -420,8 +454,16 @@ public class AnalyticsService {
         // OPTIMIZED: Get student engagements with pagination (limit 100 to avoid memory
         // issues)
         Pageable studentPageable = PageRequest.of(0, 100);
-        Page<LectureViewSession> studentSessionsPage = sessionRepository.findRecentSessionsByLectureId(
-                clientId, lectureId, studentPageable);
+        Page<LectureViewSession> studentSessionsPage;
+        if (classId != null) {
+            studentSessionsPage = sessionRepository.findRecentSessionsByLectureIdAndClassId(clientId, lectureId,
+                    classId, studentPageable);
+        } else if (sectionId != null) {
+            studentSessionsPage = sessionRepository.findRecentSessionsByLectureIdAndSectionId(clientId, lectureId,
+                    sectionId, studentPageable);
+        } else {
+            studentSessionsPage = sessionRepository.findRecentSessionsByLectureId(clientId, lectureId, studentPageable);
+        }
         List<LectureViewSession> studentSessions = studentSessionsPage.getContent();
         dto.setStudentEngagements(getStudentEngagements(studentSessions));
 
@@ -779,6 +821,7 @@ public class AnalyticsService {
 
             LectureEngagementSummaryDTO summary = new LectureEngagementSummaryDTO();
             summary.setLectureId(aggregate.getLectureId());
+            summary.setCourseId(aggregate.getCourseId());
             summary.setLectureTitle(lectureTitle);
             summary.setTotalViews(aggregate.getTotalViews());
             summary.setUniqueViewers(aggregate.getUniqueViewers());
@@ -792,6 +835,7 @@ public class AnalyticsService {
                 if (skipRate.compareTo(BigDecimal.valueOf(50)) > 0) {
                     SkippedLectureDTO skipped = new SkippedLectureDTO();
                     skipped.setLectureId(aggregate.getLectureId());
+                    skipped.setCourseId(aggregate.getCourseId());
                     skipped.setLectureTitle(lectureTitle);
                     skipped.setLectureDurationSeconds(lectureDuration);
                     skipped.setTotalSessions(aggregate.getTotalSessions());
@@ -931,6 +975,7 @@ public class AnalyticsService {
 
             LectureEngagementSummaryDTO summary = new LectureEngagementSummaryDTO();
             summary.setLectureId(aggregate.getLectureId());
+            summary.setCourseId(aggregate.getCourseId());
             summary.setLectureTitle(lectureTitle);
             summary.setTotalViews(aggregate.getTotalViews());
             summary.setUniqueViewers(aggregate.getUniqueViewers());
@@ -944,6 +989,7 @@ public class AnalyticsService {
                 if (skipRate.compareTo(BigDecimal.valueOf(50)) > 0) {
                     SkippedLectureDTO skipped = new SkippedLectureDTO();
                     skipped.setLectureId(aggregate.getLectureId());
+                    skipped.setCourseId(aggregate.getCourseId());
                     skipped.setLectureTitle(lectureTitle);
                     skipped.setLectureDurationSeconds(lectureDuration);
                     skipped.setTotalSessions(aggregate.getTotalSessions());

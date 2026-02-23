@@ -67,6 +67,7 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
     @Query("""
             SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
                 s.lectureId,
+                MAX(s.courseId),
                 COUNT(s),
                 COUNT(DISTINCT s.studentId),
                 AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL
@@ -92,6 +93,7 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
     @Query("""
             SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
                 s.lectureId,
+                MAX(s.courseId),
                 COUNT(s),
                 COUNT(DISTINCT s.studentId),
                 AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL
@@ -109,6 +111,54 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
             @Param("clientId") UUID clientId,
             @Param("lectureId") String lectureId,
             @Param("thresholdSeconds") Integer thresholdSeconds);
+
+    @Query("""
+            SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
+                s.lectureId,
+                MAX(s.courseId),
+                COUNT(s),
+                COUNT(DISTINCT s.studentId),
+                AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL
+                    THEN CAST(s.durationSeconds AS double) ELSE NULL END),
+                SUM(CASE WHEN s.isCompletedInSession = true THEN 1L ELSE 0L END),
+                COUNT(s),
+                SUM(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL
+                    AND s.durationSeconds < :thresholdSeconds THEN 1L ELSE 0L END)
+            )
+            FROM LectureViewSession s
+            INNER JOIN Enrollment e ON s.enrollmentId = e.id
+            WHERE s.clientId = :clientId AND s.lectureId = :lectureId AND e.batchId = :sectionId
+            GROUP BY s.lectureId
+            """)
+    LectureEngagementAggregateDTO getLectureEngagementAggregateBySection(
+            @Param("clientId") UUID clientId,
+            @Param("lectureId") String lectureId,
+            @Param("thresholdSeconds") Integer thresholdSeconds,
+            @Param("sectionId") String sectionId);
+
+    @Query("""
+            SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
+                s.lectureId,
+                MAX(s.courseId),
+                COUNT(s),
+                COUNT(DISTINCT s.studentId),
+                AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL
+                    THEN CAST(s.durationSeconds AS double) ELSE NULL END),
+                SUM(CASE WHEN s.isCompletedInSession = true THEN 1L ELSE 0L END),
+                COUNT(s),
+                SUM(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL
+                    AND s.durationSeconds < :thresholdSeconds THEN 1L ELSE 0L END)
+            )
+            FROM LectureViewSession s
+            INNER JOIN Enrollment e ON s.enrollmentId = e.id
+            WHERE s.clientId = :clientId AND s.lectureId = :lectureId AND e.classId = :classId
+            GROUP BY s.lectureId
+            """)
+    LectureEngagementAggregateDTO getLectureEngagementAggregateByClass(
+            @Param("clientId") UUID clientId,
+            @Param("lectureId") String lectureId,
+            @Param("thresholdSeconds") Integer thresholdSeconds,
+            @Param("classId") String classId);
 
     /**
      * Get course-level aggregated metrics.
@@ -178,10 +228,29 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
             @Param("lectureId") String lectureId,
             Pageable pageable);
 
+    @Query("SELECT s FROM LectureViewSession s INNER JOIN Enrollment e ON s.enrollmentId = e.id " +
+            "WHERE s.clientId = :clientId AND s.lectureId = :lectureId AND e.batchId = :sectionId " +
+            "ORDER BY s.sessionStartedAt DESC")
+    Page<LectureViewSession> findRecentSessionsByLectureIdAndSectionId(
+            @Param("clientId") UUID clientId,
+            @Param("lectureId") String lectureId,
+            @Param("sectionId") String sectionId,
+            Pageable pageable);
+
+    @Query("SELECT s FROM LectureViewSession s INNER JOIN Enrollment e ON s.enrollmentId = e.id " +
+            "WHERE s.clientId = :clientId AND s.lectureId = :lectureId AND e.classId = :classId " +
+            "ORDER BY s.sessionStartedAt DESC")
+    Page<LectureViewSession> findRecentSessionsByLectureIdAndClassId(
+            @Param("clientId") UUID clientId,
+            @Param("lectureId") String lectureId,
+            @Param("classId") String classId,
+            Pageable pageable);
+
     /**
      * Find sessions by client and lecture ID with pagination (for compatibility).
      */
-    default Page<LectureViewSession> findByClientIdAndLectureId(UUID clientId, String lectureId, Pageable pageable) {
+    default Page<LectureViewSession> findByClientIdAndLectureId(UUID clientId, String lectureId,
+            Pageable pageable) {
         return findRecentSessionsByLectureId(clientId, lectureId, pageable);
     }
 
@@ -199,6 +268,32 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
     List<Object[]> getFirstAndLastViewList(
             @Param("clientId") UUID clientId,
             @Param("lectureId") String lectureId);
+
+    @Query(value = """
+            SELECT
+                MIN(s.session_started_at) AS firstView,
+                MAX(s.session_started_at) AS lastView
+            FROM student.lecture_view_sessions s
+            INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+            WHERE s.client_id = CAST(:clientId AS uuid) AND s.lecture_id = :lectureId AND e.batch_id = :sectionId
+            """, nativeQuery = true)
+    List<Object[]> getFirstAndLastViewBySectionList(
+            @Param("clientId") UUID clientId,
+            @Param("lectureId") String lectureId,
+            @Param("sectionId") String sectionId);
+
+    @Query(value = """
+            SELECT
+                MIN(s.session_started_at) AS firstView,
+                MAX(s.session_started_at) AS lastView
+            FROM student.lecture_view_sessions s
+            INNER JOIN student.enrollments e ON s.enrollment_id = e.id
+            WHERE s.client_id = CAST(:clientId AS uuid) AND s.lecture_id = :lectureId AND e.class_id = :classId
+            """, nativeQuery = true)
+    List<Object[]> getFirstAndLastViewByClassList(
+            @Param("clientId") UUID clientId,
+            @Param("lectureId") String lectureId,
+            @Param("classId") String classId);
 
     default Object[] getFirstAndLastView(UUID clientId, String lectureId) {
         List<Object[]> results = getFirstAndLastViewList(clientId, lectureId);
@@ -219,6 +314,7 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
     @Query("""
             SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
                 s.lectureId,
+                MAX(s.courseId),
                 COUNT(s),
                 COUNT(DISTINCT s.studentId),
                 AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL
@@ -318,6 +414,7 @@ public interface LectureViewSessionRepository extends JpaRepository<LectureViewS
     @Query("""
             SELECT new com.datagami.edudron.student.dto.LectureEngagementAggregateDTO(
                 s.lectureId,
+                MAX(s.courseId),
                 COUNT(s),
                 COUNT(DISTINCT s.studentId),
                 AVG(CASE WHEN s.durationSeconds IS NOT NULL AND s.sessionEndedAt IS NOT NULL

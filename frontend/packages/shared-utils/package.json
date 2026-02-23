@@ -1,6 +1,6 @@
 {
   "name": "@kunal-ak23/edudron-shared-utils",
-  "version": "1.0.25",
+  "version": "1.0.26",
   "description": "Shared utilities and services for EduDron platform",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

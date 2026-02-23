@@ -57,6 +57,7 @@ export interface StudentLectureEngagement {
 
 export interface LectureEngagementSummary {
   lectureId: string
+  courseId?: string
   lectureTitle: string
   totalViews: number
   uniqueViewers: number
@@ -67,6 +68,7 @@ export interface LectureEngagementSummary {
 
 export interface SkippedLecture {
   lectureId: string
+  courseId?: string
   lectureTitle: string
   lectureDurationSeconds: number
   totalSessions: number
@@ -150,7 +152,7 @@ export interface UpdateSessionRequest {
 }
 
 export class AnalyticsApi {
-  constructor(private apiClient: ApiClient) {}
+  constructor(private apiClient: ApiClient) { }
 
   async startLectureSession(lectureId: string, request: StartSessionRequest): Promise<LectureViewSession> {
     console.log('[AnalyticsApi] startLectureSession called:', {
@@ -244,8 +246,13 @@ export class AnalyticsApi {
     }
   }
 
-  async getLectureAnalytics(lectureId: string): Promise<LectureAnalytics> {
-    const response = await this.apiClient.get<LectureAnalytics>(`/api/lectures/${lectureId}/analytics`)
+  async getLectureAnalytics(lectureId: string, params?: { sectionId?: string, classId?: string }): Promise<LectureAnalytics> {
+    const urlParams = new URLSearchParams()
+    if (params?.sectionId) urlParams.append('sectionId', params.sectionId)
+    if (params?.classId) urlParams.append('classId', params.classId)
+    const queryString = urlParams.toString() ? `?${urlParams.toString()}` : ''
+
+    const response = await this.apiClient.get<LectureAnalytics>(`/api/lectures/${lectureId}/analytics${queryString}`)
     return response.data
   }
 

@@ -27,17 +27,20 @@ public class AnalyticsController {
 
     @Autowired
     private AnalyticsService analyticsService;
-    
+
     @Autowired
     private LectureViewSessionService sessionService;
-    
+
     @Autowired
     private InstructorAssignmentService instructorAssignmentService;
 
     @GetMapping("/lectures/{lectureId}/analytics")
     @Operation(summary = "Get lecture analytics", description = "Get detailed analytics for a specific lecture")
-    public ResponseEntity<LectureAnalyticsDTO> getLectureAnalytics(@PathVariable String lectureId) {
-        LectureAnalyticsDTO analytics = analyticsService.getLectureEngagementMetrics(lectureId);
+    public ResponseEntity<LectureAnalyticsDTO> getLectureAnalytics(
+            @PathVariable String lectureId,
+            @RequestParam(required = false) String sectionId,
+            @RequestParam(required = false) String classId) {
+        LectureAnalyticsDTO analytics = analyticsService.getLectureEngagementMetrics(lectureId, sectionId, classId);
         return ResponseEntity.ok(analytics);
     }
 
@@ -62,7 +65,7 @@ public class AnalyticsController {
         CourseAnalyticsDTO courseAnalytics = analyticsService.getCourseEngagementMetrics(courseId);
         return ResponseEntity.ok(courseAnalytics.getSkippedLectures());
     }
-    
+
     @DeleteMapping("/courses/{courseId}/analytics/cache")
     @Operation(summary = "Clear course analytics cache", description = "Manually clear the cached analytics for a specific course")
     public ResponseEntity<Map<String, String>> clearCourseAnalyticsCache(@PathVariable String courseId) {

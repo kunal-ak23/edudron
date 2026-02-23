@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ArrowLeft, TrendingUp, Users, BookOpen, Clock, AlertTriangle, GraduationCap, Layers } from 'lucide-react'
+import { Loader2, ArrowLeft, TrendingUp, Users, BookOpen, Clock, AlertTriangle, GraduationCap, Layers, ChevronRight } from 'lucide-react'
 import { analyticsApi } from '@/lib/api'
 import type { ClassAnalytics } from '@kunal-ak23/edudron-shared-utils'
 import { ActivityTimelineChart } from '@/components/analytics/ActivityTimelineChart'
@@ -171,7 +172,7 @@ export default function ClassAnalyticsPage() {
                   </TableHeader>
                   <TableBody>
                     {analytics.sectionComparison.map((section) => (
-                      <TableRow 
+                      <TableRow
                         key={section.sectionId}
                         className="cursor-pointer hover:bg-muted/50"
                         onClick={() => router.push(`/analytics/sections/${section.sectionId}`)}
@@ -269,12 +270,24 @@ export default function ClassAnalyticsPage() {
                       <TableHead className="text-right">Avg Duration</TableHead>
                       <TableHead className="text-right">Completion</TableHead>
                       <TableHead className="text-right">Skip Rate</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {analytics.lectureEngagements.slice(0, 10).map((lecture) => (
                       <TableRow key={lecture.lectureId}>
-                        <TableCell className="font-medium">{lecture.lectureTitle}</TableCell>
+                        <TableCell className="font-medium">
+                          {lecture.courseId ? (
+                            <Link
+                              href={`/analytics/courses/${lecture.courseId}/lectures/${lecture.lectureId}?classId=${classId}`}
+                              className="text-primary hover:underline hover:text-blue-600 transition-colors"
+                            >
+                              {lecture.lectureTitle}
+                            </Link>
+                          ) : (
+                            lecture.lectureTitle
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">{lecture.totalViews}</TableCell>
                         <TableCell className="text-right">{lecture.uniqueViewers}</TableCell>
                         <TableCell className="text-right">{formatDuration(lecture.averageDurationSeconds)}</TableCell>
@@ -288,6 +301,15 @@ export default function ClassAnalyticsPage() {
                             <Badge variant="destructive">{lecture.skipRate.toFixed(1)}%</Badge>
                           ) : (
                             <span>{lecture.skipRate?.toFixed(1) || 0}%</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {lecture.courseId && (
+                            <Link href={`/analytics/courses/${lecture.courseId}/lectures/${lecture.lectureId}?classId=${classId}`}>
+                              <Button variant="ghost" size="sm" className="h-8 flex items-center gap-1 ml-auto">
+                                View Details <ChevronRight className="h-4 w-4" />
+                              </Button>
+                            </Link>
                           )}
                         </TableCell>
                       </TableRow>
@@ -320,12 +342,24 @@ export default function ClassAnalyticsPage() {
                       <TableHead className="text-right">Skipped</TableHead>
                       <TableHead className="text-right">Skip Rate</TableHead>
                       <TableHead>Reason</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {analytics.skippedLectures.map((lecture) => (
                       <TableRow key={lecture.lectureId}>
-                        <TableCell className="font-medium">{lecture.lectureTitle}</TableCell>
+                        <TableCell className="font-medium">
+                          {lecture.courseId ? (
+                            <Link
+                              href={`/analytics/courses/${lecture.courseId}/lectures/${lecture.lectureId}?classId=${classId}`}
+                              className="text-primary hover:underline hover:text-blue-600 transition-colors"
+                            >
+                              {lecture.lectureTitle}
+                            </Link>
+                          ) : (
+                            lecture.lectureTitle
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">{formatDuration(lecture.lectureDurationSeconds)}</TableCell>
                         <TableCell className="text-right">{lecture.totalSessions}</TableCell>
                         <TableCell className="text-right">{lecture.skippedSessions}</TableCell>
@@ -334,6 +368,15 @@ export default function ClassAnalyticsPage() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">{lecture.skipReason.replace('_', ' ')}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {lecture.courseId && (
+                            <Link href={`/analytics/courses/${lecture.courseId}/lectures/${lecture.lectureId}?classId=${classId}`}>
+                              <Button variant="ghost" size="sm" className="h-8 flex items-center gap-1 ml-auto">
+                                View Details <ChevronRight className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

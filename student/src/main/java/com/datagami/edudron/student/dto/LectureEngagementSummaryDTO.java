@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 
 public class LectureEngagementSummaryDTO {
     private String lectureId;
+    private String courseId;
     private String lectureTitle;
     private Long totalViews;
     private Long uniqueViewers;
@@ -12,27 +13,71 @@ public class LectureEngagementSummaryDTO {
     private BigDecimal skipRate;
 
     // Constructors
-    public LectureEngagementSummaryDTO() {}
+    public LectureEngagementSummaryDTO() {
+    }
 
     // Getters and Setters
-    public String getLectureId() { return lectureId; }
-    public void setLectureId(String lectureId) { this.lectureId = lectureId; }
+    public String getLectureId() {
+        return lectureId;
+    }
 
-    public String getLectureTitle() { return lectureTitle; }
-    public void setLectureTitle(String lectureTitle) { this.lectureTitle = lectureTitle; }
+    public void setLectureId(String lectureId) {
+        this.lectureId = lectureId;
+    }
 
-    public Long getTotalViews() { return totalViews; }
-    public void setTotalViews(Long totalViews) { this.totalViews = totalViews; }
+    public String getCourseId() {
+        return courseId;
+    }
 
-    public Long getUniqueViewers() { return uniqueViewers; }
-    public void setUniqueViewers(Long uniqueViewers) { this.uniqueViewers = uniqueViewers; }
+    public void setCourseId(String courseId) {
+        this.courseId = courseId;
+    }
 
-    public Integer getAverageDurationSeconds() { return averageDurationSeconds; }
-    public void setAverageDurationSeconds(Integer averageDurationSeconds) { this.averageDurationSeconds = averageDurationSeconds; }
+    public String getLectureTitle() {
+        return lectureTitle;
+    }
 
-    public BigDecimal getCompletionRate() { return completionRate; }
-    public void setCompletionRate(BigDecimal completionRate) { this.completionRate = completionRate; }
+    public void setLectureTitle(String lectureTitle) {
+        this.lectureTitle = lectureTitle;
+    }
 
-    public BigDecimal getSkipRate() { return skipRate; }
-    public void setSkipRate(BigDecimal skipRate) { this.skipRate = skipRate; }
+    public Long getTotalViews() {
+        return totalViews;
+    }
+
+    public void setTotalViews(Long totalViews) {
+        this.totalViews = totalViews;
+    }
+
+    public Long getUniqueViewers() {
+        return uniqueViewers;
+    }
+
+    public void setUniqueViewers(Long uniqueViewers) {
+        this.uniqueViewers = uniqueViewers;
+    }
+
+    public Integer getAverageDurationSeconds() {
+        return averageDurationSeconds;
+    }
+
+    public void setAverageDurationSeconds(Integer averageDurationSeconds) {
+        this.averageDurationSeconds = averageDurationSeconds;
+    }
+
+    public BigDecimal getCompletionRate() {
+        return completionRate;
+    }
+
+    public void setCompletionRate(BigDecimal completionRate) {
+        this.completionRate = completionRate;
+    }
+
+    public BigDecimal getSkipRate() {
+        return skipRate;
+    }
+
+    public void setSkipRate(BigDecimal skipRate) {
+        this.skipRate = skipRate;
+    }
 }

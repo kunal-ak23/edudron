@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,8 +24,11 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 export default function LectureAnalyticsPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const courseId = params.courseId as string
   const lectureId = params.lectureId as string
+  const sectionId = searchParams.get('sectionId') || undefined
+  const classId = searchParams.get('classId') || undefined
   const { isAuthenticated } = useAuth()
   const [analytics, setAnalytics] = useState<LectureAnalytics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -38,7 +41,7 @@ export default function LectureAnalyticsPage() {
     const loadData = async () => {
       try {
         setLoading(true)
-        const analyticsData = await analyticsApi.getLectureAnalytics(lectureId)
+        const analyticsData = await analyticsApi.getLectureAnalytics(lectureId, { sectionId, classId })
         setAnalytics(analyticsData)
       } catch (error) {
       } finally {
@@ -46,7 +49,7 @@ export default function LectureAnalyticsPage() {
       }
     }
     loadData()
-  }, [isAuthenticated, router, lectureId])
+  }, [isAuthenticated, router, lectureId, sectionId, classId])
 
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
