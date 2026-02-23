@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  AlertCircle, 
-  CheckCircle, 
-  AlertTriangle, 
+import {
+  AlertCircle,
+  CheckCircle,
+  AlertTriangle,
   XCircle,
   Camera,
   Eye,
@@ -46,7 +46,7 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
     setJourneyLoading(true)
     getJourneyEvents(examId, submissionId)
       .then((data) => setJourneyEvents(data))
-      .catch(() => {})
+      .catch(() => { })
       .finally(() => setJourneyLoading(false))
   }, [activeTab, examId, submissionId])
 
@@ -64,14 +64,14 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
     loadReport()
   }, [examId, submissionId])
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string | null | undefined) => {
     const config: Record<string, { variant: 'default' | 'secondary' | 'destructive'; icon: typeof CheckCircle; label: string; color: string }> = {
       CLEAR: { variant: 'default', icon: CheckCircle, label: 'Clear', color: 'text-green-600' },
       FLAGGED: { variant: 'secondary', icon: AlertTriangle, label: 'Flagged', color: 'text-yellow-600' },
       SUSPICIOUS: { variant: 'secondary', icon: AlertCircle, label: 'Suspicious', color: 'text-orange-600' },
       VIOLATION: { variant: 'destructive', icon: XCircle, label: 'Violation', color: 'text-red-600' }
     }
-    const entry = config[status] ?? { variant: 'secondary' as const, icon: AlertCircle, label: status || 'Unknown', color: 'text-gray-600' }
+    const entry = (status && status in config) ? config[status as keyof typeof config] : { variant: 'secondary' as const, icon: AlertCircle, label: status || 'Unknown', color: 'text-gray-600' }
     const { variant, icon: Icon, label, color } = entry
 
     return (
@@ -200,7 +200,17 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
                         <TableCell>{getSeverityBadge(event.severity)}</TableCell>
                         <TableCell className="text-sm text-gray-600">
                           {event.metadata && Object.keys(event.metadata).length > 0 ? (
-                            <pre className="text-xs">{JSON.stringify(event.metadata, null, 2)}</pre>
+                            <div className="space-y-2">
+                              {event.metadata.photoUrl && (
+                                <img
+                                  src={event.metadata.photoUrl as string}
+                                  alt="Event thumbnail"
+                                  className="h-16 rounded border cursor-pointer hover:opacity-80 transition"
+                                  onClick={() => setSelectedPhoto(event.metadata.photoUrl as string)}
+                                />
+                              )}
+                              <pre className="text-xs">{JSON.stringify(event.metadata, null, 2)}</pre>
+                            </div>
                           ) : (
                             '-'
                           )}
@@ -366,13 +376,13 @@ export function ProctoringReport({ examId, submissionId }: ProctoringReportProps
                   </div>
                 )}
 
-                {!report.identityVerificationPhotoUrl && 
-                 (!report.proctoringData?.photos || report.proctoringData.photos.length === 0) && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Camera className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                    No photos captured
-                  </div>
-                )}
+                {!report.identityVerificationPhotoUrl &&
+                  (!report.proctoringData?.photos || report.proctoringData.photos.length === 0) && (
+                    <div className="text-center py-8 text-gray-500">
+                      <Camera className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      No photos captured
+                    </div>
+                  )}
               </div>
             </CardContent>
           </Card>

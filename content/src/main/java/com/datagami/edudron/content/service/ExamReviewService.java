@@ -38,27 +38,27 @@ import java.util.UUID;
 @Service
 @Transactional
 public class ExamReviewService {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(ExamReviewService.class);
-    
+
     @Autowired
     private ExamReviewAIService examReviewAIService;
-    
+
     @Autowired
     private AssessmentRepository assessmentRepository;
-    
+
     @Autowired
     private QuizQuestionRepository quizQuestionRepository;
-    
+
     @Autowired
     private ObjectMapper objectMapper;
-    
+
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
-    
+
     private volatile RestTemplate restTemplate;
     private final Object restTemplateLock = new Object();
-    
+
     private RestTemplate getRestTemplate() {
         // Double-checked locking for thread-safe lazy initialization
         if (restTemplate == null) {
@@ -68,7 +68,8 @@ public class ExamReviewService {
                     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
                     interceptors.add(new TenantContextRestTemplateInterceptor());
                     interceptors.add((request, body, execution) -> {
-                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
+                                .getRequestAttributes();
                         if (attributes != null) {
                             HttpServletRequest currentRequest = attributes.getRequest();
                             String authHeader = currentRequest.getHeader("Authorization");
@@ -87,7 +88,7 @@ public class ExamReviewService {
         }
         return restTemplate;
     }
-    
+
     /**
      * Review submission with AI - grades both objective and subjective questions
      */
@@ -97,80 +98,81 @@ public class ExamReviewService {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         // Fetch submission from student service
         String submissionUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
         ResponseEntity<JsonNode> submissionResponse = getRestTemplate().exchange(
-            submissionUrl,
-            HttpMethod.GET,
-            new HttpEntity<>(new HttpHeaders()),
-            JsonNode.class
-        );
-        
+                submissionUrl,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                JsonNode.class);
+
         if (!submissionResponse.getStatusCode().is2xxSuccessful() || submissionResponse.getBody() == null) {
             throw new IllegalArgumentException("Submission not found: " + submissionId);
         }
-        
+
         JsonNode submission = submissionResponse.getBody();
         String assessmentId = submission.get("assessmentId").asText();
-        
+
         Assessment exam = assessmentRepository.findByIdAndClientId(assessmentId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Assessment not found: " + assessmentId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Assessment not found: " + assessmentId));
+
         if (exam.getAssessmentType() != Assessment.AssessmentType.EXAM) {
             throw new IllegalArgumentException("Assessment is not an exam");
         }
-        
+
         // Check if AI review is allowed for this exam
         if (exam.getReviewMethod() == Assessment.ReviewMethod.INSTRUCTOR) {
-            throw new IllegalArgumentException("AI review is not allowed for this exam. Review method is set to INSTRUCTOR only.");
+            throw new IllegalArgumentException(
+                    "AI review is not allowed for this exam. Review method is set to INSTRUCTOR only.");
         }
-        
+
         // Get all questions for this exam (with options eagerly loaded for grading)
         List<QuizQuestion> questions = quizQuestionRepository.findByAssessmentIdAndClientIdWithOptions(
-            exam.getId(), clientId);
-        
+                exam.getId(), clientId);
+
         JsonNode answersJson = submission.get("answersJson");
         if (answersJson == null) {
             throw new IllegalStateException("No answers found in submission");
         }
-        
+
         logger.info("Grading submission {} with {} questions", submissionId, questions.size());
-        
+
         double totalScore = 0.0;
         double maxScore = 0.0;
         ObjectNode reviewFeedback = objectMapper.createObjectNode();
         ArrayNode questionReviews = objectMapper.createArrayNode();
-        
+
         for (QuizQuestion question : questions) {
             maxScore += question.getPoints();
-            
+
             // Ensure options are loaded for multiple choice questions
             if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE ||
-                question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
+                    question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
                 if (question.getOptions() == null || question.getOptions().isEmpty()) {
-                    logger.error("Question {} has no options loaded! Type: {}", 
-                        question.getId(), question.getQuestionType());
+                    logger.error("Question {} has no options loaded! Type: {}",
+                            question.getId(), question.getQuestionType());
                 } else {
-                    logger.debug("Question {} has {} options loaded", 
-                        question.getId(), question.getOptions().size());
+                    logger.debug("Question {} has {} options loaded",
+                            question.getId(), question.getOptions().size());
                 }
             }
-            
+
             JsonNode answerNode = answersJson.get(question.getId());
-            if (answerNode == null) {
+            if (answerNode == null || answerNode.isNull()
+                    || (answerNode.isTextual() && answerNode.asText().trim().isEmpty())) {
                 // No answer provided
-                questionReviews.add(createQuestionReview(question.getId(), 0.0, question.getPoints(), 
-                    "No answer provided", false));
+                questionReviews.add(createQuestionReview(question.getId(), 0.0, question.getPoints(),
+                        "No answer provided", false));
                 continue;
             }
-            
+
             double pointsEarned = 0.0;
             String feedback = "";
             boolean isCorrect = false;
-            
+
             if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE ||
-                question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
+                    question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
                 // Objective question - exact match
                 pointsEarned = gradeObjectiveQuestion(question, answerNode);
                 isCorrect = pointsEarned == question.getPoints();
@@ -178,14 +180,15 @@ public class ExamReviewService {
             } else {
                 // Subjective question - semantic similarity
                 String studentAnswer = answerNode.asText();
-                String tentativeAnswer = question.getEditedTentativeAnswer() != null ? 
-                    question.getEditedTentativeAnswer() : question.getTentativeAnswer();
-                
+                String tentativeAnswer = question.getEditedTentativeAnswer() != null
+                        ? question.getEditedTentativeAnswer()
+                        : question.getTentativeAnswer();
+
                 if (tentativeAnswer != null && question.getUseTentativeAnswerForGrading()) {
                     double similarityScore = examReviewAIService.compareAnswersSemantically(
-                        studentAnswer, tentativeAnswer);
+                            studentAnswer, tentativeAnswer);
                     pointsEarned = examReviewAIService.calculateGradeFromSimilarity(
-                        similarityScore, question.getPoints());
+                            similarityScore, question.getPoints());
                     feedback = String.format("Similarity: %.1f%%", similarityScore);
                     isCorrect = similarityScore >= 70.0;
                 } else {
@@ -194,25 +197,25 @@ public class ExamReviewService {
                     pointsEarned = 0.0;
                 }
             }
-            
+
             totalScore += pointsEarned;
-            questionReviews.add(createQuestionReview(question.getId(), pointsEarned, question.getPoints(), 
-                feedback, isCorrect));
+            questionReviews.add(createQuestionReview(question.getId(), pointsEarned, question.getPoints(),
+                    feedback, isCorrect));
         }
-        
+
         // Calculate percentage
         double percentage = 0.0;
         if (maxScore > 0) {
             percentage = (totalScore / maxScore) * 100.0;
         }
-        
+
         // Store review feedback
         reviewFeedback.set("questionReviews", questionReviews);
         reviewFeedback.put("totalScore", totalScore);
         reviewFeedback.put("maxScore", maxScore);
         reviewFeedback.put("percentage", percentage);
         reviewFeedback.put("isPassed", percentage >= exam.getPassingScorePercentage());
-        
+
         // Update submission in student service
         ObjectNode updateRequest = objectMapper.createObjectNode();
         updateRequest.put("score", totalScore);
@@ -221,7 +224,7 @@ public class ExamReviewService {
         updateRequest.put("isPassed", percentage >= exam.getPassingScorePercentage());
         updateRequest.set("aiReviewFeedback", reviewFeedback);
         updateRequest.put("reviewStatus", "AI_REVIEWED");
-        
+
         String updateUrl = gatewayUrl + "/api/assessments/submissions/" + submissionId + "/grade";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -234,51 +237,50 @@ public class ExamReviewService {
             throw new RuntimeException("Failed to serialize update request", e);
         }
         getRestTemplate().exchange(
-            updateUrl,
-            HttpMethod.POST,
-            new HttpEntity<>(requestBody, headers),
-            JsonNode.class
-        );
-        
-        logger.info("AI review completed for submission: {}, score: {}/{}", 
-            submissionId, totalScore, maxScore);
-        
+                updateUrl,
+                HttpMethod.POST,
+                new HttpEntity<>(requestBody, headers),
+                JsonNode.class);
+
+        logger.info("AI review completed for submission: {}, score: {}/{}",
+                submissionId, totalScore, maxScore);
+
         return reviewFeedback;
     }
-    
+
     private double gradeObjectiveQuestion(QuizQuestion question, JsonNode answerNode) {
         if (question.getQuestionType() == QuizQuestion.QuestionType.MULTIPLE_CHOICE) {
             String selectedOptionId = answerNode.asText();
             logger.debug("Grading MC question {}: selected option ID = '{}'", question.getId(), selectedOptionId);
-            
+
             // Find the correct option
             for (QuizOption option : question.getOptions()) {
-                logger.debug("  Checking option {}: id='{}', isCorrect={}", 
-                    option.getSequence(), option.getId(), option.getIsCorrect());
-                
+                logger.debug("  Checking option {}: id='{}', isCorrect={}",
+                        option.getSequence(), option.getId(), option.getIsCorrect());
+
                 if (option.getId().equals(selectedOptionId) && option.getIsCorrect()) {
-                    logger.info("Correct answer! Question {}, option {}, points: {}", 
-                        question.getId(), option.getId(), question.getPoints());
+                    logger.info("Correct answer! Question {}, option {}, points: {}",
+                            question.getId(), option.getId(), question.getPoints());
                     return question.getPoints();
                 }
             }
-            
+
             // Check if the selected option exists but is incorrect
             boolean optionFound = false;
             for (QuizOption option : question.getOptions()) {
                 if (option.getId().equals(selectedOptionId)) {
                     optionFound = true;
-                    logger.info("Incorrect answer selected. Question {}, selected option {}, correct option not found", 
-                        question.getId(), selectedOptionId);
+                    logger.info("Incorrect answer selected. Question {}, selected option {}, correct option not found",
+                            question.getId(), selectedOptionId);
                     break;
                 }
             }
-            
+
             if (!optionFound) {
-                logger.warn("Selected option ID '{}' not found in question {} options", 
-                    selectedOptionId, question.getId());
+                logger.warn("Selected option ID '{}' not found in question {} options",
+                        selectedOptionId, question.getId());
             }
-            
+
             return 0.0;
         } else if (question.getQuestionType() == QuizQuestion.QuestionType.TRUE_FALSE) {
             boolean studentAnswer = answerNode.asBoolean();
@@ -295,9 +297,9 @@ public class ExamReviewService {
         }
         return 0.0;
     }
-    
-    private ObjectNode createQuestionReview(String questionId, double pointsEarned, double maxPoints, 
-                                           String feedback, boolean isCorrect) {
+
+    private ObjectNode createQuestionReview(String questionId, double pointsEarned, double maxPoints,
+            String feedback, boolean isCorrect) {
         ObjectNode review = objectMapper.createObjectNode();
         review.put("questionId", questionId);
         review.put("pointsEarned", pointsEarned);
@@ -306,54 +308,54 @@ public class ExamReviewService {
         review.put("isCorrect", isCorrect);
         return review;
     }
-    
+
     /**
      * Submit instructor review (manual override).
      * Instructors can only grade submissions for exams within their assigned scope.
      */
-    public JsonNode submitInstructorReview(String submissionId, BigDecimal score, 
-                                           BigDecimal maxScore, JsonNode feedback) {
+    public JsonNode submitInstructorReview(String submissionId, BigDecimal score,
+            BigDecimal maxScore, JsonNode feedback) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         // Fetch submission to get assessment ID
         String submissionUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
         ResponseEntity<JsonNode> submissionResponse = getRestTemplate().exchange(
-            submissionUrl,
-            HttpMethod.GET,
-            new HttpEntity<>(new HttpHeaders()),
-            JsonNode.class
-        );
-        
+                submissionUrl,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                JsonNode.class);
+
         if (!submissionResponse.getStatusCode().is2xxSuccessful() || submissionResponse.getBody() == null) {
             throw new IllegalArgumentException("Submission not found: " + submissionId);
         }
-        
+
         JsonNode submission = submissionResponse.getBody();
         String assessmentId = submission.get("assessmentId").asText();
-        
+
         Assessment exam = assessmentRepository.findByIdAndClientId(assessmentId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Assessment not found"));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Assessment not found"));
+
         // Check if instructor can grade this exam (within their assigned scope)
         String userRole = getCurrentUserRole();
         if ("INSTRUCTOR".equals(userRole)) {
             if (!canInstructorAccessExam(exam)) {
-                throw new IllegalArgumentException("You don't have permission to grade this submission. It's outside your assigned scope.");
+                throw new IllegalArgumentException(
+                        "You don't have permission to grade this submission. It's outside your assigned scope.");
             }
         }
-        
+
         BigDecimal percentage = BigDecimal.ZERO;
         boolean isPassed = false;
         if (maxScore != null && maxScore.compareTo(BigDecimal.ZERO) > 0) {
             percentage = score.divide(maxScore, 4, RoundingMode.HALF_UP)
-                .multiply(BigDecimal.valueOf(100));
+                    .multiply(BigDecimal.valueOf(100));
             isPassed = percentage.compareTo(BigDecimal.valueOf(exam.getPassingScorePercentage())) >= 0;
         }
-        
+
         // Update submission in student service
         ObjectNode updateRequest = objectMapper.createObjectNode();
         updateRequest.put("score", score.doubleValue());
@@ -364,7 +366,7 @@ public class ExamReviewService {
             updateRequest.set("aiReviewFeedback", feedback);
         }
         updateRequest.put("reviewStatus", "INSTRUCTOR_REVIEWED");
-        
+
         String updateUrl = gatewayUrl + "/api/assessments/submissions/" + submissionId + "/grade";
         HttpHeaders instructorHeaders = new HttpHeaders();
         instructorHeaders.setContentType(MediaType.APPLICATION_JSON);
@@ -377,15 +379,14 @@ public class ExamReviewService {
             throw new RuntimeException("Failed to serialize update request", e);
         }
         ResponseEntity<JsonNode> updateResponse = getRestTemplate().exchange(
-            updateUrl,
-            HttpMethod.POST,
-            new HttpEntity<>(requestBody, instructorHeaders),
-            JsonNode.class
-        );
-        
+                updateUrl,
+                HttpMethod.POST,
+                new HttpEntity<>(requestBody, instructorHeaders),
+                JsonNode.class);
+
         return updateResponse.getBody();
     }
-    
+
     /**
      * Get review status
      */
@@ -393,72 +394,70 @@ public class ExamReviewService {
         try {
             String submissionUrl = gatewayUrl + "/api/student/exams/submissions/" + submissionId;
             ResponseEntity<JsonNode> submissionResponse = getRestTemplate().exchange(
-                submissionUrl,
-                HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
-                JsonNode.class
-            );
-            
+                    submissionUrl,
+                    HttpMethod.GET,
+                    new HttpEntity<>(new HttpHeaders()),
+                    JsonNode.class);
+
             if (submissionResponse.getStatusCode().is2xxSuccessful() && submissionResponse.getBody() != null) {
                 JsonNode submission = submissionResponse.getBody();
-                return submission.has("reviewStatus") ? 
-                    submission.get("reviewStatus").asText() : "PENDING";
+                return submission.has("reviewStatus") ? submission.get("reviewStatus").asText() : "PENDING";
             }
         } catch (Exception e) {
             logger.error("Failed to get review status", e);
         }
         return "PENDING";
     }
-    
+
     /**
      * Update tentative answer for a question
      */
-    public QuizQuestion updateTentativeAnswer(String questionId, String editedTentativeAnswer, 
-                                             Boolean useForGrading) {
+    public QuizQuestion updateTentativeAnswer(String questionId, String editedTentativeAnswer,
+            Boolean useForGrading) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
         }
         UUID clientId = UUID.fromString(clientIdStr);
-        
+
         QuizQuestion question = quizQuestionRepository.findByIdAndClientId(questionId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Question not found: " + questionId));
-        
+                .orElseThrow(() -> new IllegalArgumentException("Question not found: " + questionId));
+
         if (editedTentativeAnswer != null) {
             question.setEditedTentativeAnswer(editedTentativeAnswer);
         }
-        
+
         if (useForGrading != null) {
             question.setUseTentativeAnswerForGrading(useForGrading);
         }
-        
+
         return quizQuestionRepository.save(question);
     }
-    
+
     /**
      * Get the current user's role from the identity service
      */
     private String getCurrentUserRole() {
         try {
-            org.springframework.security.core.Authentication authentication = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (authentication == null || authentication.getName() == null || 
-                "anonymousUser".equals(authentication.getName())) {
+            org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null ||
+                    "anonymousUser".equals(authentication.getName())) {
                 return null;
             }
-            
+
             String meUrl = gatewayUrl + "/idp/users/me";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
-            
+
             ResponseEntity<java.util.Map<String, Object>> response = getRestTemplate().exchange(
-                meUrl,
-                HttpMethod.GET,
-                entity,
-                new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {}
-            );
-            
+                    meUrl,
+                    HttpMethod.GET,
+                    entity,
+                    new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {
+                    });
+
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object role = response.getBody().get("role");
                 return role != null ? role.toString() : null;
@@ -468,31 +467,31 @@ public class ExamReviewService {
         }
         return null;
     }
-    
+
     /**
      * Get the current user's ID from the identity service
      */
     private String getCurrentUserId() {
         try {
-            org.springframework.security.core.Authentication authentication = 
-                org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-            if (authentication == null || authentication.getName() == null || 
-                "anonymousUser".equals(authentication.getName())) {
+            org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (authentication == null || authentication.getName() == null ||
+                    "anonymousUser".equals(authentication.getName())) {
                 return null;
             }
-            
+
             String meUrl = gatewayUrl + "/idp/users/me";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
-            
+
             ResponseEntity<java.util.Map<String, Object>> response = getRestTemplate().exchange(
-                meUrl,
-                HttpMethod.GET,
-                entity,
-                new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {}
-            );
-            
+                    meUrl,
+                    HttpMethod.GET,
+                    entity,
+                    new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {
+                    });
+
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object id = response.getBody().get("id");
                 return id != null ? id.toString() : null;
@@ -502,7 +501,7 @@ public class ExamReviewService {
         }
         return null;
     }
-    
+
     /**
      * Get instructor access from student service
      */
@@ -513,14 +512,14 @@ public class ExamReviewService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<?> entity = new HttpEntity<>(headers);
-            
+
             ResponseEntity<java.util.Map<String, Object>> response = getRestTemplate().exchange(
-                accessUrl,
-                HttpMethod.GET,
-                entity,
-                new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {}
-            );
-            
+                    accessUrl,
+                    HttpMethod.GET,
+                    entity,
+                    new org.springframework.core.ParameterizedTypeReference<java.util.Map<String, Object>>() {
+                    });
+
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 return response.getBody();
             }
@@ -529,7 +528,7 @@ public class ExamReviewService {
         }
         return null;
     }
-    
+
     /**
      * Helper method to extract a Set of strings from instructor access response
      */
@@ -546,7 +545,7 @@ public class ExamReviewService {
         }
         return new java.util.HashSet<>();
     }
-    
+
     /**
      * Check if the current instructor can access an exam
      */
@@ -555,16 +554,16 @@ public class ExamReviewService {
         if (userId == null) {
             return false;
         }
-        
+
         java.util.Map<String, Object> instructorAccess = getInstructorAccess(userId);
         if (instructorAccess == null) {
             return false;
         }
-        
+
         java.util.Set<String> allowedCourseIds = getSetFromAccess(instructorAccess, "allowedCourseIds");
         java.util.Set<String> allowedClassIds = getSetFromAccess(instructorAccess, "allowedClassIds");
         java.util.Set<String> allowedSectionIds = getSetFromAccess(instructorAccess, "allowedSectionIds");
-        
+
         // Check if exam's course is directly assigned
         if (allowedCourseIds.contains(exam.getCourseId())) {
             // If exam is section-specific, check section access
@@ -577,7 +576,7 @@ public class ExamReviewService {
             }
             return true; // Course-wide exam
         }
-        
+
         // Check if exam's class or section is assigned
         if (exam.getSectionId() != null && allowedSectionIds.contains(exam.getSectionId())) {
             return true;
@@ -585,7 +584,7 @@ public class ExamReviewService {
         if (exam.getClassId() != null && allowedClassIds.contains(exam.getClassId())) {
             return true;
         }
-        
+
         return false;
     }
 }

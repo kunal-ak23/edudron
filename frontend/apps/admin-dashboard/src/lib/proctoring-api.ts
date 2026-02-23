@@ -10,7 +10,7 @@ export interface ProctoringEvent {
 
 export interface ProctoringReport {
   submissionId: string
-  proctoringStatus: 'CLEAR' | 'FLAGGED' | 'SUSPICIOUS' | 'VIOLATION'
+  proctoringStatus: 'CLEAR' | 'FLAGGED' | 'SUSPICIOUS' | 'VIOLATION' | null
   tabSwitchCount: number
   copyAttemptCount: number
   identityVerified: boolean
@@ -37,9 +37,10 @@ export const proctoringApi = {
     examId: string,
     submissionId: string
   ): Promise<ProctoringReport> => {
-    return apiClient.get(
+    const response = await apiClient.get(
       `/api/student/exams/${examId}/submissions/${submissionId}/proctoring/report`
-    ) as unknown as Promise<ProctoringReport>
+    )
+    return (response as any)?.data || response
   },
 
   /**
@@ -52,6 +53,7 @@ export const proctoringApi = {
   ): Promise<ProctoringEvent[]> => {
     const url = `/api/student/exams/${examId}/submissions/${submissionId}/proctoring/events`
     const params = severity ? `?severity=${severity}` : ''
-    return apiClient.get(url + params) as unknown as Promise<ProctoringEvent[]>
+    const response = await apiClient.get(url + params)
+    return (response as any)?.data || response
   }
 }
