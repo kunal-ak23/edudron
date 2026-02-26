@@ -936,6 +936,26 @@ export default function TakeExamPage() {
     handleSubmit()
   }
 
+  const handleProctoringComplete = async () => {
+    try {
+      if (submissionId && !isPreviewMode) {
+        // Start the timer on the backend after proctoring is complete
+        const response = await apiClient.post(`/api/student/exams/${examId}/start-timer`, {
+          submissionId
+        })
+        const updatedSubmission = (response as any)?.data || response
+        if (updatedSubmission && updatedSubmission.timeRemainingSeconds !== undefined) {
+          setTimeRemaining(updatedSubmission.timeRemainingSeconds)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to start timer:', error)
+    } finally {
+      setShowProctoringSetup(false)
+      setProctoringComplete(true)
+    }
+  }
+
   // Request fullscreen mode
   const requestFullscreen = async () => {
 
@@ -1171,10 +1191,7 @@ export default function TakeExamPage() {
               }}
               isPreview={isPreviewMode}
               requestFullscreen={requestFullscreen}
-              onComplete={() => {
-                setShowProctoringSetup(false)
-                setProctoringComplete(true)
-              }}
+              onComplete={handleProctoringComplete}
               onCancel={() => {
                 if (isPreviewMode) {
                   window.close()

@@ -45,33 +45,33 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/student/exams")
 @Tag(name = "Student Exams", description = "Student exam taking endpoints")
 public class StudentExamController {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(StudentExamController.class);
-    
+
     @Autowired
     private ExamSubmissionService examSubmissionService;
-    
+
     @Autowired
     private ObjectMapper objectMapper;
-    
+
     @Autowired
     private EnrollmentRepository enrollmentRepository;
-    
+
     @Autowired
     private AssessmentSubmissionRepository submissionRepository;
-    
+
     @Autowired
     private SectionRepository sectionRepository;
-    
+
     @Autowired
     private ContentExamClient contentExamClient;
-    
+
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
-    
+
     private volatile RestTemplate restTemplate;
     private final Object restTemplateLock = new Object();
-    
+
     private RestTemplate getRestTemplate() {
         // Double-checked locking for thread-safe lazy initialization
         if (restTemplate == null) {
@@ -81,7 +81,8 @@ public class StudentExamController {
                     List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
                     interceptors.add(new TenantContextRestTemplateInterceptor());
                     interceptors.add((request, body, execution) -> {
-                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
+                                .getRequestAttributes();
                         if (attributes != null) {
                             HttpServletRequest currentRequest = attributes.getRequest();
                             String authHeader = currentRequest.getHeader("Authorization");
@@ -100,7 +101,7 @@ public class StudentExamController {
         }
         return restTemplate;
     }
-    
+
     @GetMapping
     @Operation(summary = "Get available exams", description = "Get all available exams (live, scheduled, and completed) for the student based on their enrollments")
     public ResponseEntity<List<?>> getAvailableExams() {
@@ -111,20 +112,20 @@ public class StudentExamController {
                 return ResponseEntity.ok(new ArrayList<>());
             }
             UUID clientId = UUID.fromString(clientIdStr);
-            
+
             // Get student's enrollments to determine which courses they have access to
             List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentId(clientId, studentId);
             Set<String> enrolledCourseIds = enrollments.stream()
-                .map(Enrollment::getCourseId)
-                .filter(courseId -> courseId != null && !courseId.isEmpty())
-                .collect(Collectors.toSet());
-            
+                    .map(Enrollment::getCourseId)
+                    .filter(courseId -> courseId != null && !courseId.isEmpty())
+                    .collect(Collectors.toSet());
+
             // Get all exam submissions for enrolled courses to find completed exams
             Set<String> submissionCourseIds = new HashSet<>();
             Set<String> completedExamIds = new HashSet<>();
             for (String courseId : enrolledCourseIds) {
                 List<AssessmentSubmission> courseSubmissions = submissionRepository
-                    .findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId);
+                        .findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId);
                 for (AssessmentSubmission submission : courseSubmissions) {
                     if (submission.getCourseId() != null) {
                         submissionCourseIds.add(submission.getCourseId());
@@ -134,56 +135,56 @@ public class StudentExamController {
                     }
                 }
             }
-            
+
             // Combine both sets for accessible course IDs
             Set<String> accessibleCourseIds = new HashSet<>(enrolledCourseIds);
             accessibleCourseIds.addAll(submissionCourseIds);
-            
+
             if (accessibleCourseIds.isEmpty()) {
                 return ResponseEntity.ok(new ArrayList<>());
             }
-            
+
             // Get live exams
             List<Object> exams = new ArrayList<>();
             try {
                 String url = gatewayUrl + "/api/exams/live";
                 HttpHeaders liveHeaders = new HttpHeaders();
-                liveHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
-                
+                liveHeaders.setAccept(
+                        java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+
                 ResponseEntity<Object[]> response = getRestTemplate().exchange(
-                    url,
-                    HttpMethod.GET,
-                    new HttpEntity<>(liveHeaders),
-                    Object[].class
-                );
-                
+                        url,
+                        HttpMethod.GET,
+                        new HttpEntity<>(liveHeaders),
+                        Object[].class);
+
                 if (response.getBody() != null) {
                     exams.addAll(List.of(response.getBody()));
                 }
             } catch (Exception e) {
                 logger.warn("Failed to fetch live exams", e);
             }
-            
+
             // Get scheduled exams
             try {
                 String scheduledUrl = gatewayUrl + "/api/exams/scheduled";
                 HttpHeaders scheduledHeaders = new HttpHeaders();
-                scheduledHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
-                
+                scheduledHeaders.setAccept(
+                        java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+
                 ResponseEntity<Object[]> scheduledResponse = getRestTemplate().exchange(
-                    scheduledUrl,
-                    HttpMethod.GET,
-                    new HttpEntity<>(scheduledHeaders),
-                    Object[].class
-                );
-                
+                        scheduledUrl,
+                        HttpMethod.GET,
+                        new HttpEntity<>(scheduledHeaders),
+                        Object[].class);
+
                 if (scheduledResponse.getBody() != null) {
                     exams.addAll(List.of(scheduledResponse.getBody()));
                 }
             } catch (Exception e) {
                 logger.warn("Failed to fetch scheduled exams", e);
             }
-            
+
             // Fetch completed exam details (only for exams not already in the list)
             Set<String> existingExamIds = new HashSet<>();
             for (Object exam : exams) {
@@ -196,20 +197,20 @@ public class StudentExamController {
                     // Ignore
                 }
             }
-            
+
             for (String examId : completedExamIds) {
                 if (!existingExamIds.contains(examId)) {
                     try {
                         String examUrl = gatewayUrl + "/api/exams/" + examId;
                         HttpHeaders examHeaders = new HttpHeaders();
-                        examHeaders.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
-                        
+                        examHeaders.setAccept(java.util.Collections
+                                .singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+
                         ResponseEntity<Object> examResponse = getRestTemplate().exchange(
-                            examUrl,
-                            HttpMethod.GET,
-                            new HttpEntity<>(examHeaders),
-                            Object.class
-                        );
+                                examUrl,
+                                HttpMethod.GET,
+                                new HttpEntity<>(examHeaders),
+                                Object.class);
                         if (examResponse.getBody() != null) {
                             exams.add(examResponse.getBody());
                         }
@@ -217,125 +218,133 @@ public class StudentExamController {
                     }
                 }
             }
-            
+
             // Filter exams to only include those for courses the student is enrolled in
             // Also check section-based or class-based access if exam is restricted
             // Also deduplicate by exam ID to prevent same exam appearing multiple times
             Set<String> seenExamIds = new HashSet<>();
             List<Object> filteredExams = exams.stream()
-                .filter(exam -> {
-                    try {
-                        JsonNode examNode = objectMapper.valueToTree(exam);
-                        String examId = examNode.has("id") ? examNode.get("id").asText() : "unknown";
-                        
-                        // Check if exam ID exists and hasn't been seen before
-                        if (examNode.has("id")) {
-                            if (seenExamIds.contains(examId)) {
-                                return false; // Skip duplicate
-                            }
-                            seenExamIds.add(examId);
-                        }
-                        
-                        // Filter by course enrollment
-                        if (examNode.has("courseId")) {
-                            String courseId = examNode.get("courseId").asText();
-                            if (!accessibleCourseIds.contains(courseId)) {
-                                return false; // Student not enrolled in this course
-                            }
-                            
-                            // Find student's enrollment for this course
-                            Enrollment studentEnrollment = null;
-                            for (Enrollment enrollment : enrollments) {
-                                if (courseId.equals(enrollment.getCourseId())) {
-                                    studentEnrollment = enrollment;
-                                    break;
+                    .filter(exam -> {
+                        try {
+                            JsonNode examNode = objectMapper.valueToTree(exam);
+                            String examId = examNode.has("id") ? examNode.get("id").asText() : "unknown";
+
+                            // Check if exam ID exists and hasn't been seen before
+                            if (examNode.has("id")) {
+                                if (seenExamIds.contains(examId)) {
+                                    return false; // Skip duplicate
                                 }
+                                seenExamIds.add(examId);
                             }
-                            
-                            if (studentEnrollment == null) {
-                                return false; // Should not happen, but safety check
-                            }
-                            
-                            String studentSectionId = studentEnrollment.getBatchId(); // batchId represents sectionId
-                            
-                            // Priority 1: Check if exam is section-specific
-                            String examSectionId = examNode.has("sectionId") ? examNode.get("sectionId").asText() : null;
-                            if (examSectionId != null && !examSectionId.isEmpty()) {
-                                // Student can access if their section matches
-                                if (studentSectionId != null && studentSectionId.equals(examSectionId)) {
-                                    return true;
+
+                            // Filter by course enrollment
+                            if (examNode.has("courseId")) {
+                                String courseId = examNode.get("courseId").asText();
+                                if (!accessibleCourseIds.contains(courseId)) {
+                                    return false; // Student not enrolled in this course
                                 }
-                                // Student not in the required section
-                                return false;
-                            }
-                            
-                            // Priority 2: Check if exam is class-specific
-                            String examClassId = examNode.has("classId") ? examNode.get("classId").asText() : null;
-                            if (examClassId != null && !examClassId.isEmpty()) {
-                                // Need to check if student's section belongs to this class
-                                if (studentSectionId == null) {
+
+                                // Find student's enrollment for this course
+                                Enrollment studentEnrollment = null;
+                                for (Enrollment enrollment : enrollments) {
+                                    if (courseId.equals(enrollment.getCourseId())) {
+                                        studentEnrollment = enrollment;
+                                        break;
+                                    }
+                                }
+
+                                if (studentEnrollment == null) {
+                                    return false; // Should not happen, but safety check
+                                }
+
+                                String studentSectionId = studentEnrollment.getBatchId(); // batchId represents
+                                                                                          // sectionId
+
+                                // Priority 1: Check if exam is section-specific
+                                String examSectionId = examNode.has("sectionId") ? examNode.get("sectionId").asText()
+                                        : null;
+                                if (examSectionId != null && !examSectionId.isEmpty()) {
+                                    // Student can access if their section matches
+                                    if (studentSectionId != null && studentSectionId.equals(examSectionId)) {
+                                        return true;
+                                    }
+                                    // Student not in the required section
                                     return false;
                                 }
-                                
-                                // Get student's section to check its classId
-                                try {
-                                    java.util.Optional<Section> sectionOpt = sectionRepository.findByIdAndClientId(studentSectionId, clientId);
-                                    
-                                    if (sectionOpt.isPresent()) {
-                                        Section studentSection = sectionOpt.get();
-                                        String studentClassId = studentSection.getClassId();
-                                        
-                                        if (studentClassId != null && studentClassId.equals(examClassId)) {
-                                            return true;
-                                        }
+
+                                // Priority 2: Check if exam is class-specific
+                                String examClassId = examNode.has("classId") ? examNode.get("classId").asText() : null;
+                                if (examClassId != null && !examClassId.isEmpty()) {
+                                    // Need to check if student's section belongs to this class
+                                    if (studentSectionId == null) {
+                                        return false;
                                     }
-                                } catch (Exception e) {
-                                    logger.warn("Error checking class membership for student section", e);
+
+                                    // Get student's section to check its classId
+                                    try {
+                                        java.util.Optional<Section> sectionOpt = sectionRepository
+                                                .findByIdAndClientId(studentSectionId, clientId);
+
+                                        if (sectionOpt.isPresent()) {
+                                            Section studentSection = sectionOpt.get();
+                                            String studentClassId = studentSection.getClassId();
+
+                                            if (studentClassId != null && studentClassId.equals(examClassId)) {
+                                                return true;
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        logger.warn("Error checking class membership for student section", e);
+                                    }
+
+                                    // Student's section not in the required class
+                                    return false;
                                 }
-                                
-                                // Student's section not in the required class
-                                return false;
+
+                                // Exam has no section or class requirement - accessible to all students in
+                                // course
+                                return true;
                             }
-                            
-                            // Exam has no section or class requirement - accessible to all students in course
-                            return true;
+                            return false;
+                        } catch (Exception e) {
+                            logger.warn("Error filtering exam", e);
+                            return false;
                         }
-                        return false;
-                    } catch (Exception e) {
-                        logger.warn("Error filtering exam", e);
-                        return false;
-                    }
-                })
-                .collect(Collectors.toList());
-            
+                    })
+                    .collect(Collectors.toList());
+
             // Add attemptsTaken for each exam so frontend knows if student has completed it
             List<Map<String, Object>> examsWithAttempts = new ArrayList<>();
             for (Object exam : filteredExams) {
                 try {
-                    Map<String, Object> examMap = objectMapper.convertValue(exam, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                    Map<String, Object> examMap = objectMapper.convertValue(exam,
+                            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                            });
                     String examId = examMap.containsKey("id") ? String.valueOf(examMap.get("id")) : null;
-                    
+
                     if (examId != null) {
                         // Count submissions for this exam
                         long attemptCount = submissionRepository.countByClientIdAndStudentIdAndAssessmentId(
-                            clientId, studentId, examId);
+                                clientId, studentId, examId);
                         examMap.put("attemptsTaken", (int) attemptCount);
                     }
                     examsWithAttempts.add(examMap);
                 } catch (Exception ex) {
                     // Still include the exam even if we can't add attemptsTaken
-                    Map<String, Object> examMap = objectMapper.convertValue(exam, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+                    Map<String, Object> examMap = objectMapper.convertValue(exam,
+                            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                            });
                     examsWithAttempts.add(examMap);
                 }
             }
-            
+
             return ResponseEntity.ok(examsWithAttempts);
         } catch (Exception e) {
             logger.error("Failed to fetch available exams", e);
             return ResponseEntity.ok(new ArrayList<>());
         }
     }
-    
+
     @GetMapping("/{id}")
     @Operation(summary = "Get exam details", description = "Get exam details by ID")
     public ResponseEntity<?> getExamDetails(@PathVariable String id) {
@@ -346,86 +355,88 @@ public class StudentExamController {
                 return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED).build();
             }
             UUID clientId = UUID.fromString(clientIdStr);
-            
+
             JsonNode exam = contentExamClient.getExam(id);
             if (exam == null) {
                 return ResponseEntity.notFound().build();
             }
             String courseId = exam.has("courseId") ? exam.get("courseId").asText() : null;
-            
+
             if (courseId == null) {
                 logger.warn("Exam {} has no courseId, allowing access", id);
                 return ResponseEntity.ok(exam);
             }
-            
+
             // Verify enrollment in the exam's course
             List<Enrollment> enrollments = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(
-                clientId, studentId, courseId);
-            
+                    clientId, studentId, courseId);
+
             if (enrollments.isEmpty()) {
-                logger.warn("Student {} attempted to access exam {} but not enrolled in course {}", 
-                    studentId, id, courseId);
+                logger.warn("Student {} attempted to access exam {} but not enrolled in course {}",
+                        studentId, id, courseId);
                 return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
             }
-            
+
             // Compute whether exam is available for take (live and in window)
             AvailabilityResult availability = computeAvailabilityForTake(exam);
-            com.fasterxml.jackson.databind.node.ObjectNode examNode = (com.fasterxml.jackson.databind.node.ObjectNode) exam.deepCopy();
+            com.fasterxml.jackson.databind.node.ObjectNode examNode = (com.fasterxml.jackson.databind.node.ObjectNode) exam
+                    .deepCopy();
             examNode.put("availableForTake", availability.available);
             if (availability.message != null) {
                 examNode.put("availabilityMessage", availability.message);
             }
-            
+
             if (!availability.available) {
                 // Do not send questions to frontend when not allowed to take
                 examNode.set("questions", objectMapper.createArrayNode());
                 return ResponseEntity.ok(examNode);
             }
-            
+
             // Apply randomization if student has a submission with randomized order
             JsonNode finalExam = applyRandomization(examNode, id, studentId, clientId);
             ((com.fasterxml.jackson.databind.node.ObjectNode) finalExam).put("availableForTake", true);
-            
+
             return ResponseEntity.ok(finalExam);
         } catch (Exception e) {
             logger.error("Failed to fetch exam details", e);
             return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
-    
+
     @PostMapping("/{id}/start")
     @Operation(summary = "Start exam", description = "Start an exam attempt")
     public ResponseEntity<?> startExam(
             @PathVariable String id,
             @RequestBody(required = false) JsonNode request) {
-        
+
         String studentId = UserUtil.getCurrentUserId();
-        
+
         try {
             JsonNode exam = contentExamClient.getExam(id);
             if (exam == null) {
                 return ResponseEntity.notFound().build();
             }
             String courseId = exam.has("courseId") ? exam.get("courseId").asText() : null;
-            Integer timeLimitSeconds = exam.has("timeLimitSeconds") ? 
-                exam.get("timeLimitSeconds").asInt() : null;
-            Integer maxAttempts = exam.has("maxAttempts") && !exam.get("maxAttempts").isNull() ? 
-                exam.get("maxAttempts").asInt() : null;
-            
+            Integer timeLimitSeconds = exam.has("timeLimitSeconds") ? exam.get("timeLimitSeconds").asInt() : null;
+            Integer maxAttempts = exam.has("maxAttempts") && !exam.get("maxAttempts").isNull()
+                    ? exam.get("maxAttempts").asInt()
+                    : null;
+
             // Get timing mode (defaults to FIXED_WINDOW for backward compatibility)
-            String timingModeStr = exam.has("timingMode") && !exam.get("timingMode").isNull() ?
-                exam.get("timingMode").asText() : "FIXED_WINDOW";
+            String timingModeStr = exam.has("timingMode") && !exam.get("timingMode").isNull()
+                    ? exam.get("timingMode").asText()
+                    : "FIXED_WINDOW";
             ExamSubmissionService.TimingMode timingMode;
             try {
                 timingMode = ExamSubmissionService.TimingMode.valueOf(timingModeStr);
             } catch (IllegalArgumentException e) {
                 timingMode = ExamSubmissionService.TimingMode.FIXED_WINDOW;
             }
-            
+
             if (courseId == null) {
                 return ResponseEntity.badRequest().build();
             }
-            
+
             // Parse start/end times once for availability and submission
             java.time.OffsetDateTime endTime = null;
             java.time.OffsetDateTime startTime = null;
@@ -449,60 +460,71 @@ public class StudentExamController {
                     }
                 }
             }
-            
+
             java.time.OffsetDateTime now = java.time.OffsetDateTime.now();
             String status = exam.has("status") && !exam.get("status").isNull() ? exam.get("status").asText() : null;
 
-            // Allow start only when exam is in window (same logic as computeAvailabilityForTake)
+            // Allow start only when exam is in window (same logic as
+            // computeAvailabilityForTake)
             if (timingMode == ExamSubmissionService.TimingMode.FLEXIBLE_START) {
                 if ("LIVE".equals(status)) {
                     // Cached status says LIVE, allow
                 } else {
-                    // Cached status may be stale (e.g. right after publish); use real-time status from Content
+                    // Cached status may be stale (e.g. right after publish); use real-time status
+                    // from Content
                     JsonNode statusResponse = contentExamClient.getExamCurrentStatus(id);
                     if (statusResponse != null) {
-                        boolean isAccessible = statusResponse.has("isAccessible") && !statusResponse.get("isAccessible").isNull()
-                            && statusResponse.get("isAccessible").asBoolean();
-                        String currentStatus = statusResponse.has("currentStatus") && !statusResponse.get("currentStatus").isNull()
-                            ? statusResponse.get("currentStatus").asText() : null;
+                        boolean isAccessible = statusResponse.has("isAccessible")
+                                && !statusResponse.get("isAccessible").isNull()
+                                && statusResponse.get("isAccessible").asBoolean();
+                        String currentStatus = statusResponse.has("currentStatus")
+                                && !statusResponse.get("currentStatus").isNull()
+                                        ? statusResponse.get("currentStatus").asText()
+                                        : null;
                         if (isAccessible || "LIVE".equals(currentStatus)) {
                             // Real-time status says live, allow
                         } else {
-                            logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId, id, status);
+                            logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}",
+                                    studentId, id, status);
                             return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                                .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                                    .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
                         }
                     } else {
-                        logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId, id, status);
+                        logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId,
+                                id, status);
                         return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                            .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                                .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
                     }
                 }
             } else {
-                // FIXED_WINDOW: use time window so cached SCHEDULED does not block when now is in window
+                // FIXED_WINDOW: use time window so cached SCHEDULED does not block when now is
+                // in window
                 if (startTime != null && endTime != null) {
                     if (now.isBefore(startTime)) {
-                        logger.warn("Student {} attempted to start exam {} before start time. Start: {}, Now: {}", studentId, id, startTime, now);
+                        logger.warn("Student {} attempted to start exam {} before start time. Start: {}, Now: {}",
+                                studentId, id, startTime, now);
                         return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                            .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                                .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
                     }
                     if (now.isAfter(endTime)) {
-                        logger.warn("Student {} attempted to start exam {} after end time. End: {}, Now: {}", studentId, id, endTime, now);
+                        logger.warn("Student {} attempted to start exam {} after end time. End: {}, Now: {}", studentId,
+                                id, endTime, now);
                         return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                            .body(Map.of("message", "Exam has ended"));
+                                .body(Map.of("message", "Exam has ended"));
                     }
                 } else {
                     if (!"LIVE".equals(status)) {
-                        logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId, id, status);
+                        logger.warn("Student {} attempted to start exam {} which is not LIVE. Status: {}", studentId,
+                                id, status);
                         return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN)
-                            .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
+                                .body(Map.of("error", "EXAM_NOT_AVAILABLE", "message", "Exam has not begun yet"));
                     }
                 }
             }
-            
+
             AssessmentSubmission submission = examSubmissionService.startExam(
-                studentId, courseId, id, timeLimitSeconds, maxAttempts, timingMode, endTime);
-            
+                    studentId, courseId, id, timeLimitSeconds, maxAttempts, timingMode, endTime);
+
             return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(toDTO(submission));
         } catch (IllegalStateException e) {
             // Handle max attempts exceeded or other state errors
@@ -513,110 +535,164 @@ public class StudentExamController {
             return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
-    
+
+    @PostMapping("/{id}/start-timer")
+    @Operation(summary = "Start exam timer", description = "Initialize the timer for the exam (called after proctoring setup)")
+    public ResponseEntity<AssessmentSubmissionDTO> startTimer(
+            @PathVariable String id,
+            @RequestBody JsonNode request) {
+
+        String submissionId = request.has("submissionId") ? request.get("submissionId").asText() : null;
+
+        if (submissionId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        try {
+            JsonNode exam = contentExamClient.getExam(id);
+            if (exam == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Integer timeLimitSeconds = exam.has("timeLimitSeconds") ? exam.get("timeLimitSeconds").asInt() : null;
+
+            String timingModeStr = exam.has("timingMode") && !exam.get("timingMode").isNull()
+                    ? exam.get("timingMode").asText()
+                    : "FIXED_WINDOW";
+            ExamSubmissionService.TimingMode timingMode;
+            try {
+                timingMode = ExamSubmissionService.TimingMode.valueOf(timingModeStr);
+            } catch (IllegalArgumentException e) {
+                timingMode = ExamSubmissionService.TimingMode.FIXED_WINDOW;
+            }
+
+            java.time.OffsetDateTime endTime = null;
+            if (exam.has("endTime") && !exam.get("endTime").isNull()) {
+                String endTimeStr = exam.get("endTime").asText();
+                if (endTimeStr != null && !endTimeStr.isBlank()) {
+                    try {
+                        endTime = java.time.OffsetDateTime.parse(endTimeStr);
+                    } catch (Exception e) {
+                        logger.debug("Failed to parse exam end time: {}", endTimeStr);
+                    }
+                }
+            }
+
+            AssessmentSubmission submission = examSubmissionService.startTimer(
+                    submissionId, timingMode, timeLimitSeconds, endTime);
+
+            return ResponseEntity.ok(toDTO(submission));
+
+        } catch (Exception e) {
+            logger.error("Failed to start timer", e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @PostMapping("/{id}/save-progress")
     @Operation(summary = "Save exam progress", description = "Auto-save exam answers and timer")
     public ResponseEntity<AssessmentSubmissionDTO> saveProgress(
             @PathVariable String id,
             @RequestBody JsonNode request) {
-        
-        String submissionId = request.has("submissionId") ? 
-            request.get("submissionId").asText() : null;
+
+        String submissionId = request.has("submissionId") ? request.get("submissionId").asText() : null;
         JsonNode answers = request.has("answers") ? request.get("answers") : null;
-        Integer timeRemainingSeconds = request.has("timeRemainingSeconds") ? 
-            request.get("timeRemainingSeconds").asInt() : null;
-        
+        Integer timeRemainingSeconds = request.has("timeRemainingSeconds") ? request.get("timeRemainingSeconds").asInt()
+                : null;
+
         if (submissionId == null || answers == null) {
             return ResponseEntity.badRequest().build();
         }
-        
+
         AssessmentSubmission submission = examSubmissionService.saveProgress(
-            submissionId, answers, timeRemainingSeconds);
-        
+                submissionId, answers, timeRemainingSeconds);
+
         return ResponseEntity.ok(toDTO(submission));
     }
-    
+
     @PostMapping("/{id}/submit")
     @Operation(summary = "Submit exam", description = "Submit final exam answers")
     public ResponseEntity<AssessmentSubmissionDTO> submitExam(
             @PathVariable String id,
             @RequestBody JsonNode request) {
-        
-        String submissionId = request.has("submissionId") ? 
-            request.get("submissionId").asText() : null;
+
+        String submissionId = request.has("submissionId") ? request.get("submissionId").asText() : null;
         JsonNode answers = request.has("answers") ? request.get("answers") : null;
-        String reviewMethod = request.has("reviewMethod") ? 
-            request.get("reviewMethod").asText() : null;
-        
+        String reviewMethod = request.has("reviewMethod") ? request.get("reviewMethod").asText() : null;
+
         if (submissionId == null || answers == null) {
             return ResponseEntity.badRequest().build();
         }
-        
+
         AssessmentSubmission submission = examSubmissionService.submitExam(submissionId, answers);
-        
+
         // Only trigger AI review if review method is AI (not INSTRUCTOR)
         if (reviewMethod == null || !"INSTRUCTOR".equalsIgnoreCase(reviewMethod)) {
             try {
                 String reviewUrl = gatewayUrl + "/api/exams/" + id + "/submissions/" + submissionId + "/review";
                 HttpHeaders headers = new HttpHeaders();
-                headers.setAccept(java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
+                headers.setAccept(
+                        java.util.Collections.singletonList(org.springframework.http.MediaType.APPLICATION_JSON));
                 headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
-                
+
                 getRestTemplate().exchange(
-                    reviewUrl,
-                    HttpMethod.POST,
-                    new HttpEntity<>(headers),
-                    Void.class
-                );
+                        reviewUrl,
+                        HttpMethod.POST,
+                        new HttpEntity<>(headers),
+                        Void.class);
             } catch (Exception e) {
                 logger.warn("Failed to trigger AI review, but submission was successful", e);
             }
         }
-        
+
         return ResponseEntity.ok(toDTO(submission));
     }
-    
+
     @GetMapping("/{id}/submission")
     @Operation(summary = "Get submission", description = "Get exam submission details")
     public ResponseEntity<AssessmentSubmissionDTO> getSubmission(@PathVariable String id) {
         String studentId = UserUtil.getCurrentUserId();
-        
+
         AssessmentSubmission submission = examSubmissionService.getSubmissionByExamId(studentId, id);
         if (submission == null) {
             return ResponseEntity.notFound().build();
         }
-        
+
         return ResponseEntity.ok(toDTO(submission));
     }
-    
+
     @GetMapping("/submissions/{submissionId}")
     @Operation(summary = "Get submission by ID", description = "Get submission details by submission ID")
     public ResponseEntity<AssessmentSubmissionDTO> getSubmissionById(@PathVariable String submissionId) {
         AssessmentSubmission submission = examSubmissionService.getSubmissionStatus(submissionId);
         return ResponseEntity.ok(toDTO(submission));
     }
-    
+
     @PutMapping(value = "/submissions/{submissionId}/manual-grade", produces = "application/json")
     @Operation(summary = "Manual grade submission", description = "Manually grade an exam submission")
     public ResponseEntity<AssessmentSubmissionDTO> manualGrade(
             @PathVariable String submissionId,
             @RequestBody JsonNode request) {
-        
+
         try {
-            Double score = request.has("score") && !request.get("score").isNull() ? 
-                request.get("score").asDouble() : null;
-            Double maxScore = request.has("maxScore") && !request.get("maxScore").isNull() ? 
-                request.get("maxScore").asDouble() : null;
-            Boolean isPassed = request.has("isPassed") && !request.get("isPassed").isNull() ? 
-                request.get("isPassed").asBoolean() : null;
-            String instructorFeedback = request.has("instructorFeedback") && !request.get("instructorFeedback").isNull() ? 
-                request.get("instructorFeedback").asText() : null;
-            JsonNode aiReviewFeedback = request.has("aiReviewFeedback") && !request.get("aiReviewFeedback").isNull() ? 
-                request.get("aiReviewFeedback") : null;
-            
+            Double score = request.has("score") && !request.get("score").isNull() ? request.get("score").asDouble()
+                    : null;
+            Double maxScore = request.has("maxScore") && !request.get("maxScore").isNull()
+                    ? request.get("maxScore").asDouble()
+                    : null;
+            Boolean isPassed = request.has("isPassed") && !request.get("isPassed").isNull()
+                    ? request.get("isPassed").asBoolean()
+                    : null;
+            String instructorFeedback = request.has("instructorFeedback") && !request.get("instructorFeedback").isNull()
+                    ? request.get("instructorFeedback").asText()
+                    : null;
+            JsonNode aiReviewFeedback = request.has("aiReviewFeedback") && !request.get("aiReviewFeedback").isNull()
+                    ? request.get("aiReviewFeedback")
+                    : null;
+
             AssessmentSubmission submission = examSubmissionService.manualGrade(
-                submissionId, score, maxScore, isPassed, instructorFeedback, aiReviewFeedback);
-            
+                    submissionId, score, maxScore, isPassed, instructorFeedback, aiReviewFeedback);
+
             return ResponseEntity.ok(toDTO(submission));
         } catch (IllegalArgumentException e) {
             logger.warn("Invalid request for manual grading: {}", e.getMessage());
@@ -626,7 +702,7 @@ public class StudentExamController {
             return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
-    
+
     /**
      * Result of availability check for taking an exam.
      */
@@ -641,16 +717,20 @@ public class StudentExamController {
     }
 
     /**
-     * Compute whether the exam is currently available for take (live and within window).
-     * FIXED_WINDOW: when startTime/endTime are present, available when now is within [startTime, endTime]
-     * (do not gate on cached status so scheduled exams go live at the correct time).
+     * Compute whether the exam is currently available for take (live and within
+     * window).
+     * FIXED_WINDOW: when startTime/endTime are present, available when now is
+     * within [startTime, endTime]
+     * (do not gate on cached status so scheduled exams go live at the correct
+     * time).
      * When start/end are missing, require status == LIVE.
      * FLEXIBLE_START: available when status == LIVE.
      */
     private AvailabilityResult computeAvailabilityForTake(JsonNode exam) {
         String status = exam.has("status") && !exam.get("status").isNull() ? exam.get("status").asText() : null;
-        String timingModeStr = exam.has("timingMode") && !exam.get("timingMode").isNull() ?
-            exam.get("timingMode").asText() : "FIXED_WINDOW";
+        String timingModeStr = exam.has("timingMode") && !exam.get("timingMode").isNull()
+                ? exam.get("timingMode").asText()
+                : "FIXED_WINDOW";
         boolean isFlexible = "FLEXIBLE_START".equalsIgnoreCase(timingModeStr);
         OffsetDateTime now = OffsetDateTime.now();
 
@@ -658,15 +738,19 @@ public class StudentExamController {
             if ("LIVE".equals(status)) {
                 return new AvailabilityResult(true, null);
             }
-            // Cached status may be stale (e.g. right after publish); use real-time status from Content
+            // Cached status may be stale (e.g. right after publish); use real-time status
+            // from Content
             String examId = exam.has("id") && !exam.get("id").isNull() ? exam.get("id").asText() : null;
             if (examId != null) {
                 JsonNode statusResponse = contentExamClient.getExamCurrentStatus(examId);
                 if (statusResponse != null) {
-                    boolean isAccessible = statusResponse.has("isAccessible") && !statusResponse.get("isAccessible").isNull()
-                        && statusResponse.get("isAccessible").asBoolean();
-                    String currentStatus = statusResponse.has("currentStatus") && !statusResponse.get("currentStatus").isNull()
-                        ? statusResponse.get("currentStatus").asText() : null;
+                    boolean isAccessible = statusResponse.has("isAccessible")
+                            && !statusResponse.get("isAccessible").isNull()
+                            && statusResponse.get("isAccessible").asBoolean();
+                    String currentStatus = statusResponse.has("currentStatus")
+                            && !statusResponse.get("currentStatus").isNull()
+                                    ? statusResponse.get("currentStatus").asText()
+                                    : null;
                     if (isAccessible || "LIVE".equals(currentStatus)) {
                         return new AvailabilityResult(true, null);
                     }
@@ -675,7 +759,8 @@ public class StudentExamController {
             return new AvailabilityResult(false, "Exam has not begun yet");
         }
 
-        // FIXED_WINDOW: parse window first; if we have both start and end, use time window only (ignore cached status)
+        // FIXED_WINDOW: parse window first; if we have both start and end, use time
+        // window only (ignore cached status)
         OffsetDateTime startTime = null;
         OffsetDateTime endTime = null;
         if (exam.has("startTime") && !exam.get("startTime").isNull()) {
@@ -699,7 +784,8 @@ public class StudentExamController {
             }
         }
         if (startTime != null && endTime != null) {
-            // Use time window only so scheduled exams go live at the correct time (cached status may be stale)
+            // Use time window only so scheduled exams go live at the correct time (cached
+            // status may be stale)
             if (now.isBefore(startTime)) {
                 return new AvailabilityResult(false, "Exam has not begun yet");
             }
@@ -722,40 +808,40 @@ public class StudentExamController {
         try {
             // Try to find student's submission
             AssessmentSubmission submission = submissionRepository
-                .findFirstByClientIdAndStudentIdAndAssessmentIdOrderBySubmittedAtDesc(clientId, studentId, examId)
-                .orElse(null);
-            
+                    .findFirstByClientIdAndStudentIdAndAssessmentIdOrderBySubmittedAtDesc(clientId, studentId, examId)
+                    .orElse(null);
+
             if (submission == null) {
                 // No submission yet, return exam as-is
                 return exam;
             }
-            
+
             JsonNode questionOrder = submission.getQuestionOrder();
             JsonNode mcqOptionOrders = submission.getMcqOptionOrders();
-            
+
             if (questionOrder == null && mcqOptionOrders == null) {
                 // No randomization in submission
                 return exam;
             }
-            
+
             // Clone the exam to avoid modifying the original
             com.fasterxml.jackson.databind.node.ObjectNode examCopy = exam.deepCopy();
             JsonNode questionsNode = examCopy.get("questions");
-            
+
             if (questionsNode == null || !questionsNode.isArray()) {
                 return exam;
             }
-            
+
             List<JsonNode> questionsList = new ArrayList<>();
             questionsNode.forEach(questionsList::add);
-            
+
             // Apply question randomization
             if (questionOrder != null && questionOrder.isArray()) {
                 Map<String, JsonNode> questionMap = new HashMap<>();
                 for (JsonNode question : questionsList) {
                     questionMap.put(question.get("id").asText(), question);
                 }
-                
+
                 com.fasterxml.jackson.databind.node.ArrayNode reorderedQuestions = objectMapper.createArrayNode();
                 for (JsonNode qId : questionOrder) {
                     String questionId = qId.asText();
@@ -764,18 +850,18 @@ public class StudentExamController {
                         reorderedQuestions.add(question);
                     }
                 }
-                
+
                 examCopy.set("questions", reorderedQuestions);
                 questionsList.clear();
                 reorderedQuestions.forEach(questionsList::add);
             }
-            
+
             // Apply MCQ option randomization
             if (mcqOptionOrders != null && mcqOptionOrders.isObject()) {
                 for (JsonNode question : questionsList) {
                     String questionId = question.get("id").asText();
                     JsonNode optionOrder = mcqOptionOrders.get(questionId);
-                    
+
                     if (optionOrder != null && optionOrder.isArray()) {
                         JsonNode optionsNode = question.get("options");
                         if (optionsNode != null && optionsNode.isArray()) {
@@ -784,9 +870,10 @@ public class StudentExamController {
                             optionsNode.forEach(option -> {
                                 optionMap.put(option.get("id").asText(), option);
                             });
-                            
+
                             // Reorder options
-                            com.fasterxml.jackson.databind.node.ArrayNode reorderedOptions = objectMapper.createArrayNode();
+                            com.fasterxml.jackson.databind.node.ArrayNode reorderedOptions = objectMapper
+                                    .createArrayNode();
                             for (JsonNode optId : optionOrder) {
                                 String optionId = optId.asText();
                                 JsonNode option = optionMap.get(optionId);
@@ -794,21 +881,22 @@ public class StudentExamController {
                                     reorderedOptions.add(option);
                                 }
                             }
-                            
-                            ((com.fasterxml.jackson.databind.node.ObjectNode) question).set("options", reorderedOptions);
+
+                            ((com.fasterxml.jackson.databind.node.ObjectNode) question).set("options",
+                                    reorderedOptions);
                         }
                     }
                 }
             }
-            
+
             return examCopy;
-            
+
         } catch (Exception e) {
             logger.error("Failed to apply randomization for exam: {}, student: {}", examId, studentId, e);
             return exam; // Return original exam on error
         }
     }
-    
+
     private AssessmentSubmissionDTO toDTO(AssessmentSubmission submission) {
         AssessmentSubmissionDTO dto = new AssessmentSubmissionDTO();
         dto.setId(submission.getId());
@@ -825,7 +913,7 @@ public class StudentExamController {
         dto.setSubmittedAt(submission.getSubmittedAt());
         dto.setGradedAt(submission.getGradedAt());
         dto.setCreatedAt(submission.getCreatedAt());
-        
+
         // Add exam-specific fields
         dto.setStartedAt(submission.getStartedAt());
         dto.setCompletedAt(submission.getCompletedAt());
@@ -835,7 +923,7 @@ public class StudentExamController {
         }
         dto.setAiReviewFeedback(submission.getAiReviewFeedback());
         dto.setMarkedAsCheating(submission.getMarkedAsCheating());
-        
+
         return dto;
     }
 }

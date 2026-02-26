@@ -266,6 +266,70 @@ public class ExamSubmissionService {
     }
 
     /**
+     * Start the exam timer by updating the startedAt timestamp to the current time.
+     * This is intended to be called after proctoring setup is complete, ensuring
+     * the timer doesn't run down during setup.
+     */
+    public AssessmentSubmission startTimer(String submissionId, TimingMode timingMode,
+            Integer timeLimitSeconds, OffsetDateTime examEndTime) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        int maxRetries = 3;
+        int attempt = 0;
+
+        while (attempt < maxRetries) {
+            try {
+                AssessmentSubmission submission = submissionRepository.findById(submissionId)
+                        .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
+
+                if (!submission.getClientId().equals(clientId)) {
+                    throw new IllegalArgumentException("Submission not found: " + submissionId);
+                }
+
+                if (submission.getCompletedAt() != null) {
+                    throw new IllegalStateException("Cannot start timer for completed exam");
+                }
+
+                OffsetDateTime now = OffsetDateTime.now();
+                submission.setStartedAt(now);
+
+                // Recalculate time remaining based on the new start time
+                Integer effectiveTimeLimit = calculateEffectiveTimeLimit(timingMode, timeLimitSeconds, examEndTime);
+                submission.setTimeRemainingSeconds(effectiveTimeLimit);
+
+                AssessmentSubmission saved = submissionRepository.save(submission);
+
+                logger.info("Timer started for submission: {} at {} with {} seconds remaining",
+                        submissionId, now, effectiveTimeLimit);
+
+                return saved;
+
+            } catch (org.springframework.dao.OptimisticLockingFailureException
+                    | org.hibernate.StaleObjectStateException e) {
+                attempt++;
+                if (attempt >= maxRetries) {
+                    logger.error("Failed to start timer after {} attempts due to concurrent updates: {}", maxRetries,
+                            submissionId);
+                    throw e;
+                }
+
+                long backoff = 50 * (long) Math.pow(2, attempt - 1);
+                try {
+                    Thread.sleep(backoff);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted during retry backoff", ie);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Save progress (auto-save answers)
      */
     /**

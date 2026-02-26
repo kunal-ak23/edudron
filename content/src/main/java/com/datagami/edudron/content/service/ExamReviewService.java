@@ -92,7 +92,8 @@ public class ExamReviewService {
     /**
      * Review submission with AI - grades both objective and subjective questions
      */
-    public JsonNode reviewSubmissionWithAI(String submissionId) {
+    @org.springframework.scheduling.annotation.Async
+    public java.util.concurrent.CompletableFuture<JsonNode> reviewSubmissionWithAI(String submissionId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
             throw new IllegalStateException("Tenant context is not set");
@@ -245,7 +246,7 @@ public class ExamReviewService {
         logger.info("AI review completed for submission: {}, score: {}/{}",
                 submissionId, totalScore, maxScore);
 
-        return reviewFeedback;
+        return java.util.concurrent.CompletableFuture.completedFuture(reviewFeedback);
     }
 
     private double gradeObjectiveQuestion(QuizQuestion question, JsonNode answerNode) {

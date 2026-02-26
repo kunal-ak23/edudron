@@ -742,7 +742,7 @@ public class ExamController {
             @PathVariable String submissionId) {
         try {
             logger.info("Re-grading submission {} for exam {}", submissionId, id);
-            JsonNode result = examReviewService.reviewSubmissionWithAI(submissionId);
+            JsonNode result = examReviewService.reviewSubmissionWithAI(submissionId).join();
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             logger.error("Failed to re-grade submission {} for exam {}", submissionId, id, e);
