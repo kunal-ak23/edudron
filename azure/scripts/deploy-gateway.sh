@@ -104,16 +104,13 @@ if [ -z "$ENV_FQDN" ]; then
 fi
 
 # Build service URLs using internal FQDN format with HTTPS (port handled by ingress)
-IDENTITY_URL="https://identity-${ENVIRONMENT}.internal.${ENV_FQDN}"
+# Core API bundles identity + student + payment into a single service
+CORE_API_URL="https://core-api-${ENVIRONMENT}.internal.${ENV_FQDN}"
 CONTENT_URL="https://content-${ENVIRONMENT}.internal.${ENV_FQDN}"
-STUDENT_URL="https://student-${ENVIRONMENT}.internal.${ENV_FQDN}"
-PAYMENT_URL="https://payment-${ENVIRONMENT}.internal.${ENV_FQDN}"
 
 print_info "Service URLs:"
-print_info "  IDENTITY_SERVICE_URL: ${IDENTITY_URL}"
+print_info "  CORE_API_SERVICE_URL: ${CORE_API_URL} (identity + student + payment)"
 print_info "  CONTENT_SERVICE_URL: ${CONTENT_URL}"
-print_info "  STUDENT_SERVICE_URL: ${STUDENT_URL}"
-print_info "  PAYMENT_SERVICE_URL: ${PAYMENT_URL}"
 
 # Check if app exists
 APP_EXISTS=$(az containerapp show --name "$APP_NAME" --resource-group "$RESOURCE_GROUP" --query "name" -o tsv 2>/dev/null || echo "")
@@ -170,10 +167,8 @@ if [ -z "$APP_EXISTS" ]; then
             "SPRING_PROFILES_ACTIVE=production" \
             "GATEWAY_CONNECT_TIMEOUT=30000" \
             "GATEWAY_RESPONSE_TIMEOUT=600s" \
-            "IDENTITY_SERVICE_URL=$IDENTITY_URL" \
+            "CORE_API_SERVICE_URL=$CORE_API_URL" \
             "CONTENT_SERVICE_URL=$CONTENT_URL" \
-            "STUDENT_SERVICE_URL=$STUDENT_URL" \
-            "PAYMENT_SERVICE_URL=$PAYMENT_URL" \
         --output none
     
     print_success "Container app created successfully"
@@ -188,10 +183,8 @@ else
             "SPRING_PROFILES_ACTIVE=production" \
             "GATEWAY_CONNECT_TIMEOUT=30000" \
             "GATEWAY_RESPONSE_TIMEOUT=600s" \
-            "IDENTITY_SERVICE_URL=$IDENTITY_URL" \
+            "CORE_API_SERVICE_URL=$CORE_API_URL" \
             "CONTENT_SERVICE_URL=$CONTENT_URL" \
-            "STUDENT_SERVICE_URL=$STUDENT_URL" \
-            "PAYMENT_SERVICE_URL=$PAYMENT_URL" \
         --output none
     
     print_success "Container app updated successfully"

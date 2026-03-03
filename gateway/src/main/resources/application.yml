@@ -4,22 +4,20 @@ spring:
   cloud:
     gateway:
       routes:
-        # Identity Service (8081)
-        # Note: All identity service routes forward paths as-is (no StripPrefix)
-        # because controllers expect full paths: /auth/**, /idp/**, /api/tenant/**
+        # Core API (8085) — bundled identity + student + payment
         - id: identity-auth
-          uri: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/auth/**
         - id: identity-idp
-          uri: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/idp/**
         - id: identity-tenant-api
-          uri: ${IDENTITY_SERVICE_URL:http://localhost:8081}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/tenant/**
-        
+
         # Content Service (8082)
         # Note: Content service routes forward paths as-is (no StripPrefix)
         # because controllers expect full paths: /content/**, /api/content/**, /content/api/**
@@ -39,46 +37,44 @@ spring:
           uri: ${CONTENT_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/content/**, /api/content/**, /content/api/**
-        
-        # Student Service (8083)
-        # Note: More specific routes should come first, catch-all /api/** at the end
-        # All paths are forwarded as-is (no StripPrefix) because controllers expect full paths
+
+        # Student routes → Core API
         - id: student-service-institutes
-          uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/institutes/**
         - id: student-service-classes
-          uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/classes/**
         - id: student-service-sections
-          uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/sections/**
         - id: student-service-batches
-          uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/batches/**
         - id: student-service-enrollments
-          uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/enrollments/**
         - id: student-service-students
-          uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/students/**
         - id: student-service-api
-          uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/**
         - id: student-service
-          uri: ${STUDENT_SERVICE_URL:http://localhost:8083}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/student/**
-        
-        # Payment Service (8084)
+
+        # Payment routes → Core API
         - id: payment-service
-          uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/payment/**, /api/payment/**
       globalcors:
@@ -125,11 +121,9 @@ management:
       enabled: true
 
 # Note: Swagger/OpenAPI removed from gateway to avoid circular dependency
-# Access Swagger docs directly on individual microservices:
-# - Identity: http://localhost:8081/swagger-ui.html
+# Access Swagger docs directly on individual services:
+# - Core API (identity+student+payment): http://localhost:8085/swagger-ui.html
 # - Content: http://localhost:8082/swagger-ui.html
-# - Student: http://localhost:8083/swagger-ui.html
-# - Payment: http://localhost:8084/swagger-ui.html
 
 server:
   port: 8080

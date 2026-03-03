@@ -11,5 +11,6 @@ include 'identity'
 include 'content'
 include 'student'
 include 'payment'
+include 'core-api'
 
 

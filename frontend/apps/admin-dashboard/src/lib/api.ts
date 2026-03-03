@@ -36,15 +36,15 @@ export const questionsApi = {
   create: async (examId: string, questionData: QuestionData) => {
     return apiClient.post<any>(`/api/exams/${examId}/questions`, questionData)
   },
-  
+
   update: async (examId: string, questionId: string, questionData: Partial<QuestionData>) => {
     return apiClient.put<any>(`/api/exams/${examId}/questions/${questionId}`, questionData)
   },
-  
+
   delete: async (examId: string, questionId: string) => {
     return apiClient.delete(`/api/exams/${examId}/questions/${questionId}`)
   },
-  
+
   reorder: async (examId: string, questionIds: string[]) => {
     return apiClient.post(`/api/exams/${examId}/questions/reorder`, { questionIds })
   }
@@ -107,35 +107,35 @@ export const examsApi = {
     const response = await apiClient.post<BatchExamGenerationResponse>('/api/exams/batch-generate', request)
     return response.data
   },
-  
+
   create: async (examData: any) => {
     return apiClient.post<any>('/api/exams', examData)
   },
-  
+
   getById: async (examId: string) => {
     return apiClient.get<any>(`/api/exams/${examId}`)
   },
-  
+
   list: async () => {
     return apiClient.get<any[]>('/api/exams')
   },
-  
+
   update: async (examId: string, examData: any) => {
     return apiClient.put<any>(`/api/exams/${examId}`, examData)
   },
-  
+
   delete: async (examId: string) => {
     return apiClient.delete(`/api/exams/${examId}`)
   },
-  
+
   schedule: async (examId: string, startTime: string, endTime: string) => {
     return apiClient.put<any>(`/api/exams/${examId}/schedule`, { startTime, endTime })
   },
-  
+
   getCourseSections: async (courseId: string) => {
     return apiClient.get<any[]>(`/api/exams/courses/${courseId}/sections`)
   },
-  
+
   getCourseClasses: async (courseId: string) => {
     return apiClient.get<any[]>(`/api/exams/courses/${courseId}/classes`)
   }

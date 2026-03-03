@@ -20,7 +20,7 @@ spring:
         default_schema: student
         jdbc.time_zone: UTC
   liquibase:
-    change-log: classpath:/db/changelog/db.changelog-master.yaml
+    change-log: classpath:/db/changelog/student-master.yaml
     default-schema: public
     liquibase-schema: public
 
@@ -70,4 +70,3 @@ azure:
     account-name: ${AZURE_STORAGE_ACCOUNT_NAME:}
     proctoring-container-name: ${AZURE_STORAGE_PROCTORING_CONTAINER:proctoring-photos}
     photo-retention-days: ${AZURE_STORAGE_PHOTO_RETENTION_DAYS:90}
-
