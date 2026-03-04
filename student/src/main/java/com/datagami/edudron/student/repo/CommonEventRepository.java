@@ -12,7 +12,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-@Repository
+@Repository("studentCommonEventRepository")
 public interface CommonEventRepository extends JpaRepository<Event, String> {
     
     // Find events by client

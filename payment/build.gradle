@@ -70,6 +70,12 @@ tasks.named('bootRun') {
     }
 }
 
+jar {
+    enabled = true
+    exclude 'application.yml'
+    exclude 'application-*.yml'
+}
+
 springBoot {
 	mainClass = 'com.datagami.edudron.payment.PaymentApplication'
 }

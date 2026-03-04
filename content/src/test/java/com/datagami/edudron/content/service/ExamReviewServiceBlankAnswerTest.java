@@ -126,11 +126,11 @@ class ExamReviewServiceBlankAnswerTest {
                 .thenReturn(new ResponseEntity<>(objectMapper.createObjectNode(), HttpStatus.OK));
 
         // When
-        JsonNode result = examReviewService.reviewSubmissionWithAI(submissionId);
+        JsonNode reviewFeedback = examReviewService.reviewSubmissionWithAI(submissionId).join();
 
         // Then
-        assertEquals(0.0, result.get("totalScore").asDouble(), "Total score should be 0");
-        JsonNode qReviews = result.get("questionReviews");
+        assertEquals(0.0, reviewFeedback.get("totalScore").asDouble(), "Total score should be 0");
+        JsonNode qReviews = reviewFeedback.get("questionReviews");
         assertEquals(3, qReviews.size());
 
         for (JsonNode review : qReviews) {

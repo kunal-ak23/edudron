@@ -38,26 +38,28 @@ services:
     networks:
       - edudron-dev
 
-  # Identity Service
-  identity-service:
+  # Core API — bundled identity + student + payment
+  core-api:
     build:
       context: .
-      dockerfile: identity/Dockerfile
+      dockerfile: core-api/Dockerfile
       args:
         - BUILDKIT_INLINE_CACHE=1
-    container_name: edudron-identity-dev
+    container_name: edudron-core-api-dev
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=edudron
       - DB_USERNAME=edudron
       - DB_PASSWORD=edudron
-      - IDENTITY_SERVICE_PORT=8081
+      - CORE_API_SERVICE_PORT=8085
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - JWT_SECRET=devSecretKey123456789012345678901234567890
       - JWT_EXPIRATION=86400
       - JWT_REFRESH_EXPIRATION=604800
     ports:
-      - "8081:8081"
+      - "8085:8085"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,54 +93,6 @@ services:
       - edudron-dev
     restart: unless-stopped
 
-  # Student Service
-  student-service:
-    build:
-      context: .
-      dockerfile: student/Dockerfile
-    container_name: edudron-student-dev
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=edudron
-      - DB_USERNAME=edudron
-      - DB_PASSWORD=edudron
-      - STUDENT_SERVICE_PORT=8083
-    ports:
-      - "8083:8083"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - edudron-dev
-    restart: unless-stopped
-
-  # Payment Service
-  payment-service:
-    build:
-      context: .
-      dockerfile: payment/Dockerfile
-    container_name: edudron-payment-dev
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=edudron
-      - DB_USERNAME=edudron
-      - DB_PASSWORD=edudron
-      - PAYMENT_SERVICE_PORT=8084
-    ports:
-      - "8084:8084"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - edudron-dev
-    restart: unless-stopped
-
   # Gateway Service
   gateway-service:
     build:
@@ -147,17 +101,13 @@ services:
     container_name: edudron-gateway-dev
     environment:
       - GATEWAY_SERVICE_PORT=8080
-      - IDENTITY_SERVICE_URL=http://identity-service:8081
+      - CORE_API_SERVICE_URL=http://core-api:8085
       - CONTENT_SERVICE_URL=http://content-service:8082
-      - STUDENT_SERVICE_URL=http://student-service:8083
-      - PAYMENT_SERVICE_URL=http://payment-service:8084
     ports:
       - "8080:8080"
     depends_on:
-      - identity-service
+      - core-api
       - content-service
-      - student-service
-      - payment-service
     networks:
       - edudron-dev
     restart: unless-stopped

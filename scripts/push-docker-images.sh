@@ -12,7 +12,7 @@ NC='\033[0m' # No Color
 # Configuration
 REGISTRY="${DOCKER_REGISTRY:-edudron}"
 VERSIONS_FILE="versions.json"
-SERVICES=("gateway" "identity" "content" "student" "payment")
+SERVICES=("gateway" "identity" "content" "student" "payment" "core-api")
 
 # Function to read version from versions.json
 get_version() {

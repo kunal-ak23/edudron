@@ -19,10 +19,10 @@
         }
       ]
     },
-    "identity": {
-      "port": 8081,
-      "cpu": "0.5",
-      "memory": "1.0Gi",
+    "core-api": {
+      "port": 8085,
+      "cpu": "1.0",
+      "memory": "2.0Gi",
       "minReplicas": 1,
       "maxReplicas": 5,
       "ingressExternal": false,
@@ -33,8 +33,8 @@
           "value": "production"
         },
         {
-          "name": "IDENTITY_SERVICE_PORT",
-          "value": "8081"
+          "name": "CORE_API_SERVICE_PORT",
+          "value": "8085"
         },
         {
           "name": "JWT_EXPIRATION",
@@ -62,44 +62,6 @@
         {
           "name": "CONTENT_SERVICE_PORT",
           "value": "8082"
-        }
-      ]
-    },
-    "student": {
-      "port": 8083,
-      "cpu": "0.5",
-      "memory": "1.0Gi",
-      "minReplicas": 1,
-      "maxReplicas": 5,
-      "ingressExternal": false,
-      "healthProbePath": "/actuator/health",
-      "environmentVariables": [
-        {
-          "name": "SPRING_PROFILES_ACTIVE",
-          "value": "production"
-        },
-        {
-          "name": "STUDENT_SERVICE_PORT",
-          "value": "8083"
-        }
-      ]
-    },
-    "payment": {
-      "port": 8084,
-      "cpu": "0.5",
-      "memory": "1.0Gi",
-      "minReplicas": 1,
-      "maxReplicas": 5,
-      "ingressExternal": false,
-      "healthProbePath": "/actuator/health",
-      "environmentVariables": [
-        {
-          "name": "SPRING_PROFILES_ACTIVE",
-          "value": "production"
-        },
-        {
-          "name": "PAYMENT_SERVICE_PORT",
-          "value": "8084"
         }
       ]
     }

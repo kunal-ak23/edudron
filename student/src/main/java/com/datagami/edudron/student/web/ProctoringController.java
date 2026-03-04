@@ -1,8 +1,10 @@
 package com.datagami.edudron.student.web;
 
+import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.student.domain.AssessmentJourneyEvent;
 import com.datagami.edudron.student.domain.ProctoringEvent;
 import com.datagami.edudron.student.service.AssessmentJourneyService;
+import com.datagami.edudron.student.service.ProctoringPhotoQueueService;
 import com.datagami.edudron.student.service.ProctoringPhotoService;
 import com.datagami.edudron.student.service.ProctoringService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +33,9 @@ public class ProctoringController {
     
     @Autowired
     private ProctoringPhotoService proctoringPhotoService;
+
+    @Autowired
+    private ProctoringPhotoQueueService proctoringPhotoQueueService;
 
     @Autowired
     private AssessmentJourneyService assessmentJourneyService;
@@ -77,32 +82,45 @@ public class ProctoringController {
             @PathVariable String examId,
             @PathVariable String submissionId,
             @RequestBody Map<String, String> request) {
-        
+
         try {
             String base64Photo = request.get("photo");
             if (base64Photo == null || base64Photo.isBlank()) {
                 return ResponseEntity.badRequest().build();
             }
-            
-            // Upload photo to Azure Blob Storage
-            String photoUrl = proctoringPhotoService.uploadPhoto(base64Photo, submissionId, "identity_verification");
-            
-            proctoringService.storeIdentityVerificationPhoto(submissionId, photoUrl);
-            
-            // Record event
+
+            String clientId = TenantContext.getClientId();
+
+            // Queue photo for async upload (falls back to sync if Redis unavailable)
+            var result = proctoringPhotoQueueService.queuePhoto(
+                    base64Photo, submissionId, "identity_verification", clientId, null);
+
+            if (result.synchronous()) {
+                // Sync fallback — photo URL available immediately
+                proctoringService.storeIdentityVerificationPhoto(submissionId, result.photoUrl());
+            }
+            // If async: identityVerified=true is set by recordProctoringEvent → updateSubmissionCounters()
+            // Photo URL will be populated by the background worker
+
+            // Record event (also sets identityVerified=true on submission)
             Map<String, Object> metadata = new HashMap<>();
-            metadata.put("photoUrl", photoUrl);
+            if (result.synchronous()) {
+                metadata.put("photoUrl", result.photoUrl());
+            } else {
+                metadata.put("jobId", result.jobId());
+                metadata.put("async", true);
+            }
             proctoringService.recordProctoringEvent(
                 submissionId,
                 ProctoringEvent.EventType.IDENTITY_VERIFIED,
                 ProctoringEvent.Severity.INFO,
                 metadata
             );
-            
+
             Map<String, String> response = new HashMap<>();
             response.put("message", "Identity verified successfully");
             response.put("submissionId", submissionId);
-            
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error verifying identity", e);
@@ -116,35 +134,47 @@ public class ProctoringController {
             @PathVariable String examId,
             @PathVariable String submissionId,
             @RequestBody Map<String, String> request) {
-        
+
         try {
             String base64Photo = request.get("photo");
             if (base64Photo == null || base64Photo.isBlank()) {
                 return ResponseEntity.badRequest().build();
             }
-            
-            // Upload photo to Azure Blob Storage
-            String photoUrl = proctoringPhotoService.uploadPhoto(base64Photo, submissionId, "exam_capture");
-            
+
+            String clientId = TenantContext.getClientId();
             OffsetDateTime capturedAt = OffsetDateTime.now();
-            proctoringService.addPhotoToProctoringData(submissionId, photoUrl, capturedAt);
-            
+
+            // Queue photo for async upload (falls back to sync if Redis unavailable)
+            var result = proctoringPhotoQueueService.queuePhoto(
+                    base64Photo, submissionId, "exam_capture", clientId, capturedAt);
+
+            if (result.synchronous()) {
+                // Sync fallback — photo URL available immediately
+                proctoringService.addPhotoToProctoringData(submissionId, result.photoUrl(), capturedAt);
+            }
+            // If async: worker will call addPhotoToProctoringData after upload
+
             // Record event
             Map<String, Object> metadata = new HashMap<>();
-            metadata.put("photoUrl", photoUrl);
             metadata.put("capturedAt", capturedAt.toString());
+            if (result.synchronous()) {
+                metadata.put("photoUrl", result.photoUrl());
+            } else {
+                metadata.put("jobId", result.jobId());
+                metadata.put("async", true);
+            }
             proctoringService.recordProctoringEvent(
                 submissionId,
                 ProctoringEvent.EventType.PHOTO_CAPTURED,
                 ProctoringEvent.Severity.INFO,
                 metadata
             );
-            
+
             Map<String, String> response = new HashMap<>();
             response.put("message", "Photo captured successfully");
             response.put("submissionId", submissionId);
             response.put("capturedAt", capturedAt.toString());
-            
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             logger.error("Error capturing photo", e);

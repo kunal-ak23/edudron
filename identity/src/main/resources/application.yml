@@ -20,7 +20,7 @@ spring:
         default_schema: idp
         jdbc.time_zone: UTC
   liquibase:
-    change-log: classpath:/db/changelog/db.changelog-master.yaml
+    change-log: classpath:/db/changelog/identity-master.yaml
     default-schema: public
     liquibase-schema: public
 

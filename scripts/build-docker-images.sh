@@ -14,7 +14,7 @@ REGISTRY="${DOCKER_REGISTRY:-kunalms}"
 IMAGE_PREFIX="${IMAGE_PREFIX:-edudron-}"
 PUSH_IMAGES="${PUSH_IMAGES:-true}"
 VERSIONS_FILE="versions.json"
-SERVICES=("gateway" "identity" "content" "student" "payment")
+SERVICES=("gateway" "identity" "content" "student" "payment" "core-api")
 
 # Check if Docker is running
 check_docker() {

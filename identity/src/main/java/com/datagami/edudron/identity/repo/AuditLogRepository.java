@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.UUID;
 
-@Repository
+@Repository("identityAuditLogRepository")
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID>, JpaSpecificationExecutor<AuditLog> {
     Page<AuditLog> findByClientIdOrderByCreatedAtDesc(UUID clientId, Pageable pageable);
 }
