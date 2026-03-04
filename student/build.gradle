@@ -37,6 +37,9 @@ dependencies {
 	// Azure Storage Blob for proctoring photo uploads
 	implementation 'com.azure:azure-storage-blob:12.25.0'
 	implementation 'com.azure:azure-identity:1.11.1'
+
+	// Redis for async proctoring photo upload queue
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 }
 
 def loadEnvFile() {

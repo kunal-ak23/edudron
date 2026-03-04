@@ -11,10 +11,12 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.FullyQualifiedAnnotationBeanNameGenerator;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication(exclude = {
     LiquibaseAutoConfiguration.class
 })
+@EnableScheduling
 @ComponentScan(
     basePackages = {
         "com.datagami.edudron.coreapi",
