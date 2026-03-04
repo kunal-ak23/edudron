@@ -20,6 +20,7 @@ public class LiquibaseConfig {
     }
 
     @Bean
+    @org.springframework.context.annotation.DependsOn("identityLiquibase")
     public SpringLiquibase studentLiquibase(DataSource dataSource) {
         SpringLiquibase liquibase = new SpringLiquibase();
         liquibase.setDataSource(dataSource);
@@ -30,6 +31,7 @@ public class LiquibaseConfig {
     }
 
     @Bean
+    @org.springframework.context.annotation.DependsOn("studentLiquibase")
     public SpringLiquibase paymentLiquibase(DataSource dataSource) {
         SpringLiquibase liquibase = new SpringLiquibase();
         liquibase.setDataSource(dataSource);

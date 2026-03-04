@@ -270,7 +270,7 @@ public class ExamSubmissionService {
      * This is intended to be called after proctoring setup is complete, ensuring
      * the timer doesn't run down during setup.
      */
-    public AssessmentSubmission startTimer(String submissionId, TimingMode timingMode,
+    public AssessmentSubmission startTimer(String submissionId, String studentId, TimingMode timingMode,
             Integer timeLimitSeconds, OffsetDateTime examEndTime) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -287,6 +287,10 @@ public class ExamSubmissionService {
                         .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
 
                 if (!submission.getClientId().equals(clientId)) {
+                    throw new IllegalArgumentException("Submission not found: " + submissionId);
+                }
+
+                if (studentId != null && !submission.getStudentId().equals(studentId)) {
                     throw new IllegalArgumentException("Submission not found: " + submissionId);
                 }
 

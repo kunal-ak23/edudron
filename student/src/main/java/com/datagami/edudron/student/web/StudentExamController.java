@@ -542,6 +542,7 @@ public class StudentExamController {
             @PathVariable String id,
             @RequestBody JsonNode request) {
 
+        String studentId = UserUtil.getCurrentUserId();
         String submissionId = request.has("submissionId") ? request.get("submissionId").asText() : null;
 
         if (submissionId == null) {
@@ -579,7 +580,7 @@ public class StudentExamController {
             }
 
             AssessmentSubmission submission = examSubmissionService.startTimer(
-                    submissionId, timingMode, timeLimitSeconds, endTime);
+                    submissionId, studentId, timingMode, timeLimitSeconds, endTime);
 
             return ResponseEntity.ok(toDTO(submission));
 
