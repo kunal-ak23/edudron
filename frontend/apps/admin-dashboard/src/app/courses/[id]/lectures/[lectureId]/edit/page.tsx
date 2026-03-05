@@ -513,7 +513,7 @@ export default function LectureEditPage() {
                   onChange={(content) => setFormData({ ...formData, description: content })}
                   className="w-full"
                   onImageUpload={(file, onProgress) =>
-                    mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
+                    mediaApi.uploadImageWithProgress(file, 'lectures', onProgress)
                   }
                 />
               </div>
@@ -631,7 +631,7 @@ export default function LectureEditPage() {
                               }}
                               className="w-full"
                               onImageUpload={(file, onProgress) =>
-                                mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
+                                mediaApi.uploadImageWithProgress(file, 'lectures', onProgress)
                               }
                             />
                           </div>

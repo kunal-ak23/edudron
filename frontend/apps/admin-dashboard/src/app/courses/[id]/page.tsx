@@ -757,7 +757,7 @@ export default function CourseEditPage() {
                             content={course?.description || ''}
                             onChange={(content) => setCourse({ ...course, description: content })}
                             onImageUpload={(file, onProgress) =>
-                              mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
+                              mediaApi.uploadImageWithProgress(file, 'courses', onProgress)
                             }
                           />
                         ) : (
