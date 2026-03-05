@@ -12,8 +12,6 @@ import { Markdown } from 'tiptap-markdown'
 import { useEffect } from 'react'
 import '@kunal-ak23/edudron-shared-utils/tiptap/editor-styles.css'
 
-const looksLikeHtml = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
-
 interface MarkdownRendererProps {
   content: string
   className?: string

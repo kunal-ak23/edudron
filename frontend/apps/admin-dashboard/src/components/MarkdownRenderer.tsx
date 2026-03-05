@@ -12,8 +12,6 @@ import { Markdown } from 'tiptap-markdown'
 import { useEffect } from 'react'
 import '@kunal-ak23/edudron-shared-utils/tiptap/editor-styles.css'
 
-const looksLikeHtml = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
-
 interface MarkdownRendererProps {
   content: string
   className?: string
@@ -59,11 +57,8 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
   useEffect(() => {
     if (!editor || !content) return
 
-    if (looksLikeHtml(content)) {
-      editor.commands.setContent(content)
-    } else {
-      editor.commands.setContent(content)
-    }
+    // tiptap-markdown handles both HTML and markdown content
+    editor.commands.setContent(content)
   }, [content, editor])
 
   if (!content) return null

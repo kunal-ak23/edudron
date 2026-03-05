@@ -14,6 +14,15 @@ export class MediaApi {
     this.apiClient = apiClient
   }
 
+  /** Extract the URL from an upload response, handling both wrapped and unwrapped shapes. */
+  private extractUrl(response: { data?: UploadResponse } & Partial<UploadResponse>): string {
+    const url = response.data?.url ?? response.url
+    if (!url) {
+      throw new Error('Upload succeeded but response did not contain a URL')
+    }
+    return url
+  }
+
   /**
    * Upload an image file
    * @param file The image file to upload
@@ -25,15 +34,11 @@ export class MediaApi {
     formData.append('file', file)
     formData.append('folder', folder)
 
-    try {
-      const response = await this.apiClient.postForm<UploadResponse>(
-        '/content/media/upload/image',
-        formData
-      )
-      return response.data?.url || (response as any).url
-    } catch (error: any) {
-      throw error
-    }
+    const response = await this.apiClient.postForm<UploadResponse>(
+      '/content/media/upload/image',
+      formData
+    )
+    return this.extractUrl(response)
   }
 
   /**
@@ -52,24 +57,22 @@ export class MediaApi {
     formData.append('file', file)
     formData.append('folder', folder)
 
-    try {
-      const response = await this.apiClient.postForm<UploadResponse>(
-        '/content/media/upload/image',
-        formData,
-        {
-          onUploadProgress: onProgress
-            ? (progressEvent: { loaded: number; total?: number }) => {
-                const total = progressEvent.total || progressEvent.loaded
-                const percent = total > 0 ? Math.round((progressEvent.loaded * 100) / total) : 0
-                onProgress(percent)
-              }
-            : undefined,
-        }
-      )
-      return response.data?.url || (response as any).url
-    } catch (error: any) {
-      throw error
-    }
+    const response = await this.apiClient.postForm<UploadResponse>(
+      '/content/media/upload/image',
+      formData,
+      {
+        onUploadProgress: onProgress
+          ? (progressEvent: { loaded: number; total?: number }) => {
+              const total = (progressEvent.total != null && progressEvent.total > 0)
+                ? progressEvent.total
+                : progressEvent.loaded
+              const percent = total > 0 ? Math.round((progressEvent.loaded * 100) / total) : 0
+              onProgress(percent)
+            }
+          : undefined,
+      }
+    )
+    return this.extractUrl(response)
   }
 
   /**
@@ -83,18 +86,17 @@ export class MediaApi {
     formData.append('file', file)
     formData.append('folder', folder)
 
-    // Calculate timeout based on file size: 1 minute per 50MB, minimum 5 minutes, maximum 30 minutes
-    // This ensures large video uploads (e.g., 500MB) don't timeout
+    // Timeout: ~1.2 seconds per MB, clamped to 5-30 minutes
     const fileSizeMB = file.size / (1024 * 1024)
-    const timeoutMs = Math.min(Math.max(fileSizeMB * 60000, 300000), 1800000) // 5-30 minutes
+    const timeoutMs = Math.min(Math.max(fileSizeMB * 1200, 300000), 1800000)
 
     const response = await this.apiClient.postForm<UploadResponse>(
       '/content/media/upload/video',
       formData,
-      { timeout: timeoutMs } // Override default 30s timeout for large video uploads
+      { timeout: timeoutMs }
     )
 
-    return response.data?.url || (response as any).url
+    return this.extractUrl(response)
   }
 
   /**
@@ -107,5 +109,3 @@ export class MediaApi {
     })
   }
 }
-
-

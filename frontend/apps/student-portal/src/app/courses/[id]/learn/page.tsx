@@ -33,8 +33,6 @@ export default function LearnPage() {
   const [loading, setLoading] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('transcript')
-  const [searchQuery, setSearchQuery] = useState('')
-
   // Feedback state
   const [currentFeedback, setCurrentFeedback] = useState<Feedback | null>(null)
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false)
@@ -58,7 +56,6 @@ export default function LearnPage() {
   // Session tracking state
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const sessionStartTimeRef = useRef<number | null>(null)
-  const isTabVisibleRef = useRef<boolean>(true)
   const previousLectureIdRef = useRef<string | null>(null)
   const isEndingSessionRef = useRef<boolean>(false)
   const activeSessionIdRef = useRef<string | null>(null)
@@ -352,7 +349,6 @@ export default function LearnPage() {
         }
 
         let restoredLecture: Lecture | null = null
-        let restoredSection: Section | null = null
 
         // Try to find last accessed lecture from progress data
         restoredLecture = findLastAccessedLecture(lectureProgressData, sectionsData)
@@ -361,7 +357,6 @@ export default function LearnPage() {
         if (!restoredLecture) {
           const storagePosition = restorePositionFromStorage(sectionsData)
           restoredLecture = storagePosition.lecture
-          restoredSection = storagePosition.section
         }
 
         if (restoredLecture) {
@@ -703,34 +698,12 @@ export default function LearnPage() {
       }
     }
 
-    // Also handle visibility change (tab switch, minimize) as a fallback
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Tab is now hidden - could be unload, but we'll let beforeunload handle it
-        // This is just for logging
-      }
-    }
-
     window.addEventListener('beforeunload', handleBeforeUnload)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, []) // No dependencies - this should only set up once
-
-  // Handle tab visibility changes
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      isTabVisibleRef.current = !document.hidden
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [])
 
   // Save position to localStorage when selectedLecture changes
   useEffect(() => {
@@ -1070,31 +1043,7 @@ export default function LearnPage() {
     return null
   }
 
-  const getPrevLecture = () => {
-    if (!selectedLecture || !sections) return null
-
-    for (let i = 0; i < sections.length; i++) {
-      const section = sections[i]
-      const lectures = section.lectures || []
-      const currentIndex = lectures.findIndex((l: any) => l.id === selectedLecture.id)
-
-      if (currentIndex !== -1) {
-        if (currentIndex > 0) {
-          return lectures[currentIndex - 1]
-        }
-        if (i > 0) {
-          const prevSection = sections[i - 1]
-          if (prevSection.lectures && prevSection.lectures.length > 0) {
-            return prevSection.lectures[prevSection.lectures.length - 1]
-          }
-        }
-      }
-    }
-    return null
-  }
-
   const nextLecture = getNextLecture()
-  const prevLecture = getPrevLecture()
 
   const getContentTypeIcon = (contentType: string) => {
     switch (contentType) {
@@ -1145,8 +1094,6 @@ export default function LearnPage() {
   }
 
   const currentSection = sections.find(s => s.lectures?.some((l: any) => l.id === selectedLecture?.id))
-  const currentSectionIndex = sections.findIndex(s => s.id === currentSection?.id)
-
   return (
     <ProtectedRoute>
       <StudentLayout>

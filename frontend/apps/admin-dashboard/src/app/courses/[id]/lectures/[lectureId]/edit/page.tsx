@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
-import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { FileUpload } from '@kunal-ak23/edudron-ui-components'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

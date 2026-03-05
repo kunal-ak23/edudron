@@ -122,6 +122,7 @@ export function TipTapMarkdownEditor({
     editorProps: {
       attributes: {
         class: 'prose prose-sm max-w-none min-h-[300px] p-4 focus:outline-none',
+        'data-placeholder': placeholder,
       },
       handleDrop: (view, event, _slice, moved) => {
         if (!onImageUploadRef.current) return false
