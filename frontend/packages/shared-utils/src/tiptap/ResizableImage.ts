@@ -1,7 +1,12 @@
-import { mergeAttributes, ResizableNodeView } from '@tiptap/core'
+import { mergeAttributes } from '@tiptap/core'
 import { Image } from '@tiptap/extension-image'
 
 export type ImageAlignment = 'left' | 'center' | 'right'
+
+/** Escape a string for safe use inside an HTML attribute (double-quoted). */
+function escapeAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -67,7 +72,7 @@ export const ResizableImage = Image.extend({
       styles.push('margin-right: auto')
     }
 
-    const { 'data-alignment': _, style: existingStyle, ...restAttrs } = HTMLAttributes
+    const { 'data-alignment': _, style: _existingStyle, ...restAttrs } = HTMLAttributes
     const mergedAttrs = mergeAttributes(this.options.HTMLAttributes, restAttrs, {
       'data-alignment': alignment,
       style: styles.join('; '),
@@ -164,12 +169,12 @@ export const ResizableImage = Image.extend({
               styles.push('margin-left: auto', 'margin-right: auto')
             }
             const attrs = [
-              `src="${src}"`,
-              alt ? `alt="${alt}"` : '',
-              title ? `title="${title}"` : '',
-              width ? `width="${width}"` : '',
-              `data-alignment="${alignment}"`,
-              `style="${styles.join('; ')}"`,
+              `src="${escapeAttr(src)}"`,
+              alt ? `alt="${escapeAttr(alt)}"` : '',
+              title ? `title="${escapeAttr(title)}"` : '',
+              width ? `width="${escapeAttr(String(width))}"` : '',
+              `data-alignment="${escapeAttr(alignment)}"`,
+              `style="${escapeAttr(styles.join('; '))}"`,
             ]
               .filter(Boolean)
               .join(' ')

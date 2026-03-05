@@ -49,7 +49,6 @@ const looksLikeHtml = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
 interface TipTapMarkdownEditorProps {
   content: string
   onChange: (content: string) => void
-  placeholder?: string
   className?: string
   /** Optional image upload handler. If provided, enables file upload tab and drag-drop. */
   onImageUpload?: (file: File, onProgress?: (percent: number) => void) => Promise<string>
@@ -58,7 +57,6 @@ interface TipTapMarkdownEditorProps {
 export function TipTapMarkdownEditor({
   content,
   onChange,
-  placeholder = 'Start typing...',
   className = '',
   onImageUpload,
 }: TipTapMarkdownEditorProps) {

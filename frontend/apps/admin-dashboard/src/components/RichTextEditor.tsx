@@ -45,13 +45,12 @@ import { useEffect, useRef, useState } from 'react'
 interface RichTextEditorProps {
   content: string
   onChange: (content: string) => void
-  placeholder?: string
   className?: string
   /** Optional image upload handler. If provided, enables file upload tab and drag-drop. */
   onImageUpload?: (file: File, onProgress?: (percent: number) => void) => Promise<string>
 }
 
-export function RichTextEditor({ content, onChange, placeholder = 'Start typing...', className = '', onImageUpload }: RichTextEditorProps) {
+export function RichTextEditor({ content, onChange, className = '', onImageUpload }: RichTextEditorProps) {
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [showLinkDialog, setShowLinkDialog] = useState(false)
   const [imageUrl, setImageUrl] = useState('')

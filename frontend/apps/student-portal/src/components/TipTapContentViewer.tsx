@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
@@ -13,8 +13,6 @@ import { Markdown } from 'tiptap-markdown'
 import { HighlightMark } from '@kunal-ak23/edudron-shared-utils'
 import '@kunal-ak23/edudron-shared-utils/tiptap/editor-styles.css'
 import type { Note } from '@kunal-ak23/edudron-shared-utils'
-
-const looksLikeHtml = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
 
 interface TipTapContentViewerProps {
   content: string
