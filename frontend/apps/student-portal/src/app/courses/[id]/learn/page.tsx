@@ -12,7 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { StudentLayout } from '@/components/StudentLayout'
 import { FeedbackDialog } from '@/components/FeedbackDialog'
 import { IssueReportDialog } from '@/components/IssueReportDialog'
-import { MarkdownWithHighlights } from '@/components/MarkdownWithHighlights'
+import { TipTapContentViewer } from '@/components/TipTapContentViewer'
 import { NotesSidebar } from '@/components/NotesSidebar'
 
 type TabType = 'transcript' | 'notes'
@@ -1428,7 +1428,7 @@ export default function LearnPage() {
                                   {content.title && content.title.trim() !== selectedLecture.title.trim() && (
                                     <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">{content.title}</h2>
                                   )}
-                                  <MarkdownWithHighlights
+                                  <TipTapContentViewer
                                     content={content.textContent}
                                     notes={notes.filter(n => n.lectureId === selectedLecture.id)}
                                     onAddNote={handleAddNote}
@@ -1649,7 +1649,7 @@ export default function LearnPage() {
                                     {content.title && content.title.trim() !== selectedLecture.title.trim() && (
                                       <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-3">{content.title}</h3>
                                     )}
-                                    <MarkdownWithHighlights
+                                    <TipTapContentViewer
                                       content={content.textContent}
                                       notes={notes.filter(n => n.lectureId === selectedLecture.id)}
                                       onAddNote={handleAddNote}

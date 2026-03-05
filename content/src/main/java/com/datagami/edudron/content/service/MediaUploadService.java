@@ -95,7 +95,8 @@ public class MediaUploadService {
                     MediaFolderConstants.INSTRUCTORS,
                     MediaFolderConstants.TEMP,
                     MediaFolderConstants.LOGOS,
-                    MediaFolderConstants.FAVICONS));
+                    MediaFolderConstants.FAVICONS,
+                    MediaFolderConstants.CONTENT_IMAGES));
         }
 
         // Get tenant ID from context if not provided

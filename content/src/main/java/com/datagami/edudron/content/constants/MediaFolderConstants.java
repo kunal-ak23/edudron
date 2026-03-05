@@ -14,6 +14,7 @@ public class MediaFolderConstants {
     public static final String TEMP = "temp";
     public static final String LOGOS = "logos";
     public static final String FAVICONS = "favicons";
+    public static final String CONTENT_IMAGES = "content-images";
     
     // Helper method to validate folder name
     // Also accepts nested folders like "lectures/videos", "lectures/audio", "lectures/attachments"
@@ -33,7 +34,8 @@ public class MediaFolderConstants {
                baseFolder.equals(INSTRUCTORS) ||
                baseFolder.equals(TEMP) ||
                baseFolder.equals(LOGOS) ||
-               baseFolder.equals(FAVICONS);
+               baseFolder.equals(FAVICONS) ||
+               baseFolder.equals(CONTENT_IMAGES);
     }
 }
 

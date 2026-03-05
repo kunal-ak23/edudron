@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { SplitMarkdownEditor } from '@/components/SplitMarkdownEditor'
+import { TipTapMarkdownEditor } from '@/components/TipTapMarkdownEditor'
 import {
   Select,
   SelectContent,
@@ -753,10 +753,13 @@ export default function CourseEditPage() {
                       <div className="space-y-2">
                         <Label>Description</Label>
                         {canManageContent ? (
-                          <SplitMarkdownEditor
+                          <TipTapMarkdownEditor
                             content={course?.description || ''}
                             onChange={(content) => setCourse({ ...course, description: content })}
                             placeholder="Enter course description (markdown supported)"
+                            onImageUpload={(file, onProgress) =>
+                              mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
+                            }
                           />
                         ) : (
                           <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 min-h-[200px]">

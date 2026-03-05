@@ -102,3 +102,9 @@ export { getFontSize, setFontSize, resetFontSize, applyFontSize } from './prefer
 export { FontSizeControl } from './components/FontSizeControl'
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/Tooltip'
 
+// TipTap Extensions
+export { ResizableImage } from './tiptap/ResizableImage'
+export type { ImageAlignment } from './tiptap/ResizableImage'
+export { ImageBubbleMenu } from './tiptap/ImageBubbleMenu'
+export { HighlightMark } from './tiptap/HighlightMark'
+
