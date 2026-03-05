@@ -32,10 +32,26 @@ const HIGHLIGHT_COLORS = [
   { value: '#F44336', name: 'Red' },
 ]
 
-/** Normalize text for fuzzy matching: collapse whitespace, strip zero-width chars, lowercase */
+/**
+ * Normalize text for fuzzy matching:
+ * - Remove zero-width chars
+ * - Convert smart quotes to straight quotes
+ * - Strip Unicode list markers (bullets, etc.)
+ * - Strip numbered list prefixes (1. 2. etc.)
+ * - Collapse whitespace, trim, lowercase
+ */
 function normalize(text: string): string {
   return text
+    // Remove zero-width characters
     .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    // Smart quotes → straight quotes
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    // Remove common Unicode list markers that browsers may inject
+    .replace(/[\u2022\u2023\u25E6\u2043\u2219\u25AA\u25CF\u25CB\u25A0\u25A1\u2013\u2014]/g, '')
+    // Remove numbered list prefixes at start of lines (e.g. "1. ", "12. ")
+    .replace(/(?:^|\n)\d+\.\s+/g, ' ')
+    // Collapse all whitespace (including tabs, newlines) to single space
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase()
@@ -58,14 +74,22 @@ function stripMarkdown(md: string): string {
 
 /**
  * Search the ProseMirror document for `needle` text and return `{ from, to }` positions.
- * Searches the document's text content, matching via normalised text.
+ * Handles cross-block matching (heading → paragraph → list items).
+ *
+ * Algorithm:
+ * 1. Collect all text nodes with their document positions
+ * 2. Build combined text with a space separator between nodes
+ * 3. Build a direct charIndex→docPos mapping array
+ * 4. Normalize both combined text and needle, then indexOf
+ * 5. Map normalized match positions back to document positions via a
+ *    normalized-index→combined-index mapping built during normalization
  */
 function findTextInDoc(doc: any, needle: string): { from: number; to: number } | null {
   const stripped = stripMarkdown(needle)
   const target = normalize(stripped)
   if (!target) return null
 
-  // Collect all text nodes with their positions
+  // 1. Collect all text nodes with their positions
   const texts: { text: string; pos: number }[] = []
   doc.descendants((node: any, pos: number) => {
     if (node.isText) {
@@ -73,64 +97,141 @@ function findTextInDoc(doc: any, needle: string): { from: number; to: number } |
     }
   })
 
-  // Build a combined text with position mapping
-  let combined = ''
-  const posMap: { charIndex: number; docPos: number }[] = []
+  if (texts.length === 0) return null
 
-  for (const t of texts) {
+  // 2. Build combined text with a direct charIndex→docPos mapping
+  // Each character in `combined` maps to a document position
+  const charToDocPos: number[] = [] // charToDocPos[i] = docPos for combined[i]
+  let combined = ''
+
+  for (let ti = 0; ti < texts.length; ti++) {
+    const t = texts[ti]
     for (let i = 0; i < t.text.length; i++) {
-      posMap.push({ charIndex: combined.length, docPos: t.pos + i })
+      charToDocPos.push(t.pos + i)
       combined += t.text[i]
     }
     // Add a space between text nodes to handle cross-node matching
-    posMap.push({ charIndex: combined.length, docPos: t.pos + t.text.length })
-    combined += ' '
+    // Map it to the position right after the text node ends
+    if (ti < texts.length - 1) {
+      charToDocPos.push(t.pos + t.text.length)
+      combined += ' '
+    }
   }
 
-  const normalizedCombined = normalize(combined)
+  // 3. Normalize the combined text and build a mapping:
+  //    normIndex → combinedIndex (so we can map back from a match in normalized text)
+  const normToCombIdx: number[] = []
+  const normalizedChars: string[] = []
 
-  // Find the target in the normalised combined text
-  const idx = normalizedCombined.indexOf(target)
-  if (idx === -1) return null
+  let i = 0
+  // Skip leading whitespace (to match trim() behavior)
+  while (i < combined.length && /\s/.test(combined[i])) i++
 
-  // Map normalized positions back to combined positions
-  // Build a mapping from normalised index -> combined index
-  let ni = 0
-  let ci = 0
-  const normToCombined: number[] = []
+  // Find the end (trim trailing whitespace)
+  let end = combined.length
+  while (end > i && /\s/.test(combined[end - 1])) end--
 
-  while (ci < combined.length) {
-    const ch = combined[ci]
-    if (/[\u200B-\u200D\uFEFF]/.test(ch)) {
-      ci++
-      continue
-    }
-    // Handle whitespace collapsing: multiple spaces -> single space in normalised
+  let inWhitespace = false
+  while (i < end) {
+    const ch = combined[i]
+    // Skip zero-width characters
+    if (/[\u200B-\u200D\uFEFF]/.test(ch)) { i++; continue }
+
     if (/\s/.test(ch)) {
-      normToCombined.push(ci)
-      ni++
-      ci++
-      while (ci < combined.length && /\s/.test(combined[ci])) ci++
+      if (!inWhitespace) {
+        // Emit a single space for a whitespace run
+        normToCombIdx.push(i)
+        normalizedChars.push(' ')
+        inWhitespace = true
+      }
+      i++
     } else {
-      normToCombined.push(ci)
-      ni++
-      ci++
+      normToCombIdx.push(i)
+      normalizedChars.push(ch.toLowerCase())
+      inWhitespace = false
+      i++
     }
   }
 
-  if (idx >= normToCombined.length) return null
-  const startCombinedIdx = normToCombined[idx]
+  const normalizedCombined = normalizedChars.join('')
+
+  // 4. Find the target in the normalized combined text
+  let idx = normalizedCombined.indexOf(target)
+
+  // Fallback: strip all non-alphanumeric and retry
+  if (idx === -1) {
+    const aggressiveNorm = (s: string) => s.replace(/[^a-z0-9]/g, '')
+    const aggressiveTarget = aggressiveNorm(target)
+    const aggressiveCombined = aggressiveNorm(normalizedCombined)
+    if (aggressiveTarget && aggressiveCombined.includes(aggressiveTarget)) {
+      // Find where the aggressive match starts in the normalizedCombined
+      // by walking both strings character by character
+      let ai = 0, ni2 = 0
+      const aggressiveIdx = aggressiveCombined.indexOf(aggressiveTarget)
+      // Map aggressiveIdx back to normalizedCombined index
+      let agCount = 0
+      for (let ci = 0; ci < normalizedCombined.length && agCount <= aggressiveIdx + aggressiveTarget.length; ci++) {
+        if (/[a-z0-9]/.test(normalizedCombined[ci])) {
+          if (agCount === aggressiveIdx) { idx = ci; break }
+          agCount++
+        }
+      }
+      // For the aggressive fallback, also need to find the length in normalized space
+      if (idx !== -1) {
+        // Find the end position
+        let matchedAlphaNum = 0
+        let endIdx = idx
+        for (let ci = idx; ci < normalizedCombined.length && matchedAlphaNum < aggressiveTarget.length; ci++) {
+          endIdx = ci + 1
+          if (/[a-z0-9]/.test(normalizedCombined[ci])) {
+            matchedAlphaNum++
+          }
+        }
+        // Adjust target for position mapping (use the span in normalizedCombined)
+        const matchLen = endIdx - idx
+        // Map back using the same normToCombIdx
+        if (idx >= normToCombIdx.length) return null
+        const startCombinedIdx = normToCombIdx[idx]
+        const endNormIdx = idx + matchLen - 1
+        const endCombinedIdx = endNormIdx < normToCombIdx.length
+          ? normToCombIdx[endNormIdx] + 1
+          : combined.length
+
+        const from = charToDocPos[startCombinedIdx]
+        const lastIdx = Math.min(endCombinedIdx - 1, charToDocPos.length - 1)
+        const to = charToDocPos[lastIdx] + 1
+
+        if (from == null || to == null || from >= to) return null
+        return { from, to }
+      }
+    }
+
+    // Could not match at all
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn(
+        '[TipTapContentViewer] Could not find note text in document.',
+        '\n  needle:', target.slice(0, 100),
+        '\n  doc:', normalizedCombined.slice(0, 200)
+      )
+    }
+    return null
+  }
+
+  // 5. Map normalized match positions back to document positions
+  if (idx >= normToCombIdx.length) return null
+  const startCombinedIdx = normToCombIdx[idx]
+
   const endNormIdx = idx + target.length - 1
-  const endCombinedIdx = endNormIdx < normToCombined.length ? normToCombined[endNormIdx] + 1 : combined.length
+  const endCombinedIdx = endNormIdx < normToCombIdx.length
+    ? normToCombIdx[endNormIdx] + 1
+    : combined.length
 
-  // Map combined indices back to document positions
-  const startEntry = posMap.find(e => e.charIndex >= startCombinedIdx)
-  const endEntry = [...posMap].reverse().find(e => e.charIndex < endCombinedIdx)
-
-  if (!startEntry || !endEntry) return null
-
-  const from = startEntry.docPos
-  const to = endEntry.docPos + 1
+  // Map combined indices to document positions
+  if (startCombinedIdx >= charToDocPos.length) return null
+  const from = charToDocPos[startCombinedIdx]
+  const lastIdx = Math.min(endCombinedIdx - 1, charToDocPos.length - 1)
+  if (lastIdx < 0) return null
+  const to = charToDocPos[lastIdx] + 1
 
   if (from >= to) return null
   return { from, to }
