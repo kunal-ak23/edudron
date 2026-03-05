@@ -511,7 +511,6 @@ export default function LectureEditPage() {
                 <TipTapMarkdownEditor
                   content={formData.description || ''}
                   onChange={(content) => setFormData({ ...formData, description: content })}
-                  placeholder="Enter lecture description..."
                   className="w-full"
                   onImageUpload={(file, onProgress) =>
                     mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
@@ -630,7 +629,6 @@ export default function LectureEditPage() {
                                 )
                                 setTextContents(updatedContents)
                               }}
-                              placeholder="Start typing content..."
                               className="w-full"
                               onImageUpload={(file, onProgress) =>
                                 mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
