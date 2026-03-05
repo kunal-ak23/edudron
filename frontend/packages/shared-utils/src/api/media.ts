@@ -86,9 +86,9 @@ export class MediaApi {
     formData.append('file', file)
     formData.append('folder', folder)
 
-    // Timeout: ~1.2 seconds per MB, clamped to 5-30 minutes
+    // Timeout: ~6 seconds per MB (assumes worst-case ~170 KB/s upload), clamped to 5-30 minutes
     const fileSizeMB = file.size / (1024 * 1024)
-    const timeoutMs = Math.min(Math.max(fileSizeMB * 1200, 300000), 1800000)
+    const timeoutMs = Math.min(Math.max(fileSizeMB * 6000, 300000), 1800000)
 
     const response = await this.apiClient.postForm<UploadResponse>(
       '/content/media/upload/video',
