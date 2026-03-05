@@ -756,7 +756,6 @@ export default function CourseEditPage() {
                           <TipTapMarkdownEditor
                             content={course?.description || ''}
                             onChange={(content) => setCourse({ ...course, description: content })}
-                            placeholder="Enter course description (markdown supported)"
                             onImageUpload={(file, onProgress) =>
                               mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
                             }
