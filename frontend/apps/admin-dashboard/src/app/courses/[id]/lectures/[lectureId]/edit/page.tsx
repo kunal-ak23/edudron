@@ -7,7 +7,7 @@ import { FileUpload } from '@kunal-ak23/edudron-ui-components'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { SplitMarkdownEditor } from '@/components/SplitMarkdownEditor'
+import { TipTapMarkdownEditor } from '@/components/TipTapMarkdownEditor'
 import {
   Select,
   SelectContent,
@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Loader2, X, ArrowLeft, Save, FileText } from 'lucide-react'
-import { lecturesApi } from '@/lib/api'
+import { lecturesApi, mediaApi } from '@/lib/api'
 import type { Lecture, LectureContent } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -509,11 +509,14 @@ export default function LectureEditPage() {
             <div className="space-y-2">
               <Label>Description</Label>
               <div className="w-full">
-                <SplitMarkdownEditor
+                <TipTapMarkdownEditor
                   content={formData.description || ''}
                   onChange={(content) => setFormData({ ...formData, description: content })}
-                  placeholder="Enter lecture description (markdown supported)"
+                  placeholder="Enter lecture description..."
                   className="w-full"
+                  onImageUpload={(file, onProgress) =>
+                    mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
+                  }
                 />
               </div>
             </div>
@@ -614,9 +617,9 @@ export default function LectureEditPage() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label className="text-xs">Content (Markdown/Rich Text)</Label>
+                          <Label className="text-xs">Content (Markdown)</Label>
                           <div className="w-full">
-                            <SplitMarkdownEditor
+                            <TipTapMarkdownEditor
                               content={content.textContent || ''}
                               onChange={(newContent) => {
                                 // Only update if this is a TEXT content item
@@ -628,8 +631,11 @@ export default function LectureEditPage() {
                                 )
                                 setTextContents(updatedContents)
                               }}
-                              placeholder="Start typing markdown... Use # for headings, ** for bold, * for italic, etc."
+                              placeholder="Start typing content..."
                               className="w-full"
+                              onImageUpload={(file, onProgress) =>
+                                mediaApi.uploadImageWithProgress(file, 'content-images', onProgress)
+                              }
                             />
                           </div>
                         </div>

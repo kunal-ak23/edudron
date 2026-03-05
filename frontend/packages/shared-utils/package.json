@@ -1,6 +1,6 @@
 {
   "name": "@kunal-ak23/edudron-shared-utils",
-  "version": "1.0.27",
+  "version": "1.0.28",
   "description": "Shared utilities and services for EduDron platform",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -10,7 +10,8 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./tiptap/editor-styles.css": "./src/tiptap/editor-styles.css"
   },
   "files": [
     "dist",
@@ -36,6 +37,18 @@
     "@radix-ui/react-tooltip": "^1.1.3",
     "axios": "^1.6.0",
     "date-fns": "^2.30.0"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18",
+    "@tiptap/core": ">=3.0.0",
+    "@tiptap/extension-image": ">=3.0.0",
+    "@tiptap/react": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tiptap/core": { "optional": true },
+    "@tiptap/extension-image": { "optional": true },
+    "@tiptap/react": { "optional": true }
   },
   "devDependencies": {
     "typescript": "^5.2.2",

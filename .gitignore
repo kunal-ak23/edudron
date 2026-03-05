@@ -202,3 +202,9 @@ ehthumbs.db
 Desktop.ini
 
 
+
+# Claude Code
+.claude/
+
+# Backups
+backups/

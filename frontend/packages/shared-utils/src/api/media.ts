@@ -37,6 +37,42 @@ export class MediaApi {
   }
 
   /**
+   * Upload an image file with progress tracking
+   * @param file The image file to upload
+   * @param folder Optional folder name (default: 'thumbnails')
+   * @param onProgress Optional progress callback (0-100)
+   * @returns Promise with the uploaded file URL
+   */
+  async uploadImageWithProgress(
+    file: File,
+    folder: string = 'thumbnails',
+    onProgress?: (percent: number) => void
+  ): Promise<string> {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('folder', folder)
+
+    try {
+      const response = await this.apiClient.postForm<UploadResponse>(
+        '/content/media/upload/image',
+        formData,
+        {
+          onUploadProgress: onProgress
+            ? (progressEvent: { loaded: number; total?: number }) => {
+                const total = progressEvent.total || progressEvent.loaded
+                const percent = total > 0 ? Math.round((progressEvent.loaded * 100) / total) : 0
+                onProgress(percent)
+              }
+            : undefined,
+        }
+      )
+      return response.data?.url || (response as any).url
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  /**
    * Upload a video file
    * @param file The video file to upload
    * @param folder Optional folder name (default: 'preview-videos')

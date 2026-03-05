@@ -8,6 +8,7 @@ import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
+import { Markdown } from 'tiptap-markdown'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -41,8 +42,11 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import '@kunal-ak23/edudron-shared-utils/tiptap/editor-styles.css'
 
-interface RichTextEditorProps {
+const looksLikeHtml = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value)
+
+interface TipTapMarkdownEditorProps {
   content: string
   onChange: (content: string) => void
   placeholder?: string
@@ -51,7 +55,13 @@ interface RichTextEditorProps {
   onImageUpload?: (file: File, onProgress?: (percent: number) => void) => Promise<string>
 }
 
-export function RichTextEditor({ content, onChange, placeholder = 'Start typing...', className = '', onImageUpload }: RichTextEditorProps) {
+export function TipTapMarkdownEditor({
+  content,
+  onChange,
+  placeholder = 'Start typing...',
+  className = '',
+  onImageUpload,
+}: TipTapMarkdownEditorProps) {
   const [showImageDialog, setShowImageDialog] = useState(false)
   const [showLinkDialog, setShowLinkDialog] = useState(false)
   const [imageUrl, setImageUrl] = useState('')
@@ -63,6 +73,7 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const isExternalUpdate = useRef(false)
 
   // Stable ref for onImageUpload to avoid re-creating editor on prop changes
   const onImageUploadRef = useRef(onImageUpload)
@@ -72,9 +83,7 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3],
-        },
+        heading: { levels: [1, 2, 3] },
       }),
       Link.configure({
         openOnClick: false,
@@ -94,16 +103,21 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
           alwaysPreserveAspectRatio: true,
         },
       }),
-      Table.configure({
-        resizable: true,
-      }),
+      Table.configure({ resizable: true }),
       TableRow,
       TableHeader,
       TableCell,
+      Markdown.configure({
+        html: true,
+        transformPastedText: true,
+        transformCopiedText: true,
+      }),
     ],
-    content,
+    content: looksLikeHtml(content || '') ? content : '', // HTML loads directly; markdown via onCreat
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML())
+      if (isExternalUpdate.current) return
+      const md = (editor.storage as any).markdown.getMarkdown()
+      onChange(md)
     },
     editorProps: {
       attributes: {
@@ -119,7 +133,6 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
 
         event.preventDefault()
 
-        // Upload and insert at drop position
         onImageUploadRef.current(file).then((url) => {
           const { schema } = view.state
           const image = schema.nodes.image.create({ src: url })
@@ -131,9 +144,7 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
             const transaction = view.state.tr.insert(coordinates.pos, image)
             view.dispatch(transaction)
           }
-        }).catch(() => {
-          // Silently fail for drag-drop -- user can retry via dialog
-        })
+        }).catch(() => {})
 
         return true
       },
@@ -165,11 +176,33 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
     },
   })
 
+  // Load markdown content on create
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
+    if (editor && content && !looksLikeHtml(content)) {
+      // Set markdown content after editor is ready
+      isExternalUpdate.current = true
       editor.commands.setContent(content)
+      isExternalUpdate.current = false
     }
-  }, [content, editor])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]) // Only run once when editor becomes available
+
+  // Sync external content changes
+  useEffect(() => {
+    if (!editor) return
+
+    const currentMd = (editor.storage as any).markdown.getMarkdown()
+    if (content === currentMd) return
+
+    isExternalUpdate.current = true
+    if (looksLikeHtml(content || '')) {
+      editor.commands.setContent(content)
+    } else {
+      editor.commands.setContent(content || '')
+    }
+    isExternalUpdate.current = false
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content])
 
   if (!editor) {
     return (
@@ -210,13 +243,11 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
 
     setUploadError(null)
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       setUploadError('Please select an image file (PNG, JPG, GIF, WebP)')
       return
     }
 
-    // Validate file size (10MB max, matching backend MAX_IMAGE_SIZE)
     if (file.size > 10 * 1024 * 1024) {
       setUploadError('Image must be less than 10MB')
       return
@@ -224,7 +255,6 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
 
     setSelectedFile(file)
 
-    // Create local preview
     const reader = new FileReader()
     reader.onloadend = () => setFilePreview(reader.result as string)
     reader.readAsDataURL(file)
@@ -371,28 +401,13 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
 
         <div className="w-px h-6 bg-gray-300 mx-1" />
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={addLink}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={addLink}>
           <LinkIcon className="h-4 w-4" />
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={addImage}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={addImage}>
           <ImageIcon className="h-4 w-4" />
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={insertTable}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={insertTable}>
           <TableIcon className="h-4 w-4" />
         </Button>
 
@@ -453,7 +468,6 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
               </TabsList>
 
               <TabsContent value="upload" className="space-y-4 py-2">
-                {/* Hidden file input */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -463,7 +477,6 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
                   disabled={isUploading}
                 />
 
-                {/* Drop zone / file preview */}
                 {filePreview ? (
                   <div className="space-y-3">
                     <div className="relative">
@@ -497,7 +510,6 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
                   </div>
                 )}
 
-                {/* Progress bar */}
                 {isUploading && (
                   <div className="space-y-1">
                     <Progress value={uploadProgress} className="h-2" />
@@ -505,7 +517,6 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
                   </div>
                 )}
 
-                {/* Error message */}
                 {uploadError && (
                   <div className="flex items-center gap-2 text-sm text-red-600">
                     <AlertCircle className="h-4 w-4 flex-shrink-0" />
@@ -550,7 +561,6 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
               </TabsContent>
             </Tabs>
           ) : (
-            /* Fallback: URL-only mode when no upload handler provided */
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="image-url">Image URL</Label>
@@ -582,9 +592,7 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Link</DialogTitle>
-            <DialogDescription>
-              Enter the URL you want to link to.
-            </DialogDescription>
+            <DialogDescription>Enter the URL you want to link to.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -595,9 +603,7 @@ export function RichTextEditor({ content, onChange, placeholder = 'Start typing.
                 onChange={(e) => setLinkUrl(e.target.value)}
                 placeholder="https://example.com"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleLinkSubmit()
-                  }
+                  if (e.key === 'Enter') handleLinkSubmit()
                 }}
               />
             </div>
