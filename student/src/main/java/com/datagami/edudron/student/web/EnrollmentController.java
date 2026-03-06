@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -196,6 +197,32 @@ public class EnrollmentController {
             return ResponseEntity.ok(new StudentClassSectionInfoDTO(null, null, null, null));
         }
         return ResponseEntity.ok(info);
+    }
+
+    @PostMapping("/enrollments/repair/section/{sectionId}")
+    @Operation(summary = "Repair section enrollments (admin)",
+               description = "Repair enrollment data for all students in a section. " +
+                             "Creates missing course enrollments and fixes mismatched class/institute IDs. " +
+                             "Safe to run multiple times (idempotent). Admin only.")
+    public ResponseEntity<Map<String, Object>> repairSectionEnrollments(@PathVariable String sectionId) {
+        log.info("POST /api/enrollments/repair/section/{} - Starting enrollment repair", sectionId);
+        Map<String, Object> result = enrollmentService.repairSectionEnrollments(sectionId);
+        log.info("POST /api/enrollments/repair/section/{} - Repair complete: {} created, {} fixed",
+            sectionId, result.get("enrollmentsCreated"), result.get("enrollmentsFixed"));
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/enrollments/repair/all")
+    @Operation(summary = "Repair all section enrollments (admin)",
+               description = "Repair enrollment data for ALL sections in the tenant. " +
+                             "Creates missing course enrollments and fixes mismatched class/institute IDs. " +
+                             "Safe to run multiple times (idempotent). Admin only.")
+    public ResponseEntity<Map<String, Object>> repairAllEnrollments() {
+        log.info("POST /api/enrollments/repair/all - Starting full tenant enrollment repair");
+        Map<String, Object> result = enrollmentService.repairAllSectionEnrollments();
+        log.info("POST /api/enrollments/repair/all - Full repair complete: {} created, {} fixed",
+            result.get("totalEnrollmentsCreated"), result.get("totalEnrollmentsFixed"));
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/sections/{sectionId}/students")

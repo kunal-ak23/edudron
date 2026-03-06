@@ -1293,6 +1293,43 @@ public class EnrollmentService {
     }
 
     /**
+     * Fetch ALL published course IDs assigned to the given section or class.
+     * Used during transfer to decide whether existing enrollment courseIds should be kept or swapped.
+     */
+    private Set<String> getAssignedCourseIdsForDestination(String sectionId, String classId) {
+        String url;
+        String scope;
+        if (sectionId != null && !sectionId.isBlank()) {
+            url = gatewayUrl + "/content/courses/section/" + sectionId;
+            scope = "section " + sectionId;
+        } else if (classId != null && !classId.isBlank()) {
+            url = gatewayUrl + "/content/courses/class/" + classId;
+            scope = "class " + classId;
+        } else {
+            return Set.of();
+        }
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+            ResponseEntity<CourseDTO[]> response = getRestTemplate().exchange(url, HttpMethod.GET, entity, CourseDTO[].class);
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Set<String> courseIds = new java.util.LinkedHashSet<>();
+                for (CourseDTO c : response.getBody()) {
+                    courseIds.add(c.getId());
+                }
+                log.debug("Courses assigned to {}: {}", scope, courseIds);
+                return courseIds;
+            }
+            log.debug("No courses assigned to {}", scope);
+            return Set.of();
+        } catch (Exception e) {
+            log.warn("Failed to fetch courses for {}: {}", scope, e.getMessage());
+            return Set.of();
+        }
+    }
+
+    /**
      * Inner class to deserialize course info from content service
      * Only includes fields needed for auto-enrollment
      */
@@ -1448,8 +1485,13 @@ public class EnrollmentService {
     }
     
     /**
-     * Transfer a single enrollment to a destination section (and optionally change course).
-     * Updates enrollment's batchId (section), classId, instituteId, and optionally courseId.
+     * Transfer a student's enrollment(s) to a destination section (and optionally change course).
+     * <p>
+     * This method transfers the specified enrollment AND all other enrollments the student has
+     * in the same source section, so the student fully moves from the old section to the new one.
+     * After transferring existing enrollments, it also auto-enrolls the student in any additional
+     * courses assigned to the destination section/class that the student was not previously enrolled in.
+     * <p>
      * Does not update Progress, LectureViewSession, or AssessmentSubmission (progress remains archived).
      */
     public EnrollmentDTO transferEnrollment(TransferEnrollmentRequest request) {
@@ -1499,41 +1541,119 @@ public class EnrollmentService {
 
         String sourceSectionId = enrollment.getBatchId();
         String sourceClassId = enrollment.getClassId();
-        String oldCourseId = enrollment.getCourseId();
+        String studentId = enrollment.getStudentId();
 
-        // Set enrollment's course to the destination's course so the student gains access to the new batch/class's course and loses the old one
-        if (request.getDestinationCourseId() != null && !request.getDestinationCourseId().isBlank()) {
-            enrollment.setCourseId(request.getDestinationCourseId());
-        } else {
-            String destinationCourseId = getFirstAssignedCourseIdForDestination(destSectionId, destClass.getId());
-            if (destinationCourseId == null || destinationCourseId.isBlank()) {
-                throw new IllegalArgumentException(
-                    "Destination section/class has no course assigned. Assign a course to the destination section/class, or specify a destination course when transferring.");
-            }
-            enrollment.setCourseId(destinationCourseId);
+        // ── Step 1: Find ALL of this student's enrollments in the source section ──
+        // This ensures the student is fully moved, not just one enrollment.
+        List<Enrollment> studentEnrollmentsInSource = new ArrayList<>();
+        if (sourceSectionId != null && !sourceSectionId.isBlank()) {
+            studentEnrollmentsInSource = enrollmentRepository.findByClientIdAndBatchId(clientId, sourceSectionId)
+                .stream()
+                .filter(e -> studentId.equals(e.getStudentId()))
+                .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+                .collect(Collectors.toList());
         }
 
-        enrollment.setBatchId(destSectionId); // null for class-only transfer
-        enrollment.setClassId(destClass.getId());
-        enrollment.setInstituteId(destClass.getInstituteId());
+        // If we couldn't find sibling enrollments (e.g. class-only enrollment), just use the single one
+        if (studentEnrollmentsInSource.isEmpty()) {
+            studentEnrollmentsInSource = List.of(enrollment);
+        }
 
-        Enrollment saved = enrollmentRepository.save(enrollment);
+        // ── Step 2: Fetch courses assigned to the destination section/class ──
+        // Used to determine: should we keep the original courseId or swap it?
+        Set<String> destAssignedCourseIds = getAssignedCourseIdsForDestination(destSectionId, destClass.getId());
 
         String currentUserId = getCurrentUserId();
         String currentUserEmail = getCurrentUserEmail();
+        Set<String> evictCourseIds = new java.util.HashSet<>();
+        int siblingCount = 0;
+
+        // ── Step 3: Transfer each enrollment ──
+        for (Enrollment e : studentEnrollmentsInSource) {
+            String oldCourseId = e.getCourseId();
+
+            // Determine the new courseId for this enrollment:
+            // - If admin explicitly specified a destinationCourseId, use it for the primary enrollment only
+            // - If the enrollment's current course is also assigned to the destination, KEEP it (preserves progress link)
+            // - Otherwise, don't force-swap — auto-enrollment (step 4) will handle new courses
+            if (e.getId().equals(request.getEnrollmentId())
+                    && request.getDestinationCourseId() != null && !request.getDestinationCourseId().isBlank()) {
+                e.setCourseId(request.getDestinationCourseId());
+            } else if (!destAssignedCourseIds.isEmpty() && !destAssignedCourseIds.contains(oldCourseId)) {
+                // Current course is NOT assigned to destination — pick the first destination course
+                String firstDestCourse = destAssignedCourseIds.iterator().next();
+                e.setCourseId(firstDestCourse);
+            }
+            // else: keep original courseId (it's assigned to destination too)
+
+            e.setBatchId(destSectionId);
+            e.setClassId(destClass.getId());
+            e.setInstituteId(destClass.getInstituteId());
+            enrollmentRepository.save(e);
+
+            // Track for cache eviction
+            if (oldCourseId != null && !oldCourseId.isBlank()) {
+                evictCourseIds.add(oldCourseId);
+            }
+            if (e.getCourseId() != null && !e.getCourseId().isBlank()) {
+                evictCourseIds.add(e.getCourseId());
+            }
+
+            if (!e.getId().equals(request.getEnrollmentId())) {
+                siblingCount++;
+                log.info("Also transferred sibling enrollment {} (course: {} -> {}) for student {}",
+                    e.getId(), oldCourseId, e.getCourseId(), studentId);
+            }
+        }
+
+        // Reload the primary enrollment after save for the return value
+        Enrollment saved = enrollmentRepository.findById(request.getEnrollmentId())
+            .orElseThrow(() -> new IllegalStateException("Primary enrollment disappeared after save"));
+
+        // ── Step 4: Auto-enroll in destination's assigned courses ──
+        // This creates enrollments for any courses assigned to the destination section/class
+        // that the student doesn't already have. Mirrors what happens when a student is first
+        // added to a section.
+        try {
+            autoEnrollStudentInAssignedCourses(studentId, destSectionId, destClass.getId(),
+                destClass.getInstituteId(), clientId);
+        } catch (Exception e) {
+            log.warn("Auto-enrollment after transfer failed for student {} in section {}: {}. " +
+                     "Student was transferred but may be missing some course enrollments.",
+                studentId, destSectionId, e.getMessage());
+            // Don't fail the transfer — the primary operation succeeded
+        }
+
+        // ── Step 5: Clean up placeholder in source section ──
+        // If transferring out was the student's last real enrollment in the source section,
+        // we don't need to leave a placeholder because the student is fully leaving.
+        if (sourceSectionId != null && !sourceSectionId.isBlank()) {
+            List<Enrollment> remainingInSource = enrollmentRepository.findByClientIdAndBatchId(clientId, sourceSectionId)
+                .stream()
+                .filter(e -> studentId.equals(e.getStudentId()))
+                .collect(Collectors.toList());
+            // Delete any placeholders left in the source section for this student
+            for (Enrollment remaining : remainingInSource) {
+                if ("__PLACEHOLDER_ASSOCIATION__".equals(remaining.getCourseId())) {
+                    enrollmentRepository.delete(remaining);
+                    log.debug("Removed placeholder enrollment {} from source section {}", remaining.getId(), sourceSectionId);
+                }
+            }
+        }
+
+        // ── Audit & event logging ──
         Map<String, Object> eventData = new HashMap<>();
         eventData.put("enrollmentId", saved.getId());
-        eventData.put("studentId", saved.getStudentId());
+        eventData.put("studentId", studentId);
         eventData.put("sourceSectionId", sourceSectionId != null ? sourceSectionId : "");
         eventData.put("sourceClassId", sourceClassId != null ? sourceClassId : "");
         eventData.put("destinationSectionId", destSectionId != null ? destSectionId : "");
         eventData.put("destinationClassId", destClass.getId());
-        eventData.put("oldCourseId", oldCourseId != null ? oldCourseId : "");
-        eventData.put("newCourseId", saved.getCourseId() != null ? saved.getCourseId() : "");
+        eventData.put("siblingEnrollmentsTransferred", siblingCount);
         eventService.logUserAction("ENROLLMENT_TRANSFERRED", currentUserId, currentUserEmail, "/api/enrollments/transfer", eventData);
         auditService.logCrud(clientId, "TRANSFER", "Enrollment", saved.getId(), currentUserId, currentUserEmail, eventData);
 
-        // Evict analytics caches so section/class/course counts and engagement update immediately after transfer
+        // ── Evict analytics caches ──
         if (sourceSectionId != null && !sourceSectionId.isBlank()) {
             sessionService.evictSectionAnalyticsCache(sourceSectionId);
         }
@@ -1544,15 +1664,14 @@ public class EnrollmentService {
             sessionService.evictClassAnalyticsCache(sourceClassId);
         }
         sessionService.evictClassAnalyticsCache(destClass.getId());
-        if (saved.getCourseId() != null && !saved.getCourseId().isBlank()) {
-            sessionService.evictCourseAnalyticsCache(saved.getCourseId());
-        }
-        if (oldCourseId != null && !oldCourseId.isBlank() && !oldCourseId.equals(saved.getCourseId())) {
-            sessionService.evictCourseAnalyticsCache(oldCourseId);
+        for (String courseId : evictCourseIds) {
+            sessionService.evictCourseAnalyticsCache(courseId);
         }
 
-        log.info("Transferred enrollment {} to class {} (section: {}) (student: {}, course: {})",
-            saved.getId(), destClass.getId(), destSectionId, saved.getStudentId(), saved.getCourseId());
+        log.info("Transferred student {} from section {} to section {} (class {}). " +
+                 "Primary enrollment: {}, sibling enrollments also transferred: {}",
+            studentId, sourceSectionId, destSectionId, destClass.getId(),
+            saved.getId(), siblingCount);
 
         return toDTO(saved);
     }
@@ -1560,10 +1679,15 @@ public class EnrollmentService {
     /**
      * Bulk transfer enrollments to a destination section (and optionally change course for all).
      * Processes one-by-one; returns successes and per-item errors (no partial rollback).
+     * <p>
+     * Since transferEnrollment now moves ALL sibling enrollments for a student in the same
+     * source section, we track already-processed students to skip duplicates when the admin
+     * selects multiple enrollments belonging to the same student.
      */
     public BulkTransferEnrollmentResponse bulkTransferEnrollments(BulkTransferEnrollmentRequest request) {
         List<EnrollmentDTO> successes = new ArrayList<>();
         List<TransferEnrollmentError> errors = new ArrayList<>();
+        Set<String> alreadyTransferredStudentSections = new java.util.HashSet<>();
         TransferEnrollmentRequest single = new TransferEnrollmentRequest();
         single.setDestinationSectionId(request.getDestinationSectionId());
         single.setDestinationClassId(request.getDestinationClassId());
@@ -1571,8 +1695,22 @@ public class EnrollmentService {
 
         for (int i = 0; i < request.getEnrollmentIds().size(); i++) {
             String enrollmentId = request.getEnrollmentIds().get(i);
-            single.setEnrollmentId(enrollmentId);
             try {
+                // Check if this enrollment's student+section was already transferred by a prior iteration
+                Enrollment enrollment = enrollmentRepository.findById(enrollmentId).orElse(null);
+                if (enrollment != null) {
+                    String key = enrollment.getStudentId() + "|" + (enrollment.getBatchId() != null ? enrollment.getBatchId() : "");
+                    if (alreadyTransferredStudentSections.contains(key)) {
+                        log.info("Skipping enrollment {} — student {} already transferred from section {}",
+                            enrollmentId, enrollment.getStudentId(), enrollment.getBatchId());
+                        // Still count as success since the student was already moved
+                        successes.add(toDTO(enrollment));
+                        continue;
+                    }
+                    alreadyTransferredStudentSections.add(key);
+                }
+
+                single.setEnrollmentId(enrollmentId);
                 EnrollmentDTO dto = transferEnrollment(single);
                 successes.add(dto);
             } catch (Exception e) {
@@ -1582,6 +1720,168 @@ public class EnrollmentService {
         }
 
         return new BulkTransferEnrollmentResponse(successes, errors);
+    }
+
+    /**
+     * Repair enrollment data for students in a given section.
+     * <p>
+     * Fixes data inconsistencies caused by the old transfer logic that only moved one enrollment
+     * instead of all, and didn't auto-enroll in destination courses:
+     * <ul>
+     *   <li>For each student in the section, ensures they have enrollments for ALL published courses
+     *       assigned to that section/class (creates missing ones)</li>
+     *   <li>Updates any enrollments with mismatched classId/instituteId (from stale transfers)</li>
+     * </ul>
+     *
+     * @param sectionId the section to repair
+     * @return a summary map with repair statistics
+     */
+    public Map<String, Object> repairSectionEnrollments(String sectionId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+
+        Class sectionClass = classRepository.findByIdAndClientId(section.getClassId(), clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found for section: " + sectionId));
+
+        // Get all enrollments in this section
+        List<Enrollment> sectionEnrollments = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId);
+
+        // Get distinct students in this section
+        Set<String> studentIds = sectionEnrollments.stream()
+            .map(Enrollment::getStudentId)
+            .collect(Collectors.toSet());
+
+        // Get courses assigned to this section/class
+        Set<String> assignedCourseIds = getAssignedCourseIdsForDestination(sectionId, section.getClassId());
+
+        int studentsProcessed = 0;
+        int enrollmentsCreated = 0;
+        int enrollmentsFixed = 0;
+        List<String> details = new ArrayList<>();
+
+        for (String studentId : studentIds) {
+            studentsProcessed++;
+
+            // Get this student's enrollments in this section
+            List<Enrollment> studentEnrollments = sectionEnrollments.stream()
+                .filter(e -> studentId.equals(e.getStudentId()))
+                .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+                .collect(Collectors.toList());
+
+            Set<String> existingCourseIds = studentEnrollments.stream()
+                .map(Enrollment::getCourseId)
+                .collect(Collectors.toSet());
+
+            // Fix mismatched classId/instituteId on existing enrollments
+            for (Enrollment e : studentEnrollments) {
+                boolean changed = false;
+                if (!sectionClass.getId().equals(e.getClassId())) {
+                    e.setClassId(sectionClass.getId());
+                    changed = true;
+                }
+                if (sectionClass.getInstituteId() != null && !sectionClass.getInstituteId().equals(e.getInstituteId())) {
+                    e.setInstituteId(sectionClass.getInstituteId());
+                    changed = true;
+                }
+                if (changed) {
+                    enrollmentRepository.save(e);
+                    enrollmentsFixed++;
+                    details.add("Fixed classId/instituteId on enrollment " + e.getId() + " for student " + studentId);
+                }
+            }
+
+            // Create missing course enrollments
+            for (String courseId : assignedCourseIds) {
+                if (!existingCourseIds.contains(courseId)) {
+                    // Also check globally (student might have an enrollment for this course in a different section — rare but possible)
+                    if (enrollmentRepository.existsByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId)) {
+                        continue; // Skip — enrolled via a different path
+                    }
+
+                    Enrollment newEnrollment = new Enrollment();
+                    newEnrollment.setId(UlidGenerator.nextUlid());
+                    newEnrollment.setClientId(clientId);
+                    newEnrollment.setStudentId(studentId);
+                    newEnrollment.setCourseId(courseId);
+                    newEnrollment.setBatchId(sectionId);
+                    newEnrollment.setClassId(sectionClass.getId());
+                    newEnrollment.setInstituteId(sectionClass.getInstituteId());
+                    enrollmentRepository.save(newEnrollment);
+                    enrollmentsCreated++;
+                    details.add("Created missing enrollment for student " + studentId + " in course " + courseId);
+                }
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("sectionId", sectionId);
+        result.put("studentsProcessed", studentsProcessed);
+        result.put("enrollmentsCreated", enrollmentsCreated);
+        result.put("enrollmentsFixed", enrollmentsFixed);
+        result.put("assignedCourseIds", assignedCourseIds);
+        result.put("details", details);
+
+        log.info("Repair completed for section {}: {} students, {} enrollments created, {} enrollments fixed",
+            sectionId, studentsProcessed, enrollmentsCreated, enrollmentsFixed);
+
+        return result;
+    }
+
+    /**
+     * Repair enrollment data for ALL sections in the tenant.
+     * Iterates through all active sections and calls repairSectionEnrollments for each.
+     *
+     * @return summary of repairs across all sections
+     */
+    public Map<String, Object> repairAllSectionEnrollments() {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        List<Section> allSections = sectionRepository.findByClientId(clientId);
+        int totalStudents = 0;
+        int totalCreated = 0;
+        int totalFixed = 0;
+        List<Map<String, Object>> sectionResults = new ArrayList<>();
+
+        for (Section section : allSections) {
+            try {
+                Map<String, Object> result = repairSectionEnrollments(section.getId());
+                totalStudents += (int) result.get("studentsProcessed");
+                totalCreated += (int) result.get("enrollmentsCreated");
+                totalFixed += (int) result.get("enrollmentsFixed");
+                // Only include sections where something was actually fixed
+                if ((int) result.get("enrollmentsCreated") > 0 || (int) result.get("enrollmentsFixed") > 0) {
+                    sectionResults.add(result);
+                }
+            } catch (Exception e) {
+                log.warn("Repair failed for section {}: {}", section.getId(), e.getMessage());
+                Map<String, Object> errorResult = new HashMap<>();
+                errorResult.put("sectionId", section.getId());
+                errorResult.put("error", e.getMessage());
+                sectionResults.add(errorResult);
+            }
+        }
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("sectionsProcessed", allSections.size());
+        summary.put("totalStudentsProcessed", totalStudents);
+        summary.put("totalEnrollmentsCreated", totalCreated);
+        summary.put("totalEnrollmentsFixed", totalFixed);
+        summary.put("sectionDetails", sectionResults);
+
+        log.info("Full tenant repair completed: {} sections, {} students, {} created, {} fixed",
+            allSections.size(), totalStudents, totalCreated, totalFixed);
+
+        return summary;
     }
 
     private EnrollmentDTO toDTO(Enrollment enrollment) {
