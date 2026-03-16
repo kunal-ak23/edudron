@@ -56,8 +56,21 @@ public class DecisionMappingService {
             }
         }
 
-        // No match and no default — error
-        throw new IllegalStateException("No mapping matched for input and no default mapping exists");
+        // No match and no default — fallback to choiceId if provided (narrative-style)
+        if (choiceId != null && !choiceId.isEmpty()) {
+            logger.warn("No mapping matched for type {}. Falling back to direct choiceId.", decisionType);
+            return validateChoiceId(node, choiceId);
+        }
+
+        // Last resort: pick the first choice
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
+        if (choices != null && !choices.isEmpty()) {
+            String firstChoiceId = (String) choices.get(0).get("id");
+            logger.warn("No mapping matched and no choiceId provided for type {}. Defaulting to first choice.", decisionType);
+            return firstChoiceId;
+        }
+
+        throw new IllegalStateException("No mapping matched and no choices available");
     }
 
     /**
