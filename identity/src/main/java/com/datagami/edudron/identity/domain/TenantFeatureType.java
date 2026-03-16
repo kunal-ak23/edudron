@@ -21,7 +21,13 @@ public enum TenantFeatureType {
      * Controls whether proctored exams feature is available.
      * Default: false (proctored exams are disabled by default)
      */
-    PROCTORED_EXAMS(false, "Enable proctored exams with identity verification and monitoring");
+    PROCTORED_EXAMS(false, "Enable proctored exams with identity verification and monitoring"),
+
+    /**
+     * Controls whether AI-powered image generation is available for courses and lectures.
+     * Default: false (premium feature, must be explicitly enabled per tenant)
+     */
+    AI_IMAGE_GENERATION(false, "Enable AI-powered image generation for courses and lectures");
 
     private final boolean defaultValue;
     private final String description;

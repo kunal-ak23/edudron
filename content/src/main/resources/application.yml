@@ -116,6 +116,8 @@ azure:
     api-key: ${AZURE_OPENAI_API_KEY:}
     deployment-name: ${AZURE_OPENAI_DEPLOYMENT_NAME:gpt-4}
     api-version: ${AZURE_OPENAI_API_VERSION:2024-02-15-preview}
+  ai-services:
+    endpoint: ${AZURE_AI_SERVICES_ENDPOINT:}
 
 # Video Processing Configuration
 video:

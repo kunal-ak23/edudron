@@ -239,6 +239,7 @@ export class CoursesApi {
       if (request.referenceIndexIds && request.referenceIndexIds.length > 0) formData.append('referenceIndexIds', request.referenceIndexIds.join(','))
       if (request.writingFormatId) formData.append('writingFormatId', request.writingFormatId)
       if (request.writingFormat) formData.append('writingFormat', request.writingFormat)
+      if (request.generateImages) formData.append('generateImages', String(request.generateImages))
       // Append PDF file - this must be the actual File object
       formData.append('pdfFile', request.pdfFile, request.pdfFile.name)
       
@@ -362,12 +363,13 @@ export interface GenerateCourseRequest {
   referenceIndexIds?: string[]
   writingFormatId?: string
   writingFormat?: string
+  generateImages?: boolean
   pdfFile?: File
 }
 
 export interface AIGenerationJobDTO {
   jobId: string
-  jobType: 'COURSE_GENERATION' | 'LECTURE_GENERATION' | 'SUB_LECTURE_GENERATION' | 'COURSE_COPY'
+  jobType: 'COURSE_GENERATION' | 'LECTURE_GENERATION' | 'SUB_LECTURE_GENERATION' | 'COURSE_COPY' | 'IMAGE_GENERATION'
   status: 'PENDING' | 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
   message?: string
   clientId?: string

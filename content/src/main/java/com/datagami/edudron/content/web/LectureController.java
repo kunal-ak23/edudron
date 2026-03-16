@@ -108,6 +108,7 @@ public class LectureController {
             @PathVariable String sectionId,
             @RequestPart(required = false) String prompt,
             @RequestPart(required = false) String courseId,
+            @RequestPart(required = false) String generateImages,
             @RequestPart(required = false) MultipartFile pdfFile) {
         
         // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
@@ -141,11 +142,14 @@ public class LectureController {
         jobRequest.put("courseId", courseId);
         jobRequest.put("sectionId", sectionId);
         jobRequest.put("prompt", finalPrompt);
-        
+        if (generateImages != null) {
+            jobRequest.put("generateImages", generateImages);
+        }
+
         com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.submitSubLectureGenerationJob(jobRequest, aiJobWorker);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
-    
+
     // JSON endpoint for backward compatibility
     @PostMapping(value = "/sections/{sectionId}/lectures/generate", consumes = "application/json")
     @Operation(summary = "Generate sub-lecture with AI (JSON)", description = "Submit a sub-lecture generation job to the queue. Returns a job ID that can be used to check status. Only SYSTEM_ADMIN and TENANT_ADMIN can use AI generation features.")
@@ -157,18 +161,22 @@ public class LectureController {
         if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
             throw new IllegalArgumentException("AI generation features are only available to SYSTEM_ADMIN and TENANT_ADMIN");
         }
-        
+
         String prompt = request.get("prompt");
         String courseId = request.get("courseId");
         if (prompt == null || prompt.trim().isEmpty() || courseId == null) {
             return ResponseEntity.badRequest().build();
         }
-        
+
         Map<String, String> jobRequest = new java.util.HashMap<>();
         jobRequest.put("courseId", courseId);
         jobRequest.put("sectionId", sectionId);
         jobRequest.put("prompt", prompt);
-        
+        String generateImages = request.get("generateImages");
+        if (generateImages != null) {
+            jobRequest.put("generateImages", generateImages);
+        }
+
         com.datagami.edudron.content.dto.AIGenerationJobDTO job = aiJobQueueService.submitSubLectureGenerationJob(jobRequest, aiJobWorker);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }

@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,6 +29,12 @@ public class AIJobWorker {
     private CourseGenerationService courseGenerationService;
     
     @Autowired
+    private ImageGenerationService imageGenerationService;
+
+    @Autowired
+    private LectureService lectureService;
+
+    @Autowired
     private ObjectMapper objectMapper;
     
     // Store request data for jobs
@@ -36,7 +43,7 @@ public class AIJobWorker {
     /**
      * Process a course generation job
      */
-    @Async
+    @Async("aiJobTaskExecutor")
     public void processCourseGenerationJob(String jobId) {
         logger.info("Processing course generation job: {}", jobId);
         
@@ -99,7 +106,7 @@ public class AIJobWorker {
     /**
      * Process a lecture generation job
      */
-    @Async
+    @Async("aiJobTaskExecutor")
     public void processLectureGenerationJob(String jobId) {
         logger.info("Processing lecture generation job: {}", jobId);
         
@@ -135,7 +142,8 @@ public class AIJobWorker {
             job.setMessage("Generating lecture structure...");
             queueService.updateJob(job);
             
-            SectionDTO section = courseGenerationService.generateLectureWithSubLectures(courseId, prompt);
+            boolean generateImages = "true".equalsIgnoreCase(request.get("generateImages"));
+            SectionDTO section = courseGenerationService.generateLectureWithSubLectures(courseId, prompt, generateImages);
             
             job.setStatus(AIGenerationJobDTO.JobStatus.COMPLETED);
             job.setResult(section);
@@ -160,7 +168,7 @@ public class AIJobWorker {
     /**
      * Process a sub-lecture generation job
      */
-    @Async
+    @Async("aiJobTaskExecutor")
     public void processSubLectureGenerationJob(String jobId) {
         logger.info("Processing sub-lecture generation job: {}", jobId);
         
@@ -197,7 +205,8 @@ public class AIJobWorker {
             job.setMessage("Generating sub-lecture content...");
             queueService.updateJob(job);
             
-            LectureDTO lecture = courseGenerationService.generateSubLectureWithAI(courseId, sectionId, prompt);
+            boolean generateImages = "true".equalsIgnoreCase(request.get("generateImages"));
+            LectureDTO lecture = courseGenerationService.generateSubLectureWithAI(courseId, sectionId, prompt, generateImages);
             
             job.setStatus(AIGenerationJobDTO.JobStatus.COMPLETED);
             job.setResult(lecture);
@@ -219,6 +228,78 @@ public class AIJobWorker {
         }
     }
     
+    /**
+     * Process an image generation job
+     */
+    @Async("aiJobTaskExecutor")
+    public void processImageGenerationJob(String jobId) {
+        logger.info("Processing image generation job: {}", jobId);
+
+        AIGenerationJobDTO job = queueService.getJob(jobId);
+        if (job == null) {
+            logger.error("Job {} not found", jobId);
+            return;
+        }
+
+        if (job.getClientId() != null) {
+            TenantContext.setClientId(job.getClientId().toString());
+        }
+
+        try {
+            job.setStatus(AIGenerationJobDTO.JobStatus.PROCESSING);
+            job.setMessage("Starting image generation...");
+            job.setProgress(10);
+            queueService.updateJob(job);
+
+            Object requestObj = jobRequests.get(jobId);
+            if (requestObj == null) {
+                throw new RuntimeException("Request data not found for job: " + jobId);
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, String> request = (Map<String, String>) requestObj;
+            String lectureId = request.get("lectureId");
+            int count = Integer.parseInt(request.getOrDefault("count", "2"));
+
+            // Load lecture details
+            LectureDTO lecture = lectureService.getLectureById(lectureId);
+            String lectureContent = lecture.getDescription();
+            if (lecture.getContents() != null && !lecture.getContents().isEmpty()) {
+                for (var content : lecture.getContents()) {
+                    if (content.getTextContent() != null && !content.getTextContent().isEmpty()) {
+                        lectureContent = content.getTextContent();
+                        break;
+                    }
+                }
+            }
+
+            job.setProgress(30);
+            job.setMessage("Generating image prompts...");
+            queueService.updateJob(job);
+
+            List<String> imageUrls = imageGenerationService.generateLectureImages(
+                    lecture.getTitle(), lectureContent, count);
+
+            job.setStatus(AIGenerationJobDTO.JobStatus.COMPLETED);
+            job.setResult(Map.of("imageUrls", imageUrls, "lectureId", lectureId));
+            job.setMessage("Generated " + imageUrls.size() + " image(s) successfully");
+            job.setProgress(100);
+            queueService.updateJob(job);
+
+            logger.info("Image generation job {} completed: {} images", jobId, imageUrls.size());
+
+        } catch (Exception e) {
+            logger.error("Error processing image generation job: {}", jobId, e);
+            job.setStatus(AIGenerationJobDTO.JobStatus.FAILED);
+            job.setError(e.getMessage());
+            job.setMessage("Image generation failed: " + e.getMessage());
+            queueService.updateJob(job);
+        } finally {
+            jobRequests.remove(jobId);
+            TenantContext.clear();
+        }
+    }
+
     /**
      * Store request data for a job
      */

@@ -462,6 +462,25 @@ if [ -n "$AZURE_OPENAI_API_VERSION" ]; then
     set_secret "AZURE-OPENAI-API-VERSION" "$AZURE_OPENAI_API_VERSION" ""
 fi
 
+# Azure AI Services (FLUX image generation)
+print_info "Configuring Azure AI Services endpoint..."
+
+if [ -n "$AZURE_AI_SERVICES_ENDPOINT" ]; then
+    print_info "Using Azure AI Services Endpoint from dev.env"
+    AZURE_AI_SERVICES_ENDPOINT_INPUT="$AZURE_AI_SERVICES_ENDPOINT"
+else
+    AZURE_AI_SERVICES_ENDPOINT_INPUT=$(grep "^export AZURE_AI_SERVICES_ENDPOINT=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || \
+        grep "^AZURE_AI_SERVICES_ENDPOINT=" "$ENV_FILE" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+    if [ -z "$AZURE_AI_SERVICES_ENDPOINT_INPUT" ]; then
+        read -p "Azure AI Services Endpoint (or press Enter to skip): " AZURE_AI_SERVICES_ENDPOINT_INPUT
+    fi
+fi
+
+if [ -n "$AZURE_AI_SERVICES_ENDPOINT_INPUT" ]; then
+    AZURE_AI_SERVICES_ENDPOINT_INPUT=$(echo -n "$AZURE_AI_SERVICES_ENDPOINT_INPUT" | tr -d '\n\r')
+    set_secret "AZURE-AI-SERVICES-ENDPOINT" "$AZURE_AI_SERVICES_ENDPOINT_INPUT" ""
+fi
+
 print_success "All secrets configured successfully!"
 print_info "Key Vault: $KEY_VAULT_NAME"
 print_info "Resource Group: $RESOURCE_GROUP"

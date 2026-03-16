@@ -28,7 +28,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ArrowLeft, Loader2, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles, Download, Database } from 'lucide-react'
-import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi, apiClient } from '@/lib/api'
+import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi, apiClient, tenantFeaturesApi } from '@/lib/api'
+import { TenantFeatureType } from '@kunal-ak23/edudron-shared-utils'
 import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -67,6 +68,8 @@ export default function CourseEditPage() {
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiPdfFile, setAiPdfFile] = useState<File | null>(null)
   const [aiDialogType, setAiDialogType] = useState<{ isSubLecture: boolean; sectionId?: string } | null>(null)
+  const [imageGenEnabled, setImageGenEnabled] = useState(false)
+  const [aiGenerateImages, setAiGenerateImages] = useState(false)
   const [showDeleteLectureDialog, setShowDeleteLectureDialog] = useState(false)
   const [showDeleteSubLectureDialog, setShowDeleteSubLectureDialog] = useState(false)
   const [lectureToDelete, setLectureToDelete] = useState<{ sectionId: string; lectureId?: string; title: string } | null>(null)
@@ -181,6 +184,9 @@ export default function CourseEditPage() {
     } else {
       setLoading(false)
     }
+    tenantFeaturesApi.isFeatureEnabled(TenantFeatureType.AI_IMAGE_GENERATION)
+      .then(setImageGenEnabled)
+      .catch(() => {})
   }, [courseId, loadHierarchyData, loadCourse])
 
   const toggleSection = (sectionId: string) => {
@@ -326,6 +332,7 @@ export default function CourseEditPage() {
     if (!courseId || courseId === 'new') return
     setAiPrompt('')
     setAiPdfFile(null)
+    setAiGenerateImages(false)
     setAiDialogType({ isSubLecture, sectionId })
     setShowAIGenerateDialog(true)
   }
@@ -345,7 +352,8 @@ export default function CourseEditPage() {
           formData.append('prompt', aiPrompt.trim() || '')
           formData.append('courseId', courseId)
           formData.append('pdfFile', aiPdfFile, aiPdfFile.name)
-          
+          if (aiGenerateImages) formData.append('generateImages', 'true')
+
           await apiClient.post<any>(
             `/content/api/sections/${aiDialogType.sectionId}/lectures/generate`,
             formData
@@ -355,7 +363,8 @@ export default function CourseEditPage() {
             `/content/api/sections/${aiDialogType.sectionId}/lectures/generate`,
             {
               prompt: aiPrompt.trim(),
-              courseId: courseId
+              courseId: courseId,
+              ...(aiGenerateImages ? { generateImages: 'true' } : {})
             }
           )
         }
@@ -370,7 +379,8 @@ export default function CourseEditPage() {
           const formData = new FormData()
           formData.append('prompt', aiPrompt.trim() || '')
           formData.append('pdfFile', aiPdfFile, aiPdfFile.name)
-          
+          if (aiGenerateImages) formData.append('generateImages', 'true')
+
           const response = await apiClient.post<any>(
             `/content/courses/${courseId}/lectures/generate`,
             formData
@@ -386,7 +396,8 @@ export default function CourseEditPage() {
           const response = await apiClient.post<any>(
             `/content/courses/${courseId}/lectures/generate`,
             {
-              prompt: aiPrompt.trim()
+              prompt: aiPrompt.trim(),
+              ...(aiGenerateImages ? { generateImages: 'true' } : {})
             }
           ) as any
           
@@ -1518,6 +1529,20 @@ export default function CourseEditPage() {
                 Upload a PDF file containing reference content. The AI will extract the content and use it to generate the lecture.
               </p>
             </div>
+
+            {imageGenEnabled && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="aiGenerateImages"
+                  checked={aiGenerateImages}
+                  onCheckedChange={(checked) => setAiGenerateImages(checked as boolean)}
+                  disabled={loadingSections}
+                />
+                <Label htmlFor="aiGenerateImages" className="text-sm font-normal cursor-pointer">
+                  Generate AI images for each lecture
+                </Label>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button

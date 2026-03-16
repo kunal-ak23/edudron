@@ -101,6 +101,8 @@ export default function SettingsPage() {
         return 'Psychometric Test'
       case TenantFeatureType.PROCTORED_EXAMS:
         return 'Proctored Exams'
+      case TenantFeatureType.AI_IMAGE_GENERATION:
+        return 'AI Image Generation'
       default:
         return feature
     }
@@ -114,6 +116,8 @@ export default function SettingsPage() {
         return 'Enable AI-powered psychometric test feature for students. This allows students to take a dynamic, chat-based test to discover their career and field inclinations.'
       case TenantFeatureType.PROCTORED_EXAMS:
         return 'Enable proctored exams with webcam monitoring, tab switch detection, copy-paste blocking, and identity verification. Instructors can configure proctoring settings per exam.'
+      case TenantFeatureType.AI_IMAGE_GENERATION:
+        return 'Enable AI-powered image generation for courses and lectures. When generating content with AI, a checkbox will appear to generate images for each lecture using FLUX.2-pro.'
       default:
         return ''
     }

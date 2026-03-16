@@ -165,6 +165,7 @@ public class CourseController {
             @RequestPart(required = false) String referenceIndexIds,
             @RequestPart(required = false) String writingFormatId,
             @RequestPart(required = false) String writingFormat,
+            @RequestPart(required = false) String generateImages,
             @RequestPart(required = false) MultipartFile pdfFile) {
         
         // AI generation features are restricted to SYSTEM_ADMIN and TENANT_ADMIN only
@@ -207,7 +208,10 @@ public class CourseController {
         if (writingFormat != null && !writingFormat.isEmpty()) {
             request.setWritingFormat(writingFormat);
         }
-        
+        if (generateImages != null && !generateImages.isEmpty()) {
+            request.setGenerateImages(Boolean.parseBoolean(generateImages));
+        }
+
         // Extract text from PDF file if provided
         if (pdfFile != null && !pdfFile.isEmpty()) {
             try {

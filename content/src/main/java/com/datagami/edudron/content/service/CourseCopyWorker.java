@@ -115,7 +115,7 @@ public class CourseCopyWorker {
     /**
      * Process course copy job (called by queue processor)
      */
-    @Async("eventTaskExecutor")
+    @Async("aiJobTaskExecutor")
     public void processCourseCopyJob(String jobId) {
         AIGenerationJobDTO job = queueService.getJob(jobId);
         if (job == null) {

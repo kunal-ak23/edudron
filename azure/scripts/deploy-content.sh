@@ -190,8 +190,9 @@ if [ -z "$APP_EXISTS" ]; then
             "azure-storage-account-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-ACCOUNT-NAME,identityref:system" \
             "azure-storage-container-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-CONTAINER-NAME,identityref:system" \
             "azure-storage-base-url=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-BASE-URL,identityref:system" \
+            "azure-ai-services-endpoint=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-AI-SERVICES-ENDPOINT,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
-    
+
     # Ephemeral storage is automatically allocated based on CPU:
     # - 0.25 CPU → 1Gi, 0.5 CPU → 2Gi, 1.0 CPU → 4Gi, 2.0 CPU → 8Gi
     # With 2.0 CPU, we automatically get 8Gi ephemeral storage (more than enough for video processing)
@@ -226,8 +227,9 @@ if [ -z "$APP_EXISTS" ]; then
             "AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name" \
             "AZURE_STORAGE_CONTAINER_NAME=secretref:azure-storage-container-name" \
             "AZURE_STORAGE_BASE_URL=secretref:azure-storage-base-url" \
+            "AZURE_AI_SERVICES_ENDPOINT=secretref:azure-ai-services-endpoint" \
         --output none
-    
+
     print_success "Container app created successfully"
 else
     print_info "Container app exists. Updating..."
@@ -284,8 +286,9 @@ else
             "azure-storage-account-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-ACCOUNT-NAME,identityref:system" \
             "azure-storage-container-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-CONTAINER-NAME,identityref:system" \
             "azure-storage-base-url=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-BASE-URL,identityref:system" \
+            "azure-ai-services-endpoint=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-AI-SERVICES-ENDPOINT,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
-    
+
     # Update image, resources, and environment variables
     # Note: Ephemeral storage is automatically allocated based on CPU (2.0 CPU = 8Gi)
     print_info "Updating container app configuration..."
@@ -319,8 +322,9 @@ else
             "AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name" \
             "AZURE_STORAGE_CONTAINER_NAME=secretref:azure-storage-container-name" \
             "AZURE_STORAGE_BASE_URL=secretref:azure-storage-base-url" \
+            "AZURE_AI_SERVICES_ENDPOINT=secretref:azure-ai-services-endpoint" \
         --output none
-    
+
     print_success "Container app updated successfully"
 fi
 

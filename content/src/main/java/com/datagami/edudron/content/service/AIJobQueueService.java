@@ -23,6 +23,7 @@ public class AIJobQueueService {
     private static final String COURSE_GENERATION_QUEUE = "ai:queue:course-generation";
     private static final String LECTURE_GENERATION_QUEUE = "ai:queue:lecture-generation";
     private static final String COURSE_COPY_QUEUE = "ai:queue:course-copy";
+    private static final String IMAGE_GENERATION_QUEUE = "ai:queue:image-generation";
     
     // Job storage prefix
     private static final String JOB_PREFIX = "ai:job:";
@@ -120,6 +121,26 @@ public class AIJobQueueService {
     }
     
     /**
+     * Submit an image generation job to the queue
+     */
+    public AIGenerationJobDTO submitImageGenerationJob(Object request, AIJobWorker jobWorker) {
+        String jobId = UlidGenerator.nextUlid();
+        AIGenerationJobDTO job = createJob(jobId, AIGenerationJobDTO.JobType.IMAGE_GENERATION);
+
+        try {
+            jobWorker.storeJobRequest(jobId, request);
+            saveJob(job);
+            redisTemplate.opsForList().rightPush(IMAGE_GENERATION_QUEUE, jobId);
+
+            logger.info("Image generation job {} submitted to queue", jobId);
+            return job;
+        } catch (Exception e) {
+            logger.error("Failed to submit image generation job", e);
+            throw new RuntimeException("Failed to submit job", e);
+        }
+    }
+
+    /**
      * Get a job from the queue (blocking)
      */
     public String getJobFromQueue(String queueName, long timeoutSeconds) {
@@ -208,6 +229,8 @@ public class AIJobQueueService {
                 return LECTURE_GENERATION_QUEUE;
             case COURSE_COPY:
                 return COURSE_COPY_QUEUE;
+            case IMAGE_GENERATION:
+                return IMAGE_GENERATION_QUEUE;
             default:
                 throw new IllegalArgumentException("Unknown job type: " + jobType);
         }

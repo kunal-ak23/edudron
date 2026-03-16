@@ -1,8 +1,8 @@
 {
   "gateway": "0.1.22",
   "identity": "0.1.23",
-  "content": "0.1.38",
+  "content": "0.1.39",
   "student": "0.1.40",
   "payment": "0.1.13",
-  "core-api": "0.1.1"
+  "core-api": "0.1.2"
 }

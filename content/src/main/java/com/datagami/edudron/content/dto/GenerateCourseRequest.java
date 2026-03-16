@@ -24,6 +24,9 @@ public class GenerateCourseRequest {
     private String writingFormatId;
     private String writingFormat;
     
+    // AI image generation (premium feature)
+    private Boolean generateImages;
+
     // PDF file for course structure (transient, not serialized)
     @JsonIgnore
     private transient MultipartFile pdfFile;
@@ -109,6 +112,14 @@ public class GenerateCourseRequest {
         this.writingFormat = writingFormat;
     }
     
+    public Boolean getGenerateImages() {
+        return generateImages;
+    }
+
+    public void setGenerateImages(Boolean generateImages) {
+        this.generateImages = generateImages;
+    }
+
     public MultipartFile getPdfFile() {
         return pdfFile;
     }

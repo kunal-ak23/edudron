@@ -18,7 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Sparkles, Loader2, ArrowLeft, FileText, X, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { coursesApi, courseGenerationIndexApi } from '@/lib/api'
+import { coursesApi, courseGenerationIndexApi, tenantFeaturesApi } from '@/lib/api'
+import { TenantFeatureType } from '@kunal-ak23/edudron-shared-utils'
 import type { GenerateCourseRequest, CourseGenerationIndex } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -37,6 +38,8 @@ export default function GenerateCoursePage() {
   const [writingFormats, setWritingFormats] = useState<CourseGenerationIndex[]>([])
   const [selectedWritingFormatId, setSelectedWritingFormatId] = useState<string>('')
   const [customWritingFormat, setCustomWritingFormat] = useState('')
+  const [imageGenEnabled, setImageGenEnabled] = useState(false)
+  const [generateImages, setGenerateImages] = useState(false)
   const [options, setOptions] = useState({
     categoryId: '',
     difficultyLevel: 'AUTO',
@@ -77,6 +80,12 @@ export default function GenerateCoursePage() {
       setWritingFormats(formats)
     } catch (error) {
     }
+    try {
+      const enabled = await tenantFeaturesApi.isFeatureEnabled(TenantFeatureType.AI_IMAGE_GENERATION)
+      setImageGenEnabled(enabled)
+    } catch (error) {
+      // Feature not available, keep disabled
+    }
   }
 
   const handleGenerate = async () => {
@@ -113,6 +122,7 @@ export default function GenerateCoursePage() {
         tags: options.tags ? options.tags.split(',').map(t => t.trim()) : undefined,
         certificateEligible: options.certificateEligible || undefined,
         maxCompletionDays: options.maxCompletionDays ? parseInt(options.maxCompletionDays) : undefined,
+        generateImages: generateImages || undefined,
         pdfFile: pdfFile || undefined,
       } as GenerateCourseRequest & { pdfFile?: File }
 
@@ -404,6 +414,19 @@ export default function GenerateCoursePage() {
                         Certificate Eligible
                       </Label>
                     </div>
+                    {imageGenEnabled && (
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="generateImages"
+                          checked={generateImages}
+                          onCheckedChange={(checked) => setGenerateImages(checked as boolean)}
+                          disabled={generating}
+                        />
+                        <Label htmlFor="generateImages" className="text-sm font-normal cursor-pointer">
+                          Generate AI images for each lecture
+                        </Label>
+                      </div>
+                    )}
                   </div>
                 </details>
               </div>

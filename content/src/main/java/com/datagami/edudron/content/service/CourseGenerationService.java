@@ -19,14 +19,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 @Service
-@Transactional
 public class CourseGenerationService {
     
     private static final Logger logger = LoggerFactory.getLogger(CourseGenerationService.class);
@@ -48,6 +46,9 @@ public class CourseGenerationService {
     
     @Autowired
     private LectureContentRepository lectureContentRepository;
+
+    @Autowired
+    private ImageGenerationService imageGenerationService;
     
     @Autowired
     private CourseGenerationIndexService indexService;
@@ -159,6 +160,17 @@ public class CourseGenerationService {
                         referenceContent
                     );
                     
+                    // Generate and insert images if requested (premium feature)
+                    if (Boolean.TRUE.equals(request.getGenerateImages()) && imageGenerationService.isConfigured()) {
+                        try {
+                            logger.info("Planning and generating images for lecture: {}", lectureInfo.getTitle());
+                            lectureContent = imageGenerationService.planAndGenerateLectureImages(
+                                    lectureInfo.getTitle(), lectureContent);
+                        } catch (Exception e) {
+                            logger.warn("Failed to generate images for lecture '{}': {}", lectureInfo.getTitle(), e.getMessage());
+                        }
+                    }
+
                     // Create LectureContent entity
                     LectureContent content = new LectureContent();
                     content.setId(UlidGenerator.nextUlid());
@@ -168,7 +180,7 @@ public class CourseGenerationService {
                     content.setTitle(lectureInfo.getTitle());
                     content.setTextContent(lectureContent);
                     content.setSequence(0);
-                    
+
                     lectureContentRepository.save(content);
                     totalLectures++;
                 }
@@ -258,7 +270,7 @@ public class CourseGenerationService {
      * Generate a single lecture (section) with sub-lectures based on a prompt.
      * This is a subset of the full course generation feature.
      */
-    public SectionDTO generateLectureWithSubLectures(String courseId, String prompt) {
+    public SectionDTO generateLectureWithSubLectures(String courseId, String prompt, boolean generateImages) {
         logger.info("Starting lecture generation from prompt for course: {}", courseId);
         
         String clientIdStr = TenantContext.getClientId();
@@ -310,6 +322,17 @@ public class CourseGenerationService {
                     null  // No reference content for single lecture generation
                 );
                 
+                // Generate and insert images if requested (premium feature)
+                if (generateImages && imageGenerationService.isConfigured()) {
+                    try {
+                        logger.info("Planning and generating images for sub-lecture: {}", lectureInfo.getTitle());
+                        lectureContent = imageGenerationService.planAndGenerateLectureImages(
+                                lectureInfo.getTitle(), lectureContent);
+                    } catch (Exception e) {
+                        logger.warn("Failed to generate images for sub-lecture '{}': {}", lectureInfo.getTitle(), e.getMessage());
+                    }
+                }
+
                 // Create LectureContent entity
                 LectureContent content = new LectureContent();
                 content.setId(UlidGenerator.nextUlid());
@@ -319,11 +342,11 @@ public class CourseGenerationService {
                 content.setTitle(lectureInfo.getTitle());
                 content.setTextContent(lectureContent);
                 content.setSequence(0);
-                
+
                 lectureContentRepository.save(content);
             }
         }
-        
+
         logger.info("Lecture generation completed. Section ID: {}", section.getId());
         
         // Get the section with sub-lectures populated
@@ -341,7 +364,7 @@ public class CourseGenerationService {
      * Generate a single sub-lecture with AI content based on a prompt.
      * This creates a sub-lecture within an existing section (main lecture).
      */
-    public LectureDTO generateSubLectureWithAI(String courseId, String sectionId, String prompt) {
+    public LectureDTO generateSubLectureWithAI(String courseId, String sectionId, String prompt, boolean generateImages) {
         logger.info("Starting sub-lecture generation from prompt for section: {}", sectionId);
         
         String clientIdStr = TenantContext.getClientId();
@@ -382,6 +405,16 @@ public class CourseGenerationService {
             null  // No reference content for single sub-lecture generation
         );
         
+        // Generate and insert images if requested (premium feature)
+        if (generateImages && imageGenerationService.isConfigured()) {
+            try {
+                logger.info("Planning and generating images for sub-lecture: {}", lectureTitle);
+                lectureContent = imageGenerationService.planAndGenerateLectureImages(lectureTitle, lectureContent);
+            } catch (Exception e) {
+                logger.warn("Failed to generate images for sub-lecture '{}': {}", lectureTitle, e.getMessage());
+            }
+        }
+
         // Create LectureContent entity
         LectureContent content = new LectureContent();
         content.setId(UlidGenerator.nextUlid());
@@ -391,11 +424,11 @@ public class CourseGenerationService {
         content.setTitle(lectureTitle);
         content.setTextContent(lectureContent);
         content.setSequence(0);
-        
+
         lectureContentRepository.save(content);
-        
+
         logger.info("Sub-lecture generation completed. Lecture ID: {}", lecture.getId());
-        
+
         return lecture;
     }
 }
