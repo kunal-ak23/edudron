@@ -36,7 +36,8 @@ import { simulationsApi, enrollmentsApi } from '@/lib/api'
 import type { SimulationDTO } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
-import SimulationTreeView from '@/components/simulation/SimulationTreeView'
+import SimulationYearView from '@/components/simulation/SimulationYearView'
+import type { SelectedItem } from '@/components/simulation/SimulationYearView'
 import SimulationNodeEditor from '@/components/simulation/SimulationNodeEditor'
 
 export const dynamic = 'force-dynamic'
@@ -58,8 +59,8 @@ export default function SimulationEditorPage() {
   const [simulation, setSimulation] = useState<SimulationDTO | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [treeData, setTreeData] = useState<any>(null)
+  const [selectedItem, setSelectedItem] = useState<SelectedItem | null>(null)
+  const [simulationData, setSimulationData] = useState<any>(null)
 
   // Metadata form
   const [title, setTitle] = useState('')
@@ -90,13 +91,13 @@ export default function SimulationEditorPage() {
       setSubject(data.subject || '')
       setAudience(data.audience || '')
       setDescription(data.description || '')
-      setVisibility(data.visibility || 'ALL')
+      setVisibility(data.visibility as any || 'ALL')
       setAssignedSectionIds(data.assignedToSectionIds || [])
-      setTreeData(data.treeData || null)
+      setSimulationData(data.simulationData || null)
 
-      // Auto-select root node
-      if (data.treeData?.rootNodeId && !selectedNodeId) {
-        setSelectedNodeId(data.treeData.rootNodeId)
+      // Auto-select first decision
+      if (data.simulationData?.years?.length > 0 && !selectedItem) {
+        setSelectedItem({ type: 'decision', year: 1, index: 0 })
       }
     } catch (error) {
       toast({
@@ -115,7 +116,6 @@ export default function SimulationEditorPage() {
       const response = await enrollmentsApi.listSections()
       setSections(Array.isArray(response) ? response : [])
     } catch {
-      // Sections might not load if there are none - that's ok
       setSections([])
     } finally {
       setSectionsLoading(false)
@@ -158,22 +158,87 @@ export default function SimulationEditorPage() {
     }
   }
 
-  // Save node within tree
-  const handleSaveNode = async (updatedNode: any) => {
-    if (!treeData?.nodes) return
+  // Save decision within simulation data
+  const handleSaveDecision = async (year: number, index: number, decision: any) => {
+    if (!simulationData?.years) return
     setSaving(true)
     try {
-      const newTreeData = {
-        ...treeData,
-        nodes: {
-          ...treeData.nodes,
-          [updatedNode.id]: updatedNode,
-        },
+      const newData = { ...simulationData }
+      const yearIdx = newData.years.findIndex((y: any) => (y.year ?? 0) === year)
+      if (yearIdx === -1) {
+        toast({ variant: 'destructive', title: 'Year not found' })
+        setSaving(false)
+        return
       }
-      const updated = await simulationsApi.updateTree(simulationId, newTreeData)
-      setTreeData(updated.treeData || newTreeData)
+      newData.years = [...newData.years]
+      newData.years[yearIdx] = { ...newData.years[yearIdx] }
+      newData.years[yearIdx].decisions = [...(newData.years[yearIdx].decisions || [])]
+      newData.years[yearIdx].decisions[index] = decision
+
+      const updated = await simulationsApi.updateSimulationData(simulationId, newData)
+      setSimulationData(updated.simulationData || newData)
       setSimulation(updated)
-      toast({ title: 'Node saved', description: `Node ${updatedNode.id} updated.` })
+      toast({ title: 'Decision saved' })
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Save failed',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Save review
+  const handleSaveReview = async (year: number, review: any) => {
+    if (!simulationData?.years) return
+    setSaving(true)
+    try {
+      const newData = { ...simulationData }
+      const yearIdx = newData.years.findIndex((y: any) => (y.year ?? 0) === year)
+      if (yearIdx === -1) {
+        toast({ variant: 'destructive', title: 'Year not found' })
+        setSaving(false)
+        return
+      }
+      newData.years = [...newData.years]
+      newData.years[yearIdx] = { ...newData.years[yearIdx], review }
+
+      const updated = await simulationsApi.updateSimulationData(simulationId, newData)
+      setSimulationData(updated.simulationData || newData)
+      setSimulation(updated)
+      toast({ title: 'Review saved' })
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Save failed',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Save opening
+  const handleSaveOpening = async (year: number, opening: any) => {
+    if (!simulationData?.years) return
+    setSaving(true)
+    try {
+      const newData = { ...simulationData }
+      const yearIdx = newData.years.findIndex((y: any) => (y.year ?? 0) === year)
+      if (yearIdx === -1) {
+        toast({ variant: 'destructive', title: 'Year not found' })
+        setSaving(false)
+        return
+      }
+      newData.years = [...newData.years]
+      newData.years[yearIdx] = { ...newData.years[yearIdx], opening }
+
+      const updated = await simulationsApi.updateSimulationData(simulationId, newData)
+      setSimulationData(updated.simulationData || newData)
+      setSimulation(updated)
+      toast({ title: 'Opening narrative saved' })
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -279,11 +344,6 @@ export default function SimulationEditorPage() {
       </div>
     )
   }
-
-  const selectedNode =
-    selectedNodeId && treeData?.nodes
-      ? treeData.nodes[selectedNodeId]
-      : null
 
   return (
     <div className="space-y-4">
@@ -419,6 +479,15 @@ export default function SimulationEditorPage() {
                 className="resize-y"
               />
             </div>
+            {/* Format info */}
+            <div className="space-y-1.5">
+              <Label>Years</Label>
+              <p className="text-sm text-muted-foreground">{simulation.targetYears}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Decisions per Year</Label>
+              <p className="text-sm text-muted-foreground">{simulation.decisionsPerYear}</p>
+            </div>
           </div>
 
           {/* Section assignment */}
@@ -472,31 +541,34 @@ export default function SimulationEditorPage() {
         </CardContent>
       </Card>
 
-      {/* Tree + Editor split */}
+      {/* Year View + Editor split */}
       <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] gap-4 min-h-[500px]">
-        {/* Left: Tree View */}
+        {/* Left: Year Navigator */}
         <Card className="overflow-hidden">
-          <SimulationTreeView
-            treeData={treeData}
-            selectedNodeId={selectedNodeId}
-            onSelectNode={setSelectedNodeId}
+          <SimulationYearView
+            simulationData={simulationData}
+            selectedItem={selectedItem}
+            onSelectItem={setSelectedItem}
           />
         </Card>
 
-        {/* Right: Node Editor */}
+        {/* Right: Editor */}
         <Card>
           <CardContent className="pt-4">
-            {selectedNode ? (
+            {selectedItem ? (
               <SimulationNodeEditor
-                node={selectedNode}
-                onSave={handleSaveNode}
+                selectedItem={selectedItem}
+                simulationData={simulationData}
+                onSaveDecision={handleSaveDecision}
+                onSaveReview={handleSaveReview}
+                onSaveOpening={handleSaveOpening}
               />
             ) : (
               <div className="flex items-center justify-center h-full min-h-[300px] text-muted-foreground">
                 <p className="text-sm">
-                  {treeData?.nodes
-                    ? 'Select a node from the tree to edit it.'
-                    : 'No tree data available.'}
+                  {simulationData?.years
+                    ? 'Select an item from the year navigator to edit it.'
+                    : 'No simulation data available.'}
                 </p>
               </div>
             )}

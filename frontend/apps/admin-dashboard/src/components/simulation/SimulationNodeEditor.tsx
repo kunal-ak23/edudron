@@ -14,12 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Trash2, Save, Link } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Plus, Trash2, Save } from 'lucide-react'
+import type { SelectedItem } from './SimulationYearView'
 
 interface Choice {
   id: string
   text: string
-  nextNodeId?: string
   quality?: number
 }
 
@@ -30,20 +31,38 @@ interface Debrief {
   playAgain: string
 }
 
-interface NodeData {
-  id: string
-  type: 'SCENARIO' | 'TERMINAL'
+interface DecisionData {
+  decisionId: string
   narrative: string
   decisionType?: string
   decisionConfig?: any
   choices?: Choice[]
-  score?: number
-  debrief?: Debrief
 }
 
+interface ReviewVariant {
+  metrics?: Record<string, any>
+  feedback?: Record<string, string>
+}
+
+interface ReviewData {
+  strong?: ReviewVariant
+  mid?: ReviewVariant
+  poor?: ReviewVariant
+}
+
+interface OpeningData {
+  strong?: string
+  mid?: string
+  poor?: string
+}
+
+// Props differ by selected item type
 interface SimulationNodeEditorProps {
-  node: NodeData
-  onSave: (updatedNode: NodeData) => void
+  selectedItem: SelectedItem
+  simulationData: any
+  onSaveDecision: (year: number, index: number, decision: DecisionData) => void
+  onSaveReview: (year: number, review: ReviewData) => void
+  onSaveOpening: (year: number, opening: OpeningData) => void
 }
 
 const DECISION_TYPES = [
@@ -55,60 +74,50 @@ const DECISION_TYPES = [
   'TIMELINE_CHOICE',
 ]
 
-export default function SimulationNodeEditor({
-  node,
+function DecisionEditor({
+  decision,
   onSave,
-}: SimulationNodeEditorProps) {
-  const [editedNode, setEditedNode] = useState<NodeData>({ ...node })
+}: {
+  decision: DecisionData
+  onSave: (d: DecisionData) => void
+}) {
+  const [edited, setEdited] = useState<DecisionData>({ ...decision })
   const [configJson, setConfigJson] = useState('')
   const [configError, setConfigError] = useState<string | null>(null)
 
-  // Reset when node changes
   useEffect(() => {
-    setEditedNode({ ...node })
+    setEdited({ ...decision })
     setConfigJson(
-      node.decisionConfig ? JSON.stringify(node.decisionConfig, null, 2) : ''
+      decision.decisionConfig ? JSON.stringify(decision.decisionConfig, null, 2) : ''
     )
     setConfigError(null)
-  }, [node])
+  }, [decision])
 
-  const updateField = <K extends keyof NodeData>(
-    field: K,
-    value: NodeData[K]
-  ) => {
-    setEditedNode((prev) => ({ ...prev, [field]: value }))
+  const updateField = <K extends keyof DecisionData>(field: K, value: DecisionData[K]) => {
+    setEdited((prev) => ({ ...prev, [field]: value }))
   }
 
   const updateChoice = (index: number, field: keyof Choice, value: any) => {
-    const choices = [...(editedNode.choices || [])]
+    const choices = [...(edited.choices || [])]
     choices[index] = { ...choices[index], [field]: value }
     updateField('choices', choices)
   }
 
   const addChoice = () => {
-    const choices = [...(editedNode.choices || [])]
-    const newId = `choice_${editedNode.id}_${String.fromCharCode(
-      97 + choices.length
-    )}`
+    const choices = [...(edited.choices || [])]
+    const newId = `choice_${edited.decisionId}_${String.fromCharCode(97 + choices.length)}`
     choices.push({ id: newId, text: '', quality: 2 })
     updateField('choices', choices)
   }
 
   const removeChoice = (index: number) => {
-    const choices = [...(editedNode.choices || [])]
+    const choices = [...(edited.choices || [])]
     choices.splice(index, 1)
     updateField('choices', choices)
   }
 
-  const updateDebrief = (field: keyof Debrief, value: string) => {
-    const debrief = { ...(editedNode.debrief || { yourPath: '', conceptAtWork: '', theGap: '', playAgain: '' }) }
-    debrief[field] = value
-    updateField('debrief', debrief)
-  }
-
   const handleSave = () => {
-    // Validate and parse decision config JSON
-    let parsedConfig = editedNode.decisionConfig
+    let parsedConfig = edited.decisionConfig
     if (configJson.trim()) {
       try {
         parsedConfig = JSON.parse(configJson)
@@ -120,36 +129,21 @@ export default function SimulationNodeEditor({
     } else {
       parsedConfig = undefined
     }
-
-    onSave({ ...editedNode, decisionConfig: parsedConfig })
+    onSave({ ...edited, decisionConfig: parsedConfig })
   }
-
-  const isScenario = editedNode.type === 'SCENARIO'
 
   return (
     <div className="space-y-4">
-      {/* Node header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-muted-foreground">
-            {editedNode.id}
-          </h3>
-          <Badge
-            variant="outline"
-            className={
-              isScenario
-                ? 'bg-blue-50 text-blue-700 border-blue-300'
-                : (editedNode.score ?? 0) >= 50
-                ? 'bg-green-50 text-green-700 border-green-300'
-                : 'bg-red-50 text-red-700 border-red-300'
-            }
-          >
-            {editedNode.type}
+          <h3 className="text-sm font-medium text-muted-foreground">{edited.decisionId}</h3>
+          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+            DECISION
           </Badge>
         </div>
         <Button size="sm" onClick={handleSave}>
           <Save className="h-4 w-4 mr-1" />
-          Save Node
+          Save Decision
         </Button>
       </div>
 
@@ -158,210 +152,329 @@ export default function SimulationNodeEditor({
         <Label htmlFor="narrative">Narrative</Label>
         <Textarea
           id="narrative"
-          value={editedNode.narrative || ''}
+          value={edited.narrative || ''}
           onChange={(e) => updateField('narrative', e.target.value)}
           rows={8}
-          placeholder="Enter the narrative text for this node..."
+          placeholder="Enter the narrative text..."
           className="resize-y"
         />
       </div>
 
-      {/* SCENARIO-specific fields */}
-      {isScenario && (
-        <>
-          {/* Decision Type */}
-          <div className="space-y-1.5">
-            <Label>Decision Type</Label>
-            <Select
-              value={editedNode.decisionType || 'NARRATIVE_CHOICE'}
-              onValueChange={(val) => updateField('decisionType', val)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DECISION_TYPES.map((dt) => (
-                  <SelectItem key={dt} value={dt}>
-                    {dt.replace(/_/g, ' ')}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      {/* Decision Type */}
+      <div className="space-y-1.5">
+        <Label>Decision Type</Label>
+        <Select
+          value={edited.decisionType || 'NARRATIVE_CHOICE'}
+          onValueChange={(val) => updateField('decisionType', val)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DECISION_TYPES.map((dt) => (
+              <SelectItem key={dt} value={dt}>
+                {dt.replace(/_/g, ' ')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-          {/* Decision Config JSON */}
-          <div className="space-y-1.5">
-            <Label htmlFor="decisionConfig">
-              Decision Config (JSON)
-            </Label>
-            <Textarea
-              id="decisionConfig"
-              value={configJson}
-              onChange={(e) => {
-                setConfigJson(e.target.value)
-                setConfigError(null)
-              }}
-              rows={4}
-              placeholder='{ "mappings": [...] }'
-              className="font-mono text-sm resize-y"
-            />
-            {configError && (
-              <p className="text-xs text-red-500">{configError}</p>
-            )}
-          </div>
+      {/* Decision Config JSON */}
+      <div className="space-y-1.5">
+        <Label htmlFor="decisionConfig">Decision Config (JSON)</Label>
+        <Textarea
+          id="decisionConfig"
+          value={configJson}
+          onChange={(e) => {
+            setConfigJson(e.target.value)
+            setConfigError(null)
+          }}
+          rows={4}
+          placeholder='{ "mappings": [...] }'
+          className="font-mono text-sm resize-y"
+        />
+        {configError && <p className="text-xs text-red-500">{configError}</p>}
+      </div>
 
-          {/* Choices */}
-          <Card>
-            <CardHeader className="py-3 px-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm">Choices</CardTitle>
+      {/* Choices */}
+      <Card>
+        <CardHeader className="py-3 px-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm">Choices</CardTitle>
+            <Button variant="outline" size="sm" onClick={addChoice}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Add Choice
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 space-y-3">
+          {(edited.choices || []).length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-2">
+              No choices defined.
+            </p>
+          ) : (
+            (edited.choices || []).map((choice, index) => (
+              <div
+                key={choice.id || index}
+                className="flex gap-2 items-start p-3 rounded-md border bg-muted/30"
+              >
+                <div className="flex-1 space-y-2">
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <Input
+                        value={choice.text}
+                        onChange={(e) => updateChoice(index, 'text', e.target.value)}
+                        placeholder="Choice text..."
+                        className="text-sm"
+                      />
+                    </div>
+                    <Select
+                      value={String(choice.quality || 2)}
+                      onValueChange={(val) => updateChoice(index, 'quality', parseInt(val))}
+                    >
+                      <SelectTrigger className="w-28">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Quality 1</SelectItem>
+                        <SelectItem value="2">Quality 2</SelectItem>
+                        <SelectItem value="3">Quality 3</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  onClick={addChoice}
+                  onClick={() => removeChoice(index)}
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
                 >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Add Choice
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-3">
-              {(editedNode.choices || []).length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-2">
-                  No choices defined. Add a choice to create a branch.
-                </p>
-              ) : (
-                (editedNode.choices || []).map((choice, index) => (
-                  <div
-                    key={choice.id || index}
-                    className="flex gap-2 items-start p-3 rounded-md border bg-muted/30"
-                  >
-                    <div className="flex-1 space-y-2">
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <Input
-                            value={choice.text}
-                            onChange={(e) =>
-                              updateChoice(index, 'text', e.target.value)
-                            }
-                            placeholder="Choice text..."
-                            className="text-sm"
-                          />
-                        </div>
-                        <Select
-                          value={String(choice.quality || 2)}
-                          onValueChange={(val) =>
-                            updateChoice(index, 'quality', parseInt(val))
-                          }
-                        >
-                          <SelectTrigger className="w-28">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="1">Quality 1</SelectItem>
-                            <SelectItem value="2">Quality 2</SelectItem>
-                            <SelectItem value="3">Quality 3</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {choice.nextNodeId && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Link className="h-3 w-3" />
-                          <span>{choice.nextNodeId}</span>
-                        </div>
-                      )}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeChoice(index)}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+            ))
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
 
-      {/* TERMINAL-specific fields */}
-      {!isScenario && (
-        <>
-          {/* Score */}
-          <div className="space-y-1.5">
-            <Label htmlFor="score">Score (0-100)</Label>
-            <Input
-              id="score"
-              type="number"
-              min={0}
-              max={100}
-              value={editedNode.score ?? 0}
-              onChange={(e) =>
-                updateField('score', parseInt(e.target.value) || 0)
-              }
-              className="w-32"
-            />
-          </div>
+function ReviewEditor({
+  review,
+  onSave,
+}: {
+  review: ReviewData
+  onSave: (r: ReviewData) => void
+}) {
+  const [edited, setEdited] = useState<ReviewData>({ ...review })
 
-          {/* Debrief */}
-          <Card>
-            <CardHeader className="py-3 px-4">
-              <CardTitle className="text-sm">Debrief</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="debrief-path">Your Path</Label>
-                <Textarea
-                  id="debrief-path"
-                  value={editedNode.debrief?.yourPath || ''}
-                  onChange={(e) => updateDebrief('yourPath', e.target.value)}
-                  rows={3}
-                  placeholder="Describe the path the student took..."
-                  className="resize-y"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="debrief-concept">The Concept at Work</Label>
-                <Textarea
-                  id="debrief-concept"
-                  value={editedNode.debrief?.conceptAtWork || ''}
-                  onChange={(e) =>
-                    updateDebrief('conceptAtWork', e.target.value)
+  useEffect(() => {
+    setEdited({ ...review })
+  }, [review])
+
+  const updateVariant = (variant: 'strong' | 'mid' | 'poor', field: string, value: any) => {
+    setEdited((prev) => ({
+      ...prev,
+      [variant]: {
+        ...prev[variant],
+        [field]: value,
+      },
+    }))
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+          YEAR-END REVIEW
+        </Badge>
+        <Button size="sm" onClick={() => onSave(edited)}>
+          <Save className="h-4 w-4 mr-1" />
+          Save Review
+        </Button>
+      </div>
+
+      <Tabs defaultValue="strong">
+        <TabsList>
+          <TabsTrigger value="strong">Strong Performance</TabsTrigger>
+          <TabsTrigger value="mid">Mid Performance</TabsTrigger>
+          <TabsTrigger value="poor">Poor Performance</TabsTrigger>
+        </TabsList>
+
+        {(['strong', 'mid', 'poor'] as const).map((variant) => (
+          <TabsContent key={variant} value={variant} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Metrics (JSON)</Label>
+              <Textarea
+                value={
+                  edited[variant]?.metrics
+                    ? JSON.stringify(edited[variant]!.metrics, null, 2)
+                    : ''
+                }
+                onChange={(e) => {
+                  try {
+                    const val = e.target.value.trim() ? JSON.parse(e.target.value) : undefined
+                    updateVariant(variant, 'metrics', val)
+                  } catch {
+                    // Allow typing invalid JSON temporarily
                   }
-                  rows={3}
-                  placeholder="Explain the underlying concept..."
-                  className="resize-y"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="debrief-gap">The Gap</Label>
-                <Textarea
-                  id="debrief-gap"
-                  value={editedNode.debrief?.theGap || ''}
-                  onChange={(e) => updateDebrief('theGap', e.target.value)}
-                  rows={3}
-                  placeholder="What did the student miss or could improve..."
-                  className="resize-y"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="debrief-again">Play Again</Label>
-                <Input
-                  id="debrief-again"
-                  value={editedNode.debrief?.playAgain || ''}
-                  onChange={(e) =>
-                    updateDebrief('playAgain', e.target.value)
+                }}
+                rows={6}
+                className="font-mono text-sm resize-y"
+                placeholder='{ "revenue": { "value": 5000000, "trend": "up" } }'
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Stakeholder Feedback (JSON)</Label>
+              <Textarea
+                value={
+                  edited[variant]?.feedback
+                    ? JSON.stringify(edited[variant]!.feedback, null, 2)
+                    : ''
+                }
+                onChange={(e) => {
+                  try {
+                    const val = e.target.value.trim() ? JSON.parse(e.target.value) : undefined
+                    updateVariant(variant, 'feedback', val)
+                  } catch {
+                    // Allow typing invalid JSON temporarily
                   }
-                  placeholder="Encouragement to try again..."
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
+                }}
+                rows={4}
+                className="font-mono text-sm resize-y"
+                placeholder='{ "board": "Great progress this year.", "customers": "..." }'
+              />
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  )
+}
+
+function OpeningEditor({
+  opening,
+  onSave,
+}: {
+  opening: OpeningData
+  onSave: (o: OpeningData) => void
+}) {
+  const [edited, setEdited] = useState<OpeningData>({ ...opening })
+
+  useEffect(() => {
+    setEdited({ ...opening })
+  }, [opening])
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+          OPENING NARRATIVE
+        </Badge>
+        <Button size="sm" onClick={() => onSave(edited)}>
+          <Save className="h-4 w-4 mr-1" />
+          Save Opening
+        </Button>
+      </div>
+
+      <Tabs defaultValue="strong">
+        <TabsList>
+          <TabsTrigger value="strong">Strong Performance</TabsTrigger>
+          <TabsTrigger value="mid">Mid Performance</TabsTrigger>
+          <TabsTrigger value="poor">Poor Performance</TabsTrigger>
+        </TabsList>
+
+        {(['strong', 'mid', 'poor'] as const).map((variant) => (
+          <TabsContent key={variant} value={variant} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Narrative Text</Label>
+              <Textarea
+                value={edited[variant] || ''}
+                onChange={(e) =>
+                  setEdited((prev) => ({ ...prev, [variant]: e.target.value }))
+                }
+                rows={8}
+                placeholder={`Opening narrative for ${variant} performance variant...`}
+                className="resize-y"
+              />
+            </div>
+          </TabsContent>
+        ))}
+      </Tabs>
+    </div>
+  )
+}
+
+export default function SimulationNodeEditor({
+  selectedItem,
+  simulationData,
+  onSaveDecision,
+  onSaveReview,
+  onSaveOpening,
+}: SimulationNodeEditorProps) {
+  if (!simulationData?.years) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[300px] text-muted-foreground">
+        <p className="text-sm">No simulation data available.</p>
+      </div>
+    )
+  }
+
+  const years: any[] = simulationData.years
+  const yearData = years.find((y: any) => (y.year ?? 0) === selectedItem.year) ||
+    years[selectedItem.year - 1]
+
+  if (!yearData) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[300px] text-muted-foreground">
+        <p className="text-sm">Year {selectedItem.year} not found in data.</p>
+      </div>
+    )
+  }
+
+  if (selectedItem.type === 'decision' && selectedItem.index != null) {
+    const decisions: any[] = yearData.decisions || []
+    const decision = decisions[selectedItem.index]
+    if (!decision) {
+      return (
+        <div className="flex items-center justify-center h-full min-h-[300px] text-muted-foreground">
+          <p className="text-sm">Decision not found.</p>
+        </div>
+      )
+    }
+    return (
+      <DecisionEditor
+        decision={decision}
+        onSave={(d) => onSaveDecision(selectedItem.year, selectedItem.index!, d)}
+      />
+    )
+  }
+
+  if (selectedItem.type === 'review') {
+    const review: ReviewData = yearData.review || {}
+    return (
+      <ReviewEditor
+        review={review}
+        onSave={(r) => onSaveReview(selectedItem.year, r)}
+      />
+    )
+  }
+
+  if (selectedItem.type === 'opening') {
+    const opening: OpeningData = yearData.opening || {}
+    return (
+      <OpeningEditor
+        opening={opening}
+        onSave={(o) => onSaveOpening(selectedItem.year, o)}
+      />
+    )
+  }
+
+  return (
+    <div className="flex items-center justify-center h-full min-h-[300px] text-muted-foreground">
+      <p className="text-sm">Select an item from the year navigator to edit it.</p>
     </div>
   )
 }
