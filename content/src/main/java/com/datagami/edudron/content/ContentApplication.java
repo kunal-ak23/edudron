@@ -15,6 +15,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EntityScan(basePackages = {
     "com.datagami.edudron.content.domain",
     "com.datagami.edudron.content.psychtest.domain",
+    "com.datagami.edudron.content.simulation.domain",
     "com.datagami.edudron.common.domain"
 })
 public class ContentApplication {
