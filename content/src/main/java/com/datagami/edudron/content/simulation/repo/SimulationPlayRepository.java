@@ -20,7 +20,7 @@ public interface SimulationPlayRepository extends JpaRepository<SimulationPlay, 
     List<SimulationPlay> findByStudentIdAndClientIdOrderByStartedAtDesc(String studentId,
             UUID clientId);
 
-    Optional<SimulationPlay> findTopBySimulationIdAndStudentIdOrderByScoreDesc(
+    Optional<SimulationPlay> findTopBySimulationIdAndStudentIdOrderByFinalScoreDesc(
             String simulationId, String studentId);
 
     long countBySimulationId(String simulationId);
