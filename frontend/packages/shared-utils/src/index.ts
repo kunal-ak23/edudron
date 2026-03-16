@@ -30,6 +30,12 @@ export { StudentsApi } from './api/students'
 export type { BulkStudentImportResult, StudentImportRowResult, BulkEnrollmentResult } from './api/students'
 export type { BulkEnrollmentResult as EnrollmentBulkEnrollmentResult } from './api/enrollments'
 export { AnalyticsApi } from './api/analytics'
+export { SimulationsApi } from './api/simulations'
+export type {
+  GenerateSimulationRequest, SimulationDTO, SimulationNodeDTO,
+  SimulationPlayDTO, DecisionInput, ChoiceDTO, DebriefDTO,
+  SimulationExportDTO
+} from './api/simulations'
 export type {
   LectureViewSession,
   LectureAnalytics,
