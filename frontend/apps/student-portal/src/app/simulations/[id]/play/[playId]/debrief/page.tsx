@@ -6,7 +6,7 @@ import { ProtectedRoute } from '@kunal-ak23/edudron-ui-components'
 import { simulationsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Loader2, RotateCcw, History, ArrowLeft } from 'lucide-react'
-import type { SimulationNodeDTO } from '@kunal-ak23/edudron-shared-utils'
+import type { SimulationStateDTO } from '@kunal-ak23/edudron-shared-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +30,7 @@ export default function DebriefPage() {
   const simulationId = params.id as string
   const playId = params.playId as string
 
-  const [node, setNode] = useState<SimulationNodeDTO | null>(null)
+  const [state, setState] = useState<SimulationStateDTO | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [startingPlay, setStartingPlay] = useState(false)
@@ -41,11 +41,11 @@ export default function DebriefPage() {
   useEffect(() => {
     loadDebrief()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [simulationId, playId])
+  }, [playId])
 
   // Sequentially reveal debrief sections
   useEffect(() => {
-    if (!node?.debrief) return
+    if (!state?.debrief) return
 
     const totalSections = 4
     if (visibleSections >= totalSections) return
@@ -55,18 +55,22 @@ export default function DebriefPage() {
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [node, visibleSections])
+  }, [state, visibleSections])
 
   async function loadDebrief() {
     try {
       setLoading(true)
       setError(null)
-      const data = await simulationsApi.getDebrief(simulationId, playId)
-      setNode(data)
-      // Start the sequential reveal
+      const data = await simulationsApi.getCurrentState(playId)
+      if (data.phase !== 'DEBRIEF') {
+        // Not in debrief phase, redirect back to play
+        router.push(`/simulations/${simulationId}/play/${playId}`)
+        return
+      }
+      setState(data)
       setVisibleSections(0)
       setTimeout(() => setVisibleSections(1), 300)
-    } catch (e: any) {
+    } catch {
       setError('Failed to load debrief. The simulation may still be in progress.')
     } finally {
       setLoading(false)
@@ -78,14 +82,14 @@ export default function DebriefPage() {
       setStartingPlay(true)
       const play = await simulationsApi.startPlay(simulationId)
       router.push(`/simulations/${simulationId}/play/${play.id}`)
-    } catch (e: any) {
+    } catch {
       setError('Failed to start a new play.')
       setStartingPlay(false)
     }
   }
 
-  const score = node?.score ?? 0
-  const debrief = node?.debrief
+  const score = state?.cumulativeScore ?? 0
+  const debrief = state?.debrief
 
   return (
     <ProtectedRoute>
@@ -119,21 +123,29 @@ export default function DebriefPage() {
                 <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
                 <p className="text-sm text-gray-500">Loading your debrief...</p>
               </div>
-            ) : node && debrief ? (
+            ) : state && debrief ? (
               <div className="space-y-8">
-                {/* Header with score */}
+                {/* Header with score + role + years */}
                 <div className="text-center space-y-4">
                   <h1 className="text-3xl font-bold text-gray-900">
                     Simulation Complete
                   </h1>
-                  <div className={`inline-flex items-center gap-3 px-6 py-4 rounded-2xl border ${scoreBg(score)}`}>
-                    <span className="text-sm font-medium text-gray-600 uppercase tracking-wide">
-                      Score
-                    </span>
-                    <span className={`text-5xl font-bold tabular-nums ${scoreColor(score)}`}>
-                      {score}
-                    </span>
-                    <span className="text-sm text-gray-400">/100</span>
+                  <div className="flex items-center justify-center gap-4 flex-wrap">
+                    <div className={`inline-flex items-center gap-3 px-6 py-4 rounded-2xl border ${scoreBg(score)}`}>
+                      <span className="text-sm font-medium text-gray-600 uppercase tracking-wide">
+                        Score
+                      </span>
+                      <span className={`text-5xl font-bold tabular-nums ${scoreColor(score)}`}>
+                        {score}
+                      </span>
+                      <span className="text-sm text-gray-400">pts</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center gap-4 text-sm text-gray-500">
+                    {state.currentRole && (
+                      <span>Final Role: <span className="font-medium text-gray-700">{state.currentRole}</span></span>
+                    )}
+                    <span>Years Completed: <span className="font-medium text-gray-700">{state.currentYear}</span></span>
                   </div>
                 </div>
 

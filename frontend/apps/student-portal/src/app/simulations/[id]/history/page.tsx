@@ -25,6 +25,7 @@ const STATUS_STYLES: Record<string, string> = {
   COMPLETED: 'bg-green-100 text-green-700 border-green-300',
   IN_PROGRESS: 'bg-yellow-100 text-yellow-700 border-yellow-300',
   ABANDONED: 'bg-gray-100 text-gray-500 border-gray-300',
+  FIRED: 'bg-red-100 text-red-700 border-red-300',
 }
 
 export default function SimulationHistoryPage() {
@@ -48,7 +49,7 @@ export default function SimulationHistoryPage() {
       setError(null)
       const data = await simulationsApi.getPlayHistory(simulationId)
       setPlays(data)
-    } catch (e: any) {
+    } catch {
       setError('Failed to load play history.')
     } finally {
       setLoading(false)
@@ -60,7 +61,7 @@ export default function SimulationHistoryPage() {
       setStartingPlay(true)
       const play = await simulationsApi.startPlay(simulationId)
       router.push(`/simulations/${simulationId}/play/${play.id}`)
-    } catch (e: any) {
+    } catch {
       setError('Failed to start a new play.')
       setStartingPlay(false)
     }
@@ -75,6 +76,16 @@ export default function SimulationHistoryPage() {
       hour: 'numeric',
       minute: '2-digit',
     })
+  }
+
+  function formatStatus(status: string): string {
+    switch (status) {
+      case 'IN_PROGRESS': return 'In Progress'
+      case 'COMPLETED': return 'Completed'
+      case 'FIRED': return 'Fired'
+      case 'ABANDONED': return 'Abandoned'
+      default: return status
+    }
   }
 
   // Derive title from first play entry
@@ -136,7 +147,10 @@ export default function SimulationHistoryPage() {
                         Date
                       </th>
                       <th className="text-center px-4 py-3 font-medium text-gray-600">
-                        Decisions
+                        Years Completed
+                      </th>
+                      <th className="text-center px-4 py-3 font-medium text-gray-600">
+                        Final Role
                       </th>
                       <th className="text-center px-4 py-3 font-medium text-gray-600">
                         Score
@@ -171,13 +185,20 @@ export default function SimulationHistoryPage() {
                           {formatDate(play.startedAt)}
                         </td>
                         <td className="px-4 py-3 text-center text-gray-600">
-                          {play.decisionsMade}
+                          {play.currentYear ?? '-'}
+                        </td>
+                        <td className="px-4 py-3 text-center text-gray-600">
+                          {play.currentRole || '-'}
                         </td>
                         <td className="px-4 py-3 text-center">
                           <span
-                            className={`font-semibold tabular-nums ${scoreColor(play.score)}`}
+                            className={`font-semibold tabular-nums ${scoreColor(play.finalScore ?? play.cumulativeScore)}`}
                           >
-                            {play.score != null ? play.score : '-'}
+                            {play.finalScore != null
+                              ? play.finalScore
+                              : play.cumulativeScore != null
+                                ? play.cumulativeScore
+                                : '-'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -187,11 +208,7 @@ export default function SimulationHistoryPage() {
                               STATUS_STYLES[play.status] || ''
                             }
                           >
-                            {play.status === 'IN_PROGRESS'
-                              ? 'In Progress'
-                              : play.status === 'COMPLETED'
-                                ? 'Completed'
-                                : 'Abandoned'}
+                            {formatStatus(play.status)}
                           </Badge>
                         </td>
                       </tr>
