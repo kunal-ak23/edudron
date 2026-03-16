@@ -219,6 +219,7 @@ if [ -z "$APP_EXISTS" ]; then
             "AZURE_STORAGE_CONNECTION_STRING=secretref:azure-storage-connection-string" \
             "AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name" \
             "AZURE_STORAGE_PROCTORING_CONTAINER=proctoring-photos" \
+            "CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,https://admin.edudron.com,https://lms.edudron.com}" \
         --output none
 
     print_success "Container app created successfully"
@@ -299,6 +300,7 @@ else
             "AZURE_STORAGE_CONNECTION_STRING=secretref:azure-storage-connection-string" \
             "AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name" \
             "AZURE_STORAGE_PROCTORING_CONTAINER=proctoring-photos" \
+            "CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:3001,https://admin.edudron.com,https://lms.edudron.com}" \
         --output none
 
     print_success "Container app updated successfully"
