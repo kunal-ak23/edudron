@@ -3,11 +3,14 @@ package com.datagami.edudron.content.simulation.service;
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.content.simulation.domain.Simulation;
 import com.datagami.edudron.content.simulation.domain.SimulationPlay;
+import com.datagami.edudron.content.simulation.dto.DebriefDTO;
 import com.datagami.edudron.content.simulation.dto.DecisionInputDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationDecisionDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationExportDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationPlayDTO;
+import com.datagami.edudron.content.simulation.dto.SimulationStateDTO;
+import com.datagami.edudron.content.simulation.dto.YearEndReviewDTO;
 import com.datagami.edudron.content.simulation.repo.SimulationPlayRepository;
 import com.datagami.edudron.content.simulation.repo.SimulationRepository;
 import java.time.OffsetDateTime;
@@ -298,9 +301,258 @@ public class SimulationService {
         return SimulationPlayDTO.fromEntity(play, sim.getTitle());
     }
 
-    // TODO: v2 play flow methods (getCurrentState, submitDecision, getDebrief) will be
-    // implemented in a subsequent task. The v1 tree-based play logic has been removed
-    // as it is incompatible with the year-based career tenure model.
+    // ============ V2 PLAY FLOW ============
+
+    /**
+     * Get the current state of a play session. Returns the appropriate phase:
+     * - DEBRIEF if completed
+     * - FIRED if fired
+     * - YEAR_END_REVIEW if all decisions for the year are done
+     * - DECISION if there are decisions remaining (includes openingNarrative at start of year)
+     */
+    @Transactional(readOnly = true)
+    @SuppressWarnings("unchecked")
+    public SimulationStateDTO getCurrentState(String playId, String studentId) {
+        SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
+                .orElseThrow(() -> new IllegalArgumentException("Play not found"));
+
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        if (!play.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Play not found");
+        }
+
+        Simulation sim = simulationRepository.findByIdAndClientId(play.getSimulationId(), clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+
+        Map<String, Object> simData = sim.getSimulationData();
+        int decisionsPerYear = sim.getDecisionsPerYear();
+
+        SimulationStateDTO state = new SimulationStateDTO();
+        state.setCurrentYear(play.getCurrentYear());
+        state.setCurrentDecision(play.getCurrentDecision());
+        state.setTotalDecisions(decisionsPerYear);
+        state.setCurrentRole(play.getCurrentRole());
+        state.setCumulativeScore(play.getCumulativeScore());
+        state.setYearScore(calculateCurrentYearScore(play));
+        state.setPerformanceBand(play.getPerformanceBand());
+
+        // 1. Completed → DEBRIEF
+        if (play.getStatus() == SimulationPlay.PlayStatus.COMPLETED) {
+            state.setPhase("DEBRIEF");
+            state.setDebrief(buildDebrief(simData, play.getPerformanceBand()));
+            return state;
+        }
+
+        // 2. Fired → FIRED
+        if (play.getStatus() == SimulationPlay.PlayStatus.FIRED) {
+            state.setPhase("FIRED");
+            state.setDebrief(buildFiredDebrief(simData));
+            return state;
+        }
+
+        // 3. Year-end review: all decisions for the year are done
+        if (play.getCurrentDecision() >= decisionsPerYear) {
+            state.setPhase("YEAR_END_REVIEW");
+            String yearBand = calculateBand(calculateCurrentYearScore(play), decisionsPerYear);
+            state.setYearEndReview(buildYearEndReview(simData, play.getCurrentYear(), yearBand,
+                    sim, play));
+            return state;
+        }
+
+        // 4. Decision phase
+        state.setPhase("DECISION");
+
+        // Include opening narrative at the start of each year (decision index 0)
+        if (play.getCurrentDecision() == 0) {
+            String narrative = getOpeningNarrative(simData, play.getCurrentYear(),
+                    play.getPerformanceBand());
+            state.setOpeningNarrative(narrative);
+        }
+
+        // Get the current decision and convert to student-facing DTO
+        Map<String, Object> decision = getDecision(simData, play.getCurrentYear(),
+                play.getCurrentDecision());
+        state.setDecision(toStudentDecision(decision));
+
+        return state;
+    }
+
+    /**
+     * Submit a decision for the current play session.
+     * Resolves the choice, calculates points, advances the decision counter,
+     * and returns the next state.
+     */
+    @Transactional
+    @SuppressWarnings("unchecked")
+    public SimulationStateDTO submitDecision(String playId, String studentId, DecisionInputDTO input) {
+        SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
+                .orElseThrow(() -> new IllegalArgumentException("Play not found"));
+
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        if (!play.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Play not found");
+        }
+
+        if (play.getStatus() != SimulationPlay.PlayStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Play is not in progress");
+        }
+
+        Simulation sim = simulationRepository.findByIdAndClientId(play.getSimulationId(), clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+
+        Map<String, Object> simData = sim.getSimulationData();
+        int decisionsPerYear = sim.getDecisionsPerYear();
+
+        if (play.getCurrentDecision() >= decisionsPerYear) {
+            throw new IllegalStateException(
+                    "All decisions for this year are complete. Call advanceYear to proceed.");
+        }
+
+        // Get the decision configuration
+        Map<String, Object> decision = getDecision(simData, play.getCurrentYear(),
+                play.getCurrentDecision());
+
+        // Verify the submitted decision ID matches
+        String expectedDecisionId = (String) decision.get("id");
+        if (input.getDecisionId() != null && !input.getDecisionId().equals(expectedDecisionId)) {
+            throw new IllegalArgumentException("Decision ID mismatch. Expected: " + expectedDecisionId);
+        }
+
+        // Resolve the choice via the mapping service
+        String resolvedChoiceId = decisionMappingService.resolveChoice(
+                decision, input.getChoiceId(), input.getInput());
+
+        // Find the choice and its quality
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");
+        Map<String, Object> selectedChoice = choices.stream()
+                .filter(c -> resolvedChoiceId.equals(c.get("id")))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("Resolved choice not found"));
+
+        int quality = ((Number) selectedChoice.get("quality")).intValue();
+        int points = qualityToPoints(quality);
+
+        // Update play state
+        play.setCumulativeScore(play.getCumulativeScore() + points);
+        play.setCurrentDecision(play.getCurrentDecision() + 1);
+
+        // Record the decision in decisionsJson
+        List<Map<String, Object>> decisions = play.getDecisionsJson();
+        if (decisions == null) {
+            decisions = new ArrayList<>();
+        }
+        Map<String, Object> decisionRecord = new LinkedHashMap<>();
+        decisionRecord.put("year", play.getCurrentYear());
+        decisionRecord.put("decisionIndex", play.getCurrentDecision() - 1); // 0-based index of the decision just made
+        decisionRecord.put("decisionId", expectedDecisionId);
+        decisionRecord.put("choiceId", resolvedChoiceId);
+        decisionRecord.put("quality", quality);
+        decisionRecord.put("points", points);
+        if (input.getInput() != null) {
+            decisionRecord.put("rawInput", input.getInput());
+        }
+        decisions.add(decisionRecord);
+        play.setDecisionsJson(decisions);
+
+        playRepository.save(play);
+
+        // Return the next state
+        return getCurrentState(playId, studentId);
+    }
+
+    /**
+     * Advance to the next year after the student has seen the year-end review.
+     * Handles promotions, firing, and completion.
+     */
+    @Transactional
+    @SuppressWarnings("unchecked")
+    public SimulationStateDTO advanceYear(String playId, String studentId) {
+        SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
+                .orElseThrow(() -> new IllegalArgumentException("Play not found"));
+
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        if (!play.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Play not found");
+        }
+
+        if (play.getStatus() != SimulationPlay.PlayStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Play is not in progress");
+        }
+
+        Simulation sim = simulationRepository.findByIdAndClientId(play.getSimulationId(), clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+
+        Map<String, Object> simData = sim.getSimulationData();
+        int decisionsPerYear = sim.getDecisionsPerYear();
+
+        // Verify we're at the end of the year
+        if (play.getCurrentDecision() < decisionsPerYear) {
+            throw new IllegalStateException(
+                    "Cannot advance year — not all decisions have been made for the current year.");
+        }
+
+        // Calculate the year's band
+        int yearScore = calculateCurrentYearScore(play);
+        String yearBand = calculateBand(yearScore, decisionsPerYear);
+
+        // Store year result in yearScoresJson
+        List<Map<String, Object>> yearScores = play.getYearScoresJson();
+        if (yearScores == null) {
+            yearScores = new ArrayList<>();
+        }
+        Map<String, Object> yearResult = new LinkedHashMap<>();
+        yearResult.put("year", play.getCurrentYear());
+        yearResult.put("score", yearScore);
+        yearResult.put("band", yearBand);
+        yearResult.put("role", play.getCurrentRole());
+        yearScores.add(yearResult);
+        play.setYearScoresJson(yearScores);
+
+        // Handle consecutive struggling logic
+        if ("STRUGGLING".equals(yearBand)) {
+            play.setConsecutiveStruggling(play.getConsecutiveStruggling() + 1);
+            if (play.getConsecutiveStruggling() >= 2) {
+                // FIRED
+                play.setStatus(SimulationPlay.PlayStatus.FIRED);
+                play.setPerformanceBand(yearBand);
+                play.setFinalScore(calculateFinalScore(play, sim));
+                play.setCompletedAt(OffsetDateTime.now());
+                playRepository.save(play);
+                return getCurrentState(playId, studentId);
+            }
+        } else {
+            play.setConsecutiveStruggling(0);
+        }
+
+        // Handle promotion on THRIVING
+        if ("THRIVING".equals(yearBand)) {
+            List<String> roleProgression = getRoleProgression(simData);
+            if (roleProgression != null && play.getCurrentRole() != null) {
+                int currentRoleIndex = roleProgression.indexOf(play.getCurrentRole());
+                if (currentRoleIndex >= 0 && currentRoleIndex < roleProgression.size() - 1) {
+                    play.setCurrentRole(roleProgression.get(currentRoleIndex + 1));
+                }
+            }
+        }
+
+        // Check if simulation is complete
+        if (play.getCurrentYear() >= sim.getTargetYears()) {
+            play.setStatus(SimulationPlay.PlayStatus.COMPLETED);
+            play.setPerformanceBand(yearBand);
+            play.setFinalScore(calculateFinalScore(play, sim));
+            play.setCompletedAt(OffsetDateTime.now());
+            playRepository.save(play);
+            return getCurrentState(playId, studentId);
+        }
+
+        // Advance to next year
+        play.setCurrentYear(play.getCurrentYear() + 1);
+        play.setCurrentDecision(0);
+        play.setPerformanceBand(yearBand);
+
+        playRepository.save(play);
+        return getCurrentState(playId, studentId);
+    }
 
     @Transactional(readOnly = true)
     public List<SimulationPlayDTO> getPlayHistory(String simulationId, String studentId) {
@@ -326,5 +578,225 @@ public class SimulationService {
                     return SimulationPlayDTO.fromEntity(p, title);
                 })
                 .collect(Collectors.toList());
+    }
+
+    // ============ SIMULATION DATA HELPERS ============
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getYear(Map<String, Object> simData, int yearNum) {
+        List<Map<String, Object>> years = (List<Map<String, Object>>) simData.get("years");
+        if (years == null || yearNum < 1 || yearNum > years.size()) {
+            throw new IllegalStateException("Year " + yearNum + " not found in simulation data");
+        }
+        return years.get(yearNum - 1); // 1-based to 0-based
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getDecision(Map<String, Object> simData, int yearNum, int decisionIndex) {
+        Map<String, Object> year = getYear(simData, yearNum);
+        List<Map<String, Object>> decisions = (List<Map<String, Object>>) year.get("decisions");
+        if (decisions == null || decisionIndex < 0 || decisionIndex >= decisions.size()) {
+            throw new IllegalStateException(
+                    "Decision " + decisionIndex + " not found in year " + yearNum);
+        }
+        return decisions.get(decisionIndex);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String getOpeningNarrative(Map<String, Object> simData, int yearNum, String band) {
+        Map<String, Object> year = getYear(simData, yearNum);
+        Map<String, String> narratives = (Map<String, String>) year.get("openingNarrative");
+        if (narratives == null) {
+            return "";
+        }
+        return narratives.getOrDefault(band, narratives.getOrDefault("STEADY", ""));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getYearEndReviewData(Map<String, Object> simData, int yearNum,
+            String band) {
+        Map<String, Object> year = getYear(simData, yearNum);
+        Map<String, Object> reviews = (Map<String, Object>) year.get("yearEndReview");
+        if (reviews == null) {
+            return Map.of();
+        }
+        // Map performance band to review key: THRIVING→STRONG, STEADY→MID, STRUGGLING→POOR
+        String reviewKey = bandToReviewKey(band);
+        Map<String, Object> review = (Map<String, Object>) reviews.get(reviewKey);
+        if (review == null) {
+            // Fallback to MID
+            review = (Map<String, Object>) reviews.get("MID");
+        }
+        return review != null ? review : Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> getRoleProgression(Map<String, Object> simData) {
+        return (List<String>) simData.get("roleProgression");
+    }
+
+    private String calculateBand(int yearScore, int decisionsPerYear) {
+        double ratio = (double) yearScore / (decisionsPerYear * 10);
+        if (ratio >= 0.67) return "THRIVING";
+        if (ratio >= 0.33) return "STEADY";
+        return "STRUGGLING";
+    }
+
+    private String bandToReviewKey(String band) {
+        return switch (band) {
+            case "THRIVING" -> "STRONG";
+            case "STRUGGLING" -> "POOR";
+            default -> "MID";
+        };
+    }
+
+    private int qualityToPoints(int quality) {
+        return switch (quality) {
+            case 3 -> 10;
+            case 2 -> 5;
+            default -> 0;
+        };
+    }
+
+    /**
+     * Calculate the score for the current year based on decisions made so far.
+     */
+    @SuppressWarnings("unchecked")
+    private int calculateCurrentYearScore(SimulationPlay play) {
+        List<Map<String, Object>> decisions = play.getDecisionsJson();
+        if (decisions == null || decisions.isEmpty()) {
+            return 0;
+        }
+
+        int currentYear = play.getCurrentYear();
+        return decisions.stream()
+                .filter(d -> {
+                    Object yearObj = d.get("year");
+                    return yearObj != null && ((Number) yearObj).intValue() == currentYear;
+                })
+                .mapToInt(d -> {
+                    Object pointsObj = d.get("points");
+                    return pointsObj != null ? ((Number) pointsObj).intValue() : 0;
+                })
+                .sum();
+    }
+
+    /**
+     * Calculate the final normalized score (0-100) based on cumulative score vs max possible.
+     */
+    private int calculateFinalScore(SimulationPlay play, Simulation sim) {
+        int maxPossible = sim.getTargetYears() * sim.getDecisionsPerYear() * 10;
+        if (maxPossible == 0) return 0;
+        return (int) Math.round((double) play.getCumulativeScore() / maxPossible * 100);
+    }
+
+    /**
+     * Convert a decision config map to a student-facing SimulationDecisionDTO,
+     * stripping quality scores and mapping configuration from choices.
+     */
+    @SuppressWarnings("unchecked")
+    private SimulationDecisionDTO toStudentDecision(Map<String, Object> decision) {
+        SimulationDecisionDTO dto = new SimulationDecisionDTO();
+        dto.setDecisionId((String) decision.get("id"));
+        dto.setNarrative((String) decision.get("narrative"));
+        dto.setDecisionType((String) decision.get("decisionType"));
+
+        // Include decision config but strip mappings (server-side only)
+        Map<String, Object> config = (Map<String, Object>) decision.get("decisionConfig");
+        if (config != null) {
+            Map<String, Object> studentConfig = new LinkedHashMap<>(config);
+            studentConfig.remove("mappings"); // Mappings are server-side only
+            dto.setDecisionConfig(studentConfig);
+        }
+
+        // Convert choices, stripping quality scores
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");
+        if (choices != null) {
+            List<SimulationDecisionDTO.ChoiceDTO> studentChoices = choices.stream()
+                    .map(c -> new SimulationDecisionDTO.ChoiceDTO(
+                            (String) c.get("id"),
+                            (String) c.get("text")))
+                    .collect(Collectors.toList());
+            dto.setChoices(studentChoices);
+        }
+
+        return dto;
+    }
+
+    /**
+     * Build a YearEndReviewDTO from simulation data for the given year and band.
+     */
+    @SuppressWarnings("unchecked")
+    private YearEndReviewDTO buildYearEndReview(Map<String, Object> simData, int yearNum,
+            String band, Simulation sim, SimulationPlay play) {
+        Map<String, Object> reviewData = getYearEndReviewData(simData, yearNum, band);
+
+        YearEndReviewDTO review = new YearEndReviewDTO();
+        review.setYear(yearNum);
+        review.setBand(band);
+        review.setMetrics((Map<String, Object>) reviewData.get("metrics"));
+        review.setFeedback((Map<String, String>) reviewData.get("feedback"));
+
+        // Determine if student will be promoted (THRIVING)
+        if ("THRIVING".equals(band)) {
+            List<String> roleProgression = getRoleProgression(simData);
+            if (roleProgression != null && play.getCurrentRole() != null) {
+                int currentRoleIndex = roleProgression.indexOf(play.getCurrentRole());
+                if (currentRoleIndex >= 0 && currentRoleIndex < roleProgression.size() - 1) {
+                    review.setPromotionTitle(roleProgression.get(currentRoleIndex + 1));
+                }
+            }
+        }
+
+        // Determine if student will be fired (2nd consecutive STRUGGLING)
+        if ("STRUGGLING".equals(band) && play.getConsecutiveStruggling() >= 1) {
+            // This would be the 2nd consecutive struggling year
+            review.setFired(true);
+        }
+
+        return review;
+    }
+
+    /**
+     * Build a DebriefDTO for completed simulations based on final performance band.
+     */
+    @SuppressWarnings("unchecked")
+    private DebriefDTO buildDebrief(Map<String, Object> simData, String band) {
+        Map<String, Object> finalDebrief = (Map<String, Object>) simData.get("finalDebrief");
+        if (finalDebrief == null) {
+            return new DebriefDTO();
+        }
+
+        // Map band to debrief key
+        Map<String, Object> bandDebrief = (Map<String, Object>) finalDebrief.get(band);
+        if (bandDebrief == null) {
+            bandDebrief = (Map<String, Object>) finalDebrief.get("STEADY");
+        }
+        if (bandDebrief == null) {
+            return new DebriefDTO();
+        }
+
+        return new DebriefDTO(
+                (String) bandDebrief.get("yourPath"),
+                (String) bandDebrief.get("conceptAtWork"),
+                (String) bandDebrief.get("theGap"),
+                (String) bandDebrief.get("playAgain"));
+    }
+
+    /**
+     * Build a DebriefDTO for fired students.
+     */
+    @SuppressWarnings("unchecked")
+    private DebriefDTO buildFiredDebrief(Map<String, Object> simData) {
+        Map<String, Object> firedDebrief = (Map<String, Object>) simData.get("firedDebrief");
+        if (firedDebrief == null) {
+            return new DebriefDTO();
+        }
+
+        return new DebriefDTO(
+                (String) firedDebrief.get("yourPath"),
+                (String) firedDebrief.get("conceptAtWork"),
+                (String) firedDebrief.get("theGap"),
+                (String) firedDebrief.get("playAgain"));
     }
 }

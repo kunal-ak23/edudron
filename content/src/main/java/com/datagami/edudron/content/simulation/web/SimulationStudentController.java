@@ -4,6 +4,7 @@ import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.content.simulation.dto.DecisionInputDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationPlayDTO;
+import com.datagami.edudron.content.simulation.dto.SimulationStateDTO;
 import com.datagami.edudron.content.simulation.service.SimulationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -127,8 +128,31 @@ public class SimulationStudentController {
                 .body(simulationService.startPlay(id, studentId));
     }
 
-    // TODO: v2 play flow endpoints (getCurrentState, submitDecision, getDebrief) will be
-    // implemented in a subsequent task to match the year-based career tenure model.
+    @GetMapping("/play/{playId}/state")
+    @Operation(summary = "Get current play state",
+               description = "Get the current state of a play session including phase, decision, or review")
+    public ResponseEntity<SimulationStateDTO> getCurrentState(@PathVariable String playId) {
+        String studentId = getCurrentUserId();
+        return ResponseEntity.ok(simulationService.getCurrentState(playId, studentId));
+    }
+
+    @PostMapping("/play/{playId}/decide")
+    @Operation(summary = "Submit a decision",
+               description = "Submit a decision for the current play session")
+    public ResponseEntity<SimulationStateDTO> submitDecision(
+            @PathVariable String playId,
+            @RequestBody DecisionInputDTO input) {
+        String studentId = getCurrentUserId();
+        return ResponseEntity.ok(simulationService.submitDecision(playId, studentId, input));
+    }
+
+    @PostMapping("/play/{playId}/advance-year")
+    @Operation(summary = "Advance to next year",
+               description = "Advance to the next year after viewing the year-end review")
+    public ResponseEntity<SimulationStateDTO> advanceYear(@PathVariable String playId) {
+        String studentId = getCurrentUserId();
+        return ResponseEntity.ok(simulationService.advanceYear(playId, studentId));
+    }
 
     @GetMapping("/{id}/history")
     @Operation(summary = "Get play history for a simulation",
