@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -25,12 +25,13 @@ export const dynamic = 'force-dynamic'
 
 export default function GenerateSimulationPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
 
   const [concept, setConcept] = useState('')
   const [subject, setSubject] = useState('')
   const [audience, setAudience] = useState<string>('')
-  const [courseId, setCourseId] = useState<string>('')
+  const [courseId, setCourseId] = useState<string>(searchParams.get('courseId') || '')
   const [description, setDescription] = useState('')
   const [targetDepth, setTargetDepth] = useState(15)
   const [choicesPerNode, setChoicesPerNode] = useState('3')
