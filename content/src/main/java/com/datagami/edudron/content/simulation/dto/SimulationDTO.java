@@ -1,6 +1,8 @@
 package com.datagami.edudron.content.simulation.dto;
 
+import com.datagami.edudron.content.simulation.domain.Simulation;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -25,8 +27,29 @@ public class SimulationDTO {
     private OffsetDateTime createdAt;
     private int totalPlays; // computed field
 
-    // Static factory — entity class not yet available, will be wired in Task 5
-    // public static SimulationDTO fromEntity(Simulation sim) { ... }
+    public static SimulationDTO fromEntity(Simulation sim) {
+        SimulationDTO dto = new SimulationDTO();
+        dto.setId(sim.getId());
+        dto.setTitle(sim.getTitle());
+        dto.setConcept(sim.getConcept());
+        dto.setSubject(sim.getSubject());
+        dto.setAudience(sim.getAudience());
+        dto.setDescription(sim.getDescription());
+        dto.setCourseId(sim.getCourseId());
+        dto.setLectureId(sim.getLectureId());
+        dto.setTreeData(sim.getTreeData());
+        dto.setTargetDepth(sim.getTargetDepth());
+        dto.setChoicesPerNode(sim.getChoicesPerNode());
+        dto.setMaxDepth(sim.getMaxDepth());
+        dto.setStatus(sim.getStatus() != null ? sim.getStatus().name() : null);
+        dto.setVisibility(sim.getVisibility() != null ? sim.getVisibility().name() : null);
+        dto.setAssignedToSectionIds(sim.getAssignedToSectionIds() != null
+                ? Arrays.asList(sim.getAssignedToSectionIds()) : null);
+        dto.setCreatedBy(sim.getCreatedBy());
+        dto.setPublishedAt(sim.getPublishedAt());
+        dto.setCreatedAt(sim.getCreatedAt());
+        return dto;
+    }
 
     // Getters and Setters
     public String getId() { return id; }

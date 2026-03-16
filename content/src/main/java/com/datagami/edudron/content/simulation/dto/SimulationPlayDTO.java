@@ -1,5 +1,6 @@
 package com.datagami.edudron.content.simulation.dto;
 
+import com.datagami.edudron.content.simulation.domain.SimulationPlay;
 import java.time.OffsetDateTime;
 
 public class SimulationPlayDTO {
@@ -14,8 +15,20 @@ public class SimulationPlayDTO {
     private OffsetDateTime startedAt;
     private OffsetDateTime completedAt;
 
-    // Static factory — entity class not yet available, will be wired in Task 5
-    // public static SimulationPlayDTO fromEntity(SimulationPlay play, String simulationTitle) { ... }
+    public static SimulationPlayDTO fromEntity(SimulationPlay play, String simulationTitle) {
+        SimulationPlayDTO dto = new SimulationPlayDTO();
+        dto.setId(play.getId());
+        dto.setSimulationId(play.getSimulationId());
+        dto.setSimulationTitle(simulationTitle);
+        dto.setAttemptNumber(play.getAttemptNumber() != null ? play.getAttemptNumber() : 1);
+        dto.setPrimary(play.getIsPrimary() != null && play.getIsPrimary());
+        dto.setStatus(play.getStatus() != null ? play.getStatus().name() : null);
+        dto.setDecisionsMade(play.getDecisionsMade() != null ? play.getDecisionsMade() : 0);
+        dto.setScore(play.getScore());
+        dto.setStartedAt(play.getStartedAt());
+        dto.setCompletedAt(play.getCompletedAt());
+        return dto;
+    }
 
     // Getters and Setters
     public String getId() { return id; }
