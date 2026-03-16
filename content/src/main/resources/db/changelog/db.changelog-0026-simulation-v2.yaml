@@ -43,6 +43,7 @@ databaseChangeLog:
               - column: { name: performance_band, type: varchar(20) }
               - column: { name: consecutive_struggling, type: int, defaultValueNumeric: 0 }
               - column: { name: final_score, type: int }
+              - column: { name: decisions_json, type: jsonb }
         - dropColumn:
             tableName: simulation_play
             schemaName: content
