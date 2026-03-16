@@ -32,8 +32,9 @@ export type { BulkEnrollmentResult as EnrollmentBulkEnrollmentResult } from './a
 export { AnalyticsApi } from './api/analytics'
 export { SimulationsApi } from './api/simulations'
 export type {
-  GenerateSimulationRequest, SimulationDTO, SimulationNodeDTO,
-  SimulationPlayDTO, DecisionInput, ChoiceDTO, DebriefDTO,
+  GenerateSimulationRequest, SimulationDTO, SimulationStateDTO,
+  SimulationDecisionDTO, SimulationPlayDTO, DecisionInput,
+  ChoiceDTO, DebriefDTO, YearEndReviewDTO,
   SimulationExportDTO
 } from './api/simulations'
 export type {

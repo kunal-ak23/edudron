@@ -9,8 +9,8 @@ export interface GenerateSimulationRequest {
   courseId?: string
   lectureId?: string
   description?: string
-  targetDepth?: number  // 10-30, default 15
-  choicesPerNode?: number  // 2-4, default 3
+  targetYears?: number   // 3-7, default 5
+  decisionsPerYear?: number  // 4-8, default 6
 }
 
 export interface SimulationDTO {
@@ -22,12 +22,11 @@ export interface SimulationDTO {
   description?: string
   courseId?: string
   lectureId?: string
-  treeData?: any  // full tree (admin only)
-  targetDepth: number
-  choicesPerNode: number
-  maxDepth?: number
-  status: 'DRAFT' | 'GENERATING' | 'REVIEW' | 'PUBLISHED' | 'ARCHIVED'
-  visibility: 'ALL' | 'ASSIGNED_ONLY'
+  simulationData?: any  // full structure (admin only)
+  targetYears: number
+  decisionsPerYear: number
+  status: string
+  visibility: string
   assignedToSectionIds?: string[]
   createdBy?: string
   publishedAt?: string
@@ -35,21 +34,41 @@ export interface SimulationDTO {
   totalPlays: number
 }
 
-export interface SimulationNodeDTO {
-  nodeId: string
-  type: 'SCENARIO' | 'TERMINAL'
+export interface SimulationStateDTO {
+  phase: 'DECISION' | 'YEAR_END_REVIEW' | 'DEBRIEF' | 'FIRED'
+  currentYear: number
+  currentDecision: number
+  totalDecisions: number
+  currentRole: string
+  cumulativeScore: number
+  yearScore: number
+  performanceBand: string
+  decision?: SimulationDecisionDTO
+  yearEndReview?: YearEndReviewDTO
+  debrief?: DebriefDTO
+  openingNarrative?: string
+}
+
+export interface SimulationDecisionDTO {
+  decisionId: string
   narrative: string
   decisionType?: string
   decisionConfig?: any
   choices?: ChoiceDTO[]
-  debrief?: DebriefDTO
-  score?: number
-  terminal: boolean
 }
 
 export interface ChoiceDTO {
   id: string
   text: string
+}
+
+export interface YearEndReviewDTO {
+  year: number
+  band: string
+  metrics: Record<string, any>
+  feedback: Record<string, string>
+  promotionTitle?: string
+  fired: boolean
 }
 
 export interface DebriefDTO {
@@ -60,7 +79,7 @@ export interface DebriefDTO {
 }
 
 export interface DecisionInput {
-  nodeId: string
+  decisionId: string
   choiceId?: string  // for NARRATIVE_CHOICE
   input?: Record<string, any>  // for interactive types
 }
@@ -71,9 +90,13 @@ export interface SimulationPlayDTO {
   simulationTitle: string
   attemptNumber: number
   isPrimary: boolean
-  status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED'
-  decisionsMade: number
-  score?: number
+  status: string
+  currentYear: number
+  currentDecision: number
+  currentRole?: string
+  cumulativeScore: number
+  finalScore?: number
+  performanceBand?: string
   startedAt: string
   completedAt?: string
 }
@@ -87,9 +110,9 @@ export interface SimulationExportDTO {
     subject: string
     audience: string
     description?: string
-    treeData: any
-    targetDepth: number
-    choicesPerNode: number
+    simulationData: any
+    targetYears: number
+    decisionsPerYear: number
     metadataJson?: any
   }
 }
@@ -144,8 +167,8 @@ export class SimulationsApi {
     return response.data
   }
 
-  async updateTree(id: string, treeData: any): Promise<SimulationDTO> {
-    const response = await this.apiClient.put<SimulationDTO>(`/content/api/simulations/${id}/tree`, treeData)
+  async updateSimulationData(id: string, simulationData: any): Promise<SimulationDTO> {
+    const response = await this.apiClient.put<SimulationDTO>(`/content/api/simulations/${id}/data`, simulationData)
     return response.data
   }
 
@@ -183,21 +206,21 @@ export class SimulationsApi {
     return response.data
   }
 
-  async getCurrentNode(simulationId: string, playId: string): Promise<SimulationNodeDTO> {
-    const response = await this.apiClient.get<SimulationNodeDTO>(
-      `/content/api/simulations/${simulationId}/play/${playId}`)
+  async getCurrentState(playId: string): Promise<SimulationStateDTO> {
+    const response = await this.apiClient.get<SimulationStateDTO>(
+      `/content/api/simulations/play/${playId}/state`)
     return response.data
   }
 
-  async submitDecision(simulationId: string, playId: string, input: DecisionInput): Promise<SimulationNodeDTO> {
-    const response = await this.apiClient.post<SimulationNodeDTO>(
-      `/content/api/simulations/${simulationId}/play/${playId}/decide`, input)
+  async submitDecision(playId: string, input: DecisionInput): Promise<SimulationStateDTO> {
+    const response = await this.apiClient.post<SimulationStateDTO>(
+      `/content/api/simulations/play/${playId}/decide`, input)
     return response.data
   }
 
-  async getDebrief(simulationId: string, playId: string): Promise<SimulationNodeDTO> {
-    const response = await this.apiClient.get<SimulationNodeDTO>(
-      `/content/api/simulations/${simulationId}/play/${playId}/debrief`)
+  async advanceYear(playId: string): Promise<SimulationStateDTO> {
+    const response = await this.apiClient.post<SimulationStateDTO>(
+      `/content/api/simulations/play/${playId}/advance-year`, {})
     return response.data
   }
 
