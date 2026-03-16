@@ -54,7 +54,7 @@ public class SimulationPlay {
     @Column(name = "current_decision")
     private Integer currentDecision = 0;
 
-    @Column(name = "current_role", length = 100)
+    @Column(name = "\"current_role\"", length = 100)
     private String currentRole;
 
     @Column(name = "cumulative_score")
