@@ -26,12 +26,16 @@ public class DecisionMappingService {
 
         Map<String, Object> config = (Map<String, Object>) node.get("decisionConfig");
         if (config == null) {
-            throw new IllegalArgumentException("Decision config is required for type: " + decisionType);
+            // Fallback: treat as NARRATIVE_CHOICE if config is missing
+            logger.warn("Decision config missing for type {}. Falling back to NARRATIVE_CHOICE.", decisionType);
+            return validateChoiceId(node, choiceId);
         }
 
         List<Map<String, Object>> mappings = (List<Map<String, Object>>) config.get("mappings");
         if (mappings == null || mappings.isEmpty()) {
-            throw new IllegalArgumentException("Mappings are required for type: " + decisionType);
+            // Fallback: treat as NARRATIVE_CHOICE if mappings are missing
+            logger.warn("Mappings missing for type {}. Falling back to NARRATIVE_CHOICE.", decisionType);
+            return validateChoiceId(node, choiceId);
         }
 
         Map<String, Object> flatInput = "COMPOUND".equals(decisionType)
