@@ -18,21 +18,31 @@ interface DecisionInputProps {
 }
 
 export function DecisionInput({ decisionType, decisionConfig, choices, onSubmit, disabled }: DecisionInputProps) {
+  const config = decisionConfig || {}
+  const fallback = <NarrativeChoiceInput choices={choices ?? []} onSubmit={onSubmit} disabled={disabled} />
+
+  // Validate config has required fields for interactive types — fall back to narrative if missing
   switch (decisionType) {
     case 'BUDGET_ALLOCATION':
-      return <BudgetAllocationInput config={decisionConfig} onSubmit={onSubmit} disabled={disabled} />
+      if (!config.buckets?.length) return fallback
+      return <BudgetAllocationInput config={config} onSubmit={onSubmit} disabled={disabled} />
     case 'PRIORITY_RANKING':
-      return <PriorityRankingInput config={decisionConfig} onSubmit={onSubmit} disabled={disabled} />
+      if (!config.items?.length) return fallback
+      return <PriorityRankingInput config={config} onSubmit={onSubmit} disabled={disabled} />
     case 'TRADEOFF_SLIDER':
-      return <TradeoffSliderInput config={decisionConfig} onSubmit={onSubmit} disabled={disabled} />
+      if (!config.leftLabel && !config.label) return fallback
+      return <TradeoffSliderInput config={config} onSubmit={onSubmit} disabled={disabled} />
     case 'RESOURCE_ASSIGNMENT':
-      return <ResourceAssignmentInput config={decisionConfig} onSubmit={onSubmit} disabled={disabled} />
+      if (!config.buckets?.length) return fallback
+      return <ResourceAssignmentInput config={config} onSubmit={onSubmit} disabled={disabled} />
     case 'TIMELINE_CHOICE':
-      return <TimelineChoiceInput config={decisionConfig} onSubmit={onSubmit} disabled={disabled} />
+      if (!config.milestones?.length) return fallback
+      return <TimelineChoiceInput config={config} onSubmit={onSubmit} disabled={disabled} />
     case 'COMPOUND':
-      return <CompoundInput config={decisionConfig} onSubmit={onSubmit} disabled={disabled} />
+      if (!config.steps?.length) return fallback
+      return <CompoundInput config={config} onSubmit={onSubmit} disabled={disabled} />
     case 'NARRATIVE_CHOICE':
     default:
-      return <NarrativeChoiceInput choices={choices ?? []} onSubmit={onSubmit} disabled={disabled} />
+      return fallback
   }
 }
