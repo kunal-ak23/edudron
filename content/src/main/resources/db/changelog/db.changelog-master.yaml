@@ -76,3 +76,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0024-add-archived-to-assessments.yaml
   - include:
       file: db/changelog/db.changelog-0025-simulation-tables.yaml
+  - include:
+      file: db/changelog/db.changelog-0026-simulation-v2.yaml
