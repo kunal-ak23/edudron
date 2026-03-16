@@ -342,11 +342,11 @@ public class AIJobWorker {
             genRequest.setConcept(request.get("concept"));
             genRequest.setSubject(request.get("subject"));
             genRequest.setAudience(request.get("audience"));
-            if (request.get("targetDepth") != null) {
-                genRequest.setTargetDepth(Integer.parseInt(request.get("targetDepth")));
+            if (request.get("targetYears") != null) {
+                genRequest.setTargetYears(Integer.parseInt(request.get("targetYears")));
             }
-            if (request.get("choicesPerNode") != null) {
-                genRequest.setChoicesPerNode(Integer.parseInt(request.get("choicesPerNode")));
+            if (request.get("decisionsPerYear") != null) {
+                genRequest.setDecisionsPerYear(Integer.parseInt(request.get("decisionsPerYear")));
             }
 
             job.setProgress(20);
