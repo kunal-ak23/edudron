@@ -103,6 +103,8 @@ export default function SettingsPage() {
         return 'Proctored Exams'
       case TenantFeatureType.AI_IMAGE_GENERATION:
         return 'AI Image Generation'
+      case TenantFeatureType.SIMULATION:
+        return 'Simulations'
       default:
         return feature
     }
@@ -118,6 +120,8 @@ export default function SettingsPage() {
         return 'Enable proctored exams with webcam monitoring, tab switch detection, copy-paste blocking, and identity verification. Instructors can configure proctoring settings per exam.'
       case TenantFeatureType.AI_IMAGE_GENERATION:
         return 'Enable AI-powered image generation for courses and lectures. When generating content with AI, a checkbox will appear to generate images for each lecture using FLUX.2-pro.'
+      case TenantFeatureType.SIMULATION:
+        return 'Enable immersive decision-based simulations where students learn concepts through branching scenarios and real-world decision making.'
       default:
         return ''
     }

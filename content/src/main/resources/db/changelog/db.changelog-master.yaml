@@ -74,3 +74,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0023-drop-section-fk.yaml
   - include:
       file: db/changelog/db.changelog-0024-add-archived-to-assessments.yaml
+  - include:
+      file: db/changelog/db.changelog-0025-simulation-tables.yaml
