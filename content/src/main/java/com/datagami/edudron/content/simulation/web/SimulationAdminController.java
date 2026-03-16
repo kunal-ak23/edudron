@@ -29,6 +29,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+// TODO: Add backend feature flag check (SIMULATION feature type) once inter-service feature
+//  flag validation is available. Currently feature checks are frontend-only, consistent with
+//  PsychTestController which also lacks a backend feature flag check.
 @RestController
 @RequestMapping("/content/api/simulations")
 @Tag(name = "Simulations (Admin)", description = "Admin endpoints for simulation management")
@@ -126,6 +129,7 @@ public class SimulationAdminController {
     @GetMapping("/generate/jobs/{jobId}")
     @Operation(summary = "Get simulation generation job status")
     public ResponseEntity<?> getJobStatus(@PathVariable String jobId) {
+        requireAdmin();
         AIGenerationJobDTO job = aiJobQueueService.getJob(jobId);
         if (job == null) {
             return ResponseEntity.notFound().build();

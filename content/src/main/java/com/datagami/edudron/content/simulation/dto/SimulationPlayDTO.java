@@ -1,6 +1,7 @@
 package com.datagami.edudron.content.simulation.dto;
 
 import com.datagami.edudron.content.simulation.domain.SimulationPlay;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.OffsetDateTime;
 
 public class SimulationPlayDTO {
@@ -43,6 +44,7 @@ public class SimulationPlayDTO {
     public int getAttemptNumber() { return attemptNumber; }
     public void setAttemptNumber(int attemptNumber) { this.attemptNumber = attemptNumber; }
 
+    @JsonProperty("isPrimary")
     public boolean isPrimary() { return isPrimary; }
     public void setPrimary(boolean primary) { isPrimary = primary; }
 

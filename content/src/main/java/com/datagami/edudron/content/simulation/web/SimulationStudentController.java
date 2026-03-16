@@ -29,6 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+// TODO: Add backend feature flag check (SIMULATION feature type) once inter-service feature
+//  flag validation is available. Currently feature checks are frontend-only, consistent with
+//  PsychTestController which also lacks a backend feature flag check.
 @RestController
 @RequestMapping("/content/api/simulations")
 @Tag(name = "Simulations (Student)", description = "Student endpoints for playing simulations")

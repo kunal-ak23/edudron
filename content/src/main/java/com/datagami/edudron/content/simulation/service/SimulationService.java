@@ -241,6 +241,8 @@ public class SimulationService {
                 .map(sim -> {
                     SimulationDTO dto = SimulationDTO.fromEntity(sim);
                     dto.setTreeData(null); // Strip tree from list view
+                    dto.setConcept(null);  // Concept must never be visible to students before play
+                    dto.setCreatedBy(null);
                     dto.setTotalPlays((int) playRepository.countBySimulationId(sim.getId()));
                     return dto;
                 })
@@ -297,14 +299,19 @@ public class SimulationService {
 
     @Transactional(readOnly = true)
     public SimulationNodeDTO getCurrentNode(String playId, String studentId) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
         SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Play session not found"));
+
+        if (!play.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Play session not found");
+        }
 
         if (play.getStatus() != SimulationPlay.PlayStatus.IN_PROGRESS) {
             throw new IllegalStateException("Play session is not in progress");
         }
 
-        Simulation sim = simulationRepository.findById(play.getSimulationId())
+        Simulation sim = simulationRepository.findByIdAndClientId(play.getSimulationId(), clientId)
                 .orElseThrow(() -> new IllegalStateException("Simulation not found"));
         Map<String, Object> node = getNodeFromTree(sim.getTreeData(), play.getCurrentNodeId());
 
@@ -314,14 +321,19 @@ public class SimulationService {
     @Transactional
     @SuppressWarnings("unchecked")
     public SimulationNodeDTO submitDecision(String playId, String studentId, DecisionInputDTO input) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
         SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Play session not found"));
+
+        if (!play.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Play session not found");
+        }
 
         if (play.getStatus() != SimulationPlay.PlayStatus.IN_PROGRESS) {
             throw new IllegalStateException("Play session is not in progress");
         }
 
-        Simulation sim = simulationRepository.findById(play.getSimulationId())
+        Simulation sim = simulationRepository.findByIdAndClientId(play.getSimulationId(), clientId)
                 .orElseThrow(() -> new IllegalStateException("Simulation not found"));
         Map<String, Object> currentNode = getNodeFromTree(sim.getTreeData(), play.getCurrentNodeId());
 
@@ -383,14 +395,19 @@ public class SimulationService {
 
     @Transactional(readOnly = true)
     public SimulationNodeDTO getDebrief(String playId, String studentId) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
         SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Play session not found"));
+
+        if (!play.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Play session not found");
+        }
 
         if (play.getStatus() != SimulationPlay.PlayStatus.COMPLETED) {
             throw new IllegalStateException("Play session is not completed");
         }
 
-        Simulation sim = simulationRepository.findById(play.getSimulationId())
+        Simulation sim = simulationRepository.findByIdAndClientId(play.getSimulationId(), clientId)
                 .orElseThrow(() -> new IllegalStateException("Simulation not found"));
         Map<String, Object> terminalNode = getNodeFromTree(sim.getTreeData(), play.getFinalNodeId());
         return toStudentNode(terminalNode);
@@ -398,7 +415,8 @@ public class SimulationService {
 
     @Transactional(readOnly = true)
     public List<SimulationPlayDTO> getPlayHistory(String simulationId, String studentId) {
-        Simulation sim = simulationRepository.findById(simulationId)
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(simulationId, clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
         List<SimulationPlay> plays = playRepository
                 .findBySimulationIdAndStudentIdOrderByAttemptNumberDesc(simulationId, studentId);
@@ -414,7 +432,7 @@ public class SimulationService {
                 .findByStudentIdAndClientIdOrderByStartedAtDesc(studentId, clientId);
         return plays.stream()
                 .map(p -> {
-                    String title = simulationRepository.findById(p.getSimulationId())
+                    String title = simulationRepository.findByIdAndClientId(p.getSimulationId(), clientId)
                             .map(Simulation::getTitle).orElse("Unknown");
                     return SimulationPlayDTO.fromEntity(p, title);
                 })

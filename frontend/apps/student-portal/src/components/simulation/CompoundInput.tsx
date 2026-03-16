@@ -25,7 +25,10 @@ export function CompoundInput({ config, onSubmit, disabled }: CompoundInputProps
   const [stepResults, setStepResults] = useState<any[]>([])
 
   const handleStepSubmit = (data: any) => {
-    const newResults = [...stepResults, data]
+    // Flatten: sub-components return { input: {...} } or { choiceId: 'x' }
+    // Extract the input part so backend receives step1.marketing not step1.input.marketing
+    const flatStep = data.input || data
+    const newResults = [...stepResults, flatStep]
     setStepResults(newResults)
 
     if (currentStep < steps.length - 1) {

@@ -1,5 +1,7 @@
 package com.datagami.edudron.content.simulation.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 
 public class GenerateSimulationRequest {
@@ -15,7 +17,9 @@ public class GenerateSimulationRequest {
     private String courseId;
     private String lectureId;
     private String description;
+    @Min(10) @Max(30)
     private Integer targetDepth; // default 15, range 10-30
+    @Min(2) @Max(4)
     private Integer choicesPerNode; // default 3, range 2-4
 
     // Getters and Setters
