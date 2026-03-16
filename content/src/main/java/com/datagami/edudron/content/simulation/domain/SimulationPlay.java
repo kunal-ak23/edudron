@@ -22,6 +22,7 @@ public class SimulationPlay {
     public enum PlayStatus {
         IN_PROGRESS,
         COMPLETED,
+        FIRED,
         ABANDONED
     }
 
@@ -47,20 +48,34 @@ public class SimulationPlay {
     @Column(nullable = false)
     private PlayStatus status = PlayStatus.IN_PROGRESS;
 
+    @Column(name = "current_year")
+    private Integer currentYear = 1;
+
+    @Column(name = "current_decision")
+    private Integer currentDecision = 0;
+
+    @Column(name = "current_role", length = 100)
+    private String currentRole;
+
+    @Column(name = "cumulative_score")
+    private Integer cumulativeScore = 0;
+
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "path_json", columnDefinition = "jsonb")
-    private List<Map<String, Object>> pathJson;
+    @Column(name = "year_scores_json", columnDefinition = "jsonb")
+    private List<Map<String, Object>> yearScoresJson;
 
-    @Column(name = "current_node_id", length = 100)
-    private String currentNodeId;
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "decisions_json", columnDefinition = "jsonb")
+    private List<Map<String, Object>> decisionsJson;
 
-    @Column(name = "final_node_id", length = 100)
-    private String finalNodeId;
+    @Column(name = "performance_band", length = 20)
+    private String performanceBand;
 
-    private Integer score;
+    @Column(name = "consecutive_struggling")
+    private Integer consecutiveStruggling = 0;
 
-    @Column(name = "decisions_made")
-    private Integer decisionsMade = 0;
+    @Column(name = "final_score")
+    private Integer finalScore;
 
     @Column(name = "started_at")
     private OffsetDateTime startedAt;
@@ -134,44 +149,76 @@ public class SimulationPlay {
         this.status = status;
     }
 
-    public List<Map<String, Object>> getPathJson() {
-        return pathJson;
+    public Integer getCurrentYear() {
+        return currentYear;
     }
 
-    public void setPathJson(List<Map<String, Object>> pathJson) {
-        this.pathJson = pathJson;
+    public void setCurrentYear(Integer currentYear) {
+        this.currentYear = currentYear;
     }
 
-    public String getCurrentNodeId() {
-        return currentNodeId;
+    public Integer getCurrentDecision() {
+        return currentDecision;
     }
 
-    public void setCurrentNodeId(String currentNodeId) {
-        this.currentNodeId = currentNodeId;
+    public void setCurrentDecision(Integer currentDecision) {
+        this.currentDecision = currentDecision;
     }
 
-    public String getFinalNodeId() {
-        return finalNodeId;
+    public String getCurrentRole() {
+        return currentRole;
     }
 
-    public void setFinalNodeId(String finalNodeId) {
-        this.finalNodeId = finalNodeId;
+    public void setCurrentRole(String currentRole) {
+        this.currentRole = currentRole;
     }
 
-    public Integer getScore() {
-        return score;
+    public Integer getCumulativeScore() {
+        return cumulativeScore;
     }
 
-    public void setScore(Integer score) {
-        this.score = score;
+    public void setCumulativeScore(Integer cumulativeScore) {
+        this.cumulativeScore = cumulativeScore;
     }
 
-    public Integer getDecisionsMade() {
-        return decisionsMade;
+    public List<Map<String, Object>> getYearScoresJson() {
+        return yearScoresJson;
     }
 
-    public void setDecisionsMade(Integer decisionsMade) {
-        this.decisionsMade = decisionsMade;
+    public void setYearScoresJson(List<Map<String, Object>> yearScoresJson) {
+        this.yearScoresJson = yearScoresJson;
+    }
+
+    public List<Map<String, Object>> getDecisionsJson() {
+        return decisionsJson;
+    }
+
+    public void setDecisionsJson(List<Map<String, Object>> decisionsJson) {
+        this.decisionsJson = decisionsJson;
+    }
+
+    public String getPerformanceBand() {
+        return performanceBand;
+    }
+
+    public void setPerformanceBand(String performanceBand) {
+        this.performanceBand = performanceBand;
+    }
+
+    public Integer getConsecutiveStruggling() {
+        return consecutiveStruggling;
+    }
+
+    public void setConsecutiveStruggling(Integer consecutiveStruggling) {
+        this.consecutiveStruggling = consecutiveStruggling;
+    }
+
+    public Integer getFinalScore() {
+        return finalScore;
+    }
+
+    public void setFinalScore(Integer finalScore) {
+        this.finalScore = finalScore;
     }
 
     public OffsetDateTime getStartedAt() {

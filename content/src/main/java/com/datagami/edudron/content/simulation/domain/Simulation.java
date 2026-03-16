@@ -60,17 +60,14 @@ public class Simulation {
     private String description;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "tree_data", columnDefinition = "jsonb")
-    private Map<String, Object> treeData;
+    @Column(name = "simulation_data", columnDefinition = "jsonb")
+    private Map<String, Object> simulationData;
 
-    @Column(name = "target_depth")
-    private Integer targetDepth = 15;
+    @Column(name = "target_years")
+    private Integer targetYears = 5;
 
-    @Column(name = "choices_per_node")
-    private Integer choicesPerNode = 3;
-
-    @Column(name = "max_depth")
-    private Integer maxDepth;
+    @Column(name = "decisions_per_year")
+    private Integer decisionsPerYear = 6;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -187,36 +184,28 @@ public class Simulation {
         this.description = description;
     }
 
-    public Map<String, Object> getTreeData() {
-        return treeData;
+    public Map<String, Object> getSimulationData() {
+        return simulationData;
     }
 
-    public void setTreeData(Map<String, Object> treeData) {
-        this.treeData = treeData;
+    public void setSimulationData(Map<String, Object> simulationData) {
+        this.simulationData = simulationData;
     }
 
-    public Integer getTargetDepth() {
-        return targetDepth;
+    public Integer getTargetYears() {
+        return targetYears;
     }
 
-    public void setTargetDepth(Integer targetDepth) {
-        this.targetDepth = targetDepth;
+    public void setTargetYears(Integer targetYears) {
+        this.targetYears = targetYears;
     }
 
-    public Integer getChoicesPerNode() {
-        return choicesPerNode;
+    public Integer getDecisionsPerYear() {
+        return decisionsPerYear;
     }
 
-    public void setChoicesPerNode(Integer choicesPerNode) {
-        this.choicesPerNode = choicesPerNode;
-    }
-
-    public Integer getMaxDepth() {
-        return maxDepth;
-    }
-
-    public void setMaxDepth(Integer maxDepth) {
-        this.maxDepth = maxDepth;
+    public void setDecisionsPerYear(Integer decisionsPerYear) {
+        this.decisionsPerYear = decisionsPerYear;
     }
 
     public SimulationStatus getStatus() {
