@@ -33,8 +33,8 @@ export default function GenerateSimulationPage() {
   const [audience, setAudience] = useState<string>('')
   const [courseId, setCourseId] = useState<string>(searchParams.get('courseId') || '')
   const [description, setDescription] = useState('')
-  const [targetDepth, setTargetDepth] = useState(15)
-  const [choicesPerNode, setChoicesPerNode] = useState('3')
+  const [targetYears, setTargetYears] = useState(5)
+  const [decisionsPerYear, setDecisionsPerYear] = useState(6)
 
   const [courses, setCourses] = useState<Course[]>([])
   const [generating, setGenerating] = useState(false)
@@ -49,7 +49,7 @@ export default function GenerateSimulationPage() {
         const data = await coursesApi.listCourses()
         setCourses(data)
       } catch {
-        // Non-critical — dropdown will just be empty
+        // Non-critical
       }
     }
     loadCourses()
@@ -109,8 +109,8 @@ export default function GenerateSimulationPage() {
         audience: audience as 'UNDERGRADUATE' | 'MBA' | 'GRADUATE',
         courseId: (courseId && courseId !== 'none') ? courseId : undefined,
         description: description.trim() || undefined,
-        targetDepth,
-        choicesPerNode: parseInt(choicesPerNode),
+        targetYears,
+        decisionsPerYear,
       }
 
       const { jobId, simulationId } = await simulationsApi.generateSimulation(request)
@@ -146,7 +146,6 @@ export default function GenerateSimulationPage() {
             })
           }
         } catch (pollError) {
-          // Polling error — keep trying unless it's a fatal error
           console.error('Poll error:', pollError)
         }
       }, 3000)
@@ -277,38 +276,33 @@ export default function GenerateSimulationPage() {
               <div className="mt-4 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-xs">Target Depth (10-30)</Label>
+                    <Label className="text-xs">Number of Years (3-7)</Label>
                     <Input
                       type="number"
-                      min={10}
-                      max={30}
-                      value={targetDepth}
-                      onChange={(e) => setTargetDepth(Math.min(30, Math.max(10, parseInt(e.target.value) || 15)))}
+                      min={3}
+                      max={7}
+                      value={targetYears}
+                      onChange={(e) => setTargetYears(Math.min(7, Math.max(3, parseInt(e.target.value) || 5)))}
                       className="text-sm"
                       disabled={generating}
                     />
                     <p className="text-xs text-muted-foreground">
-                      Number of decision nodes in the simulation tree
+                      Number of simulated years in the scenario
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs">Choices per Node</Label>
-                    <Select
-                      value={choicesPerNode}
-                      onValueChange={setChoicesPerNode}
+                    <Label className="text-xs">Decisions per Year (4-8)</Label>
+                    <Input
+                      type="number"
+                      min={4}
+                      max={8}
+                      value={decisionsPerYear}
+                      onChange={(e) => setDecisionsPerYear(Math.min(8, Math.max(4, parseInt(e.target.value) || 6)))}
+                      className="text-sm"
                       disabled={generating}
-                    >
-                      <SelectTrigger className="text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="2">2</SelectItem>
-                        <SelectItem value="3">3</SelectItem>
-                        <SelectItem value="4">4</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    />
                     <p className="text-xs text-muted-foreground">
-                      Number of choices at each decision point
+                      Number of decision points per year
                     </p>
                   </div>
                 </div>

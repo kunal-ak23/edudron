@@ -204,7 +204,7 @@ export default function SimulationsPage() {
                   <TableHead>Concept</TableHead>
                   <TableHead>Subject</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-center">Depth</TableHead>
+                  <TableHead className="text-center">Format</TableHead>
                   <TableHead className="text-center">Total Plays</TableHead>
                   <TableHead>Created</TableHead>
                 </TableRow>
@@ -231,8 +231,8 @@ export default function SimulationsPage() {
                         {sim.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-center">
-                      {sim.maxDepth ?? sim.targetDepth}
+                    <TableCell className="text-center text-sm text-muted-foreground">
+                      {sim.targetYears} yrs × {sim.decisionsPerYear} dec
                     </TableCell>
                     <TableCell className="text-center">
                       {sim.totalPlays}
