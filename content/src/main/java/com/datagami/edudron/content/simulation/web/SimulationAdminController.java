@@ -95,8 +95,8 @@ public class SimulationAdminController {
         sim.setDescription(request.getDescription());
         sim.setCourseId(request.getCourseId());
         sim.setLectureId(request.getLectureId());
-        sim.setTargetDepth(request.getTargetDepth() != null ? request.getTargetDepth() : 15);
-        sim.setChoicesPerNode(request.getChoicesPerNode() != null ? request.getChoicesPerNode() : 3);
+        sim.setTargetYears(request.getTargetYears() != null ? request.getTargetYears() : 5);
+        sim.setDecisionsPerYear(request.getDecisionsPerYear() != null ? request.getDecisionsPerYear() : 6);
         sim.setStatus(Simulation.SimulationStatus.GENERATING);
         sim.setCreatedBy(getCurrentUserId());
         simulationRepository.save(sim);
@@ -110,11 +110,11 @@ public class SimulationAdminController {
         if (request.getDescription() != null) {
             jobRequest.put("description", request.getDescription());
         }
-        if (request.getTargetDepth() != null) {
-            jobRequest.put("targetDepth", String.valueOf(request.getTargetDepth()));
+        if (request.getTargetYears() != null) {
+            jobRequest.put("targetYears", String.valueOf(request.getTargetYears()));
         }
-        if (request.getChoicesPerNode() != null) {
-            jobRequest.put("choicesPerNode", String.valueOf(request.getChoicesPerNode()));
+        if (request.getDecisionsPerYear() != null) {
+            jobRequest.put("decisionsPerYear", String.valueOf(request.getDecisionsPerYear()));
         }
 
         AIGenerationJobDTO job = aiJobQueueService.submitSimulationGenerationJob(jobRequest, aiJobWorker);
@@ -160,12 +160,12 @@ public class SimulationAdminController {
         return ResponseEntity.ok(simulationService.updateSimulation(id, updates));
     }
 
-    @PutMapping("/{id}/tree")
-    @Operation(summary = "Update simulation tree", description = "Update the simulation decision tree data")
-    public ResponseEntity<SimulationDTO> updateTree(@PathVariable String id,
-                                                     @RequestBody Map<String, Object> treeData) {
+    @PutMapping("/{id}/simulation-data")
+    @Operation(summary = "Update simulation data", description = "Update the simulation year-based structure data")
+    public ResponseEntity<SimulationDTO> updateSimulationData(@PathVariable String id,
+                                                     @RequestBody Map<String, Object> simulationData) {
         requireAdmin();
-        return ResponseEntity.ok(simulationService.updateTree(id, treeData));
+        return ResponseEntity.ok(simulationService.updateSimulationData(id, simulationData));
     }
 
     @PostMapping("/{id}/publish")

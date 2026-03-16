@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 
 public class SimulationExportDTO {
-    private String version = "1.0";
+    private String version = "2.0";
     private OffsetDateTime exportedAt;
     private SimulationData simulation;
 
@@ -14,9 +14,9 @@ public class SimulationExportDTO {
         private String subject;
         private String audience;
         private String description;
-        private Map<String, Object> treeData;
-        private Integer targetDepth;
-        private Integer choicesPerNode;
+        private Map<String, Object> simulationData;
+        private Integer targetYears;
+        private Integer decisionsPerYear;
         private Map<String, Object> metadataJson;
 
         // Getters and Setters
@@ -35,14 +35,14 @@ public class SimulationExportDTO {
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
 
-        public Map<String, Object> getTreeData() { return treeData; }
-        public void setTreeData(Map<String, Object> treeData) { this.treeData = treeData; }
+        public Map<String, Object> getSimulationData() { return simulationData; }
+        public void setSimulationData(Map<String, Object> simulationData) { this.simulationData = simulationData; }
 
-        public Integer getTargetDepth() { return targetDepth; }
-        public void setTargetDepth(Integer targetDepth) { this.targetDepth = targetDepth; }
+        public Integer getTargetYears() { return targetYears; }
+        public void setTargetYears(Integer targetYears) { this.targetYears = targetYears; }
 
-        public Integer getChoicesPerNode() { return choicesPerNode; }
-        public void setChoicesPerNode(Integer choicesPerNode) { this.choicesPerNode = choicesPerNode; }
+        public Integer getDecisionsPerYear() { return decisionsPerYear; }
+        public void setDecisionsPerYear(Integer decisionsPerYear) { this.decisionsPerYear = decisionsPerYear; }
 
         public Map<String, Object> getMetadataJson() { return metadataJson; }
         public void setMetadataJson(Map<String, Object> metadataJson) { this.metadataJson = metadataJson; }

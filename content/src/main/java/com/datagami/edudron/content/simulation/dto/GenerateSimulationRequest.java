@@ -17,10 +17,10 @@ public class GenerateSimulationRequest {
     private String courseId;
     private String lectureId;
     private String description;
-    @Min(10) @Max(30)
-    private Integer targetDepth; // default 15, range 10-30
-    @Min(2) @Max(4)
-    private Integer choicesPerNode; // default 3, range 2-4
+    @Min(3) @Max(7)
+    private Integer targetYears = 5; // default 5, range 3-7
+    @Min(4) @Max(8)
+    private Integer decisionsPerYear = 6; // default 6, range 4-8
 
     // Getters and Setters
     public String getConcept() { return concept; }
@@ -41,9 +41,9 @@ public class GenerateSimulationRequest {
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
 
-    public Integer getTargetDepth() { return targetDepth; }
-    public void setTargetDepth(Integer targetDepth) { this.targetDepth = targetDepth; }
+    public Integer getTargetYears() { return targetYears; }
+    public void setTargetYears(Integer targetYears) { this.targetYears = targetYears; }
 
-    public Integer getChoicesPerNode() { return choicesPerNode; }
-    public void setChoicesPerNode(Integer choicesPerNode) { this.choicesPerNode = choicesPerNode; }
+    public Integer getDecisionsPerYear() { return decisionsPerYear; }
+    public void setDecisionsPerYear(Integer decisionsPerYear) { this.decisionsPerYear = decisionsPerYear; }
 }

@@ -15,10 +15,9 @@ public class SimulationDTO {
     private String description;
     private String courseId;
     private String lectureId;
-    private Map<String, Object> treeData;
-    private Integer targetDepth;
-    private Integer choicesPerNode;
-    private Integer maxDepth;
+    private Map<String, Object> simulationData;
+    private Integer targetYears;
+    private Integer decisionsPerYear;
     private String status;
     private String visibility;
     private List<String> assignedToSectionIds;
@@ -37,10 +36,9 @@ public class SimulationDTO {
         dto.setDescription(sim.getDescription());
         dto.setCourseId(sim.getCourseId());
         dto.setLectureId(sim.getLectureId());
-        dto.setTreeData(sim.getTreeData());
-        dto.setTargetDepth(sim.getTargetDepth());
-        dto.setChoicesPerNode(sim.getChoicesPerNode());
-        dto.setMaxDepth(sim.getMaxDepth());
+        dto.setSimulationData(sim.getSimulationData());
+        dto.setTargetYears(sim.getTargetYears());
+        dto.setDecisionsPerYear(sim.getDecisionsPerYear());
         dto.setStatus(sim.getStatus() != null ? sim.getStatus().name() : null);
         dto.setVisibility(sim.getVisibility() != null ? sim.getVisibility().name() : null);
         dto.setAssignedToSectionIds(sim.getAssignedToSectionIds() != null
@@ -76,17 +74,14 @@ public class SimulationDTO {
     public String getLectureId() { return lectureId; }
     public void setLectureId(String lectureId) { this.lectureId = lectureId; }
 
-    public Map<String, Object> getTreeData() { return treeData; }
-    public void setTreeData(Map<String, Object> treeData) { this.treeData = treeData; }
+    public Map<String, Object> getSimulationData() { return simulationData; }
+    public void setSimulationData(Map<String, Object> simulationData) { this.simulationData = simulationData; }
 
-    public Integer getTargetDepth() { return targetDepth; }
-    public void setTargetDepth(Integer targetDepth) { this.targetDepth = targetDepth; }
+    public Integer getTargetYears() { return targetYears; }
+    public void setTargetYears(Integer targetYears) { this.targetYears = targetYears; }
 
-    public Integer getChoicesPerNode() { return choicesPerNode; }
-    public void setChoicesPerNode(Integer choicesPerNode) { this.choicesPerNode = choicesPerNode; }
-
-    public Integer getMaxDepth() { return maxDepth; }
-    public void setMaxDepth(Integer maxDepth) { this.maxDepth = maxDepth; }
+    public Integer getDecisionsPerYear() { return decisionsPerYear; }
+    public void setDecisionsPerYear(Integer decisionsPerYear) { this.decisionsPerYear = decisionsPerYear; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

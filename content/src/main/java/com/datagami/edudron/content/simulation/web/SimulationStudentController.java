@@ -3,7 +3,6 @@ package com.datagami.edudron.content.simulation.web;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.content.simulation.dto.DecisionInputDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationDTO;
-import com.datagami.edudron.content.simulation.dto.SimulationNodeDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationPlayDTO;
 import com.datagami.edudron.content.simulation.service.SimulationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -128,33 +127,8 @@ public class SimulationStudentController {
                 .body(simulationService.startPlay(id, studentId));
     }
 
-    @GetMapping("/{id}/play/{playId}")
-    @Operation(summary = "Get current node",
-               description = "Get the current decision node in a play session")
-    public ResponseEntity<SimulationNodeDTO> getCurrentNode(
-            @PathVariable String id, @PathVariable String playId) {
-        String studentId = getCurrentUserId();
-        return ResponseEntity.ok(simulationService.getCurrentNode(playId, studentId));
-    }
-
-    @PostMapping("/{id}/play/{playId}/decide")
-    @Operation(summary = "Submit decision",
-               description = "Submit a decision at the current node and advance to the next")
-    public ResponseEntity<SimulationNodeDTO> decide(
-            @PathVariable String id, @PathVariable String playId,
-            @RequestBody DecisionInputDTO input) {
-        String studentId = getCurrentUserId();
-        return ResponseEntity.ok(simulationService.submitDecision(playId, studentId, input));
-    }
-
-    @GetMapping("/{id}/play/{playId}/debrief")
-    @Operation(summary = "Get debrief",
-               description = "Get the debrief for a completed play session")
-    public ResponseEntity<SimulationNodeDTO> debrief(
-            @PathVariable String id, @PathVariable String playId) {
-        String studentId = getCurrentUserId();
-        return ResponseEntity.ok(simulationService.getDebrief(playId, studentId));
-    }
+    // TODO: v2 play flow endpoints (getCurrentState, submitDecision, getDebrief) will be
+    // implemented in a subsequent task to match the year-based career tenure model.
 
     @GetMapping("/{id}/history")
     @Operation(summary = "Get play history for a simulation",
