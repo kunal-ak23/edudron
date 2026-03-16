@@ -160,7 +160,7 @@ public class SimulationAdminController {
         return ResponseEntity.ok(simulationService.updateSimulation(id, updates));
     }
 
-    @PutMapping("/{id}/simulation-data")
+    @PutMapping({"/{id}/data", "/{id}/simulation-data"})
     @Operation(summary = "Update simulation data", description = "Update the simulation year-based structure data")
     public ResponseEntity<SimulationDTO> updateSimulationData(@PathVariable String id,
                                                      @RequestBody Map<String, Object> simulationData) {
