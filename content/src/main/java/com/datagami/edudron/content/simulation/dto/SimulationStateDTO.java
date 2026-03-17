@@ -1,5 +1,8 @@
 package com.datagami.edudron.content.simulation.dto;
 
+import java.math.BigDecimal;
+import java.util.Map;
+
 public class SimulationStateDTO {
     private String phase;  // DECISION, YEAR_END_REVIEW, DEBRIEF, FIRED
     private int currentYear;
@@ -18,6 +21,12 @@ public class SimulationStateDTO {
 
     // For DEBRIEF or FIRED phase
     private DebriefDTO debrief;
+
+    // v3: Budget and advisor fields
+    private BigDecimal currentBudget;
+    private Map<String, Object> financialReport;
+    private Map<String, Object> advisorDialog;
+    private Map<String, Object> advisorReaction;
 
     // Opening narrative for the current year (shown at start of each year)
     private String openingNarrative;
@@ -55,6 +64,18 @@ public class SimulationStateDTO {
 
     public DebriefDTO getDebrief() { return debrief; }
     public void setDebrief(DebriefDTO debrief) { this.debrief = debrief; }
+
+    public BigDecimal getCurrentBudget() { return currentBudget; }
+    public void setCurrentBudget(BigDecimal currentBudget) { this.currentBudget = currentBudget; }
+
+    public Map<String, Object> getFinancialReport() { return financialReport; }
+    public void setFinancialReport(Map<String, Object> financialReport) { this.financialReport = financialReport; }
+
+    public Map<String, Object> getAdvisorDialog() { return advisorDialog; }
+    public void setAdvisorDialog(Map<String, Object> advisorDialog) { this.advisorDialog = advisorDialog; }
+
+    public Map<String, Object> getAdvisorReaction() { return advisorReaction; }
+    public void setAdvisorReaction(Map<String, Object> advisorReaction) { this.advisorReaction = advisorReaction; }
 
     public String getOpeningNarrative() { return openingNarrative; }
     public void setOpeningNarrative(String openingNarrative) { this.openingNarrative = openingNarrative; }

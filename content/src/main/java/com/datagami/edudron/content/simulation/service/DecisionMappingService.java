@@ -42,6 +42,14 @@ public class DecisionMappingService {
                 ? flattenCompoundInput(input)
                 : flattenInput(input);
 
+        // CRISIS_RESPONSE: if expired, return defaultOnExpiry
+        if ("CRISIS_RESPONSE".equals(decisionType) && "true".equals(flatInput.get("expired"))) {
+            String defaultChoice = (String) config.get("defaultOnExpiry");
+            if (defaultChoice != null) {
+                return validateChoiceId(node, defaultChoice);
+            }
+        }
+
         // Evaluate mappings in order; return first match
         for (Map<String, Object> mapping : mappings) {
             String condition = (String) mapping.get("condition");
@@ -121,7 +129,40 @@ public class DecisionMappingService {
             return flat;
         }
 
-        return new HashMap<>(input);
+        Map<String, Object> flat = new HashMap<>(input);
+
+        // HIRE_FIRE: selected candidate
+        if (input.containsKey("selected")) {
+            flat.put("selected", input.get("selected").toString());
+        }
+
+        // STAKEHOLDER_MEETING: selected stakeholders
+        if (input.containsKey("selectedStakeholders")) {
+            @SuppressWarnings("unchecked")
+            List<String> selected = (List<String>) input.get("selectedStakeholders");
+            flat.put("selected_list", String.join(",", selected));
+            for (String s : selected) {
+                flat.put("has_" + s, "true");
+            }
+        }
+
+        // NEGOTIATION
+        if (input.containsKey("finalAmount")) {
+            flat.put("final_amount", input.get("finalAmount").toString());
+        }
+        if (input.containsKey("acceptedRound")) {
+            flat.put("accepted_round", input.get("acceptedRound").toString());
+        }
+        if (input.containsKey("walkedAway")) {
+            flat.put("walked_away", input.get("walkedAway").toString());
+        }
+
+        // CRISIS_RESPONSE: expired flag
+        if (input.containsKey("expired") && Boolean.TRUE.equals(input.get("expired"))) {
+            flat.put("expired", "true");
+        }
+
+        return flat;
     }
 
     /**
@@ -187,6 +228,12 @@ public class DecisionMappingService {
      * Evaluate a single atomic condition like "rd >= 50" or "selected == 'launch_now'".
      */
     private boolean evaluateAtomicCondition(String condition, Map<String, Object> context) {
+        // Handle selected_contains('x') function
+        if (condition.contains("selected_contains")) {
+            String id = condition.replaceAll(".*selected_contains\\('([^']+)'\\).*", "$1");
+            return "true".equals(context.get("has_" + id));
+        }
+
         // Try each operator (longer operators first to avoid partial matches)
         String[][] operators = {
                 {">=", ">="},

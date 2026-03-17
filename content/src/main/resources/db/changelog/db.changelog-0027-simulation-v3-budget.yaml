@@ -1,0 +1,16 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0027-01-simulation-v3-budget
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: simulation_play
+            schemaName: content
+            columns:
+              - column:
+                  name: current_budget
+                  type: numeric
+                  defaultValueNumeric: 0
+              - column:
+                  name: budget_history_json
+                  type: jsonb

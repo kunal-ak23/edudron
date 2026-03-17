@@ -13,6 +13,7 @@ import com.datagami.edudron.content.simulation.dto.SimulationStateDTO;
 import com.datagami.edudron.content.simulation.dto.YearEndReviewDTO;
 import com.datagami.edudron.content.simulation.repo.SimulationPlayRepository;
 import com.datagami.edudron.content.simulation.repo.SimulationRepository;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -41,6 +42,9 @@ public class SimulationService {
 
     @Autowired
     private DecisionMappingService decisionMappingService;
+
+    @Autowired
+    private BudgetCalculationService budgetCalculationService;
 
     // ============ ADMIN OPERATIONS ============
 
@@ -297,6 +301,15 @@ public class SimulationService {
         play.setDecisionsJson(new ArrayList<>());
         play.setYearScoresJson(new ArrayList<>());
 
+        // v3: Initialize budget from financial model
+        if (simData != null) {
+            Map<String, Object> financialModel = (Map<String, Object>) simData.get("financialModel");
+            if (financialModel != null) {
+                play.setCurrentBudget(budgetCalculationService.getYearStartBudget(financialModel, null));
+                play.setBudgetHistoryJson(new ArrayList<>());
+            }
+        }
+
         playRepository.save(play);
         return SimulationPlayDTO.fromEntity(play, sim.getTitle());
     }
@@ -335,6 +348,10 @@ public class SimulationService {
         state.setCumulativeScore(play.getCumulativeScore());
         state.setYearScore(calculateCurrentYearScore(play));
         state.setPerformanceBand(play.getPerformanceBand());
+        state.setCurrentBudget(play.getCurrentBudget());
+
+        // v3: Include advisor dialog from current decision
+        Map<String, Object> advisorCharacter = (Map<String, Object>) simData.get("advisorCharacter");
 
         // 1. Completed → DEBRIEF
         if (play.getStatus() == SimulationPlay.PlayStatus.COMPLETED) {
@@ -373,6 +390,17 @@ public class SimulationService {
         Map<String, Object> decision = getDecision(simData, play.getCurrentYear(),
                 play.getCurrentDecision());
         state.setDecision(toStudentDecision(decision));
+
+        // v3: Include advisor dialog for this decision
+        if (decision.get("advisorDialog") != null) {
+            Map<String, Object> dialog = new LinkedHashMap<>();
+            dialog.put("mood", decision.get("advisorMood"));
+            dialog.put("text", decision.get("advisorDialog"));
+            if (advisorCharacter != null) {
+                dialog.put("advisorName", advisorCharacter.get("name"));
+            }
+            state.setAdvisorDialog(dialog);
+        }
 
         return state;
     }
@@ -431,6 +459,20 @@ public class SimulationService {
 
         int quality = ((Number) selectedChoice.get("quality")).intValue();
         int points = qualityToPoints(quality);
+
+        // v3: If INVESTMENT_PORTFOLIO, save allocations to budget history
+        String decisionType = (String) decision.get("decisionType");
+        if ("INVESTMENT_PORTFOLIO".equals(decisionType) && input.getInput() != null) {
+            List<Map<String, Object>> budgetHistory = play.getBudgetHistoryJson();
+            if (budgetHistory == null) {
+                budgetHistory = new ArrayList<>();
+            }
+            Map<String, Object> yearEntry = new LinkedHashMap<>();
+            yearEntry.put("year", play.getCurrentYear());
+            yearEntry.put("allocations", input.getInput());
+            budgetHistory.add(yearEntry);
+            play.setBudgetHistoryJson(budgetHistory);
+        }
 
         // Update play state
         play.setCumulativeScore(play.getCumulativeScore() + points);
@@ -494,6 +536,41 @@ public class SimulationService {
         // Calculate the year's band
         int yearScore = calculateCurrentYearScore(play);
         String yearBand = calculateBand(yearScore, decisionsPerYear);
+
+        // v3: Calculate year-end budget returns if financial model exists
+        Map<String, Object> financialModel = (Map<String, Object>) simData.get("financialModel");
+        if (financialModel != null && play.getBudgetHistoryJson() != null) {
+            // Find this year's allocations from budget history
+            Map<String, BigDecimal> allocations = new LinkedHashMap<>();
+            for (Map<String, Object> hist : play.getBudgetHistoryJson()) {
+                if (((Number) hist.get("year")).intValue() == play.getCurrentYear()) {
+                    Map<String, Object> allocs = (Map<String, Object>) hist.get("allocations");
+                    if (allocs != null) {
+                        allocs.forEach((k, v) -> allocations.put(k, new BigDecimal(v.toString())));
+                    }
+                    break;
+                }
+            }
+
+            if (!allocations.isEmpty()) {
+                Map<String, Object> financialReport = budgetCalculationService.calculateYearEndReturns(
+                        allocations, financialModel, yearBand,
+                        play.getBudgetHistoryJson(), play.getId(), play.getCurrentYear());
+
+                // Update budget history with returns
+                for (Map<String, Object> hist : play.getBudgetHistoryJson()) {
+                    if (((Number) hist.get("year")).intValue() == play.getCurrentYear()) {
+                        hist.put("returns", financialReport.get("departments"));
+                        hist.put("totalInvested", financialReport.get("totalInvested"));
+                        hist.put("totalReturns", financialReport.get("totalReturns"));
+                        hist.put("endingBudget", financialReport.get("endingBudget"));
+                        break;
+                    }
+                }
+
+                play.setCurrentBudget((BigDecimal) financialReport.get("endingBudget"));
+            }
+        }
 
         // Store year result in yearScoresJson
         List<Map<String, Object>> yearScores = play.getYearScoresJson();

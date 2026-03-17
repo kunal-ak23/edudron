@@ -2,6 +2,7 @@ package com.datagami.edudron.content.simulation.dto;
 
 import com.datagami.edudron.content.simulation.domain.SimulationPlay;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 public class SimulationPlayDTO {
@@ -18,6 +19,7 @@ public class SimulationPlayDTO {
     private Integer finalScore;
     private String performanceBand;
     private Integer consecutiveStruggling;
+    private BigDecimal currentBudget;
     private OffsetDateTime startedAt;
     private OffsetDateTime completedAt;
 
@@ -36,6 +38,7 @@ public class SimulationPlayDTO {
         dto.setFinalScore(play.getFinalScore());
         dto.setPerformanceBand(play.getPerformanceBand());
         dto.setConsecutiveStruggling(play.getConsecutiveStruggling());
+        dto.setCurrentBudget(play.getCurrentBudget());
         dto.setStartedAt(play.getStartedAt());
         dto.setCompletedAt(play.getCompletedAt());
         return dto;
@@ -81,6 +84,9 @@ public class SimulationPlayDTO {
 
     public Integer getConsecutiveStruggling() { return consecutiveStruggling; }
     public void setConsecutiveStruggling(Integer consecutiveStruggling) { this.consecutiveStruggling = consecutiveStruggling; }
+
+    public BigDecimal getCurrentBudget() { return currentBudget; }
+    public void setCurrentBudget(BigDecimal currentBudget) { this.currentBudget = currentBudget; }
 
     public OffsetDateTime getStartedAt() { return startedAt; }
     public void setStartedAt(OffsetDateTime startedAt) { this.startedAt = startedAt; }

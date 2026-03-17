@@ -8,6 +8,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +68,13 @@ public class SimulationPlay {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "decisions_json", columnDefinition = "jsonb")
     private List<Map<String, Object>> decisionsJson;
+
+    @Column(name = "current_budget")
+    private BigDecimal currentBudget = BigDecimal.ZERO;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "budget_history_json", columnDefinition = "jsonb")
+    private List<Map<String, Object>> budgetHistoryJson;
 
     @Column(name = "performance_band", length = 20)
     private String performanceBand;
@@ -235,5 +243,21 @@ public class SimulationPlay {
 
     public void setCompletedAt(OffsetDateTime completedAt) {
         this.completedAt = completedAt;
+    }
+
+    public BigDecimal getCurrentBudget() {
+        return currentBudget;
+    }
+
+    public void setCurrentBudget(BigDecimal currentBudget) {
+        this.currentBudget = currentBudget;
+    }
+
+    public List<Map<String, Object>> getBudgetHistoryJson() {
+        return budgetHistoryJson;
+    }
+
+    public void setBudgetHistoryJson(List<Map<String, Object>> budgetHistoryJson) {
+        this.budgetHistoryJson = budgetHistoryJson;
     }
 }

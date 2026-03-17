@@ -7,6 +7,12 @@ import { TradeoffSliderInput } from './TradeoffSliderInput'
 import { ResourceAssignmentInput } from './ResourceAssignmentInput'
 import { TimelineChoiceInput } from './TimelineChoiceInput'
 import { CompoundInput } from './CompoundInput'
+import { NegotiationInput } from './NegotiationInput'
+import { DashboardAnalysisInput } from './DashboardAnalysisInput'
+import { HireFireInput } from './HireFireInput'
+import { CrisisResponseInput } from './CrisisResponseInput'
+import { InvestmentPortfolioInput } from './InvestmentPortfolioInput'
+import { StakeholderMeetingInput } from './StakeholderMeetingInput'
 import type { ChoiceDTO } from '@kunal-ak23/edudron-shared-utils'
 
 interface DecisionInputProps {
@@ -41,6 +47,23 @@ export function DecisionInput({ decisionType, decisionConfig, choices, onSubmit,
     case 'COMPOUND':
       if (!config.steps?.length) return fallback
       return <CompoundInput config={config} onSubmit={onSubmit} disabled={disabled} />
+    case 'NEGOTIATION':
+      if (!config.npcResponses?.length) return fallback
+      return <NegotiationInput config={config} onSubmit={onSubmit} disabled={disabled} />
+    case 'DASHBOARD_ANALYSIS':
+      if (!config.metrics?.length) return fallback
+      return <DashboardAnalysisInput config={config} choices={choices} onSubmit={onSubmit} disabled={disabled} />
+    case 'HIRE_FIRE':
+      if (!config.candidates?.length) return fallback
+      return <HireFireInput config={config} onSubmit={onSubmit} disabled={disabled} />
+    case 'CRISIS_RESPONSE':
+      return <CrisisResponseInput config={config} choices={choices} onSubmit={onSubmit} disabled={disabled} />
+    case 'INVESTMENT_PORTFOLIO':
+      if (!config.departments?.length) return fallback
+      return <InvestmentPortfolioInput config={config} onSubmit={onSubmit} disabled={disabled} />
+    case 'STAKEHOLDER_MEETING':
+      if (!config.stakeholders?.length) return fallback
+      return <StakeholderMeetingInput config={config} onSubmit={onSubmit} disabled={disabled} />
     case 'NARRATIVE_CHOICE':
     default:
       return fallback

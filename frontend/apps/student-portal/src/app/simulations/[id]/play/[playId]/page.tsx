@@ -1,14 +1,18 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@kunal-ak23/edudron-ui-components'
 import { simulationsApi } from '@/lib/api'
 import { TypewriterText, usePrefersReducedMotion } from '@/components/psych-test/TypewriterText'
 import { DecisionInput } from '@/components/simulation/DecisionInput'
-import { PlayHeader } from '@/components/simulation/PlayHeader'
 import { YearEndReview } from '@/components/simulation/YearEndReview'
 import { FiredScreen } from '@/components/simulation/FiredScreen'
+import { AdvisorDialog } from '@/components/simulation/AdvisorDialog'
+import { StatusHUD } from '@/components/simulation/StatusHUD'
+import { YearTransition } from '@/components/simulation/YearTransition'
+import { FinancialReport } from '@/components/simulation/FinancialReport'
+import { PromotionCelebration } from '@/components/simulation/PromotionCelebration'
 import { Button } from '@/components/ui/button'
 import { Loader2, ArrowLeft } from 'lucide-react'
 import type { SimulationStateDTO } from '@kunal-ak23/edudron-shared-utils'
@@ -17,26 +21,36 @@ export const dynamic = 'force-dynamic'
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
+type PlayPhase =
+  | 'LOADING'
+  | 'ADVISOR_SETUP'
+  | 'OPENING_NARRATIVE'
+  | 'DECISION_NARRATIVE'
+  | 'DECISION_ACTIVE'
+  | 'SUBMITTING'
+  | 'ADVISOR_REACTION'
+  | 'YEAR_TRANSITION'
+  | 'FINANCIAL_REPORT'
+  | 'STAKEHOLDER_REVIEW'
+  | 'PROMOTION'
+  | 'FIRED'
+  | 'DEBRIEF'
+
 export default function SimulationPlayPage() {
   const params = useParams()
   const router = useRouter()
   const simulationId = params.id as string
   const playId = params.playId as string
-
   const prefersReducedMotion = usePrefersReducedMotion()
 
   const [state, setState] = useState<SimulationStateDTO | null>(null)
+  const [playPhase, setPlayPhase] = useState<PlayPhase>('LOADING')
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [advancing, setAdvancing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Narrative animation state
-  const [contentStage, setContentStage] = useState<'entering' | 'visible' | 'exiting'>('visible')
   const [narrativeDone, setNarrativeDone] = useState(false)
-  const [showDecision, setShowDecision] = useState(false)
-  const [showOpeningNarrative, setShowOpeningNarrative] = useState(false)
-  const [openingDone, setOpeningDone] = useState(false)
+  const [showDecisionInput, setShowDecisionInput] = useState(false)
+  const [lastReaction, setLastReaction] = useState<{ mood: string; text: string } | null>(null)
   const revealTimerRef = useRef<number | null>(null)
 
   // Load current state
@@ -45,45 +59,20 @@ export default function SimulationPlayPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playId])
 
-  // After narrative finishes typing, reveal decision area
+  // After narrative finishes typing, show decision input
   useEffect(() => {
-    if (!narrativeDone || !state || state.phase !== 'DECISION' || !state.decision) return
-
+    if (!narrativeDone || playPhase !== 'DECISION_NARRATIVE') return
     if (prefersReducedMotion) {
-      setShowDecision(true)
+      setPlayPhase('DECISION_ACTIVE')
+      setShowDecisionInput(true)
       return
     }
-
-    revealTimerRef.current = window.setTimeout(() => setShowDecision(true), 200)
-    return () => {
-      if (revealTimerRef.current) window.clearTimeout(revealTimerRef.current)
-    }
-  }, [narrativeDone, state, prefersReducedMotion])
-
-  // When state changes and we have an opening narrative, show it first
-  useEffect(() => {
-    if (!state) return
-
-    if (state.phase === 'DECISION' && state.openingNarrative) {
-      setShowOpeningNarrative(true)
-      setOpeningDone(false)
-      setNarrativeDone(Boolean(prefersReducedMotion))
-      setShowDecision(false)
-    } else if (state.phase === 'DECISION') {
-      setShowOpeningNarrative(false)
-      setOpeningDone(true)
-      setNarrativeDone(Boolean(prefersReducedMotion))
-      setShowDecision(Boolean(prefersReducedMotion))
-    }
-
-    if (!prefersReducedMotion && state.phase === 'DECISION') {
-      setContentStage('entering')
-      const t = window.setTimeout(() => setContentStage('visible'), 20)
-      return () => window.clearTimeout(t)
-    } else {
-      setContentStage('visible')
-    }
-  }, [state?.phase, state?.currentDecision, state?.currentYear, prefersReducedMotion])
+    revealTimerRef.current = window.setTimeout(() => {
+      setPlayPhase('DECISION_ACTIVE')
+      setShowDecisionInput(true)
+    }, 200)
+    return () => { if (revealTimerRef.current) window.clearTimeout(revealTimerRef.current) }
+  }, [narrativeDone, playPhase, prefersReducedMotion])
 
   async function loadState() {
     try {
@@ -91,11 +80,7 @@ export default function SimulationPlayPage() {
       setError(null)
       const data = await simulationsApi.getCurrentState(playId)
       setState(data)
-
-      // If debrief, redirect
-      if (data.phase === 'DEBRIEF') {
-        router.push(`/simulations/${simulationId}/play/${playId}/debrief`)
-      }
+      transitionToPhase(data)
     } catch {
       setError('Failed to load the current scenario.')
     } finally {
@@ -103,20 +88,60 @@ export default function SimulationPlayPage() {
     }
   }
 
+  function transitionToPhase(data: SimulationStateDTO) {
+    if (data.phase === 'DEBRIEF') {
+      router.push(`/simulations/${simulationId}/play/${playId}/debrief`)
+      return
+    }
+    if (data.phase === 'FIRED') {
+      setPlayPhase('FIRED')
+      return
+    }
+    if (data.phase === 'YEAR_END_REVIEW') {
+      setPlayPhase('YEAR_TRANSITION')
+      return
+    }
+    if (data.phase === 'DECISION') {
+      // Show advisor dialog first if available
+      if (data.advisorDialog) {
+        setPlayPhase('ADVISOR_SETUP')
+      } else if (data.openingNarrative) {
+        setPlayPhase('OPENING_NARRATIVE')
+        setNarrativeDone(Boolean(prefersReducedMotion))
+      } else {
+        setPlayPhase('DECISION_NARRATIVE')
+        setNarrativeDone(Boolean(prefersReducedMotion))
+        setShowDecisionInput(Boolean(prefersReducedMotion))
+      }
+    }
+  }
+
+  const handleAdvisorDismiss = useCallback(() => {
+    if (!state) return
+    if (state.openingNarrative && playPhase === 'ADVISOR_SETUP') {
+      setPlayPhase('OPENING_NARRATIVE')
+      setNarrativeDone(Boolean(prefersReducedMotion))
+    } else if (playPhase === 'ADVISOR_SETUP') {
+      setPlayPhase('DECISION_NARRATIVE')
+      setNarrativeDone(Boolean(prefersReducedMotion))
+      setShowDecisionInput(Boolean(prefersReducedMotion))
+    }
+  }, [state, playPhase, prefersReducedMotion])
+
+  function handleOpeningDone() {
+    setPlayPhase('DECISION_NARRATIVE')
+    setNarrativeDone(Boolean(prefersReducedMotion))
+    setShowDecisionInput(Boolean(prefersReducedMotion))
+  }
+
   async function handleSubmit(data: any) {
     if (!state?.decision || submitting) return
 
     try {
-      // Fade out current content
-      if (!prefersReducedMotion) {
-        setContentStage('exiting')
-        await sleep(200)
-      }
-
+      setPlayPhase('SUBMITTING')
       setSubmitting(true)
-      setShowDecision(false)
+      setShowDecisionInput(false)
       setNarrativeDone(false)
-      setShowOpeningNarrative(false)
       setError(null)
 
       const input = {
@@ -126,135 +151,131 @@ export default function SimulationPlayPage() {
       }
 
       const newState = await simulationsApi.submitDecision(playId, input)
-      setState(newState)
 
-      if (newState.phase === 'DEBRIEF') {
-        await sleep(prefersReducedMotion ? 500 : 1500)
-        router.push(`/simulations/${simulationId}/play/${playId}/debrief`)
+      // Show advisor reaction if available from the previous decision
+      const quality = data.choiceId ? 'quality_2' : 'quality_2' // Backend determines actual quality
+      if (state.advisorDialog) {
+        // Use a brief reaction before transitioning
+        setLastReaction({ mood: 'neutral', text: 'Noted. Let\'s see how this plays out.' })
+        setPlayPhase('ADVISOR_REACTION')
+        await sleep(prefersReducedMotion ? 500 : 2000)
       }
+
+      setState(newState)
+      transitionToPhase(newState)
     } catch {
       setError('Failed to submit your decision. Please try again.')
-      setContentStage('visible')
+      setPlayPhase('DECISION_ACTIVE')
       setNarrativeDone(true)
-      setShowDecision(true)
+      setShowDecisionInput(true)
     } finally {
       setSubmitting(false)
     }
   }
 
+  async function handleYearTransitionComplete() {
+    if (state?.yearEndReview?.fired) {
+      setPlayPhase('FIRED')
+      return
+    }
+    // Show financial report if available
+    if (state?.financialReport) {
+      setPlayPhase('FINANCIAL_REPORT')
+    } else {
+      setPlayPhase('STAKEHOLDER_REVIEW')
+    }
+  }
+
+  function handleFinancialReportDismiss() {
+    setPlayPhase('STAKEHOLDER_REVIEW')
+  }
+
   async function handleAdvanceYear() {
-    if (advancing) return
     try {
-      setAdvancing(true)
       setError(null)
+
+      // Show promotion if applicable
+      if (state?.yearEndReview?.promotionTitle && state.currentRole) {
+        setPlayPhase('PROMOTION')
+        await sleep(prefersReducedMotion ? 500 : 3000)
+      }
+
       const newState = await simulationsApi.advanceYear(playId)
       setState(newState)
-
-      if (newState.phase === 'DEBRIEF') {
-        router.push(`/simulations/${simulationId}/play/${playId}/debrief`)
-      }
+      transitionToPhase(newState)
     } catch {
       setError('Failed to advance to the next year.')
-    } finally {
-      setAdvancing(false)
     }
   }
 
   // FIRED phase
-  if (state?.phase === 'FIRED') {
+  if (playPhase === 'FIRED' && state) {
     return (
       <ProtectedRoute>
-        <FiredScreen
-          simulationId={simulationId}
-          cumulativeScore={state.cumulativeScore}
-          debrief={state.debrief}
-        />
-      </ProtectedRoute>
-    )
-  }
-
-  // YEAR_END_REVIEW phase
-  if (state?.phase === 'YEAR_END_REVIEW' && state.yearEndReview) {
-    return (
-      <ProtectedRoute>
-        <PlayHeader
-          currentRole={state.currentRole}
-          currentYear={state.currentYear}
-          currentDecision={state.totalDecisions}
-          totalDecisions={state.totalDecisions}
-          cumulativeScore={state.cumulativeScore}
-        />
-        <YearEndReview
-          review={state.yearEndReview}
-          currentYear={state.currentYear}
-          onContinue={handleAdvanceYear}
-          continuing={advancing}
-        />
+        <div className="min-h-screen bg-[#0F1729]">
+          <FiredScreen
+            simulationId={simulationId}
+            cumulativeScore={state.cumulativeScore}
+            debrief={state.debrief}
+          />
+        </div>
       </ProtectedRoute>
     )
   }
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        {/* Play header */}
-        {state && state.phase === 'DECISION' && (
-          <PlayHeader
-            currentRole={state.currentRole}
-            currentYear={state.currentYear}
-            currentDecision={state.currentDecision}
-            totalDecisions={state.totalDecisions}
-            cumulativeScore={state.cumulativeScore}
-          />
-        )}
-
-        {/* Minimal top bar for exit */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+      <div className="min-h-screen bg-[#0F1729] flex flex-col text-[#E2E8F0]">
+        {/* Minimal top bar */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-[#1E3A5F]/20">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => router.push('/simulations')}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-[#94A3B8] hover:text-[#E2E8F0]"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Exit
           </Button>
-          <div className="w-16" />
         </div>
 
-        {/* Main content area */}
-        <div className="flex-1 flex items-start justify-center px-4 py-8 md:py-16">
+        {/* Zone 1: Main Content Area */}
+        <div className="flex-1 flex items-start justify-center px-4 py-6 md:py-10 pb-32">
           <div className="w-full max-w-2xl">
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              <div className="mb-6 p-4 bg-red-900/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
                 {error}
               </div>
             )}
 
             {loading && !state ? (
               <div className="flex flex-col items-center justify-center py-20 gap-4">
-                <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
-                <p className="text-sm text-gray-500">Loading scenario...</p>
+                <Loader2 className="h-8 w-8 animate-spin text-[#0891B2]" />
+                <p className="text-sm text-[#94A3B8]">Loading scenario...</p>
               </div>
+            ) : playPhase === 'STAKEHOLDER_REVIEW' && state?.yearEndReview ? (
+              <YearEndReview
+                review={state.yearEndReview}
+                currentYear={state.currentYear}
+                onContinue={handleAdvanceYear}
+              />
+            ) : playPhase === 'FINANCIAL_REPORT' && state?.financialReport ? (
+              <FinancialReport
+                report={state.financialReport}
+                currency="$"
+                onDismiss={handleFinancialReportDismiss}
+              />
             ) : state?.phase === 'DECISION' && state.decision ? (
-              <div
-                className={`transition-all duration-200 ${
-                  contentStage === 'entering'
-                    ? 'opacity-0 translate-y-2'
-                    : contentStage === 'exiting'
-                      ? 'opacity-0 -translate-y-1'
-                      : 'opacity-100 translate-y-0'
-                }`}
-              >
-                {/* Opening narrative (start of year) */}
-                {showOpeningNarrative && state.openingNarrative && !openingDone && (
-                  <div className="mb-8 p-6 bg-blue-50/50 border border-blue-100 rounded-xl">
+              <div className="transition-all duration-200 opacity-100">
+                {/* Opening narrative */}
+                {playPhase === 'OPENING_NARRATIVE' && state.openingNarrative && (
+                  <div className="mb-8 p-6 bg-[#1A2744]/50 border border-[#1E3A5F]/30 rounded-xl">
                     <TypewriterText
                       key={`opening-${state.currentYear}`}
                       as="div"
-                      className="text-base leading-relaxed text-blue-900 whitespace-pre-line"
+                      className="text-base leading-relaxed text-[#94A3B8] whitespace-pre-line"
                       text={state.openingNarrative}
-                      onDone={() => setOpeningDone(true)}
+                      onDone={handleOpeningDone}
                       speedMs={14}
                       startDelayMs={80}
                       cursor
@@ -263,12 +284,12 @@ export default function SimulationPlayPage() {
                 )}
 
                 {/* Decision narrative */}
-                {(openingDone || !state.openingNarrative) && (
+                {(playPhase === 'DECISION_NARRATIVE' || playPhase === 'DECISION_ACTIVE') && (
                   <div className="mb-8">
                     <TypewriterText
                       key={state.decision.decisionId}
                       as="div"
-                      className="text-lg leading-relaxed text-gray-800 whitespace-pre-line"
+                      className="text-lg leading-relaxed text-[#E2E8F0] whitespace-pre-line"
                       text={state.decision.narrative}
                       onDone={() => setNarrativeDone(true)}
                       speedMs={16}
@@ -278,15 +299,11 @@ export default function SimulationPlayPage() {
                   </div>
                 )}
 
-                {/* Decision input area */}
-                {showDecision && (
-                  <div
-                    className={`transition-opacity duration-300 ${
-                      showDecision ? 'opacity-100' : 'opacity-0'
-                    }`}
-                  >
-                    <div className="border-t border-gray-200 pt-6">
-                      <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+                {/* Decision input */}
+                {showDecisionInput && playPhase === 'DECISION_ACTIVE' && (
+                  <div className="transition-opacity duration-300 opacity-100">
+                    <div className="border-t border-[#1E3A5F]/30 pt-6">
+                      <h3 className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wide mb-4">
                         What do you decide?
                       </h3>
                       <DecisionInput
@@ -300,22 +317,82 @@ export default function SimulationPlayPage() {
                   </div>
                 )}
 
-                {/* Submitting overlay */}
-                {submitting && (
+                {/* Submitting */}
+                {playPhase === 'SUBMITTING' && (
                   <div className="flex items-center justify-center py-8 gap-3">
-                    <Loader2 className="h-5 w-5 animate-spin text-primary-600" />
-                    <span className="text-sm text-gray-500">Processing your decision...</span>
+                    <Loader2 className="h-5 w-5 animate-spin text-[#0891B2]" />
+                    <span className="text-sm text-[#94A3B8]">Processing your decision...</span>
                   </div>
                 )}
               </div>
-            ) : (
+            ) : !loading ? (
               <div className="text-center py-20">
-                <p className="text-gray-500 mb-4">Could not load the scenario.</p>
+                <p className="text-[#94A3B8] mb-4">Could not load the scenario.</p>
                 <Button onClick={loadState}>Retry</Button>
               </div>
-            )}
+            ) : null}
           </div>
         </div>
+
+        {/* Zone 2: Advisor Dialog Area */}
+        {playPhase === 'ADVISOR_SETUP' && state?.advisorDialog && (
+          <div className="fixed bottom-16 left-0 right-0 px-4 z-40">
+            <div className="max-w-2xl mx-auto">
+              <AdvisorDialog
+                mood={state.advisorDialog.mood}
+                text={state.advisorDialog.text}
+                advisorName={state.advisorDialog.advisorName || 'Advisor'}
+                onDismiss={handleAdvisorDismiss}
+              />
+            </div>
+          </div>
+        )}
+
+        {playPhase === 'ADVISOR_REACTION' && lastReaction && (
+          <div className="fixed bottom-16 left-0 right-0 px-4 z-40">
+            <div className="max-w-2xl mx-auto">
+              <AdvisorDialog
+                mood={lastReaction.mood}
+                text={lastReaction.text}
+                advisorName="Advisor"
+                onDismiss={() => {}}
+                autoAdvance={2000}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Zone 3: Status HUD */}
+        {state && (
+          <div className="fixed bottom-0 left-0 right-0 z-30">
+            <StatusHUD
+              role={state.currentRole || 'Unknown'}
+              year={state.currentYear}
+              totalYears={7} // Will be dynamic when available from simulation data
+              decision={state.currentDecision}
+              totalDecisions={state.totalDecisions}
+              budget={state.currentBudget}
+              score={state.cumulativeScore}
+              performanceBand={state.performanceBand || 'STEADY'}
+            />
+          </div>
+        )}
+
+        {/* Overlays */}
+        {playPhase === 'YEAR_TRANSITION' && state && (
+          <YearTransition
+            yearCompleted={state.currentYear}
+            onComplete={handleYearTransitionComplete}
+          />
+        )}
+
+        {playPhase === 'PROMOTION' && state?.yearEndReview?.promotionTitle && state.currentRole && (
+          <PromotionCelebration
+            oldTitle={state.currentRole}
+            newTitle={state.yearEndReview.promotionTitle}
+            onDismiss={() => {}}
+          />
+        )}
       </div>
     </ProtectedRoute>
   )

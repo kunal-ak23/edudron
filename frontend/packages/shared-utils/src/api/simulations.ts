@@ -34,6 +34,24 @@ export interface SimulationDTO {
   totalPlays: number
 }
 
+export interface AdvisorDialog {
+  mood: 'neutral' | 'concerned' | 'excited' | 'disappointed' | 'proud'
+  text: string
+  advisorName?: string
+}
+
+export interface FinancialReport {
+  departments: Record<string, {
+    invested: number
+    return: number | null
+    roi: string | null
+    note: string | null
+  }>
+  totalInvested: number
+  totalReturns: number
+  endingBudget: number
+}
+
 export interface SimulationStateDTO {
   phase: 'DECISION' | 'YEAR_END_REVIEW' | 'DEBRIEF' | 'FIRED'
   currentYear: number
@@ -43,6 +61,10 @@ export interface SimulationStateDTO {
   cumulativeScore: number
   yearScore: number
   performanceBand: string
+  currentBudget?: number
+  financialReport?: FinancialReport
+  advisorDialog?: AdvisorDialog
+  advisorReaction?: AdvisorDialog
   decision?: SimulationDecisionDTO
   yearEndReview?: YearEndReviewDTO
   debrief?: DebriefDTO
@@ -95,6 +117,7 @@ export interface SimulationPlayDTO {
   currentDecision: number
   currentRole?: string
   cumulativeScore: number
+  currentBudget?: number
   finalScore?: number
   performanceBand?: string
   startedAt: string

@@ -66,8 +66,13 @@ public class SimulationGenerationService {
             Map<String, Object> roleSetup = asMap(setupResult.get("roleSetup"));
             List<String> roleProgression = asList(setupResult.get("roleProgression"));
             Map<String, Object> metrics = asMap(setupResult.get("metrics"));
-            logger.info("Phase 1 complete for {}: {} roles, {} metrics",
-                    simulationId, roleProgression.size(), ((List<?>) metrics.get("definitions")).size());
+            Map<String, Object> financialModel = setupResult.get("financialModel") != null
+                    ? asMap(setupResult.get("financialModel")) : null;
+            Map<String, Object> advisorCharacter = setupResult.get("advisorCharacter") != null
+                    ? asMap(setupResult.get("advisorCharacter")) : null;
+            logger.info("Phase 1 complete for {}: {} roles, {} metrics, financialModel={}, advisor={}",
+                    simulationId, roleProgression.size(), ((List<?>) metrics.get("definitions")).size(),
+                    financialModel != null, advisorCharacter != null);
 
             // ── Phase 2: Decisions (1 AI call per year) ──
             logger.info("Phase 2: Generating decisions for {} years for {}", targetYears, simulationId);
@@ -115,6 +120,12 @@ public class SimulationGenerationService {
             simulationData.put("roleSetup", roleSetup);
             simulationData.put("roleProgression", roleProgression);
             simulationData.put("metrics", metrics);
+            if (financialModel != null) {
+                simulationData.put("financialModel", financialModel);
+            }
+            if (advisorCharacter != null) {
+                simulationData.put("advisorCharacter", advisorCharacter);
+            }
             simulationData.put("years", yearsList);
             simulationData.put("finalDebrief", debriefs);
 
@@ -162,11 +173,28 @@ public class SimulationGenerationService {
                       {"id": "revenue", "label": "Revenue", "unit": "$M", "startValue": 45},
                       {"id": "margin", "label": "Operating Margin", "unit": "%%", "startValue": 20}
                     ]
+                  },
+                  "financialModel": {
+                    "startingBudget": 5000000,
+                    "currency": "$",
+                    "departments": [
+                      {"id": "rd", "label": "R&D", "returnFormula": "MODERATE_LONG", "baseRoi": 0.15, "volatility": 0.08, "lagYears": 1},
+                      {"id": "marketing", "label": "Marketing", "returnFormula": "HIGH_SHORT", "baseRoi": 0.22, "volatility": 0.15, "lagYears": 0},
+                      {"id": "operations", "label": "Operations", "returnFormula": "STABLE", "baseRoi": 0.08, "volatility": 0.02, "lagYears": 0},
+                      {"id": "training", "label": "Training", "returnFormula": "COMPOUND", "baseRoi": 0.05, "volatility": 0.03, "lagYears": 2}
+                    ],
+                    "performanceMultipliers": {"THRIVING": 1.2, "STEADY": 1.0, "STRUGGLING": 0.7}
+                  },
+                  "advisorCharacter": {
+                    "name": "Dr. Rivera",
+                    "role": "Your mentor and former division head",
+                    "portraitSet": "professional_female",
+                    "personality": "Wise, direct, occasionally sarcastic"
                   }
                 }
                 """.formatted(concept, subject, audience, targetYears);
 
-        String userPrompt = "Generate the role setup, role progression, and metrics for this simulation. " +
+        String userPrompt = "Generate the role setup, role progression, metrics, financial model, and advisor character for this simulation. " +
                 "Return ONLY the JSON object, no additional text.";
 
         String response = foundryAIService.callOpenAI(systemPrompt, userPrompt);
@@ -198,26 +226,70 @@ public class SimulationGenerationService {
                 - Feel like a real-world judgment call, NOT a quiz
                 - Have a vivid narrative (2-3 paragraphs) setting up the choice
                 - Have 2-3 choices ordered by quality (1=worst, 2=mid, 3=best)
-                - Use varied decisionTypes: NARRATIVE_CHOICE, BUDGET_ALLOCATION, PRIORITY_RANKING, TRADEOFF_SLIDER, RESOURCE_ASSIGNMENT, TIMELINE_CHOICE
-                - Don't use the same type more than twice in a row
-                - For interactive types (not NARRATIVE_CHOICE), include decisionConfig with:
-                  - Appropriate structure (buckets, items, labels, etc.)
-                  - mappings array that maps input conditions to choiceIds
+                - For interactive types (not NARRATIVE_CHOICE), include decisionConfig with appropriate structure and mappings
+
+                Available decision types (use ALL of them across the simulation):
+                NARRATIVE_CHOICE, BUDGET_ALLOCATION, PRIORITY_RANKING, TRADEOFF_SLIDER,
+                RESOURCE_ASSIGNMENT, TIMELINE_CHOICE, COMPOUND, NEGOTIATION,
+                DASHBOARD_ANALYSIS, HIRE_FIRE, CRISIS_RESPONSE, INVESTMENT_PORTFOLIO,
+                STAKEHOLDER_MEETING
+
+                SEQUENCING RULES (enforce strictly):
+                1. Never repeat the same decision type in consecutive positions
+                2. Each year MUST include at least:
+                   - 1 INVESTMENT_PORTFOLIO (budget allocation with dollar amounts)
+                   - 1 DASHBOARD_ANALYSIS (show metrics/charts then decide)
+                   - 1 from {NEGOTIATION, CRISIS_RESPONSE, HIRE_FIRE, STAKEHOLDER_MEETING}
+                3. CRISIS_RESPONSE: max 1 per year
+                4. NARRATIVE_CHOICE: max 2 per year
+                5. STAKEHOLDER_MEETING should appear BEFORE a related major decision
+                6. Year N and Year N+1 must NOT start with the same type
+                7. Vary the set of interactive types used each year
+
+                For each decision, also generate:
+                - "advisorMood": one of ["neutral", "concerned", "excited", "disappointed", "proud"]
+                - "advisorDialog": 1-2 sentences the mentor says to set up this decision
+                - "advisorReaction": {
+                    "quality_3": {"mood": "...", "text": "..."},
+                    "quality_2": {"mood": "...", "text": "..."},
+                    "quality_1": {"mood": "...", "text": "..."}
+                  }
+
+                DECISION CONFIG SCHEMAS BY TYPE:
+
+                NEGOTIATION: {"rounds": 3, "unit": "$", "npcName": "...", "initialOffer": N,
+                  "npcResponses": [{"round": 1, "playerRange": {"min": N, "max": N}, "response": "...", "npcCounterOffer": N}],
+                  "outcomes": [{"condition": "...", "choiceId": "..."}]}
+
+                DASHBOARD_ANALYSIS: {"metrics": [{"label": "...", "value": "...", "trend": "up|down|flat", "change": "..."}],
+                  "chartData": {"type": "line|bar", "title": "...", "labels": [...], "datasets": [{"label": "...", "data": [...], "color": "#hex"}]},
+                  "question": "..."}
+
+                HIRE_FIRE: {"action": "hire|fire", "budgetLimit": N,
+                  "candidates": [{"id": "...", "name": "...", "title": "...", "stats": {...}, "salary": N, "bio": "...", "strengths": [...], "weaknesses": [...]}],
+                  "mappings": [...]}
+
+                CRISIS_RESPONSE: {"timeLimit": 30, "crisisTitle": "...", "crisisDescription": "...",
+                  "severity": "critical|high|medium", "defaultOnExpiry": "choiceId"}
+
+                INVESTMENT_PORTFOLIO: {"totalBudget": N, "currency": "$",
+                  "departments": [{"id": "...", "label": "...", "description": "...", "minAllocation": N, "maxAllocation": N, "projectedRoiRange": "..."}],
+                  "mappings": [...]}
+
+                STAKEHOLDER_MEETING: {"maxSelections": 2, "instruction": "...",
+                  "stakeholders": [{"id": "...", "name": "...", "role": "...", "teaser": "...", "revealedInfo": "..."}],
+                  "mappings": [...]}
 
                 Output a JSON array of decisions:
                 [
                   {
                     "id": "y%d_d1",
                     "narrative": "...",
-                    "decisionType": "BUDGET_ALLOCATION",
-                    "decisionConfig": {
-                      "total": 100, "unit": "%%",
-                      "buckets": [...],
-                      "mappings": [
-                        {"condition": "rd >= 40", "choiceId": "y%d_d1_c"},
-                        {"condition": "default", "choiceId": "y%d_d1_b"}
-                      ]
-                    },
+                    "decisionType": "INVESTMENT_PORTFOLIO",
+                    "advisorMood": "neutral",
+                    "advisorDialog": "...",
+                    "advisorReaction": {"quality_3": {"mood": "excited", "text": "..."}, "quality_2": {"mood": "neutral", "text": "..."}, "quality_1": {"mood": "disappointed", "text": "..."}},
+                    "decisionConfig": { ... },
                     "choices": [
                       {"id": "y%d_d1_a", "text": "...", "quality": 1},
                       {"id": "y%d_d1_b", "text": "...", "quality": 2},
@@ -227,7 +299,7 @@ public class SimulationGenerationService {
                 ]
                 """.formatted(year, targetYears, concept, subject,
                 currentTitle, previousContext, decisionsPerYear,
-                year, year, year, year, year, year);
+                year, year, year);
 
         String userPrompt = "Generate the " + decisionsPerYear + " decisions for Year " + year +
                 ". Return ONLY the JSON array, no additional text.";
