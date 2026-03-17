@@ -57,6 +57,7 @@ export interface SimulationStateDTO {
   currentYear: number
   currentDecision: number
   totalDecisions: number
+  totalYears: number
   currentRole: string
   cumulativeScore: number
   yearScore: number

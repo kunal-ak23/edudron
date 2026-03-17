@@ -152,17 +152,20 @@ export default function SimulationPlayPage() {
 
       const newState = await simulationsApi.submitDecision(playId, input)
 
-      // Show advisor reaction if available from the previous decision
-      const quality = data.choiceId ? 'quality_2' : 'quality_2' // Backend determines actual quality
-      if (state.advisorDialog) {
-        // Use a brief reaction before transitioning
-        setLastReaction({ mood: 'neutral', text: 'Noted. Let\'s see how this plays out.' })
+      // Show advisor reaction if returned from backend
+      if (newState.advisorReaction) {
+        setLastReaction({
+          mood: newState.advisorReaction.mood,
+          text: newState.advisorReaction.text,
+        })
+        setState(newState)
         setPlayPhase('ADVISOR_REACTION')
         await sleep(prefersReducedMotion ? 500 : 2000)
+        transitionToPhase(newState)
+      } else {
+        setState(newState)
+        transitionToPhase(newState)
       }
-
-      setState(newState)
-      transitionToPhase(newState)
     } catch {
       setError('Failed to submit your decision. Please try again.')
       setPlayPhase('DECISION_ACTIVE')
@@ -368,7 +371,7 @@ export default function SimulationPlayPage() {
             <StatusHUD
               role={state.currentRole || 'Unknown'}
               year={state.currentYear}
-              totalYears={7} // Will be dynamic when available from simulation data
+              totalYears={(state as any).totalYears || 7}
               decision={state.currentDecision}
               totalDecisions={state.totalDecisions}
               budget={state.currentBudget}

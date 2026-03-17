@@ -128,7 +128,7 @@ export function StakeholderMeetingInput({ config, onSubmit, disabled }: Stakehol
 
       <Button
         onClick={handleProceed}
-        disabled={selected.length < config.maxSelections || disabled}
+        disabled={selected.length === 0 || disabled}
         className="w-full"
       >
         Proceed to Meetings

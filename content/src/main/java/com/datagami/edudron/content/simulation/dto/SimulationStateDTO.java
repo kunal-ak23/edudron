@@ -8,6 +8,7 @@ public class SimulationStateDTO {
     private int currentYear;
     private int currentDecision;
     private int totalDecisions;
+    private int totalYears;
     private String currentRole;
     private int cumulativeScore;
     private int yearScore;
@@ -43,6 +44,9 @@ public class SimulationStateDTO {
 
     public int getTotalDecisions() { return totalDecisions; }
     public void setTotalDecisions(int totalDecisions) { this.totalDecisions = totalDecisions; }
+
+    public int getTotalYears() { return totalYears; }
+    public void setTotalYears(int totalYears) { this.totalYears = totalYears; }
 
     public String getCurrentRole() { return currentRole; }
     public void setCurrentRole(String currentRole) { this.currentRole = currentRole; }

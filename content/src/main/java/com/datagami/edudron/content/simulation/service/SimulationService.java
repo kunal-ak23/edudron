@@ -344,6 +344,7 @@ public class SimulationService {
         state.setCurrentYear(play.getCurrentYear());
         state.setCurrentDecision(play.getCurrentDecision());
         state.setTotalDecisions(decisionsPerYear);
+        state.setTotalYears(sim.getTargetYears());
         state.setCurrentRole(play.getCurrentRole());
         state.setCumulativeScore(play.getCumulativeScore());
         state.setYearScore(calculateCurrentYearScore(play));
@@ -373,6 +374,23 @@ public class SimulationService {
             String yearBand = calculateBand(calculateCurrentYearScore(play), decisionsPerYear);
             state.setYearEndReview(buildYearEndReview(simData, play.getCurrentYear(), yearBand,
                     sim, play));
+
+            // v3: Include financial report from budget history if available
+            if (play.getBudgetHistoryJson() != null) {
+                for (Map<String, Object> hist : play.getBudgetHistoryJson()) {
+                    if (((Number) hist.get("year")).intValue() == play.getCurrentYear()
+                            && hist.containsKey("returns")) {
+                        Map<String, Object> report = new LinkedHashMap<>();
+                        report.put("departments", hist.get("returns"));
+                        report.put("totalInvested", hist.get("totalInvested"));
+                        report.put("totalReturns", hist.get("totalReturns"));
+                        report.put("endingBudget", hist.get("endingBudget"));
+                        state.setFinancialReport(report);
+                        break;
+                    }
+                }
+            }
+
             return state;
         }
 
@@ -460,17 +478,28 @@ public class SimulationService {
         int quality = ((Number) selectedChoice.get("quality")).intValue();
         int points = qualityToPoints(quality);
 
-        // v3: If INVESTMENT_PORTFOLIO, save allocations to budget history
+        // v3: If INVESTMENT_PORTFOLIO, save allocations to budget history (one entry per year)
         String decisionType = (String) decision.get("decisionType");
         if ("INVESTMENT_PORTFOLIO".equals(decisionType) && input.getInput() != null) {
             List<Map<String, Object>> budgetHistory = play.getBudgetHistoryJson();
             if (budgetHistory == null) {
                 budgetHistory = new ArrayList<>();
             }
-            Map<String, Object> yearEntry = new LinkedHashMap<>();
-            yearEntry.put("year", play.getCurrentYear());
-            yearEntry.put("allocations", input.getInput());
-            budgetHistory.add(yearEntry);
+            // Update existing year entry or create new one (prevents duplicates)
+            boolean found = false;
+            for (Map<String, Object> hist : budgetHistory) {
+                if (((Number) hist.get("year")).intValue() == play.getCurrentYear()) {
+                    hist.put("allocations", input.getInput());
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                Map<String, Object> yearEntry = new LinkedHashMap<>();
+                yearEntry.put("year", play.getCurrentYear());
+                yearEntry.put("allocations", input.getInput());
+                budgetHistory.add(yearEntry);
+            }
             play.setBudgetHistoryJson(budgetHistory);
         }
 
@@ -496,10 +525,21 @@ public class SimulationService {
         decisions.add(decisionRecord);
         play.setDecisionsJson(decisions);
 
+        // v3: Store advisor reaction for the decision just made
+        Map<String, Object> advisorReactionData = (Map<String, Object>) decision.get("advisorReaction");
+        String reactionKey = "quality_" + quality;
+
         playRepository.save(play);
 
-        // Return the next state
-        return getCurrentState(playId, studentId);
+        // Return the next state with advisor reaction attached
+        SimulationStateDTO nextState = getCurrentState(playId, studentId);
+        if (advisorReactionData != null && advisorReactionData.containsKey(reactionKey)) {
+            Map<String, Object> reaction = (Map<String, Object>) advisorReactionData.get(reactionKey);
+            if (reaction != null) {
+                nextState.setAdvisorReaction(reaction);
+            }
+        }
+        return nextState;
     }
 
     /**
@@ -865,7 +905,13 @@ public class SimulationService {
      */
     @SuppressWarnings("unchecked")
     private DebriefDTO buildFiredDebrief(Map<String, Object> simData) {
-        Map<String, Object> firedDebrief = (Map<String, Object>) simData.get("firedDebrief");
+        // FIRED debrief is stored under finalDebrief.FIRED (not a separate firedDebrief key)
+        Map<String, Object> finalDebrief = (Map<String, Object>) simData.get("finalDebrief");
+        if (finalDebrief == null) {
+            return new DebriefDTO();
+        }
+
+        Map<String, Object> firedDebrief = (Map<String, Object>) finalDebrief.get("FIRED");
         if (firedDebrief == null) {
             return new DebriefDTO();
         }
