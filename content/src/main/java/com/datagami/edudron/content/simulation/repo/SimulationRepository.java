@@ -23,4 +23,6 @@ public interface SimulationRepository extends JpaRepository<Simulation, String>,
 
     List<Simulation> findByCourseIdAndClientIdAndStatus(String courseId, UUID clientId,
             Simulation.SimulationStatus status);
+
+    List<Simulation> findByCourseIdAndClientId(String courseId, UUID clientId);
 }

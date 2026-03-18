@@ -1,6 +1,13 @@
 package com.datagami.edudron.content.simulation.service;
 
 import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.content.domain.Course;
+import com.datagami.edudron.content.domain.Lecture;
+import com.datagami.edudron.content.domain.LectureContent;
+import com.datagami.edudron.content.repo.CourseRepository;
+import com.datagami.edudron.content.repo.LectureContentRepository;
+import com.datagami.edudron.content.repo.LectureRepository;
+import com.datagami.edudron.content.service.FoundryAIService;
 import com.datagami.edudron.content.simulation.domain.Simulation;
 import com.datagami.edudron.content.simulation.domain.SimulationPlay;
 import com.datagami.edudron.content.simulation.dto.DebriefDTO;
@@ -10,6 +17,8 @@ import com.datagami.edudron.content.simulation.dto.SimulationDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationExportDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationPlayDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationStateDTO;
+import com.datagami.edudron.content.simulation.dto.SimulationSuggestionRequest;
+import com.datagami.edudron.content.simulation.dto.SimulationSuggestionResponse;
 import com.datagami.edudron.content.simulation.dto.YearEndReviewDTO;
 import com.datagami.edudron.content.simulation.repo.SimulationPlayRepository;
 import com.datagami.edudron.content.simulation.repo.SimulationRepository;
@@ -45,6 +54,24 @@ public class SimulationService {
 
     @Autowired
     private BudgetCalculationService budgetCalculationService;
+
+    @Autowired
+    private CourseRepository courseRepository;
+
+    @Autowired
+    private LectureRepository lectureRepository;
+
+    @Autowired
+    private LectureContentRepository lectureContentRepository;
+
+    @Autowired
+    private FoundryAIService foundryAIService;
+
+    @Autowired
+    private SimulationGenerationService simulationGenerationService;
+
+    @Autowired
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     // ============ ADMIN OPERATIONS ============
 
@@ -222,6 +249,108 @@ public class SimulationService {
         SimulationDTO dto = SimulationDTO.fromEntity(sim);
         dto.setTotalPlays(0);
         return dto;
+    }
+
+    // ============ SMART SUGGEST ============
+
+    @Transactional(readOnly = true)
+    public SimulationSuggestionResponse suggestFromCourse(SimulationSuggestionRequest request) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+
+        Course course = courseRepository.findByIdAndClientId(request.getCourseId(), clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Course not found"));
+
+        // Build course context
+        StringBuilder courseContext = new StringBuilder();
+        courseContext.append("Course: ").append(course.getTitle()).append("\n");
+        if (course.getDescription() != null) {
+            courseContext.append("Description: ").append(course.getDescription()).append("\n");
+        }
+
+        // Load lectures
+        if (request.getLectureIds() != null && !request.getLectureIds().isEmpty()) {
+            courseContext.append("\nSelected Lectures:\n");
+            for (String lectureId : request.getLectureIds()) {
+                lectureRepository.findById(lectureId).ifPresent(lecture -> {
+                    courseContext.append("- ").append(lecture.getTitle()).append("\n");
+                    List<LectureContent> contents = lectureContentRepository
+                            .findByLectureIdAndClientIdOrderBySequenceAsc(lecture.getId(), clientId);
+                    for (LectureContent content : contents) {
+                        if (content.getTextContent() != null) {
+                            String text = content.getTextContent();
+                            if (text.length() > 500) text = text.substring(0, 500) + "...";
+                            courseContext.append("  Content: ").append(text).append("\n");
+                        }
+                    }
+                });
+            }
+        } else {
+            List<Lecture> allLectures = lectureRepository
+                    .findByCourseIdAndClientIdOrderBySequenceAsc(request.getCourseId(), clientId);
+            if (!allLectures.isEmpty()) {
+                courseContext.append("\nLecture Topics:\n");
+                for (Lecture lecture : allLectures) {
+                    courseContext.append("- ").append(lecture.getTitle()).append("\n");
+                }
+            }
+        }
+
+        // Query existing simulations
+        List<Simulation> existing = simulationRepository.findByCourseIdAndClientId(
+                request.getCourseId(), clientId);
+
+        StringBuilder existingContext = new StringBuilder();
+        List<Map<String, Object>> existingList = new ArrayList<>();
+        for (Simulation sim : existing) {
+            if (sim.getConcept() != null) {
+                existingContext.append("- ").append(sim.getConcept()).append("\n");
+            }
+            Map<String, Object> simInfo = new LinkedHashMap<>();
+            simInfo.put("id", sim.getId());
+            simInfo.put("title", sim.getTitle());
+            simInfo.put("concept", sim.getConcept());
+            simInfo.put("status", sim.getStatus().name());
+            existingList.add(simInfo);
+        }
+
+        // Call AI
+        String systemPrompt = "You are analyzing course content to suggest a simulation concept.\n\n" +
+                courseContext + "\n" +
+                (existingContext.length() > 0
+                        ? "Existing simulations for this course (DO NOT duplicate these):\n" + existingContext + "\n"
+                        : "") +
+                "Suggest a NEW simulation that:\n" +
+                "1. Teaches a core concept from this course material\n" +
+                "2. Is different from any existing simulations listed above\n" +
+                "3. Can be experienced as a 5-year career journey with real-world decisions\n" +
+                "4. Has a vivid, specific professional scenario\n\n" +
+                "Return ONLY a JSON object:\n" +
+                "{\n" +
+                "  \"concept\": \"the underlying concept being taught (never revealed to students until debrief)\",\n" +
+                "  \"subject\": \"the academic subject area\",\n" +
+                "  \"audience\": \"UNDERGRADUATE or MBA or GRADUATE (infer from course level)\",\n" +
+                "  \"description\": \"2-3 sentence student-facing description of the simulation experience\"\n" +
+                "}";
+
+        String userPrompt = "Analyze this course and suggest a simulation concept. Return ONLY the JSON object.";
+
+        String response = foundryAIService.callOpenAI(systemPrompt, userPrompt);
+        String json = simulationGenerationService.extractJsonObject(response);
+
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = objectMapper.readValue(json,
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            SimulationSuggestionResponse result = new SimulationSuggestionResponse();
+            result.setConcept((String) parsed.get("concept"));
+            result.setSubject((String) parsed.get("subject"));
+            result.setAudience((String) parsed.get("audience"));
+            result.setDescription((String) parsed.get("description"));
+            result.setExistingSimulations(existingList);
+            return result;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse AI suggestion response", e);
+        }
     }
 
     // ============ STUDENT OPERATIONS ============

@@ -9,6 +9,8 @@ import com.datagami.edudron.content.simulation.domain.Simulation;
 import com.datagami.edudron.content.simulation.dto.GenerateSimulationRequest;
 import com.datagami.edudron.content.simulation.dto.SimulationDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationExportDTO;
+import com.datagami.edudron.content.simulation.dto.SimulationSuggestionRequest;
+import com.datagami.edudron.content.simulation.dto.SimulationSuggestionResponse;
 import com.datagami.edudron.content.simulation.repo.SimulationRepository;
 import com.datagami.edudron.content.simulation.service.SimulationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -124,6 +126,15 @@ public class SimulationAdminController {
                 "jobId", job.getJobId(),
                 "simulationId", sim.getId()
         ));
+    }
+
+    @PostMapping("/suggest-from-course")
+    @Operation(summary = "Smart suggest simulation parameters from course content")
+    public ResponseEntity<SimulationSuggestionResponse> suggestFromCourse(
+            @Valid @RequestBody SimulationSuggestionRequest request) {
+        requireAdmin();
+        SimulationSuggestionResponse response = simulationService.suggestFromCourse(request);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/generate/jobs/{jobId}")

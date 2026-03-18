@@ -152,6 +152,19 @@ export interface SimulationAIGenerationJobDTO {
   error?: string
 }
 
+export interface SimulationSuggestionRequest {
+  courseId: string
+  lectureIds?: string[]
+}
+
+export interface SimulationSuggestionResponse {
+  concept: string
+  subject: string
+  audience: string
+  description: string
+  existingSimulations: Array<{ id: string; title: string; concept: string; status: string }>
+}
+
 // ============ API Class ============
 
 export class SimulationsApi {
@@ -214,6 +227,12 @@ export class SimulationsApi {
 
   async importSimulation(data: SimulationExportDTO): Promise<SimulationDTO> {
     const response = await this.apiClient.post<SimulationDTO>('/content/api/simulations/import', data)
+    return response.data
+  }
+
+  async suggestFromCourse(request: SimulationSuggestionRequest): Promise<SimulationSuggestionResponse> {
+    const response = await this.apiClient.post<SimulationSuggestionResponse>(
+      '/content/api/simulations/suggest-from-course', request)
     return response.data
   }
 
