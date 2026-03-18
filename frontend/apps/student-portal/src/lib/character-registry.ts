@@ -3,17 +3,8 @@ export interface CharacterDefinition {
   name: string
   description: string
   category: 'mentor' | 'executive' | 'technical' | 'medical' | 'general'
-  moods: Record<string, string>
-}
-
-const MOODS = ['neutral', 'concerned', 'excited', 'disappointed', 'proud'] as const
-
-function buildMoods(characterId: string): Record<string, string> {
-  const moods: Record<string, string> = {}
-  for (const mood of MOODS) {
-    moods[mood] = `/characters/${characterId}/${mood}.json`
-  }
-  return moods
+  color: string
+  moods: Record<string, string>  // mood → emoji
 }
 
 export const CHARACTER_REGISTRY: Record<string, CharacterDefinition> = {
@@ -22,28 +13,32 @@ export const CHARACTER_REGISTRY: Record<string, CharacterDefinition> = {
     name: 'Professional Mentor',
     description: 'Professional woman, 40s, warm and authoritative demeanor',
     category: 'mentor',
-    moods: buildMoods('mentor_female_1'),
+    color: '#0891B2',
+    moods: { neutral: '😊', concerned: '🤔', excited: '✨', disappointed: '😔', proud: '🏆' },
   },
   exec_male_1: {
     id: 'exec_male_1',
     name: 'Corporate Executive',
     description: 'Corporate executive, 50s, serious and decisive demeanor',
     category: 'executive',
-    moods: buildMoods('exec_male_1'),
+    color: '#1E3A5F',
+    moods: { neutral: '😐', concerned: '😟', excited: '😄', disappointed: '😞', proud: '👏' },
   },
   tech_young_1: {
     id: 'tech_young_1',
     name: 'Tech Professional',
     description: 'Young tech professional, 20s-30s, enthusiastic and innovative',
     category: 'technical',
-    moods: buildMoods('tech_young_1'),
+    color: '#22C55E',
+    moods: { neutral: '🙂', concerned: '🧐', excited: '🤩', disappointed: '😕', proud: '💪' },
   },
   medical_female_1: {
     id: 'medical_female_1',
     name: 'Medical Professional',
     description: 'Doctor or scientist, 30s-40s, analytical and precise',
     category: 'medical',
-    moods: buildMoods('medical_female_1'),
+    color: '#7C3AED',
+    moods: { neutral: '🧑‍⚕️', concerned: '⚠️', excited: '🎉', disappointed: '😣', proud: '⭐' },
   },
 }
 
