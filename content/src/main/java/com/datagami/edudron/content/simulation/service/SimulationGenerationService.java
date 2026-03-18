@@ -86,8 +86,20 @@ public class SimulationGenerationService {
                 allYearDecisions.add(yearDecisions);
                 logger.info("Phase 2: Year {} decisions generated ({} decisions) for {}",
                         year, yearDecisions.size(), simulationId);
+
+                // Throttle between years to avoid Azure OpenAI TPM rate limits
+                if (year < targetYears) {
+                    try {
+                        Thread.sleep(5000); // 5 second delay between year generation calls
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
             }
             logger.info("Phase 2 complete for {}", simulationId);
+
+            // Throttle between phases
+            try { Thread.sleep(5000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
 
             // ── Phase 3: Year-End Reviews ──
             logger.info("Phase 3: Generating year-end reviews for {}", simulationId);
@@ -95,11 +107,15 @@ public class SimulationGenerationService {
                     concept, subject, targetYears, metrics);
             logger.info("Phase 3 complete for {}", simulationId);
 
+            try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+
             // ── Phase 4: Opening Narratives ──
             logger.info("Phase 4: Generating opening narratives for {}", simulationId);
             Map<String, Object> openingNarratives = phaseFourOpeningNarratives(
                     concept, subject, audience, targetYears, roleProgression);
             logger.info("Phase 4 complete for {}", simulationId);
+
+            try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
 
             // ── Phase 5: Debriefs ──
             logger.info("Phase 5: Generating final debriefs for {}", simulationId);
