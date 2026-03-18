@@ -280,10 +280,10 @@ public class SimulationGenerationService {
                   "stakeholders": [{"id": "...", "name": "...", "role": "...", "teaser": "...", "revealedInfo": "..."}],
                   "mappings": [...]}
 
-                Output a JSON array of decisions:
+                Output a JSON array of decisions. Use "yYEAR_dN" as the ID pattern (e.g., "y{YEAR}_d1", "y{YEAR}_d2"):
                 [
                   {
-                    "id": "y%d_d1",
+                    "id": "y{YEAR}_d1",
                     "narrative": "...",
                     "decisionType": "INVESTMENT_PORTFOLIO",
                     "advisorMood": "neutral",
@@ -291,15 +291,15 @@ public class SimulationGenerationService {
                     "advisorReaction": {"quality_3": {"mood": "excited", "text": "..."}, "quality_2": {"mood": "neutral", "text": "..."}, "quality_1": {"mood": "disappointed", "text": "..."}},
                     "decisionConfig": { ... },
                     "choices": [
-                      {"id": "y%d_d1_a", "text": "...", "quality": 1},
-                      {"id": "y%d_d1_b", "text": "...", "quality": 2},
-                      {"id": "y%d_d1_c", "text": "...", "quality": 3}
+                      {"id": "y{YEAR}_d1_a", "text": "...", "quality": 1},
+                      {"id": "y{YEAR}_d1_b", "text": "...", "quality": 2},
+                      {"id": "y{YEAR}_d1_c", "text": "...", "quality": 3}
                     ]
                   }
                 ]
                 """.formatted(year, targetYears, concept, subject,
-                currentTitle, previousContext, decisionsPerYear,
-                year, year, year);
+                currentTitle, previousContext, decisionsPerYear)
+                .replace("{YEAR}", String.valueOf(year));
 
         String userPrompt = "Generate the " + decisionsPerYear + " decisions for Year " + year +
                 ". Return ONLY the JSON array, no additional text.";

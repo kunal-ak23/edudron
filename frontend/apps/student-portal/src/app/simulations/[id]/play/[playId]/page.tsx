@@ -160,8 +160,7 @@ export default function SimulationPlayPage() {
         })
         setState(newState)
         setPlayPhase('ADVISOR_REACTION')
-        await sleep(prefersReducedMotion ? 500 : 2000)
-        transitionToPhase(newState)
+        // Wait for user to dismiss via click — don't auto-transition
       } else {
         setState(newState)
         transitionToPhase(newState)
@@ -351,15 +350,14 @@ export default function SimulationPlayPage() {
           </div>
         )}
 
-        {playPhase === 'ADVISOR_REACTION' && lastReaction && (
+        {playPhase === 'ADVISOR_REACTION' && lastReaction && state && (
           <div className="fixed bottom-16 left-0 right-0 px-4 z-40">
             <div className="max-w-2xl mx-auto">
               <AdvisorDialog
                 mood={lastReaction.mood}
                 text={lastReaction.text}
-                advisorName="Advisor"
-                onDismiss={() => {}}
-                autoAdvance={2000}
+                advisorName={state.advisorDialog?.advisorName || 'Advisor'}
+                onDismiss={() => transitionToPhase(state)}
               />
             </div>
           </div>

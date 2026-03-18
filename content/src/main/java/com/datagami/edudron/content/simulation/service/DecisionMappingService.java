@@ -26,16 +26,18 @@ public class DecisionMappingService {
 
         Map<String, Object> config = (Map<String, Object>) node.get("decisionConfig");
         if (config == null) {
-            // Fallback: treat as NARRATIVE_CHOICE if config is missing
-            logger.warn("Decision config missing for type {}. Falling back to NARRATIVE_CHOICE.", decisionType);
-            return validateChoiceId(node, choiceId);
+            logger.warn("Decision config missing for type {}. Falling back.", decisionType);
+            return fallbackChoiceId(node, choiceId, decisionType);
         }
 
+        // NEGOTIATION uses "outcomes" key instead of "mappings"
         List<Map<String, Object>> mappings = (List<Map<String, Object>>) config.get("mappings");
         if (mappings == null || mappings.isEmpty()) {
-            // Fallback: treat as NARRATIVE_CHOICE if mappings are missing
-            logger.warn("Mappings missing for type {}. Falling back to NARRATIVE_CHOICE.", decisionType);
-            return validateChoiceId(node, choiceId);
+            mappings = (List<Map<String, Object>>) config.get("outcomes");
+        }
+        if (mappings == null || mappings.isEmpty()) {
+            logger.warn("Mappings missing for type {}. Falling back.", decisionType);
+            return fallbackChoiceId(node, choiceId, decisionType);
         }
 
         Map<String, Object> flatInput = "COMPOUND".equals(decisionType)
@@ -79,6 +81,25 @@ public class DecisionMappingService {
         }
 
         throw new IllegalStateException("No mapping matched and no choices available");
+    }
+
+    /**
+     * Fallback when config or mappings are missing.
+     * If choiceId is provided (narrative-style), validate it.
+     * Otherwise pick the first choice (interactive types submit input, not choiceId).
+     */
+    @SuppressWarnings("unchecked")
+    private String fallbackChoiceId(Map<String, Object> node, String choiceId, String decisionType) {
+        if (choiceId != null && !choiceId.isBlank()) {
+            return validateChoiceId(node, choiceId);
+        }
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
+        if (choices != null && !choices.isEmpty()) {
+            String firstId = (String) choices.get(0).get("id");
+            logger.warn("No choiceId for type {}. Defaulting to first choice.", decisionType);
+            return firstId;
+        }
+        throw new IllegalStateException("No choices available for fallback");
     }
 
     /**

@@ -62,10 +62,7 @@ export function AdvisorDialog({ mood, text, advisorName, onDismiss, autoAdvance 
   const colorClass = moodColors[mood] || moodColors.neutral
 
   return (
-    <div
-      className="bg-[#1A2744] border border-[#1E3A5F] rounded-xl p-4 cursor-pointer"
-      onClick={onDismiss}
-    >
+    <div className="bg-[#1A2744] border border-[#1E3A5F] rounded-xl p-4">
       <div className="flex gap-3">
         <div className={`w-12 h-12 rounded-full ${colorClass} flex items-center justify-center shrink-0`}>
           <Icon className="w-6 h-6" />
@@ -78,9 +75,18 @@ export function AdvisorDialog({ mood, text, advisorName, onDismiss, autoAdvance 
           </p>
         </div>
         {isComplete && (
-          <div className="text-[#94A3B8] animate-bounce text-lg shrink-0 self-end">▼</div>
+          <button
+            onClick={onDismiss}
+            className="text-[#94A3B8] hover:text-[#E2E8F0] animate-bounce text-lg shrink-0 self-end cursor-pointer transition-colors"
+            aria-label="Continue"
+          >
+            ▼
+          </button>
         )}
       </div>
+      {isComplete && !autoAdvance && (
+        <p className="text-xs text-[#94A3B8]/50 text-center mt-2">Click ▼ to continue</p>
+      )}
     </div>
   )
 }
