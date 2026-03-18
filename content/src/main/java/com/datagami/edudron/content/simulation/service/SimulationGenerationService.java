@@ -188,10 +188,16 @@ public class SimulationGenerationService {
                   "advisorCharacter": {
                     "name": "Dr. Rivera",
                     "role": "Your mentor and former division head",
-                    "portraitSet": "professional_female",
+                    "characterId": "mentor_female_1",
                     "personality": "Wise, direct, occasionally sarcastic"
                   }
                 }
+
+                Available characters (pick the best fit for the advisor's characterId):
+                - "mentor_female_1": Professional woman, 40s, warm and authoritative
+                - "exec_male_1": Corporate executive, 50s, serious and decisive
+                - "tech_young_1": Young tech professional, 20s-30s, enthusiastic
+                - "medical_female_1": Doctor/scientist, 30s-40s, analytical
                 """.formatted(concept, subject, audience, targetYears);
 
         String userPrompt = "Generate the role setup, role progression, metrics, financial model, and advisor character for this simulation. " +
@@ -257,7 +263,7 @@ public class SimulationGenerationService {
 
                 DECISION CONFIG SCHEMAS BY TYPE:
 
-                NEGOTIATION: {"rounds": 3, "unit": "$", "npcName": "...", "initialOffer": N,
+                NEGOTIATION: {"rounds": 3, "unit": "$", "npcName": "...", "npcCharacterId": "exec_male_1", "initialOffer": N,
                   "npcResponses": [{"round": 1, "playerRange": {"min": N, "max": N}, "response": "...", "npcCounterOffer": N}],
                   "outcomes": [{"condition": "...", "choiceId": "..."}]}
 
@@ -266,7 +272,7 @@ public class SimulationGenerationService {
                   "question": "..."}
 
                 HIRE_FIRE: {"action": "hire|fire", "budgetLimit": N,
-                  "candidates": [{"id": "...", "name": "...", "title": "...", "stats": {...}, "salary": N, "bio": "...", "strengths": [...], "weaknesses": [...]}],
+                  "candidates": [{"id": "...", "name": "...", "title": "...", "characterId": "tech_young_1", "stats": {...}, "salary": N, "bio": "...", "strengths": [...], "weaknesses": [...]}],
                   "mappings": [...]}
 
                 CRISIS_RESPONSE: {"timeLimit": 30, "crisisTitle": "...", "crisisDescription": "...",
@@ -277,8 +283,12 @@ public class SimulationGenerationService {
                   "mappings": [...]}
 
                 STAKEHOLDER_MEETING: {"maxSelections": 2, "instruction": "...",
-                  "stakeholders": [{"id": "...", "name": "...", "role": "...", "teaser": "...", "revealedInfo": "..."}],
+                  "stakeholders": [{"id": "...", "name": "...", "role": "...", "characterId": "medical_female_1", "teaser": "...", "revealedInfo": "..."}],
                   "mappings": [...]}
+
+                For NPC characterIds (npcCharacterId, candidate characterId, stakeholder characterId),
+                pick from: "mentor_female_1", "exec_male_1", "tech_young_1", "medical_female_1".
+                Try to use different characters for different NPCs within the same year.
 
                 Output a JSON array of decisions. Use "yYEAR_dN" as the ID pattern (e.g., "y{YEAR}_d1", "y{YEAR}_d2"):
                 [

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { LottieCharacter } from './LottieCharacter'
 
 interface NpcResponse {
   round: number
@@ -82,11 +83,14 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
       <div className="bg-[#1A2744] border border-[#1E3A5F]/30 rounded-xl p-4 max-h-80 overflow-y-auto space-y-3">
         {dialogHistory.map((msg, i) => (
           <div key={i} className={`flex ${msg.speaker === 'You' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[75%] rounded-lg px-4 py-2 ${
+            <div className={`max-w-[75%] rounded-lg px-4 py-2 flex gap-2 items-start ${
               msg.speaker === 'You'
                 ? 'bg-[#0891B2]/20 text-[#E2E8F0]'
                 : 'bg-[#1E3A5F]/50 text-[#E2E8F0]'
             }`}>
+              {msg.speaker !== 'You' && (config as any).npcCharacterId && (
+                <LottieCharacter characterId={(config as any).npcCharacterId} mood="neutral" size={32} />
+              )}
               <p className="text-xs text-[#94A3B8] mb-1">{msg.speaker}</p>
               <p className="text-sm">{msg.text}</p>
             </div>

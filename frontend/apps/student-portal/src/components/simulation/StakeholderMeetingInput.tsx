@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { CheckCircle2, Circle, Users } from 'lucide-react'
+import { LottieCharacter } from './LottieCharacter'
 
 interface Stakeholder {
   id: string
@@ -66,9 +67,13 @@ export function StakeholderMeetingInput({ config, onSubmit, disabled }: Stakehol
             style={{ transitionDelay: `${i * 300}ms` }}
           >
             <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded-full bg-[#0891B2]/20 flex items-center justify-center text-[#0891B2] text-sm font-medium">
-                {s.name.charAt(0)}
-              </div>
+              {(s as any).characterId ? (
+                <LottieCharacter characterId={(s as any).characterId} mood="neutral" size={40} />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-[#0891B2]/20 flex items-center justify-center text-[#0891B2] text-sm font-medium">
+                  {s.name.charAt(0)}
+                </div>
+              )}
               <div>
                 <p className="text-sm font-medium text-[#E2E8F0]">{s.name}</p>
                 <p className="text-xs text-[#94A3B8]">{s.role}</p>

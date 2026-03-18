@@ -416,6 +416,9 @@ public class SimulationService {
             dialog.put("text", decision.get("advisorDialog"));
             if (advisorCharacter != null) {
                 dialog.put("advisorName", advisorCharacter.get("name"));
+                if (advisorCharacter.get("characterId") != null) {
+                    dialog.put("characterId", advisorCharacter.get("characterId"));
+                }
             }
             state.setAdvisorDialog(dialog);
         }

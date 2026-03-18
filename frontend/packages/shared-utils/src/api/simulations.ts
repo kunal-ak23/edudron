@@ -38,6 +38,7 @@ export interface AdvisorDialog {
   mood: 'neutral' | 'concerned' | 'excited' | 'disappointed' | 'proud'
   text: string
   advisorName?: string
+  characterId?: string
 }
 
 export interface FinancialReport {

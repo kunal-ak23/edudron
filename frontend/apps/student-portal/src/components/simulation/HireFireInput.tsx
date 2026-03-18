@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
+import { LottieCharacter } from './LottieCharacter'
 
 interface Candidate {
   id: string
@@ -57,9 +58,14 @@ export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps
                 onClick={() => !disabled && setSelectedId(candidate.id)}
               >
                 <div className="flex items-start justify-between">
-                  <div>
+                  <div className="flex items-center gap-3">
+                    {(candidate as any).characterId && (
+                      <LottieCharacter characterId={(candidate as any).characterId} mood="neutral" size={40} />
+                    )}
+                    <div>
                     <h4 className="text-[#E2E8F0] font-medium">{candidate.name}</h4>
                     <p className="text-sm text-[#94A3B8]">{candidate.title}</p>
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className={`font-mono text-sm ${overBudget ? 'text-amber-400' : 'text-[#E2E8F0]'}`}>

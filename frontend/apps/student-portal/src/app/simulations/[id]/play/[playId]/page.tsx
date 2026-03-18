@@ -344,6 +344,7 @@ export default function SimulationPlayPage() {
                 mood={state.advisorDialog.mood}
                 text={state.advisorDialog.text}
                 advisorName={state.advisorDialog.advisorName || 'Advisor'}
+                characterId={state.advisorDialog.characterId}
                 onDismiss={handleAdvisorDismiss}
               />
             </div>
@@ -357,6 +358,7 @@ export default function SimulationPlayPage() {
                 mood={lastReaction.mood}
                 text={lastReaction.text}
                 advisorName={state.advisorDialog?.advisorName || 'Advisor'}
+                characterId={state.advisorDialog?.characterId}
                 onDismiss={() => transitionToPhase(state)}
               />
             </div>

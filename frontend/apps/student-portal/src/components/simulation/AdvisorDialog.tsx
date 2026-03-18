@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { User, AlertTriangle, Sparkles, Frown, Award } from 'lucide-react'
+import { LottieCharacter } from './LottieCharacter'
 
 interface AdvisorDialogProps {
   mood: string
   text: string
   advisorName: string
+  characterId?: string
   onDismiss: () => void
   autoAdvance?: number
 }
@@ -27,7 +29,7 @@ const moodColors: Record<string, string> = {
   proud: 'text-[#F97316] bg-[#F97316]/10',
 }
 
-export function AdvisorDialog({ mood, text, advisorName, onDismiss, autoAdvance }: AdvisorDialogProps) {
+export function AdvisorDialog({ mood, text, advisorName, characterId, onDismiss, autoAdvance }: AdvisorDialogProps) {
   const [displayedText, setDisplayedText] = useState('')
   const [isComplete, setIsComplete] = useState(false)
 
@@ -64,9 +66,13 @@ export function AdvisorDialog({ mood, text, advisorName, onDismiss, autoAdvance 
   return (
     <div className="bg-[#1A2744] border border-[#1E3A5F] rounded-xl p-4">
       <div className="flex gap-3">
-        <div className={`w-12 h-12 rounded-full ${colorClass} flex items-center justify-center shrink-0`}>
-          <Icon className="w-6 h-6" />
-        </div>
+        {characterId ? (
+          <LottieCharacter characterId={characterId} mood={mood} size={56} />
+        ) : (
+          <div className={`w-12 h-12 rounded-full ${colorClass} flex items-center justify-center shrink-0`}>
+            <Icon className="w-6 h-6" />
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <p className="text-xs text-[#94A3B8] mb-1">{advisorName}</p>
           <p className="text-sm text-[#E2E8F0] leading-relaxed">
