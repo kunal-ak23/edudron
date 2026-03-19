@@ -161,6 +161,30 @@ export class CoursesApi {
     return { content: [], totalElements: 0, totalPages: 1, number: 0 }
   }
 
+  async searchCourses(params: {
+    searchTerm?: string
+    isPublished?: boolean
+    page?: number
+    size?: number
+  }): Promise<{ content: Course[]; totalElements: number; totalPages: number; number: number }> {
+    const response = await this.apiClient.get<any>('/content/courses/search', {
+      params: { page: 0, size: 20, ...params },
+    })
+
+    if (response.data && response.data.content && Array.isArray(response.data.content)) {
+      return {
+        content: response.data.content,
+        totalElements: response.data.totalElements || 0,
+        totalPages: response.data.totalPages || 1,
+        number: response.data.number || 0,
+      }
+    }
+    if (Array.isArray(response.data)) {
+      return { content: response.data, totalElements: response.data.length, totalPages: 1, number: 0 }
+    }
+    return { content: [], totalElements: 0, totalPages: 1, number: 0 }
+  }
+
   async getCourse(id: string): Promise<Course> {
     try {
       const response = await this.apiClient.get<Course>(`/content/courses/${id}`)

@@ -88,7 +88,6 @@ export default function CoursesPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { user } = useAuth()
-  const [courses, setCourses] = useState<Course[]>([])
   const [filteredCourses, setFilteredCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -108,9 +107,9 @@ export default function CoursesPage() {
   // Ref to track if initial load has been triggered (prevents duplicate calls)
   const loadTriggeredRef = useRef(false)
   
-  const loadCourses = useCallback(async (forceReload = false, page = currentPage) => {
+  const loadCourses = useCallback(async (forceReload = false, page = currentPage, search?: string) => {
     // Skip if already loaded, unless force reload or page change
-    if (loadTriggeredRef.current && !forceReload && page === 0) {
+    if (loadTriggeredRef.current && !forceReload && page === 0 && search === undefined) {
       return
     }
     loadTriggeredRef.current = true
@@ -129,15 +128,39 @@ export default function CoursesPage() {
         }
       }
 
-      const result = await coursesApi.listCoursesPaginated({ page, size: PAGE_SIZE })
+      const activeSearch = search !== undefined ? search : searchQuery
+      const isPublished = statusFilter === 'published' ? true : statusFilter === 'draft' ? false : undefined
+
+      let result
+      if (activeSearch) {
+        // Server-side search across all courses
+        result = await coursesApi.searchCourses({
+          searchTerm: activeSearch,
+          isPublished,
+          page,
+          size: PAGE_SIZE,
+        })
+      } else {
+        result = await coursesApi.listCoursesPaginated({ page, size: PAGE_SIZE })
+      }
+
       let data = result.content
+
+      // Client-side status filter only when not searching (search already filters server-side)
+      if (!activeSearch && statusFilter !== 'all') {
+        // We didn't pass isPublished to listCoursesPaginated, so filter client-side
+        if (statusFilter === 'published') {
+          data = data.filter(course => course.isPublished)
+        } else if (statusFilter === 'draft') {
+          data = data.filter(course => !course.isPublished)
+        }
+      }
 
       // Filter courses for instructors
       if (allowedCourseIds !== null) {
         data = data.filter(course => allowedCourseIds!.has(course.id))
       }
 
-      setCourses(data)
       setFilteredCourses(data)
       setCurrentPage(result.number)
       setTotalPages(result.totalPages)
@@ -151,34 +174,10 @@ export default function CoursesPage() {
     } finally {
       setLoading(false)
     }
-  }, [toast, isInstructor, isSupportStaff, user?.id, currentPage])
-
-  const filterCourses = useCallback(() => {
-    let filtered = [...courses]
-
-    // Client-side search filter (for current page)
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      filtered = filtered.filter(
-        (course) =>
-          course.title.toLowerCase().includes(query) ||
-          course.description?.toLowerCase().includes(query)
-      )
-    }
-
-    // Status filter
-    if (statusFilter === 'published') {
-      filtered = filtered.filter((course) => course.isPublished)
-    } else if (statusFilter === 'draft') {
-      filtered = filtered.filter((course) => !course.isPublished)
-    }
-
-    setFilteredCourses(filtered)
-  }, [courses, searchQuery, statusFilter])
+  }, [toast, isInstructor, isSupportStaff, user?.id, currentPage, searchQuery, statusFilter])
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 0 && newPage < totalPages) {
-      setCurrentPage(newPage)
       loadCourses(true, newPage)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
@@ -194,9 +193,14 @@ export default function CoursesPage() {
     }
   }, [user?.id, isInstructor, isSupportStaff]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Debounced search — triggers server-side search when query or filter changes
   useEffect(() => {
-    filterCourses()
-  }, [courses, searchQuery, statusFilter, filterCourses])
+    if (!loadTriggeredRef.current) return // Don't search before initial load
+    const timer = setTimeout(() => {
+      loadCourses(true, 0, searchQuery)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery, statusFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDeleteClick = (courseId: string, e: React.MouseEvent) => {
     e.stopPropagation()
