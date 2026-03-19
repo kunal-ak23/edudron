@@ -906,25 +906,26 @@ export default function EnrollmentsPage() {
               )}
               
               {/* Pagination Controls */}
-              {totalPages > 1 && (
+              {enrollments.length > 0 && (
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">
                   <div className="flex items-center gap-2">
-                    <Label className="text-sm">Page size:</Label>
+                    <Label className="text-sm">Show:</Label>
                     <Select
                       value={pageSize.toString()}
                       onValueChange={(value) => {
                         setPageSize(Number(value))
-                        setCurrentPage(0) // Reset to first page when changing page size
+                        setCurrentPage(0)
                       }}
                     >
                       <SelectTrigger className="w-20">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="10">10</SelectItem>
                         <SelectItem value="20">20</SelectItem>
                         <SelectItem value="50">50</SelectItem>
                         <SelectItem value="100">100</SelectItem>
+                        <SelectItem value="200">200</SelectItem>
+                        <SelectItem value="500">500</SelectItem>
                       </SelectContent>
                     </Select>
                     <span className="text-sm text-gray-600">
