@@ -95,6 +95,12 @@ export default function EnrollmentsPage() {
   const [transferDestinationCourseId, setTransferDestinationCourseId] = useState<string>('')
   const [allowDifferentCourse, setAllowDifferentCourse] = useState(false)
   const [transferring, setTransferring] = useState(false)
+  // Add to Section: state
+  const [showAddToSectionDialog, setShowAddToSectionDialog] = useState(false)
+  const [addToSectionEnrollments, setAddToSectionEnrollments] = useState<any[]>([])
+  const [addToSectionDestSectionId, setAddToSectionDestSectionId] = useState('')
+  const [addToSectionDestClassId, setAddToSectionDestClassId] = useState('')
+  const [addingToSection, setAddingToSection] = useState(false)
 
   // Load students with pagination and backend filtering
   const loadStudents = useCallback(async (searchQuery: string = '', page: number = 0, size: number = 100) => {
@@ -459,6 +465,43 @@ export default function EnrollmentsPage() {
     }
   }
 
+  const handleAddToSectionSelectedClick = () => {
+    const selected = enrollments.filter((e: any) => selectedEnrollmentIds.has(e.id))
+    if (selected.length === 0) return
+    setAddToSectionEnrollments(selected)
+    setAddToSectionDestSectionId('')
+    setAddToSectionDestClassId('')
+    setShowAddToSectionDialog(true)
+  }
+
+  const handleAddToSectionConfirm = async () => {
+    if (!addToSectionDestSectionId) return
+    setAddingToSection(true)
+    try {
+      const studentIds = [...new Set(addToSectionEnrollments.map((e: any) => e.studentId))]
+      const result = await enrollmentsApi.bulkAddToSection({
+        studentIds,
+        destinationSectionId: addToSectionDestSectionId,
+        destinationClassId: addToSectionDestClassId || undefined,
+      })
+      toast({
+        title: 'Students added to section',
+        description: `${result.enrolledStudents} enrolled, ${result.skippedStudents} skipped, ${result.failedStudents} failed`,
+      })
+      setShowAddToSectionDialog(false)
+      setSelectedEnrollmentIds(new Set())
+      loadEnrollments()
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to add students to section',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setAddingToSection(false)
+    }
+  }
+
   const toggleEnrollmentSelection = (id: string) => {
     setSelectedEnrollmentIds(prev => {
       const next = new Set(prev)
@@ -581,10 +624,16 @@ export default function EnrollmentsPage() {
         </div>
         <div className="flex gap-2">
           {selectedEnrollmentIds.size > 0 && (
-            <Button variant="secondary" onClick={handleTransferSelectedClick}>
-              <ArrowRightLeft className="h-4 w-4 mr-2" />
-              Transfer selected ({selectedEnrollmentIds.size})
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleAddToSectionSelectedClick}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add to Section
+              </Button>
+              <Button variant="secondary" onClick={handleTransferSelectedClick}>
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                Transfer selected ({selectedEnrollmentIds.size})
+              </Button>
+            </>
           )}
           <Button onClick={() => setShowAddEnrollmentDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -1078,6 +1127,70 @@ export default function EnrollmentsPage() {
               ) : (
                 `Transfer ${transferEnrollments.length} enrollment${transferEnrollments.length !== 1 ? 's' : ''}`
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add to Section Dialog */}
+      <Dialog open={showAddToSectionDialog} onOpenChange={setShowAddToSectionDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add to Section</DialogTitle>
+            <DialogDescription>
+              {addToSectionEnrollments.length} enrollment(s) selected. Students will be enrolled in the chosen section. Their existing enrollments will be retained.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Filter by Class (optional)</Label>
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'All classes' },
+                  ...classes.map(c => ({
+                    value: c.id,
+                    label: c.name,
+                    searchText: c.name.toLowerCase(),
+                  })),
+                ]}
+                value={addToSectionDestClassId}
+                onValueChange={(v) => {
+                  setAddToSectionDestClassId(v)
+                  setAddToSectionDestSectionId('')
+                }}
+                placeholder="All classes"
+                emptyMessage="No classes found"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Destination Section *</Label>
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'Select section...' },
+                  ...(addToSectionDestClassId
+                    ? sections.filter(s => s.classId === addToSectionDestClassId)
+                    : sections
+                  ).map(s => ({
+                    value: s.id,
+                    label: s.name + ((s as any).isBacklog ? ' (Backlog)' : ''),
+                    searchText: s.name.toLowerCase(),
+                  })),
+                ]}
+                value={addToSectionDestSectionId}
+                onValueChange={setAddToSectionDestSectionId}
+                placeholder="Select destination section"
+                emptyMessage="No sections found"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddToSectionDialog(false)}>Cancel</Button>
+            <Button
+              onClick={handleAddToSectionConfirm}
+              disabled={!addToSectionDestSectionId || addingToSection}
+            >
+              {addingToSection && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Add to Section
             </Button>
           </DialogFooter>
         </DialogContent>
