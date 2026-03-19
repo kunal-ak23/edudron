@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, Sparkles, BookOpen, Users, Video, Trash2, Edit, Loader2 } from 'lucide-react'
+import { Plus, Sparkles, BookOpen, Users, Video, Trash2, Edit, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { coursesApi, apiClient } from '@/lib/api'
 import type { Course } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -95,6 +95,10 @@ export default function CoursesPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'draft'>('all')
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [courseToDelete, setCourseToDelete] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalElements, setTotalElements] = useState(0)
+  const PAGE_SIZE = 20
   
   const isInstructor = user?.role === 'INSTRUCTOR'
   const isSupportStaff = user?.role === 'SUPPORT_STAFF'
@@ -104,18 +108,18 @@ export default function CoursesPage() {
   // Ref to track if initial load has been triggered (prevents duplicate calls)
   const loadTriggeredRef = useRef(false)
   
-  const loadCourses = useCallback(async (forceReload = false) => {
-    // Skip if already loaded, unless force reload
-    if (loadTriggeredRef.current && !forceReload) {
+  const loadCourses = useCallback(async (forceReload = false, page = currentPage) => {
+    // Skip if already loaded, unless force reload or page change
+    if (loadTriggeredRef.current && !forceReload && page === 0) {
       return
     }
     loadTriggeredRef.current = true
     setLoading(true)
-    
+
     try {
       // For instructors, fetch their allowed course IDs first
       let allowedCourseIds: Set<string> | null = null
-      
+
       if ((isInstructor || isSupportStaff) && user?.id) {
         try {
           const accessResponse = await apiClient.get<InstructorAccess>(`/api/instructor-assignments/instructor/${user.id}/access`)
@@ -124,16 +128,20 @@ export default function CoursesPage() {
           allowedCourseIds = new Set()
         }
       }
-      
-      let data = await coursesApi.listCourses()
-      
+
+      const result = await coursesApi.listCoursesPaginated({ page, size: PAGE_SIZE })
+      let data = result.content
+
       // Filter courses for instructors
       if (allowedCourseIds !== null) {
         data = data.filter(course => allowedCourseIds!.has(course.id))
       }
-      
+
       setCourses(data)
       setFilteredCourses(data)
+      setCurrentPage(result.number)
+      setTotalPages(result.totalPages)
+      setTotalElements(result.totalElements)
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -143,12 +151,12 @@ export default function CoursesPage() {
     } finally {
       setLoading(false)
     }
-  }, [toast, isInstructor, isSupportStaff, user?.id])
+  }, [toast, isInstructor, isSupportStaff, user?.id, currentPage])
 
   const filterCourses = useCallback(() => {
     let filtered = [...courses]
 
-    // Search filter
+    // Client-side search filter (for current page)
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
@@ -167,6 +175,14 @@ export default function CoursesPage() {
 
     setFilteredCourses(filtered)
   }, [courses, searchQuery, statusFilter])
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 0 && newPage < totalPages) {
+      setCurrentPage(newPage)
+      loadCourses(true, newPage)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
 
   // Load courses once when user is ready
   useEffect(() => {
@@ -199,8 +215,8 @@ export default function CoursesPage() {
       })
       setShowDeleteDialog(false)
       setCourseToDelete(null)
-      // Reload courses after delete
-      loadCourses(true)
+      // Reload current page after delete
+      loadCourses(true, currentPage)
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -278,7 +294,8 @@ export default function CoursesPage() {
           {/* Results Count */}
           <div className="mb-4">
             <p className="text-sm text-gray-600">
-              {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''} found
+              {totalElements} course{totalElements !== 1 ? 's' : ''} total
+              {totalPages > 1 && ` · Page ${currentPage + 1} of ${totalPages}`}
             </p>
           </div>
 
@@ -383,6 +400,54 @@ export default function CoursesPage() {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 0}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i)
+                  .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - currentPage) <= 1)
+                  .reduce<(number | string)[]>((acc, i, idx, arr) => {
+                    if (idx > 0 && i - (arr[idx - 1] as number) > 1) acc.push('...')
+                    acc.push(i)
+                    return acc
+                  }, [])
+                  .map((item, idx) =>
+                    item === '...' ? (
+                      <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">...</span>
+                    ) : (
+                      <Button
+                        key={item}
+                        variant={currentPage === item ? 'default' : 'outline'}
+                        size="sm"
+                        className="w-9"
+                        onClick={() => handlePageChange(item as number)}
+                      >
+                        {(item as number) + 1}
+                      </Button>
+                    )
+                  )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= totalPages - 1}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
             </div>
           )}
 
