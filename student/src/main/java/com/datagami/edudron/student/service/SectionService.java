@@ -62,13 +62,19 @@ public class SectionService {
         section.setEndDate(request.getEndDate());
         section.setMaxStudents(request.getMaxStudents());
         section.setIsActive(true);
-        
+        // If parent class is backlog, force section to be backlog regardless of request
+        if (classEntity.getIsBacklog() != null && classEntity.getIsBacklog()) {
+            section.setIsBacklog(true);
+        } else {
+            section.setIsBacklog(request.getIsBacklog() != null ? request.getIsBacklog() : false);
+        }
+
         Section saved = sectionRepository.save(section);
         auditService.logCrud(clientId, "CREATE", "Section", saved.getId(), null, null,
             java.util.Map.of("name", saved.getName(), "classId", classId));
         return toDTO(saved, clientId);
     }
-    
+
     public SectionDTO getSection(String sectionId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -155,7 +161,18 @@ public class SectionService {
         section.setStartDate(request.getStartDate());
         section.setEndDate(request.getEndDate());
         section.setMaxStudents(request.getMaxStudents());
-        
+
+        // Enforce isBacklog constraints
+        if (request.getIsBacklog() != null) {
+            // Look up the parent class for the target classId
+            Class parentClass = classRepository.findByIdAndClientId(request.getClassId(), clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Class not found: " + request.getClassId()));
+            if (!request.getIsBacklog() && parentClass.getIsBacklog() != null && parentClass.getIsBacklog()) {
+                throw new IllegalStateException("Cannot set section as non-backlog when parent class is marked as backlog");
+            }
+            section.setIsBacklog(request.getIsBacklog());
+        }
+
         Section saved = sectionRepository.save(section);
         auditService.logCrud(clientId, "UPDATE", "Section", sectionId, null, null,
             java.util.Map.of("name", saved.getName(), "classId", saved.getClassId()));
@@ -264,7 +281,13 @@ public class SectionService {
             section.setEndDate(sectionRequest.getEndDate());
             section.setMaxStudents(sectionRequest.getMaxStudents());
             section.setIsActive(true);
-            
+            // If parent class is backlog, force section to be backlog
+            if (classEntity.getIsBacklog() != null && classEntity.getIsBacklog()) {
+                section.setIsBacklog(true);
+            } else {
+                section.setIsBacklog(sectionRequest.getIsBacklog() != null ? sectionRequest.getIsBacklog() : false);
+            }
+
             sections.add(sectionRepository.save(section));
         }
         
@@ -416,6 +439,7 @@ public class SectionService {
         dto.setEndDate(section.getEndDate());
         dto.setMaxStudents(section.getMaxStudents());
         dto.setIsActive(section.getIsActive());
+        dto.setIsBacklog(section.getIsBacklog());
         dto.setCreatedAt(section.getCreatedAt());
         dto.setUpdatedAt(section.getUpdatedAt());
         

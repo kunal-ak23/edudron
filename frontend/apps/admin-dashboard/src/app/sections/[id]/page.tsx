@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { sectionsApi, classesApi, institutesApi, enrollmentsApi } from '@/lib/api'
 import type { Section, CreateSectionRequest, Class, Institute, SectionStudentDTO } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -50,13 +51,15 @@ export default function SectionDetailPage() {
   const [membersPageSize, setMembersPageSize] = useState(20)
   const [membersTotalElements, setMembersTotalElements] = useState(0)
   const [membersTotalPages, setMembersTotalPages] = useState(0)
+  const [parentClassIsBacklog, setParentClassIsBacklog] = useState(false)
   const [formData, setFormData] = useState<CreateSectionRequest>({
     name: '',
     description: '',
     classId: '',
     startDate: '',
     endDate: '',
-    maxStudents: undefined
+    maxStudents: undefined,
+    isBacklog: false
   })
 
   const loadSection = useCallback(async () => {
@@ -70,13 +73,15 @@ export default function SectionDetailPage() {
         classId: sectionData.classId,
         startDate: sectionData.startDate || '',
         endDate: sectionData.endDate || '',
-        maxStudents: sectionData.maxStudents
+        maxStudents: sectionData.maxStudents,
+        isBacklog: sectionData.isBacklog || false
       })
-      
+
       // Load class and institute for breadcrumb
       const classData = await classesApi.getClass(sectionData.classId)
       setClassItem(classData)
-      
+      setParentClassIsBacklog(classData.isBacklog || false)
+
       const instituteData = await institutesApi.getInstitute(classData.instituteId)
       setInstitute(instituteData)
     } catch (err: any) {
@@ -297,6 +302,21 @@ export default function SectionDetailPage() {
                       onChange={(e) => setFormData({ ...formData, maxStudents: e.target.value ? parseInt(e.target.value) : undefined })}
                       placeholder="Leave empty for unlimited"
                       disabled={!section.isActive}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Backlog Section</Label>
+                      {parentClassIsBacklog ? (
+                        <p className="text-sm text-amber-600">Inherited from backlog class</p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Mark this section for backlog exams</p>
+                      )}
+                    </div>
+                    <Switch
+                      checked={formData.isBacklog || false}
+                      onCheckedChange={(checked) => setFormData({ ...formData, isBacklog: checked })}
+                      disabled={parentClassIsBacklog || !section.isActive}
                     />
                   </div>
                 </div>

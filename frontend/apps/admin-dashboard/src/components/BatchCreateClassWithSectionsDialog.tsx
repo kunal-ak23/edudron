@@ -51,6 +51,7 @@ export function BatchCreateClassWithSectionsDialog({
     grade: '',
     level: '',
     isActive: true,
+    isBacklog: false,
   })
 
   const [sections, setSections] = useState<SectionFormData[]>([
@@ -84,6 +85,7 @@ export function BatchCreateClassWithSectionsDialog({
       grade: '',
       level: '',
       isActive: true,
+      isBacklog: false,
     })
     setSections([
       { id: '1', name: '', description: '', startDate: '', endDate: '', maxStudents: '' }
@@ -213,6 +215,19 @@ export function BatchCreateClassWithSectionsDialog({
                   onChange={(e) => setClassData({ ...classData, level: e.target.value })}
                   placeholder="e.g., Intermediate"
                 />
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <input
+                  type="checkbox"
+                  id="isBacklog"
+                  checked={classData.isBacklog}
+                  onChange={(e) => setClassData({ ...classData, isBacklog: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <div>
+                  <Label htmlFor="isBacklog">Backlog Class</Label>
+                  <p className="text-xs text-muted-foreground">All sections will be marked as backlog</p>
+                </div>
               </div>
             </div>
           </div>

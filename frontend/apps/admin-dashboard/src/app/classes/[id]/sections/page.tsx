@@ -242,7 +242,14 @@ export default function ClassSectionsPage() {
                   <TableBody>
                     {sections.map((section) => (
                       <TableRow key={section.id}>
-                        <TableCell className="font-medium">{section.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {section.name}
+                          {section.isBacklog && (
+                            <Badge variant="outline" className="ml-2 text-amber-600 border-amber-300 bg-amber-50 text-xs">
+                              Backlog
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell>{section.description || '-'}</TableCell>
                         <TableCell>{section.startDate || '-'}</TableCell>
                         <TableCell>{section.endDate || '-'}</TableCell>

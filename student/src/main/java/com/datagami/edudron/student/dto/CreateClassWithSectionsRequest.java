@@ -23,7 +23,9 @@ public class CreateClassWithSectionsRequest {
     private String level;
     
     private Boolean isActive = true;
-    
+
+    private Boolean isBacklog = false;
+
     @NotEmpty(message = "At least one section is required")
     @Size(min = 1, max = 50, message = "Must have between 1 and 50 sections")
     @Valid
@@ -50,6 +52,9 @@ public class CreateClassWithSectionsRequest {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+    public Boolean getIsBacklog() { return isBacklog; }
+    public void setIsBacklog(Boolean isBacklog) { this.isBacklog = isBacklog; }
 
     public List<CreateSectionForClassRequest> getSections() { return sections; }
     public void setSections(List<CreateSectionForClassRequest> sections) { this.sections = sections; }

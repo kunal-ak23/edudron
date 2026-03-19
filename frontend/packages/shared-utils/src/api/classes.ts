@@ -11,6 +11,7 @@ export interface Class {
   grade?: string
   level?: string
   isActive: boolean
+  isBacklog?: boolean
   sectionCount?: number
   studentCount?: number
   createdAt: string
@@ -25,6 +26,7 @@ export interface CreateClassRequest {
   grade?: string
   level?: string
   isActive?: boolean
+  isBacklog?: boolean
 }
 
 export interface CreateSectionForClassRequest {

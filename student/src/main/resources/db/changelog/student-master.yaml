@@ -41,3 +41,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0019-assessment-journey-events.yaml
   - include:
       file: db/changelog/db.changelog-0020-optimistic-locking-and-indexes.yaml
+  - include:
+      file: db/changelog/db.changelog-0021-backlog-flag.yaml

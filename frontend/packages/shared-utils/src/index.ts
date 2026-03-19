@@ -94,7 +94,9 @@ export type {
   TransferEnrollmentRequest,
   BulkTransferEnrollmentRequest,
   TransferEnrollmentError,
-  BulkTransferEnrollmentResponse
+  BulkTransferEnrollmentResponse,
+  AddToSectionRequest,
+  BulkAddToSectionRequest
 } from './api/enrollments'
 // Section and CreateSectionRequest are already exported above on line 17
 

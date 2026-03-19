@@ -13,6 +13,7 @@ public class ClassDTO {
     private String grade;
     private String level;
     private Boolean isActive;
+    private Boolean isBacklog;
     private Long sectionCount;
     private Long studentCount;
     private OffsetDateTime createdAt;
@@ -45,6 +46,9 @@ public class ClassDTO {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+    public Boolean getIsBacklog() { return isBacklog; }
+    public void setIsBacklog(Boolean isBacklog) { this.isBacklog = isBacklog; }
 
     public Long getSectionCount() { return sectionCount; }
     public void setSectionCount(Long sectionCount) { this.sectionCount = sectionCount; }

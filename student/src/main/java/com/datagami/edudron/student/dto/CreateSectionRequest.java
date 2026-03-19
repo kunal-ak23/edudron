@@ -16,6 +16,8 @@ public class CreateSectionRequest {
     private LocalDate endDate;
     private Integer maxStudents;
 
+    private Boolean isBacklog = false;
+
     // Getters and Setters
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -34,6 +36,9 @@ public class CreateSectionRequest {
 
     public Integer getMaxStudents() { return maxStudents; }
     public void setMaxStudents(Integer maxStudents) { this.maxStudents = maxStudents; }
+
+    public Boolean getIsBacklog() { return isBacklog; }
+    public void setIsBacklog(Boolean isBacklog) { this.isBacklog = isBacklog; }
 }
 
 

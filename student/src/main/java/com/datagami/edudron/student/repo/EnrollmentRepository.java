@@ -43,6 +43,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, String>,
         @Param("courseId") String courseId
     );
     
+    List<Enrollment> findByClientIdAndStudentIdAndBatchId(UUID clientId, String studentId, String batchId);
+
     List<Enrollment> findByClientIdAndBatchId(UUID clientId, String batchId);
     
     long countByClientIdAndBatchId(UUID clientId, String batchId);

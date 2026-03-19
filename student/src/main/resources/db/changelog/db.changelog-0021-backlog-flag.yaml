@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0021-add-backlog-to-classes
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: classes
+            schemaName: student
+            columns:
+              - column:
+                  name: is_backlog
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+
+  - changeSet:
+      id: student-0021-add-backlog-to-sections
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: sections
+            schemaName: student
+            columns:
+              - column:
+                  name: is_backlog
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false

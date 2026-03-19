@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { classesApi, institutesApi, enrollmentsApi, sectionsApi } from '@/lib/api'
 import type { Class, CreateClassRequest, Institute, ClassStudentDTO, Section } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -58,7 +59,8 @@ export default function ClassDetailPage() {
     academicYear: '',
     grade: '',
     level: '',
-    isActive: true
+    isActive: true,
+    isBacklog: false
   })
 
   const loadClass = useCallback(async () => {
@@ -73,7 +75,8 @@ export default function ClassDetailPage() {
         academicYear: classData.academicYear || '',
         grade: classData.grade || '',
         level: classData.level || '',
-        isActive: classData.isActive
+        isActive: classData.isActive,
+        isBacklog: classData.isBacklog || false
       })
       
       // Load institute for breadcrumb
@@ -314,6 +317,18 @@ export default function ClassDetailPage() {
                     />
                     <Label htmlFor="isActive">Active</Label>
                   </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label>Backlog Class</Label>
+                      <p className="text-sm text-muted-foreground">
+                        All sections under this class will be marked as backlog
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.isBacklog || false}
+                      onCheckedChange={(checked) => setFormData({ ...formData, isBacklog: checked })}
+                    />
+                  </div>
                 </div>
                 <div className="flex justify-between">
                   <Button
@@ -416,8 +431,8 @@ export default function ClassDetailPage() {
                             <div className="flex flex-wrap gap-1">
                               {studentSections.length > 0 ? (
                                 studentSections.slice(0, 2).map((section) => (
-                                  <Badge key={section.id} variant="outline" className="text-xs">
-                                    {section.name}
+                                  <Badge key={section.id} variant="outline" className={`text-xs ${section.isBacklog ? 'text-amber-600 border-amber-300 bg-amber-50' : ''}`}>
+                                    {section.name}{section.isBacklog ? ' (Backlog)' : ''}
                                   </Badge>
                                 ))
                               ) : (

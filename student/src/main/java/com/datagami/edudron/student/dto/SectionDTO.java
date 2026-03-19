@@ -14,6 +14,7 @@ public class SectionDTO {
     private LocalDate endDate;
     private Integer maxStudents;
     private Boolean isActive;
+    private Boolean isBacklog;
     private Long studentCount;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
@@ -45,6 +46,9 @@ public class SectionDTO {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+    public Boolean getIsBacklog() { return isBacklog; }
+    public void setIsBacklog(Boolean isBacklog) { this.isBacklog = isBacklog; }
 
     public Long getStudentCount() { return studentCount; }
     public void setStudentCount(Long studentCount) { this.studentCount = studentCount; }

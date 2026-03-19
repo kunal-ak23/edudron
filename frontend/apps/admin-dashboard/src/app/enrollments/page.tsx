@@ -95,6 +95,12 @@ export default function EnrollmentsPage() {
   const [transferDestinationCourseId, setTransferDestinationCourseId] = useState<string>('')
   const [allowDifferentCourse, setAllowDifferentCourse] = useState(false)
   const [transferring, setTransferring] = useState(false)
+  // Add to Section: state
+  const [showAddToSectionDialog, setShowAddToSectionDialog] = useState(false)
+  const [addToSectionEnrollments, setAddToSectionEnrollments] = useState<any[]>([])
+  const [addToSectionDestSectionId, setAddToSectionDestSectionId] = useState('')
+  const [addToSectionDestClassId, setAddToSectionDestClassId] = useState('')
+  const [addingToSection, setAddingToSection] = useState(false)
 
   // Load students with pagination and backend filtering
   const loadStudents = useCallback(async (searchQuery: string = '', page: number = 0, size: number = 100) => {
@@ -172,20 +178,49 @@ export default function EnrollmentsPage() {
       if (selectedSectionId && selectedSectionId !== 'all') {
         filters.sectionId = selectedSectionId
       }
-      if (debouncedSearchEmail.trim()) {
-        filters.email = debouncedSearchEmail.trim()
+      // Parse search input — support multi-line paste (one ID per line)
+      const searchTerms = debouncedSearchEmail
+        .split(/[\n,]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+
+      if (searchTerms.length === 1) {
+        // Single search term — use backend filter
+        filters.email = searchTerms[0]
       }
+      // Multi-term search handled after API call via client-side filtering
       
+      // For multi-term search, fetch a large page to filter client-side
+      const isMultiSearch = searchTerms.length > 1
+      const fetchSize = isMultiSearch ? 500 : pageSize
+      const fetchPage = isMultiSearch ? 0 : currentPage
+
       // Call backend API with filters
       const enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(
-        currentPage,
-        pageSize,
+        fetchPage,
+        fetchSize,
         Object.keys(filters).length > 0 ? filters : undefined
       )
-      
-      setEnrollments(enrollmentsResponse.content)
-      setTotalElements(enrollmentsResponse.totalElements)
-      setTotalPages(enrollmentsResponse.totalPages)
+
+      let results = enrollmentsResponse.content
+      let total = enrollmentsResponse.totalElements
+      let pages = enrollmentsResponse.totalPages
+
+      // Client-side multi-term filter
+      if (isMultiSearch) {
+        const lowerTerms = searchTerms.map(t => t.toLowerCase())
+        results = results.filter(e => {
+          const email = (e.studentEmail || '').toLowerCase()
+          const studentId = (e.studentId || '').toLowerCase()
+          return lowerTerms.some(term => email.includes(term) || studentId.includes(term))
+        })
+        total = results.length
+        pages = 1
+      }
+
+      setEnrollments(results)
+      setTotalElements(total)
+      setTotalPages(pages)
 
       // Load courses for current page (for display)
       const courseIds = Array.from(new Set(enrollmentsResponse.content.map(e => e.courseId)))
@@ -459,6 +494,43 @@ export default function EnrollmentsPage() {
     }
   }
 
+  const handleAddToSectionSelectedClick = () => {
+    const selected = enrollments.filter((e: any) => selectedEnrollmentIds.has(e.id))
+    if (selected.length === 0) return
+    setAddToSectionEnrollments(selected)
+    setAddToSectionDestSectionId('')
+    setAddToSectionDestClassId('')
+    setShowAddToSectionDialog(true)
+  }
+
+  const handleAddToSectionConfirm = async () => {
+    if (!addToSectionDestSectionId) return
+    setAddingToSection(true)
+    try {
+      const studentIds = [...new Set(addToSectionEnrollments.map((e: any) => e.studentId))]
+      const result = await enrollmentsApi.bulkAddToSection({
+        studentIds,
+        destinationSectionId: addToSectionDestSectionId,
+        destinationClassId: addToSectionDestClassId || undefined,
+      })
+      toast({
+        title: 'Students added to section',
+        description: `${result.enrolledStudents} enrolled, ${result.skippedStudents} skipped, ${result.failedStudents} failed`,
+      })
+      setShowAddToSectionDialog(false)
+      setSelectedEnrollmentIds(new Set())
+      loadEnrollments()
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to add students to section',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setAddingToSection(false)
+    }
+  }
+
   const toggleEnrollmentSelection = (id: string) => {
     setSelectedEnrollmentIds(prev => {
       const next = new Set(prev)
@@ -581,10 +653,16 @@ export default function EnrollmentsPage() {
         </div>
         <div className="flex gap-2">
           {selectedEnrollmentIds.size > 0 && (
-            <Button variant="secondary" onClick={handleTransferSelectedClick}>
-              <ArrowRightLeft className="h-4 w-4 mr-2" />
-              Transfer selected ({selectedEnrollmentIds.size})
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={handleAddToSectionSelectedClick}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add to Section
+              </Button>
+              <Button variant="secondary" onClick={handleTransferSelectedClick}>
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                Transfer selected ({selectedEnrollmentIds.size})
+              </Button>
+            </>
           )}
           <Button onClick={() => setShowAddEnrollmentDialog(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -602,20 +680,25 @@ export default function EnrollmentsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
-                <div className="space-y-2 md:col-span-1">
-                  <Label>Search Email</Label>
+                <div className="space-y-2 md:col-span-6">
+                  <Label>Search Email / Enrollment IDs</Label>
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search by email or username..."
+                    <textarea
+                      placeholder="Search by email, username, or paste multiple IDs from Excel (one per line)..."
                       value={searchEmail}
                       onChange={(e) => {
                         setSearchEmail(e.target.value)
-                        setCurrentPage(0) // Reset to first page when searching
-                        // The loadData will be triggered by the useEffect when searchEmail changes
+                        setCurrentPage(0)
                       }}
-                      className="pl-8"
+                      rows={searchEmail.includes('\n') ? Math.min(searchEmail.split('\n').length + 1, 8) : 1}
+                      className="flex w-full rounded-md border border-input bg-background px-3 py-2 pl-8 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
                     />
+                    {searchEmail.includes('\n') && (
+                      <span className="absolute right-2 top-2 text-xs text-muted-foreground bg-background px-1">
+                        {searchEmail.split('\n').filter(l => l.trim()).length} IDs
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -823,25 +906,26 @@ export default function EnrollmentsPage() {
               )}
               
               {/* Pagination Controls */}
-              {totalPages > 1 && (
+              {enrollments.length > 0 && (
                 <div className="flex items-center justify-between mt-4 pt-4 border-t">
                   <div className="flex items-center gap-2">
-                    <Label className="text-sm">Page size:</Label>
+                    <Label className="text-sm">Show:</Label>
                     <Select
                       value={pageSize.toString()}
                       onValueChange={(value) => {
                         setPageSize(Number(value))
-                        setCurrentPage(0) // Reset to first page when changing page size
+                        setCurrentPage(0)
                       }}
                     >
                       <SelectTrigger className="w-20">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="10">10</SelectItem>
                         <SelectItem value="20">20</SelectItem>
                         <SelectItem value="50">50</SelectItem>
                         <SelectItem value="100">100</SelectItem>
+                        <SelectItem value="200">200</SelectItem>
+                        <SelectItem value="500">500</SelectItem>
                       </SelectContent>
                     </Select>
                     <span className="text-sm text-gray-600">
@@ -1078,6 +1162,70 @@ export default function EnrollmentsPage() {
               ) : (
                 `Transfer ${transferEnrollments.length} enrollment${transferEnrollments.length !== 1 ? 's' : ''}`
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add to Section Dialog */}
+      <Dialog open={showAddToSectionDialog} onOpenChange={setShowAddToSectionDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add to Section</DialogTitle>
+            <DialogDescription>
+              {addToSectionEnrollments.length} enrollment(s) selected. Students will be enrolled in the chosen section. Their existing enrollments will be retained.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Filter by Class (optional)</Label>
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'All classes' },
+                  ...classes.map(c => ({
+                    value: c.id,
+                    label: c.name,
+                    searchText: c.name.toLowerCase(),
+                  })),
+                ]}
+                value={addToSectionDestClassId}
+                onValueChange={(v) => {
+                  setAddToSectionDestClassId(v)
+                  setAddToSectionDestSectionId('')
+                }}
+                placeholder="All classes"
+                emptyMessage="No classes found"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Destination Section *</Label>
+              <SearchableSelect
+                options={[
+                  { value: '', label: 'Select section...' },
+                  ...(addToSectionDestClassId
+                    ? sections.filter(s => s.classId === addToSectionDestClassId)
+                    : sections
+                  ).map(s => ({
+                    value: s.id,
+                    label: s.name + ((s as any).isBacklog ? ' (Backlog)' : ''),
+                    searchText: s.name.toLowerCase(),
+                  })),
+                ]}
+                value={addToSectionDestSectionId}
+                onValueChange={setAddToSectionDestSectionId}
+                placeholder="Select destination section"
+                emptyMessage="No sections found"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddToSectionDialog(false)}>Cancel</Button>
+            <Button
+              onClick={handleAddToSectionConfirm}
+              disabled={!addToSectionDestSectionId || addingToSection}
+            >
+              {addingToSection && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              Add to Section
             </Button>
           </DialogFooter>
         </DialogContent>

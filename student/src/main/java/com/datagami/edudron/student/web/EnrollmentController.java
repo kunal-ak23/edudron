@@ -1,5 +1,8 @@
 package com.datagami.edudron.student.web;
 
+import com.datagami.edudron.student.dto.AddToSectionRequest;
+import com.datagami.edudron.student.dto.BulkAddToSectionRequest;
+import com.datagami.edudron.student.dto.BulkEnrollmentResult;
 import com.datagami.edudron.student.dto.BulkTransferEnrollmentRequest;
 import com.datagami.edudron.student.dto.BulkTransferEnrollmentResponse;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
@@ -165,6 +168,22 @@ public class EnrollmentController {
             @Valid @RequestBody BulkTransferEnrollmentRequest request) {
         BulkTransferEnrollmentResponse response = enrollmentService.bulkTransferEnrollments(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/enrollments/add-to-section")
+    @Operation(summary = "Add student to additional section",
+               description = "Enroll a student in an additional section without removing existing enrollments")
+    public ResponseEntity<EnrollmentDTO> addToSection(@Valid @RequestBody AddToSectionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(enrollmentService.addToSection(request));
+    }
+
+    @PostMapping("/enrollments/bulk-add-to-section")
+    @Operation(summary = "Bulk add students to additional section",
+               description = "Enroll multiple students in an additional section without removing existing enrollments")
+    public ResponseEntity<BulkEnrollmentResult> bulkAddToSection(@Valid @RequestBody BulkAddToSectionRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(enrollmentService.bulkAddToSection(request));
     }
 
     @DeleteMapping("/enrollments/{enrollmentId}")
