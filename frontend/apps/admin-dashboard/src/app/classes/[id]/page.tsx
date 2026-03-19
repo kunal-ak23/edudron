@@ -431,8 +431,8 @@ export default function ClassDetailPage() {
                             <div className="flex flex-wrap gap-1">
                               {studentSections.length > 0 ? (
                                 studentSections.slice(0, 2).map((section) => (
-                                  <Badge key={section.id} variant="outline" className="text-xs">
-                                    {section.name}
+                                  <Badge key={section.id} variant="outline" className={`text-xs ${section.isBacklog ? 'text-amber-600 border-amber-300 bg-amber-50' : ''}`}>
+                                    {section.name}{section.isBacklog ? ' (Backlog)' : ''}
                                   </Badge>
                                 ))
                               ) : (

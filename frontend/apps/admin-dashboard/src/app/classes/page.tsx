@@ -193,11 +193,16 @@ export default function ClassesListPage() {
                     const institute = institutes.get(classItem.instituteId)
                     return (
                       <TableRow key={classItem.id} className="cursor-pointer hover:bg-gray-50">
-                        <TableCell 
+                        <TableCell
                           className="font-medium"
                           onClick={() => router.push(`/classes/${classItem.id}`)}
                         >
                           {classItem.name}
+                          {classItem.isBacklog && (
+                            <Badge variant="outline" className="ml-2 text-amber-600 border-amber-300 bg-amber-50 text-xs">
+                              Backlog
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell>
                           <code className="text-xs bg-gray-100 px-2 py-1 rounded">
