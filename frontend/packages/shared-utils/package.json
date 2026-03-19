@@ -38,11 +38,11 @@
     "axios": "^1.6.0"
   },
   "peerDependencies": {
-    "react": ">=18",
-    "react-dom": ">=18",
     "@tiptap/core": ">=3.0.0",
     "@tiptap/extension-image": ">=3.0.0",
-    "@tiptap/react": ">=3.0.0"
+    "@tiptap/react": ">=3.0.0",
+    "react": ">=18",
+    "react-dom": ">=18"
   },
   "peerDependenciesMeta": {
     "@tiptap/core": {
@@ -56,8 +56,10 @@
     }
   },
   "devDependencies": {
-    "typescript": "^5.2.2",
+    "@types/node": "^20.8.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "tsup": "^7.2.0",
-    "@types/node": "^20.8.0"
+    "typescript": "^5.2.2"
   }
 }
