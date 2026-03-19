@@ -272,8 +272,8 @@ frontend/
 │   ├── admin-dashboard/    # Next.js 14 (port 3000)
 │   └── student-portal/     # Next.js 14 (port 3001)
 ├── packages/
-│   ├── shared-utils/       # @kunal-ak23/edudron-shared-utils (v1.0.29)
-│   └── ui-components/      # @kunal-ak23/edudron-ui-components (v1.0.23)
+│   ├── shared-utils/       # @kunal-ak23/edudron-shared-utils (v1.0.31)
+│   └── ui-components/      # @kunal-ak23/edudron-ui-components (v1.0.25)
 ├── package.json            # pnpm workspaces
 ├── pnpm-workspace.yaml
 └── turbo.json              # Turbo build pipeline
@@ -394,11 +394,16 @@ Client polls → GET /api/content/ai-jobs/{id} → returns current status + resu
 ## Shared Utils Package
 - Published to GitHub npm registry: `@kunal-ak23/edudron-shared-utils`
 - Built with **tsup** (`npm run build` in `frontend/packages/shared-utils/`)
-- Current version: **1.0.29**
+- Current version: **1.0.31**
 - All imports from shared-utils MUST use the npm package path, NOT relative paths
 - CSS exports use subpath: `@kunal-ak23/edudron-shared-utils/tiptap/editor-styles.css`
 - `tsconfig.json` uses `"moduleResolution": "bundler"` to support subpath exports (e.g., `@tiptap/react/menus`)
 - After making changes to shared-utils, always run `npm run build` before testing
+- **Publishing**: Use `frontend/packages/publish.sh` to publish packages to GitHub npm registry
+  - Requires `GITHUB_TOKEN` env var with `write:packages` scope
+  - Usage: `cd frontend/packages && GITHUB_TOKEN=<token> bash publish.sh all`
+  - Or publish individually: `bash publish.sh shared-utils` / `bash publish.sh ui-components`
+  - After publishing, update version references in both apps' `package.json` files
 
 ## TipTap Editor Setup
 
