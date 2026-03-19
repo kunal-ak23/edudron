@@ -32,7 +32,7 @@ import {
   Archive,
   Download,
 } from 'lucide-react'
-import { simulationsApi, enrollmentsApi } from '@/lib/api'
+import { simulationsApi, apiClient } from '@/lib/api'
 import type { SimulationDTO } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -72,7 +72,7 @@ export default function SimulationEditorPage() {
   const [assignedSectionIds, setAssignedSectionIds] = useState<string[]>([])
 
   // Section data for assignment
-  const [sections, setSections] = useState<{ id: string; name: string }[]>([])
+  const [sections, setSections] = useState<{ id: string; name: string; className?: string }[]>([])
   const [sectionsLoading, setSectionsLoading] = useState(false)
 
   // Dialogs
@@ -110,11 +110,12 @@ export default function SimulationEditorPage() {
     }
   }, [simulationId, toast]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadSections = useCallback(async () => {
+  const loadSections = useCallback(async (courseId: string) => {
     try {
       setSectionsLoading(true)
-      const response = await enrollmentsApi.listSections()
-      setSections(Array.isArray(response) ? response : [])
+      const response = await apiClient.get(`/api/exams/courses/${courseId}/sections`)
+      const data = Array.isArray(response) ? response : (response as any)?.data || []
+      setSections(data.map((s: any) => ({ id: s.id, name: s.name, className: s.className })))
     } catch {
       setSections([])
     } finally {
@@ -127,10 +128,10 @@ export default function SimulationEditorPage() {
   }, [loadSimulation])
 
   useEffect(() => {
-    if (visibility === 'ASSIGNED_ONLY') {
-      loadSections()
+    if (visibility === 'ASSIGNED_ONLY' && simulation?.courseId) {
+      loadSections(simulation.courseId)
     }
-  }, [visibility, loadSections])
+  }, [visibility, simulation?.courseId, loadSections])
 
   // Save metadata
   const handleSaveMetadata = async () => {
@@ -452,7 +453,7 @@ export default function SimulationEditorPage() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Visibility</Label>
+              <Label>Assign To</Label>
               <Select
                 value={visibility}
                 onValueChange={(val) =>
@@ -463,8 +464,8 @@ export default function SimulationEditorPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ALL">All Students</SelectItem>
-                  <SelectItem value="ASSIGNED_ONLY">Assigned Sections Only</SelectItem>
+                  <SelectItem value="ALL">All Students in Course</SelectItem>
+                  <SelectItem value="ASSIGNED_ONLY">Specific Section/Batch</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -493,7 +494,7 @@ export default function SimulationEditorPage() {
           {/* Section assignment */}
           {visibility === 'ASSIGNED_ONLY' && (
             <div className="space-y-2">
-              <Label>Assigned Sections</Label>
+              <Label>Select Section/Batch</Label>
               {sectionsLoading ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -501,25 +502,52 @@ export default function SimulationEditorPage() {
                 </div>
               ) : sections.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No sections available. Create sections first.
+                  No sections found for this course. Assign classes/sections to the course first.
                 </p>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                  {sections.map((section) => (
-                    <label
-                      key={section.id}
-                      className="flex items-center gap-2 text-sm cursor-pointer"
+                <>
+                  <div className="flex gap-2 text-xs">
+                    <button
+                      type="button"
+                      className="text-blue-600 hover:underline"
+                      onClick={() => setAssignedSectionIds(sections.map(s => s.id))}
                     >
-                      <Checkbox
-                        checked={assignedSectionIds.includes(section.id)}
-                        onCheckedChange={() =>
-                          toggleSectionAssignment(section.id)
-                        }
-                      />
-                      <span className="truncate">{section.name}</span>
-                    </label>
-                  ))}
-                </div>
+                      Select All
+                    </button>
+                    <span className="text-muted-foreground">|</span>
+                    <button
+                      type="button"
+                      className="text-blue-600 hover:underline"
+                      onClick={() => setAssignedSectionIds([])}
+                    >
+                      Deselect All
+                    </button>
+                    <span className="text-muted-foreground ml-auto">
+                      {assignedSectionIds.length} of {sections.length} selected
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                    {sections.map((section) => (
+                      <label
+                        key={section.id}
+                        className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-2 py-1.5"
+                      >
+                        <Checkbox
+                          checked={assignedSectionIds.includes(section.id)}
+                          onCheckedChange={() =>
+                            toggleSectionAssignment(section.id)
+                          }
+                        />
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate font-medium">{section.name}</span>
+                          {section.className && (
+                            <span className="text-xs text-muted-foreground truncate">{section.className}</span>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
