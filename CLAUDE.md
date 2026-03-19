@@ -487,8 +487,21 @@ docker-compose -f docker-compose.dev.yml up -d
 ./scripts/manage-versions.sh get content        # Check current version
 ./scripts/manage-versions.sh bump content patch  # Bump patch version
 
-# Deploy to Azure
-./azure/scripts/deploy-content.sh
-./azure/scripts/deploy-core-api.sh
-./azure/scripts/deploy-gateway.sh
+# Deploy backend to Azure
+# Step 1: Build & push Docker image for the service you changed
+# IMPORTANT: Do NOT use build-and-push-images.sh — it rebuilds ALL services.
+# Use build-docker-images.sh with a specific service name instead.
+source azure/config/dev.env && export DOCKER_REGISTRY="$CONTAINER_REGISTRY_SERVER"
+./scripts/build-docker-images.sh content    # Builds + pushes to Docker Hub
+./scripts/build-docker-images.sh core-api
+./scripts/build-docker-images.sh gateway
+
+# Step 2: Deploy to Azure Container Apps (pulls image from Docker Hub)
+source azure/config/dev.env && bash azure/scripts/deploy-content.sh
+source azure/config/dev.env && bash azure/scripts/deploy-core-api.sh
+source azure/config/dev.env && bash azure/scripts/deploy-gateway.sh
+
+# Deploy frontend to production (Vercel)
+cd frontend/apps/admin-dashboard && vercel --prod
+cd frontend/apps/student-portal && vercel --prod
 ```
