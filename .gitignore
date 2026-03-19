@@ -208,3 +208,6 @@ Desktop.ini
 
 # Backups
 backups/
+
+# Temp npmrc files (may contain tokens)
+*.npmrc.tmp
