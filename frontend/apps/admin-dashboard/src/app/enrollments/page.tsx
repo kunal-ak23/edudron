@@ -178,20 +178,49 @@ export default function EnrollmentsPage() {
       if (selectedSectionId && selectedSectionId !== 'all') {
         filters.sectionId = selectedSectionId
       }
-      if (debouncedSearchEmail.trim()) {
-        filters.email = debouncedSearchEmail.trim()
+      // Parse search input — support multi-line paste (one ID per line)
+      const searchTerms = debouncedSearchEmail
+        .split(/[\n,]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+
+      if (searchTerms.length === 1) {
+        // Single search term — use backend filter
+        filters.email = searchTerms[0]
       }
+      // Multi-term search handled after API call via client-side filtering
       
+      // For multi-term search, fetch a large page to filter client-side
+      const isMultiSearch = searchTerms.length > 1
+      const fetchSize = isMultiSearch ? 500 : pageSize
+      const fetchPage = isMultiSearch ? 0 : currentPage
+
       // Call backend API with filters
       const enrollmentsResponse = await enrollmentsApi.listAllEnrollmentsPaginated(
-        currentPage,
-        pageSize,
+        fetchPage,
+        fetchSize,
         Object.keys(filters).length > 0 ? filters : undefined
       )
-      
-      setEnrollments(enrollmentsResponse.content)
-      setTotalElements(enrollmentsResponse.totalElements)
-      setTotalPages(enrollmentsResponse.totalPages)
+
+      let results = enrollmentsResponse.content
+      let total = enrollmentsResponse.totalElements
+      let pages = enrollmentsResponse.totalPages
+
+      // Client-side multi-term filter
+      if (isMultiSearch) {
+        const lowerTerms = searchTerms.map(t => t.toLowerCase())
+        results = results.filter(e => {
+          const email = (e.studentEmail || '').toLowerCase()
+          const studentId = (e.studentId || '').toLowerCase()
+          return lowerTerms.some(term => email.includes(term) || studentId.includes(term))
+        })
+        total = results.length
+        pages = 1
+      }
+
+      setEnrollments(results)
+      setTotalElements(total)
+      setTotalPages(pages)
 
       // Load courses for current page (for display)
       const courseIds = Array.from(new Set(enrollmentsResponse.content.map(e => e.courseId)))
@@ -652,19 +681,24 @@ export default function EnrollmentsPage() {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
                 <div className="space-y-2 md:col-span-1">
-                  <Label>Search Email</Label>
+                  <Label>Search Email / Enrollment IDs</Label>
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search by email or username..."
+                    <textarea
+                      placeholder="Search by email, username, or paste multiple IDs (one per line)..."
                       value={searchEmail}
                       onChange={(e) => {
                         setSearchEmail(e.target.value)
-                        setCurrentPage(0) // Reset to first page when searching
-                        // The loadData will be triggered by the useEffect when searchEmail changes
+                        setCurrentPage(0)
                       }}
-                      className="pl-8"
+                      rows={searchEmail.includes('\n') ? Math.min(searchEmail.split('\n').length, 5) : 1}
+                      className="flex w-full rounded-md border border-input bg-background px-3 py-2 pl-8 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
                     />
+                    {searchEmail.includes('\n') && (
+                      <span className="absolute right-2 top-2 text-xs text-muted-foreground">
+                        {searchEmail.split('\n').filter(l => l.trim()).length} IDs
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
