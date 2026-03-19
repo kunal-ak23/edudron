@@ -680,22 +680,22 @@ export default function EnrollmentsPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
-                <div className="space-y-2 md:col-span-1">
+                <div className="space-y-2 md:col-span-6">
                   <Label>Search Email / Enrollment IDs</Label>
                   <div className="relative">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                     <textarea
-                      placeholder="Search by email, username, or paste multiple IDs (one per line)..."
+                      placeholder="Search by email, username, or paste multiple IDs from Excel (one per line)..."
                       value={searchEmail}
                       onChange={(e) => {
                         setSearchEmail(e.target.value)
                         setCurrentPage(0)
                       }}
-                      rows={searchEmail.includes('\n') ? Math.min(searchEmail.split('\n').length, 5) : 1}
-                      className="flex w-full rounded-md border border-input bg-background px-3 py-2 pl-8 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                      rows={searchEmail.includes('\n') ? Math.min(searchEmail.split('\n').length + 1, 8) : 1}
+                      className="flex w-full rounded-md border border-input bg-background px-3 py-2 pl-8 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-y"
                     />
                     {searchEmail.includes('\n') && (
-                      <span className="absolute right-2 top-2 text-xs text-muted-foreground">
+                      <span className="absolute right-2 top-2 text-xs text-muted-foreground bg-background px-1">
                         {searchEmail.split('\n').filter(l => l.trim()).length} IDs
                       </span>
                     )}
