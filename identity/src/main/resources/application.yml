@@ -28,7 +28,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,env,beans,configprops
+        include: health,info,metrics
   endpoint:
     health:
       show-details: always
@@ -48,7 +48,7 @@ server:
 
 # JWT Configuration
 jwt:
-  secret: ${JWT_SECRET:mySecretKey123456789012345678901234567890}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:86400} # 24 hours in seconds
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800} # 7 days in seconds (default)
 
