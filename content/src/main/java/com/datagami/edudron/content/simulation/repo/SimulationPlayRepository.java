@@ -24,4 +24,6 @@ public interface SimulationPlayRepository extends JpaRepository<SimulationPlay, 
             String simulationId, String studentId);
 
     long countBySimulationId(String simulationId);
+
+    long countBySimulationIdAndClientId(String simulationId, UUID clientId);
 }

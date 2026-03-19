@@ -81,7 +81,7 @@ public class SimulationService {
         Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
         SimulationDTO dto = SimulationDTO.fromEntity(sim);
-        dto.setTotalPlays((int) playRepository.countBySimulationId(id));
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
         return dto;
     }
 
@@ -97,7 +97,7 @@ public class SimulationService {
         }
         return page.map(sim -> {
             SimulationDTO dto = SimulationDTO.fromEntity(sim);
-            dto.setTotalPlays((int) playRepository.countBySimulationId(sim.getId()));
+            dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(sim.getId(), clientId));
             return dto;
         });
     }
@@ -145,7 +145,7 @@ public class SimulationService {
         simulationRepository.save(sim);
 
         SimulationDTO dto = SimulationDTO.fromEntity(sim);
-        dto.setTotalPlays((int) playRepository.countBySimulationId(id));
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
         return dto;
     }
 
@@ -159,7 +159,7 @@ public class SimulationService {
         simulationRepository.save(sim);
 
         SimulationDTO dto = SimulationDTO.fromEntity(sim);
-        dto.setTotalPlays((int) playRepository.countBySimulationId(id));
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
         return dto;
     }
 
@@ -180,7 +180,7 @@ public class SimulationService {
         simulationRepository.save(sim);
 
         SimulationDTO dto = SimulationDTO.fromEntity(sim);
-        dto.setTotalPlays((int) playRepository.countBySimulationId(id));
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
         return dto;
     }
 
@@ -194,7 +194,7 @@ public class SimulationService {
         simulationRepository.save(sim);
 
         SimulationDTO dto = SimulationDTO.fromEntity(sim);
-        dto.setTotalPlays((int) playRepository.countBySimulationId(id));
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
         return dto;
     }
 
@@ -369,7 +369,7 @@ public class SimulationService {
                     dto.setSimulationData(null); // Strip data from list view
                     dto.setConcept(null);  // Concept must never be visible to students before play
                     dto.setCreatedBy(null);
-                    dto.setTotalPlays((int) playRepository.countBySimulationId(sim.getId()));
+                    dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(sim.getId(), clientId));
                     return dto;
                 })
                 .collect(Collectors.toList());
