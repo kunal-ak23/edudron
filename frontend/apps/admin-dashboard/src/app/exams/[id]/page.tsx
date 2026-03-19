@@ -2049,7 +2049,14 @@ function SubmissionsList({ examId, questions, reviewMethod, passingScorePercenta
     return (
       <Card>
         <CardContent className="py-12 text-center">
-          <p className="text-gray-500">No submissions yet</p>
+          <p className="text-gray-500 mb-4">No submissions yet</p>
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/exams/${examId}/submissions`)}
+          >
+            <Users className="h-4 w-4 mr-2" />
+            Manage Submissions
+          </Button>
         </CardContent>
       </Card>
     )
