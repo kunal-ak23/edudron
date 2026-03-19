@@ -7,6 +7,9 @@ import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.Enrollment;
 import com.datagami.edudron.student.domain.Institute;
 import com.datagami.edudron.student.domain.Section;
+import com.datagami.edudron.student.dto.AddToSectionRequest;
+import com.datagami.edudron.student.dto.BulkAddToSectionRequest;
+import com.datagami.edudron.student.dto.BulkEnrollmentResult;
 import com.datagami.edudron.student.dto.BulkTransferEnrollmentRequest;
 import com.datagami.edudron.student.dto.BulkTransferEnrollmentResponse;
 import com.datagami.edudron.student.dto.CreateEnrollmentRequest;
@@ -1882,6 +1885,168 @@ public class EnrollmentService {
             allSections.size(), totalStudents, totalCreated, totalFixed);
 
         return summary;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Additive enrollment — add student to an additional section (non-destructive)
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Add a student to an additional section without removing existing enrollments.
+     * This is the non-destructive counterpart to transferEnrollment.
+     */
+    public EnrollmentDTO addToSection(AddToSectionRequest request) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+        String studentId = request.getStudentId();
+        String destSectionId = request.getDestinationSectionId();
+
+        // Validate destination section exists and is active
+        Section destSection = sectionRepository.findByIdAndClientId(destSectionId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Destination section not found: " + destSectionId));
+        if (!Boolean.TRUE.equals(destSection.getIsActive())) {
+            throw new IllegalArgumentException("Destination section is not active: " + destSectionId);
+        }
+
+        String destClassId = request.getDestinationClassId() != null
+                ? request.getDestinationClassId()
+                : destSection.getClassId();
+
+        // Resolve the class to get instituteId
+        Class destClass = classRepository.findByIdAndClientId(destClassId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Destination class not found: " + destClassId));
+        String instituteId = destClass.getInstituteId();
+
+        // Check if student already has non-placeholder enrollments in this section
+        List<Enrollment> existingInSection = enrollmentRepository.findByClientIdAndStudentIdAndBatchId(clientId, studentId, destSectionId);
+        List<Enrollment> realEnrollments = existingInSection.stream()
+                .filter(e -> !"__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+                .collect(Collectors.toList());
+        if (!realEnrollments.isEmpty()) {
+            // Already enrolled — return existing
+            log.info("Student {} already has {} enrollment(s) in section {}, returning existing",
+                    studentId, realEnrollments.size(), destSectionId);
+            return toDTO(realEnrollments.get(0));
+        }
+
+        // Get courses assigned to the destination section/class
+        Set<String> destCourseIds = getAssignedCourseIdsForDestination(destSectionId, destClassId);
+
+        if (destCourseIds.isEmpty()) {
+            // No courses assigned — create enrollment with placeholder course
+            Enrollment enrollment = new Enrollment();
+            enrollment.setId(UlidGenerator.nextUlid());
+            enrollment.setClientId(clientId);
+            enrollment.setStudentId(studentId);
+            enrollment.setBatchId(destSectionId);
+            enrollment.setClassId(destClassId);
+            enrollment.setCourseId("__PLACEHOLDER_ASSOCIATION__");
+            enrollment.setInstituteId(instituteId);
+            enrollment = enrollmentRepository.save(enrollment);
+            log.info("Added student {} to section {} with placeholder (no courses assigned)", studentId, destSectionId);
+            return toDTO(enrollment);
+        }
+
+        // Create enrollment for each assigned course
+        Enrollment firstEnrollment = null;
+        int created = 0;
+        for (String courseId : destCourseIds) {
+            // Skip if already enrolled in this exact course+section combo
+            boolean alreadyExists = enrollmentRepository.findByClientIdAndStudentIdAndCourseId(clientId, studentId, courseId)
+                    .stream()
+                    .anyMatch(e -> destSectionId.equals(e.getBatchId()));
+            if (alreadyExists) continue;
+
+            Enrollment enrollment = new Enrollment();
+            enrollment.setId(UlidGenerator.nextUlid());
+            enrollment.setClientId(clientId);
+            enrollment.setStudentId(studentId);
+            enrollment.setCourseId(courseId);
+            enrollment.setBatchId(destSectionId);
+            enrollment.setClassId(destClassId);
+            enrollment.setInstituteId(instituteId);
+            enrollment = enrollmentRepository.save(enrollment);
+            if (firstEnrollment == null) firstEnrollment = enrollment;
+            created++;
+        }
+
+        // Clean up any placeholder enrollment in this section for this student
+        existingInSection.stream()
+                .filter(e -> "__PLACEHOLDER_ASSOCIATION__".equals(e.getCourseId()))
+                .forEach(e -> {
+                    enrollmentRepository.delete(e);
+                    log.debug("Removed placeholder enrollment {} from section {}", e.getId(), destSectionId);
+                });
+
+        // Audit & event logging
+        String currentUserId = getCurrentUserId();
+        String currentUserEmail = getCurrentUserEmail();
+        Map<String, Object> eventData = new HashMap<>();
+        eventData.put("studentId", studentId);
+        eventData.put("destinationSectionId", destSectionId);
+        eventData.put("destinationClassId", destClassId);
+        eventData.put("coursesEnrolled", created);
+        eventService.logUserAction("ENROLLMENT_ADD_TO_SECTION", currentUserId, currentUserEmail, "/api/enrollments/add-to-section", eventData);
+
+        // Evict analytics caches
+        if (destSectionId != null) {
+            sessionService.evictSectionAnalyticsCache(destSectionId);
+        }
+        sessionService.evictClassAnalyticsCache(destClassId);
+
+        log.info("Added student {} to section {} (class {}). Created {} course enrollment(s)",
+                studentId, destSectionId, destClassId, created);
+
+        return firstEnrollment != null ? toDTO(firstEnrollment) : null;
+    }
+
+    /**
+     * Bulk add multiple students to an additional section without removing existing enrollments.
+     */
+    public BulkEnrollmentResult bulkAddToSection(BulkAddToSectionRequest request) {
+        long total = request.getStudentIds().size();
+        long enrolled = 0;
+        long skipped = 0;
+        long failed = 0;
+        List<String> enrolledStudentIds = new ArrayList<>();
+        List<String> errorMessages = new ArrayList<>();
+
+        for (String studentId : request.getStudentIds()) {
+            try {
+                AddToSectionRequest singleRequest = new AddToSectionRequest();
+                singleRequest.setStudentId(studentId);
+                singleRequest.setDestinationSectionId(request.getDestinationSectionId());
+                singleRequest.setDestinationClassId(request.getDestinationClassId());
+
+                EnrollmentDTO result = addToSection(singleRequest);
+                if (result != null) {
+                    enrolled++;
+                    enrolledStudentIds.add(studentId);
+                } else {
+                    skipped++;
+                }
+            } catch (Exception e) {
+                failed++;
+                errorMessages.add("Student " + studentId + ": " + e.getMessage());
+                log.warn("Failed to add student {} to section {}: {}",
+                        studentId, request.getDestinationSectionId(), e.getMessage());
+            }
+        }
+
+        BulkEnrollmentResult result = new BulkEnrollmentResult();
+        result.setTotalStudents(total);
+        result.setEnrolledStudents(enrolled);
+        result.setSkippedStudents(skipped);
+        result.setFailedStudents(failed);
+        result.setEnrolledStudentIds(enrolledStudentIds);
+        result.setErrorMessages(errorMessages);
+
+        log.info("Bulk add-to-section complete: {} total, {} enrolled, {} skipped, {} failed",
+                total, enrolled, skipped, failed);
+        return result;
     }
 
     private EnrollmentDTO toDTO(Enrollment enrollment) {
