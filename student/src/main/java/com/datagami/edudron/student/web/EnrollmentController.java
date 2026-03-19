@@ -244,6 +244,15 @@ public class EnrollmentController {
         return ResponseEntity.ok(result);
     }
 
+    @DeleteMapping("/sections/{sectionId}/students/{studentId}")
+    @Operation(summary = "Remove student from section", description = "Delete all enrollments for a student in a specific section")
+    public ResponseEntity<Void> removeStudentFromSection(
+            @PathVariable String sectionId,
+            @PathVariable String studentId) {
+        enrollmentService.removeStudentFromSection(studentId, sectionId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/sections/{sectionId}/students")
     @Operation(summary = "Get students by section", description = "Get all students enrolled in a section")
     public ResponseEntity<List<SectionStudentDTO>> getStudentsBySection(@PathVariable String sectionId) {

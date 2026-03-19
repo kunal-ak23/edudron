@@ -892,6 +892,24 @@ public class EnrollmentService {
         }
     }
     
+    @Transactional
+    public void removeStudentFromSection(String studentId, String sectionId) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+
+        // Validate section exists
+        Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Section not found"));
+
+        // Delete all enrollments for this student in this section
+        int deleted = enrollmentRepository.deleteByClientIdAndStudentIdAndBatchId(clientId, studentId, sectionId);
+
+        if (deleted == 0) {
+            throw new IllegalArgumentException("Student not found in this section");
+        }
+
+        log.info("Removed student {} from section {} ({} enrollments deleted)", studentId, sectionId, deleted);
+    }
+
     /**
      * Get student's current class and section information from their enrollments.
      * Returns the most recent enrollment that has both class and section associations.
