@@ -21,6 +21,8 @@ public class CreateClassRequest {
     
     private Boolean isActive = true;
 
+    private Boolean isBacklog = false;
+
     // Getters and Setters
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -42,6 +44,9 @@ public class CreateClassRequest {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+    public Boolean getIsBacklog() { return isBacklog; }
+    public void setIsBacklog(Boolean isBacklog) { this.isBacklog = isBacklog; }
 }
 
 
