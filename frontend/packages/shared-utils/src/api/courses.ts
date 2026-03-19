@@ -124,7 +124,7 @@ export class CoursesApi {
   constructor(private apiClient: ApiClient) {}
 
   async listCourses(params?: { status?: string; instructorId?: string }): Promise<Course[]> {
-    const response = await this.apiClient.get<any>('/content/courses', { params })
+    const response = await this.apiClient.get<any>('/content/courses', { params: { size: 500, ...params } })
     
     // Handle Spring Data Page response structure: {content: [...], totalElements: ...}
     if (response.data && response.data.content && Array.isArray(response.data.content)) {
