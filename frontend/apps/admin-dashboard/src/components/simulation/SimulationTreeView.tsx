@@ -33,7 +33,7 @@ function computePathQualities(
   let currentId: string | undefined = rootNodeId
   while (currentId && nodes[currentId]) {
     goldenPath.add(currentId)
-    const node = nodes[currentId]
+    const node: TreeNode = nodes[currentId]
     if (node.type === 'TERMINAL' || !node.choices?.length) break
     // Find highest quality choice
     const bestChoice = node.choices.reduce((best, c) =>

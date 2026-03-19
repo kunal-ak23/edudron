@@ -48,9 +48,10 @@ export default function SimulationPlayPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [narrativeDone, setNarrativeDone] = useState(false)
   const [showDecisionInput, setShowDecisionInput] = useState(false)
   const [lastReaction, setLastReaction] = useState<{ mood: string; text: string } | null>(null)
+  const [openingNarrativeDone, setOpeningNarrativeDone] = useState(false)
+  const [decisionNarrativeDone, setDecisionNarrativeDone] = useState(false)
   const revealTimerRef = useRef<number | null>(null)
 
   // Load current state
@@ -59,20 +60,16 @@ export default function SimulationPlayPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playId])
 
-  // After narrative finishes typing, show decision input
-  useEffect(() => {
-    if (!narrativeDone || playPhase !== 'DECISION_NARRATIVE') return
-    if (prefersReducedMotion) {
-      setPlayPhase('DECISION_ACTIVE')
-      setShowDecisionInput(true)
-      return
-    }
-    revealTimerRef.current = window.setTimeout(() => {
-      setPlayPhase('DECISION_ACTIVE')
-      setShowDecisionInput(true)
-    }, 200)
-    return () => { if (revealTimerRef.current) window.clearTimeout(revealTimerRef.current) }
-  }, [narrativeDone, playPhase, prefersReducedMotion])
+  // After decision narrative finishes typing, wait for user to click Continue
+  function handleDecisionNarrativeTypingDone() {
+    setDecisionNarrativeDone(true)
+  }
+
+  function handleDecisionNarrativeContinue() {
+    setDecisionNarrativeDone(false)
+    setPlayPhase('DECISION_ACTIVE')
+    setShowDecisionInput(true)
+  }
 
   async function loadState() {
     try {
@@ -106,12 +103,21 @@ export default function SimulationPlayPage() {
       if (data.advisorDialog) {
         setPlayPhase('ADVISOR_SETUP')
       } else if (data.openingNarrative) {
-        setPlayPhase('OPENING_NARRATIVE')
-        setNarrativeDone(Boolean(prefersReducedMotion))
+        if (prefersReducedMotion) {
+          // Skip opening narrative, go straight to decision
+          setPlayPhase('DECISION_ACTIVE')
+          setShowDecisionInput(true)
+        } else {
+          setPlayPhase('OPENING_NARRATIVE')
+        }
       } else {
-        setPlayPhase('DECISION_NARRATIVE')
-        setNarrativeDone(Boolean(prefersReducedMotion))
-        setShowDecisionInput(Boolean(prefersReducedMotion))
+        if (prefersReducedMotion) {
+          // Skip decision narrative typing, go straight to input
+          setPlayPhase('DECISION_ACTIVE')
+          setShowDecisionInput(true)
+        } else {
+          setPlayPhase('DECISION_NARRATIVE')
+        }
       }
     }
   }
@@ -119,19 +125,29 @@ export default function SimulationPlayPage() {
   const handleAdvisorDismiss = useCallback(() => {
     if (!state) return
     if (state.openingNarrative && playPhase === 'ADVISOR_SETUP') {
-      setPlayPhase('OPENING_NARRATIVE')
-      setNarrativeDone(Boolean(prefersReducedMotion))
+      if (prefersReducedMotion) {
+        setPlayPhase('DECISION_ACTIVE')
+        setShowDecisionInput(true)
+      } else {
+        setPlayPhase('OPENING_NARRATIVE')
+      }
     } else if (playPhase === 'ADVISOR_SETUP') {
-      setPlayPhase('DECISION_NARRATIVE')
-      setNarrativeDone(Boolean(prefersReducedMotion))
-      setShowDecisionInput(Boolean(prefersReducedMotion))
+      if (prefersReducedMotion) {
+        setPlayPhase('DECISION_ACTIVE')
+        setShowDecisionInput(true)
+      } else {
+        setPlayPhase('DECISION_NARRATIVE')
+      }
     }
   }, [state, playPhase, prefersReducedMotion])
 
-  function handleOpeningDone() {
+  function handleOpeningTypingDone() {
+    setOpeningNarrativeDone(true)
+  }
+
+  function handleOpeningContinue() {
+    setOpeningNarrativeDone(false)
     setPlayPhase('DECISION_NARRATIVE')
-    setNarrativeDone(Boolean(prefersReducedMotion))
-    setShowDecisionInput(Boolean(prefersReducedMotion))
   }
 
   async function handleSubmit(data: any) {
@@ -141,7 +157,6 @@ export default function SimulationPlayPage() {
       setPlayPhase('SUBMITTING')
       setSubmitting(true)
       setShowDecisionInput(false)
-      setNarrativeDone(false)
       setError(null)
 
       const input = {
@@ -168,7 +183,6 @@ export default function SimulationPlayPage() {
     } catch {
       setError('Failed to submit your decision. Please try again.')
       setPlayPhase('DECISION_ACTIVE')
-      setNarrativeDone(true)
       setShowDecisionInput(true)
     } finally {
       setSubmitting(false)
@@ -277,11 +291,22 @@ export default function SimulationPlayPage() {
                       as="div"
                       className="text-base leading-relaxed text-[#94A3B8] whitespace-pre-line"
                       text={state.openingNarrative}
-                      onDone={handleOpeningDone}
+                      onDone={handleOpeningTypingDone}
                       speedMs={14}
                       startDelayMs={80}
                       cursor
                     />
+                    {openingNarrativeDone && (
+                      <div className="mt-4 flex justify-center">
+                        <Button
+                          variant="outline"
+                          onClick={handleOpeningContinue}
+                          className="border-[#1E3A5F] text-[#E2E8F0] hover:bg-[#1A2744]"
+                        >
+                          Continue
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -293,11 +318,22 @@ export default function SimulationPlayPage() {
                       as="div"
                       className="text-lg leading-relaxed text-[#E2E8F0] whitespace-pre-line"
                       text={state.decision.narrative}
-                      onDone={() => setNarrativeDone(true)}
+                      onDone={handleDecisionNarrativeTypingDone}
                       speedMs={16}
                       startDelayMs={80}
                       cursor
                     />
+                    {decisionNarrativeDone && playPhase === 'DECISION_NARRATIVE' && (
+                      <div className="mt-6 flex justify-center">
+                        <Button
+                          variant="outline"
+                          onClick={handleDecisionNarrativeContinue}
+                          className="border-[#1E3A5F] text-[#E2E8F0] hover:bg-[#1A2744]"
+                        >
+                          Make your decision
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
 
