@@ -26,6 +26,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -111,12 +112,39 @@ public class SimulationStudentController {
         throw new IllegalStateException("Unauthorized");
     }
 
+    /**
+     * Resolve the current student's section ID via the enrollment service.
+     * Returns null if the student has no section assignment.
+     */
+    private String getStudentSectionId(String studentId) {
+        try {
+            String url = gatewayUrl + "/api/enrollments/students/" + studentId + "/class-section";
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(new HttpHeaders()),
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object sectionId = response.getBody().get("sectionId");
+                if (sectionId != null && !sectionId.toString().isBlank()) {
+                    return sectionId.toString();
+                }
+            }
+        } catch (Exception ignored) {
+            // Student may not have an enrollment yet
+        }
+        return null;
+    }
+
     @GetMapping("/available")
     @Operation(summary = "Get available simulations",
                description = "List published simulations available to the current student")
     public ResponseEntity<List<SimulationDTO>> available() {
         String studentId = getCurrentUserId();
-        return ResponseEntity.ok(simulationService.getAvailableSimulations(studentId));
+        String sectionId = getStudentSectionId(studentId);
+        return ResponseEntity.ok(simulationService.getAvailableSimulations(studentId, sectionId));
     }
 
     @PostMapping("/{id}/play")
@@ -124,8 +152,9 @@ public class SimulationStudentController {
                description = "Create a new play session for a simulation")
     public ResponseEntity<SimulationPlayDTO> startPlay(@PathVariable String id) {
         String studentId = getCurrentUserId();
+        String sectionId = getStudentSectionId(studentId);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(simulationService.startPlay(id, studentId));
+                .body(simulationService.startPlay(id, studentId, sectionId));
     }
 
     @GetMapping("/play/{playId}/state")

@@ -22,6 +22,7 @@ import com.datagami.edudron.content.simulation.dto.SimulationSuggestionResponse;
 import com.datagami.edudron.content.simulation.dto.YearEndReviewDTO;
 import com.datagami.edudron.content.simulation.repo.SimulationPlayRepository;
 import com.datagami.edudron.content.simulation.repo.SimulationRepository;
+import java.util.Arrays;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -356,14 +357,13 @@ public class SimulationService {
     // ============ STUDENT OPERATIONS ============
 
     @Transactional(readOnly = true)
-    public List<SimulationDTO> getAvailableSimulations(String studentId) {
+    public List<SimulationDTO> getAvailableSimulations(String studentId, String studentSectionId) {
         UUID clientId = UUID.fromString(TenantContext.getClientId());
         List<Simulation> published = simulationRepository.findByClientIdAndStatus(
                 clientId, Simulation.SimulationStatus.PUBLISHED);
 
         return published.stream()
-                .filter(sim -> sim.getVisibility() == Simulation.SimulationVisibility.ALL
-                        || isStudentAssigned(studentId, sim))
+                .filter(sim -> isSimulationAccessible(sim, studentSectionId))
                 .map(sim -> {
                     SimulationDTO dto = SimulationDTO.fromEntity(sim);
                     dto.setSimulationData(null); // Strip data from list view
@@ -375,19 +375,40 @@ public class SimulationService {
                 .collect(Collectors.toList());
     }
 
-    private boolean isStudentAssigned(String studentId, Simulation sim) {
-        return sim.getAssignedToSectionIds() == null || sim.getAssignedToSectionIds().length == 0;
+    /**
+     * Check if a simulation is accessible to a student based on visibility and section assignment.
+     * - ALL visibility: accessible to everyone
+     * - ASSIGNED_ONLY: accessible only if student's section is in assignedToSectionIds,
+     *   or if no sections are assigned (course-wide access)
+     */
+    private boolean isSimulationAccessible(Simulation sim, String studentSectionId) {
+        if (sim.getVisibility() == Simulation.SimulationVisibility.ALL) {
+            return true;
+        }
+        // ASSIGNED_ONLY — check section assignment
+        String[] assignedSections = sim.getAssignedToSectionIds();
+        if (assignedSections == null || assignedSections.length == 0) {
+            return true; // No sections assigned = accessible to all
+        }
+        if (studentSectionId == null) {
+            return false; // Student has no section but simulation requires one
+        }
+        return Arrays.asList(assignedSections).contains(studentSectionId);
     }
 
     @Transactional
     @SuppressWarnings("unchecked")
-    public SimulationPlayDTO startPlay(String simulationId, String studentId) {
+    public SimulationPlayDTO startPlay(String simulationId, String studentId, String studentSectionId) {
         UUID clientId = UUID.fromString(TenantContext.getClientId());
         Simulation sim = simulationRepository.findByIdAndClientId(simulationId, clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
 
         if (sim.getStatus() != Simulation.SimulationStatus.PUBLISHED) {
             throw new IllegalStateException("Simulation is not published");
+        }
+
+        if (!isSimulationAccessible(sim, studentSectionId)) {
+            throw new IllegalStateException("This simulation is not available for your section");
         }
 
         int existingPlays = playRepository.countBySimulationIdAndStudentId(simulationId, studentId);
