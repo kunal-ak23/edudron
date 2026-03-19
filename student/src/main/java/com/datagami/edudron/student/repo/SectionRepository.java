@@ -2,6 +2,7 @@ package com.datagami.edudron.student.repo;
 
 import com.datagami.edudron.student.domain.Section;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -27,6 +28,10 @@ public interface SectionRepository extends JpaRepository<Section, String> {
     
     @Query("SELECT COUNT(DISTINCT e.studentId) FROM Enrollment e WHERE e.batchId = :sectionId AND e.clientId = :clientId")
     long countStudentsInSection(@Param("clientId") UUID clientId, @Param("sectionId") String sectionId);
+
+    @Modifying
+    @Query("UPDATE Section s SET s.isBacklog = :isBacklog, s.updatedAt = CURRENT_TIMESTAMP WHERE s.classId = :classId AND s.clientId = :clientId")
+    int updateIsBacklogByClassId(@Param("classId") String classId, @Param("clientId") UUID clientId, @Param("isBacklog") boolean isBacklog);
 }
 
 

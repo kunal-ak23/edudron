@@ -66,11 +66,12 @@ public class ClassService {
         classEntity.setGrade(request.getGrade());
         classEntity.setLevel(request.getLevel());
         classEntity.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
-        
+        classEntity.setIsBacklog(request.getIsBacklog() != null ? request.getIsBacklog() : false);
+
         Class saved = classRepository.save(classEntity);
         return toDTO(saved);
     }
-    
+
     public ClassDTO getClass(String classId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -218,7 +219,14 @@ public class ClassService {
         if (request.getIsActive() != null) {
             classEntity.setIsActive(request.getIsActive());
         }
-        
+        if (request.getIsBacklog() != null) {
+            classEntity.setIsBacklog(request.getIsBacklog());
+            // Cascade: when class is marked as backlog, mark all its sections as backlog too
+            if (request.getIsBacklog()) {
+                sectionRepository.updateIsBacklogByClassId(classId, clientId, true);
+            }
+        }
+
         Class saved = classRepository.save(classEntity);
         auditService.logCrud(clientId, "UPDATE", "Class", classId, null, null,
             java.util.Map.of("name", saved.getName(), "code", saved.getCode(), "instituteId", saved.getInstituteId()));
@@ -294,9 +302,10 @@ public class ClassService {
         classEntity.setGrade(request.getGrade());
         classEntity.setLevel(request.getLevel());
         classEntity.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
-        
+        classEntity.setIsBacklog(request.getIsBacklog() != null ? request.getIsBacklog() : false);
+
         Class savedClass = classRepository.save(classEntity);
-        
+
         // Create sections
         List<Section> sections = new ArrayList<>();
         for (CreateSectionForClassRequest sectionRequest : request.getSections()) {
@@ -310,7 +319,9 @@ public class ClassService {
             section.setEndDate(sectionRequest.getEndDate());
             section.setMaxStudents(sectionRequest.getMaxStudents());
             section.setIsActive(true);
-            
+            // If parent class is backlog, force section to be backlog
+            section.setIsBacklog(savedClass.getIsBacklog() != null && savedClass.getIsBacklog());
+
             sections.add(sectionRepository.save(section));
         }
         
@@ -368,7 +379,8 @@ public class ClassService {
             classEntity.setGrade(classRequest.getGrade());
             classEntity.setLevel(classRequest.getLevel());
             classEntity.setIsActive(classRequest.getIsActive() != null ? classRequest.getIsActive() : true);
-            
+            classEntity.setIsBacklog(classRequest.getIsBacklog() != null ? classRequest.getIsBacklog() : false);
+
             classes.add(classRepository.save(classEntity));
         }
         
@@ -395,6 +407,7 @@ public class ClassService {
         dto.setEndDate(section.getEndDate());
         dto.setMaxStudents(section.getMaxStudents());
         dto.setIsActive(section.getIsActive());
+        dto.setIsBacklog(section.getIsBacklog());
         dto.setCreatedAt(section.getCreatedAt());
         dto.setUpdatedAt(section.getUpdatedAt());
         dto.setStudentCount(0L); // New section has no students
@@ -413,6 +426,7 @@ public class ClassService {
         dto.setGrade(classEntity.getGrade());
         dto.setLevel(classEntity.getLevel());
         dto.setIsActive(classEntity.getIsActive());
+        dto.setIsBacklog(classEntity.getIsBacklog());
         dto.setCreatedAt(classEntity.getCreatedAt());
         dto.setUpdatedAt(classEntity.getUpdatedAt());
         
