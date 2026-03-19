@@ -10,6 +10,7 @@ export interface Section {
   endDate?: string
   maxStudents?: number
   isActive: boolean
+  isBacklog?: boolean
   studentCount?: number
   createdAt: string
   updatedAt: string
@@ -22,6 +23,7 @@ export interface CreateSectionRequest {
   startDate?: string
   endDate?: string
   maxStudents?: number
+  isBacklog?: boolean
 }
 
 export interface BatchCreateSectionsRequest {

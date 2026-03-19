@@ -314,6 +314,17 @@ export class EnrollmentsApi {
     return response.data
   }
 
+  // Add student(s) to a section additively (keeps existing enrollments)
+  async addToSection(request: AddToSectionRequest): Promise<Enrollment> {
+    const response = await this.apiClient.post<Enrollment>('/api/enrollments/add-to-section', request)
+    return response.data
+  }
+
+  async bulkAddToSection(request: BulkAddToSectionRequest): Promise<BulkEnrollmentResult> {
+    const response = await this.apiClient.post<BulkEnrollmentResult>('/api/enrollments/bulk-add-to-section', request)
+    return response.data
+  }
+
   async enrollStudentInCourse(studentId: string, courseId: string, options?: {
     classId?: string
     sectionId?: string
@@ -415,6 +426,18 @@ export class EnrollmentsApi {
       number: page
     }
   }
+}
+
+export interface AddToSectionRequest {
+  studentId: string
+  destinationSectionId: string
+  destinationClassId?: string
+}
+
+export interface BulkAddToSectionRequest {
+  studentIds: string[]
+  destinationSectionId: string
+  destinationClassId?: string
 }
 
 export interface TransferEnrollmentRequest {
