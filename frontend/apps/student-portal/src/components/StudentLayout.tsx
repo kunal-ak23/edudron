@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useAuth, FontSizeControl, TenantBrandingApi, TenantsApi } from '@kunal-ak23/edudron-shared-utils'
 import { getApiClient } from '@/lib/api'
 import { usePsychometricTestFeature } from '@/hooks/usePsychometricTestFeature'
+import { useSimulationFeature } from '@/hooks/useSimulationFeature'
 
 interface StudentLayoutProps {
   children: React.ReactNode
@@ -18,6 +19,7 @@ export function StudentLayout({ children }: StudentLayoutProps) {
   const [tenantLogo, setTenantLogo] = useState<string | null>(null)
   const [logoError, setLogoError] = useState(false)
   const { enabled: psychometricTestEnabled } = usePsychometricTestFeature()
+  const { enabled: simulationEnabled } = useSimulationFeature()
 
   useEffect(() => {
     const loadTenantInfo = async () => {
@@ -166,6 +168,18 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                     }`}
                   >
                     Psychometric Test
+                  </button>
+                )}
+                {simulationEnabled && (
+                  <button
+                    onClick={() => router.push('/simulations')}
+                    className={`font-medium transition-colors ${
+                      pathname?.startsWith('/simulations')
+                        ? 'text-primary-600'
+                        : 'text-gray-700 hover:text-primary-600'
+                    }`}
+                  >
+                    Simulations
                   </button>
                 )}
               </nav>

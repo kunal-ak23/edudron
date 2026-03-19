@@ -21,7 +21,8 @@ public class AIGenerationJobDTO {
         LECTURE_GENERATION,
         SUB_LECTURE_GENERATION,
         COURSE_COPY,
-        IMAGE_GENERATION
+        IMAGE_GENERATION,
+        SIMULATION_GENERATION
     }
 
     public enum JobStatus {

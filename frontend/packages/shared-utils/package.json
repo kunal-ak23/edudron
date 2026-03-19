@@ -1,6 +1,6 @@
 {
   "name": "@kunal-ak23/edudron-shared-utils",
-  "version": "1.0.29",
+  "version": "1.0.30",
   "description": "Shared utilities and services for EduDron platform",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -45,9 +45,15 @@
     "@tiptap/react": ">=3.0.0"
   },
   "peerDependenciesMeta": {
-    "@tiptap/core": { "optional": true },
-    "@tiptap/extension-image": { "optional": true },
-    "@tiptap/react": { "optional": true }
+    "@tiptap/core": {
+      "optional": true
+    },
+    "@tiptap/extension-image": {
+      "optional": true
+    },
+    "@tiptap/react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "typescript": "^5.2.2",
@@ -55,5 +61,3 @@
     "@types/node": "^20.8.0"
   }
 }
-
-

@@ -20,6 +20,7 @@ public class AIQueueProcessor {
     private static final String LECTURE_GENERATION_QUEUE = "ai:queue:lecture-generation";
     private static final String COURSE_COPY_QUEUE = "ai:queue:course-copy";
     private static final String IMAGE_GENERATION_QUEUE = "ai:queue:image-generation";
+    private static final String SIMULATION_GENERATION_QUEUE = "ai:queue:simulation-generation";
 
     @Autowired
     private AIJobQueueService queueService;
@@ -35,6 +36,7 @@ public class AIQueueProcessor {
     private volatile boolean processingLectureQueue = false;
     private volatile boolean processingImageQueue = false;
     private volatile boolean processingCopyQueue = false;
+    private volatile boolean processingSimulationQueue = false;
 
     /**
      * Process course generation queue
@@ -126,6 +128,35 @@ public class AIQueueProcessor {
             logger.error("Error processing image generation queue", e);
         } finally {
             processingImageQueue = false;
+        }
+    }
+
+    /**
+     * Process simulation generation queue
+     * Runs every 2 seconds
+     */
+    @Scheduled(fixedDelay = 2000, initialDelay = 2500)
+    public void processSimulationGenerationQueue() {
+        if (processingSimulationQueue) {
+            return;
+        }
+
+        try {
+            processingSimulationQueue = true;
+            String jobId = queueService.getJobFromQueue(SIMULATION_GENERATION_QUEUE, 1);
+            if (jobId != null) {
+                logger.info("Found simulation generation job: {}", jobId);
+                AIGenerationJobDTO job = queueService.getJob(jobId);
+                if (job != null) {
+                    job.setStatus(AIGenerationJobDTO.JobStatus.QUEUED);
+                    queueService.updateJob(job);
+                    jobWorker.processSimulationGenerationJob(jobId);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error processing simulation generation queue", e);
+        } finally {
+            processingSimulationQueue = false;
         }
     }
 

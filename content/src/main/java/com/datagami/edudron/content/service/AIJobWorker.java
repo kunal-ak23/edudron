@@ -6,6 +6,8 @@ import com.datagami.edudron.content.dto.CourseDTO;
 import com.datagami.edudron.content.dto.GenerateCourseRequest;
 import com.datagami.edudron.content.dto.LectureDTO;
 import com.datagami.edudron.content.dto.SectionDTO;
+import com.datagami.edudron.content.simulation.dto.GenerateSimulationRequest;
+import com.datagami.edudron.content.simulation.service.SimulationGenerationService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +32,9 @@ public class AIJobWorker {
     
     @Autowired
     private ImageGenerationService imageGenerationService;
+
+    @Autowired
+    private SimulationGenerationService simulationGenerationService;
 
     @Autowired
     private LectureService lectureService;
@@ -293,6 +298,76 @@ public class AIJobWorker {
             job.setStatus(AIGenerationJobDTO.JobStatus.FAILED);
             job.setError(e.getMessage());
             job.setMessage("Image generation failed: " + e.getMessage());
+            queueService.updateJob(job);
+        } finally {
+            jobRequests.remove(jobId);
+            TenantContext.clear();
+        }
+    }
+
+    /**
+     * Process a simulation generation job
+     */
+    @Async("aiJobTaskExecutor")
+    public void processSimulationGenerationJob(String jobId) {
+        logger.info("Processing simulation generation job: {}", jobId);
+
+        AIGenerationJobDTO job = queueService.getJob(jobId);
+        if (job == null) {
+            logger.error("Job {} not found", jobId);
+            return;
+        }
+
+        if (job.getClientId() != null) {
+            TenantContext.setClientId(job.getClientId().toString());
+        }
+
+        try {
+            job.setStatus(AIGenerationJobDTO.JobStatus.PROCESSING);
+            job.setMessage("Starting simulation generation...");
+            job.setProgress(10);
+            queueService.updateJob(job);
+
+            Object requestObj = jobRequests.get(jobId);
+            if (requestObj == null) {
+                throw new RuntimeException("Request data not found for job: " + jobId);
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, String> request = (Map<String, String>) requestObj;
+            String simulationId = request.get("simulationId");
+
+            // Build GenerateSimulationRequest from stored data
+            GenerateSimulationRequest genRequest = new GenerateSimulationRequest();
+            genRequest.setConcept(request.get("concept"));
+            genRequest.setSubject(request.get("subject"));
+            genRequest.setAudience(request.get("audience"));
+            if (request.get("targetYears") != null) {
+                genRequest.setTargetYears(Integer.parseInt(request.get("targetYears")));
+            }
+            if (request.get("decisionsPerYear") != null) {
+                genRequest.setDecisionsPerYear(Integer.parseInt(request.get("decisionsPerYear")));
+            }
+
+            job.setProgress(20);
+            job.setMessage("Generating simulation tree...");
+            queueService.updateJob(job);
+
+            simulationGenerationService.generateSimulation(simulationId, genRequest);
+
+            job.setStatus(AIGenerationJobDTO.JobStatus.COMPLETED);
+            job.setResult(Map.of("simulationId", simulationId));
+            job.setMessage("Simulation generated successfully");
+            job.setProgress(100);
+            queueService.updateJob(job);
+
+            logger.info("Simulation generation job {} completed", jobId);
+
+        } catch (Exception e) {
+            logger.error("Error processing simulation generation job: {}", jobId, e);
+            job.setStatus(AIGenerationJobDTO.JobStatus.FAILED);
+            job.setError(e.getMessage());
+            job.setMessage("Simulation generation failed: " + e.getMessage());
             queueService.updateJob(job);
         } finally {
             jobRequests.remove(jobId);

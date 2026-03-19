@@ -24,6 +24,7 @@ public class AIJobQueueService {
     private static final String LECTURE_GENERATION_QUEUE = "ai:queue:lecture-generation";
     private static final String COURSE_COPY_QUEUE = "ai:queue:course-copy";
     private static final String IMAGE_GENERATION_QUEUE = "ai:queue:image-generation";
+    private static final String SIMULATION_GENERATION_QUEUE = "ai:queue:simulation-generation";
     
     // Job storage prefix
     private static final String JOB_PREFIX = "ai:job:";
@@ -141,6 +142,26 @@ public class AIJobQueueService {
     }
 
     /**
+     * Submit a simulation generation job to the queue
+     */
+    public AIGenerationJobDTO submitSimulationGenerationJob(Object request, AIJobWorker jobWorker) {
+        String jobId = UlidGenerator.nextUlid();
+        AIGenerationJobDTO job = createJob(jobId, AIGenerationJobDTO.JobType.SIMULATION_GENERATION);
+
+        try {
+            jobWorker.storeJobRequest(jobId, request);
+            saveJob(job);
+            redisTemplate.opsForList().rightPush(SIMULATION_GENERATION_QUEUE, jobId);
+
+            logger.info("Simulation generation job {} submitted to queue", jobId);
+            return job;
+        } catch (Exception e) {
+            logger.error("Failed to submit simulation generation job", e);
+            throw new RuntimeException("Failed to submit job", e);
+        }
+    }
+
+    /**
      * Get a job from the queue (blocking)
      */
     public String getJobFromQueue(String queueName, long timeoutSeconds) {
@@ -231,6 +252,8 @@ public class AIJobQueueService {
                 return COURSE_COPY_QUEUE;
             case IMAGE_GENERATION:
                 return IMAGE_GENERATION_QUEUE;
+            case SIMULATION_GENERATION:
+                return SIMULATION_GENERATION_QUEUE;
             default:
                 throw new IllegalArgumentException("Unknown job type: " + jobType);
         }

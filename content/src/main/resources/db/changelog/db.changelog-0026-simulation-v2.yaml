@@ -1,0 +1,66 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0026-01-simulation-v2-columns
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: simulation
+            schemaName: content
+            columns:
+              - column: { name: simulation_data, type: jsonb }
+              - column: { name: target_years, type: int, defaultValueNumeric: 5 }
+              - column: { name: decisions_per_year, type: int, defaultValueNumeric: 6 }
+        - dropColumn:
+            tableName: simulation
+            schemaName: content
+            columnName: tree_data
+        - dropColumn:
+            tableName: simulation
+            schemaName: content
+            columnName: target_depth
+        - dropColumn:
+            tableName: simulation
+            schemaName: content
+            columnName: choices_per_node
+        - dropColumn:
+            tableName: simulation
+            schemaName: content
+            columnName: max_depth
+
+  - changeSet:
+      id: content-0026-02-simulation-play-v2-columns
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: simulation_play
+            schemaName: content
+            columns:
+              - column: { name: current_year, type: int, defaultValueNumeric: 1 }
+              - column: { name: current_decision, type: int, defaultValueNumeric: 0 }
+              - column: { name: current_role, type: varchar(100) }
+              - column: { name: cumulative_score, type: int, defaultValueNumeric: 0 }
+              - column: { name: year_scores_json, type: jsonb }
+              - column: { name: performance_band, type: varchar(20) }
+              - column: { name: consecutive_struggling, type: int, defaultValueNumeric: 0 }
+              - column: { name: final_score, type: int }
+              - column: { name: decisions_json, type: jsonb }
+        - dropColumn:
+            tableName: simulation_play
+            schemaName: content
+            columnName: current_node_id
+        - dropColumn:
+            tableName: simulation_play
+            schemaName: content
+            columnName: final_node_id
+        - dropColumn:
+            tableName: simulation_play
+            schemaName: content
+            columnName: path_json
+        - dropColumn:
+            tableName: simulation_play
+            schemaName: content
+            columnName: score
+        - dropColumn:
+            tableName: simulation_play
+            schemaName: content
+            columnName: decisions_made

@@ -27,10 +27,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { ArrowLeft, Loader2, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles, Download, Database } from 'lucide-react'
-import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi, apiClient, tenantFeaturesApi } from '@/lib/api'
+import { ArrowLeft, Loader2, ChevronDown, ChevronRight, BookOpen, Play, Eye, Globe, Archive, Edit, Plus, Trash2, Sparkles, Download, Database, Gamepad2, ExternalLink } from 'lucide-react'
+import { coursesApi, mediaApi, institutesApi, classesApi, sectionsApi, lecturesApi, apiClient, tenantFeaturesApi, simulationsApi } from '@/lib/api'
 import { TenantFeatureType } from '@kunal-ak23/edudron-shared-utils'
-import type { Course, Institute, Class, Section, CourseSection, Lecture } from '@kunal-ak23/edudron-shared-utils'
+import type { Course, Institute, Class, Section, CourseSection, Lecture, SimulationDTO } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 
@@ -77,6 +77,8 @@ export default function CourseEditPage() {
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
   const [generatingCourseBookPdf, setGeneratingCourseBookPdf] = useState(false)
   const [downloadingCourseBookPdf, setDownloadingCourseBookPdf] = useState(false)
+  const [linkedSimulations, setLinkedSimulations] = useState<SimulationDTO[]>([])
+  const [loadingSimulations, setLoadingSimulations] = useState(false)
 
   // Separate effect for beforeunload warning
   useEffect(() => {
@@ -289,6 +291,25 @@ export default function CourseEditPage() {
       setHasUnsavedChanges(false)
     }
   }, [course, selectedClassIds, selectedSectionIds, courseId])
+
+  // Load simulations linked to this course
+  useEffect(() => {
+    if (!courseId || courseId === 'new') return
+    async function loadLinkedSimulations() {
+      try {
+        setLoadingSimulations(true)
+        const result = await simulationsApi.listSimulations(0, 100)
+        // Filter to simulations linked to this course
+        const linked = result.content.filter((s: SimulationDTO) => s.courseId === courseId)
+        setLinkedSimulations(linked)
+      } catch {
+        // Non-critical, silently fail
+      } finally {
+        setLoadingSimulations(false)
+      }
+    }
+    loadLinkedSimulations()
+  }, [courseId])
 
   const handleCreateMainLecture = () => {
     if (!courseId || courseId === 'new') return
@@ -1228,6 +1249,82 @@ export default function CourseEditPage() {
                           )}
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Linked Simulations */}
+                  {courseId !== 'new' && (
+                    <div className="border-t pt-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Gamepad2 className="h-5 w-5 text-primary" />
+                          <h2 className="text-lg font-semibold">Linked Simulations</h2>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => router.push('/simulations')}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-1" />
+                            View All
+                          </Button>
+                          {canUseAI && (
+                            <Button
+                              size="sm"
+                              onClick={() => router.push(`/simulations/generate?courseId=${courseId}`)}
+                            >
+                              <Sparkles className="h-4 w-4 mr-1" />
+                              Generate Simulation
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {loadingSimulations ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading simulations...
+                        </div>
+                      ) : linkedSimulations.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2">
+                          No simulations linked to this course yet.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {linkedSimulations.map((sim) => (
+                            <div
+                              key={sim.id}
+                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border cursor-pointer hover:bg-gray-100 transition-colors"
+                              onClick={() => router.push(`/simulations/${sim.id}`)}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <Gamepad2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate">{sim.title || 'Untitled'}</p>
+                                  <p className="text-xs text-muted-foreground">{sim.concept}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    sim.status === 'PUBLISHED'
+                                      ? 'bg-green-100 text-green-700 border-green-300'
+                                      : sim.status === 'DRAFT'
+                                        ? 'bg-gray-100 text-gray-700 border-gray-300'
+                                        : sim.status === 'REVIEW'
+                                          ? 'bg-blue-100 text-blue-700 border-blue-300'
+                                          : ''
+                                  }
+                                >
+                                  {sim.status}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">{sim.totalPlays} plays</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 

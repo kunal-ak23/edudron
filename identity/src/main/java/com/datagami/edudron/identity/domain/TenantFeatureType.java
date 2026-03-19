@@ -27,7 +27,13 @@ public enum TenantFeatureType {
      * Controls whether AI-powered image generation is available for courses and lectures.
      * Default: false (premium feature, must be explicitly enabled per tenant)
      */
-    AI_IMAGE_GENERATION(false, "Enable AI-powered image generation for courses and lectures");
+    AI_IMAGE_GENERATION(false, "Enable AI-powered image generation for courses and lectures"),
+
+    /**
+     * Controls whether immersive decision simulations are available.
+     * Default: false (premium feature, must be explicitly enabled per tenant)
+     */
+    SIMULATION(false, "Enable immersive decision-based simulations for experiential learning");
 
     private final boolean defaultValue;
     private final String description;

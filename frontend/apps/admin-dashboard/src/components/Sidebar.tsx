@@ -28,7 +28,8 @@ import {
   ClipboardList,
   BarChart3,
   ScrollText,
-  Layers
+  Layers,
+  Gamepad2
 } from 'lucide-react'
 
 interface MenuItem {
@@ -113,6 +114,16 @@ const menuItems: MenuItem[] = [
       { name: 'All Exams', href: '/exams', icon: ClipboardList },
       { name: 'Question Bank', href: '/question-bank', icon: Database },
       { name: 'Exam Results', href: '/exams/results', icon: BarChart3 },
+    ]
+  },
+  {
+    name: 'Simulations',
+    href: '/simulations',
+    icon: Gamepad2,
+    requiresTenant: true,
+    children: [
+      { name: 'All Simulations', href: '/simulations', icon: Gamepad2 },
+      { name: 'Generate Simulation', href: '/simulations/generate', icon: Sparkles },
     ]
   },
   {
@@ -275,6 +286,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
     if (path.startsWith('/institutes')) return 'Institutes'
     if (path.startsWith('/courses')) return 'Courses'
     if (path.startsWith('/exams') || path.startsWith('/question-bank')) return 'Exams'
+    if (path.startsWith('/simulations')) return 'Simulations'
     if (path.startsWith('/enrollments')) return 'Enrollments'
     if (path.startsWith('/analytics')) return 'Analytics'
     if (path.startsWith('/payments')) return 'Payments'

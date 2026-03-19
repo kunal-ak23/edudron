@@ -1,0 +1,96 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0025-01-simulation
+      author: edudron
+      changes:
+        - createTable:
+            tableName: simulation
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26) }
+              - column: { name: lecture_id, type: varchar(26) }
+              - column: { name: title, type: varchar(500), constraints: { nullable: false } }
+              - column: { name: concept, type: varchar(500), constraints: { nullable: false } }
+              - column: { name: subject, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: audience, type: varchar(50), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: tree_data, type: jsonb }
+              - column: { name: target_depth, type: int, defaultValueNumeric: 15 }
+              - column: { name: choices_per_node, type: int, defaultValueNumeric: 3 }
+              - column: { name: max_depth, type: int }
+              - column: { name: status, type: varchar(20), defaultValue: 'DRAFT', constraints: { nullable: false } }
+              - column: { name: visibility, type: varchar(20), defaultValue: 'ALL', constraints: { nullable: false } }
+              - column: { name: assigned_to_section_ids, type: "text[]" }
+              - column: { name: created_by, type: varchar(255) }
+              - column: { name: published_at, type: timestamptz }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: metadata_json, type: jsonb }
+        - createIndex:
+            tableName: simulation
+            schemaName: content
+            indexName: idx_simulation_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: simulation
+            schemaName: content
+            indexName: idx_simulation_course_id
+            columns:
+              - column: { name: course_id }
+        - createIndex:
+            tableName: simulation
+            schemaName: content
+            indexName: idx_simulation_status
+            columns:
+              - column: { name: status }
+
+  - changeSet:
+      id: content-0025-02-simulation-play
+      author: edudron
+      changes:
+        - createTable:
+            tableName: simulation_play
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: simulation_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: attempt_number, type: int, defaultValueNumeric: 1, constraints: { nullable: false } }
+              - column: { name: is_primary, type: boolean, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(20), defaultValue: 'IN_PROGRESS', constraints: { nullable: false } }
+              - column: { name: path_json, type: jsonb }
+              - column: { name: current_node_id, type: varchar(100) }
+              - column: { name: final_node_id, type: varchar(100) }
+              - column: { name: score, type: int }
+              - column: { name: decisions_made, type: int, defaultValueNumeric: 0 }
+              - column: { name: started_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: completed_at, type: timestamptz }
+        - createIndex:
+            tableName: simulation_play
+            schemaName: content
+            indexName: idx_simulation_play_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: simulation_play
+            schemaName: content
+            indexName: idx_simulation_play_simulation_id
+            columns:
+              - column: { name: simulation_id }
+        - createIndex:
+            tableName: simulation_play
+            schemaName: content
+            indexName: idx_simulation_play_student_id
+            columns:
+              - column: { name: student_id }
+        - createIndex:
+            tableName: simulation_play
+            schemaName: content
+            indexName: idx_simulation_play_student_simulation
+            columns:
+              - column: { name: student_id }
+              - column: { name: simulation_id }
