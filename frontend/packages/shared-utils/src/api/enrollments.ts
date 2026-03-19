@@ -337,6 +337,11 @@ export class EnrollmentsApi {
     return response.data
   }
 
+  // Remove a student from a section (deletes all their enrollments in that section)
+  async removeStudentFromSection(sectionId: string, studentId: string): Promise<void> {
+    await this.apiClient.delete(`/api/sections/${sectionId}/students/${studentId}`)
+  }
+
   // Get students by section
   async getStudentsBySection(sectionId: string): Promise<SectionStudentDTO[]> {
     const response = await this.apiClient.get<SectionStudentDTO[]>(`/api/sections/${sectionId}/students`)

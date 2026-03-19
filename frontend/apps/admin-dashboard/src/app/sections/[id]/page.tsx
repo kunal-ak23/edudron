@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3, X } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { sectionsApi, classesApi, institutesApi, enrollmentsApi } from '@/lib/api'
 import type { Section, CreateSectionRequest, Class, Institute, SectionStudentDTO } from '@kunal-ak23/edudron-shared-utils'
@@ -193,6 +193,17 @@ export default function SectionDetailPage() {
       })
     } finally {
       setShowActivateDialog(false)
+    }
+  }
+
+  const handleRemoveStudent = async (studentId: string, studentName: string) => {
+    if (!confirm(`Remove ${studentName} from this section? Their enrollments in this section will be deleted.`)) return
+    try {
+      await enrollmentsApi.removeStudentFromSection(sectionId, studentId)
+      toast({ title: 'Student removed', description: `${studentName} has been removed from this section.` })
+      loadMembers()
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Failed to remove student', description: extractErrorMessage(error) })
     }
   }
 
@@ -392,6 +403,7 @@ export default function SectionDetailPage() {
                         <TableHead>Name</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Phone</TableHead>
+                        <TableHead className="w-12">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -413,6 +425,16 @@ export default function SectionDetailPage() {
                             ) : (
                               <span className="text-gray-400">—</span>
                             )}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleRemoveStudent(member.id, member.name || member.email)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
                           </TableCell>
                         </TableRow>
                       ))}
