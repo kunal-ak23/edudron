@@ -177,11 +177,11 @@ export default function BulkUploadQuestionsPage() {
         }
         return -1
       }
-      const projectNoIdx = findExact(['project no', 'project no.', 'project_no', 'projectnumber', 'project number'])
-      const titleIdx = findExact(['problem statement', 'title', 'name'])
-      const descIdx = findExact(['description in details', 'description in detail', 'description', 'details', 'detail'])
-      const subjectIdx = findExact(['subject', 'tags', 'category', 'domain'])
-      const toolsIdx = findExact(['tools', 'technologies', 'tech', 'key technologies'])
+      const projectNoIdx = findExact(['projectnumber', 'project no', 'project no.', 'project_no', 'project number'])
+      const titleIdx = findExact(['title', 'problem statement', 'name'])
+      const descIdx = findExact(['problemstatement', 'problem_statement', 'description in details', 'description in detail', 'description', 'details', 'detail'])
+      const subjectIdx = findExact(['tags', 'subject', 'category', 'domain'])
+      const toolsIdx = findExact(['keytechnologies', 'key_technologies', 'tools', 'technologies', 'tech', 'key technologies'])
       const diffIdx = findExact(['difficulty', 'level'])
 
       // Debug: log matched columns
@@ -200,7 +200,7 @@ export default function BulkUploadQuestionsPage() {
           title: titleIdx !== -1 ? (cols[titleIdx] || '') : '',
           problemStatement: descIdx !== -1 ? (cols[descIdx] || '') : '',
           keyTechnologies: toolsIdx !== -1 && cols[toolsIdx] ? cols[toolsIdx].split(/[;,\/]/).map(t => t.trim()).filter(Boolean) : undefined,
-          tags: subjectIdx !== -1 && cols[subjectIdx] ? [cols[subjectIdx]] : undefined,
+          tags: subjectIdx !== -1 && cols[subjectIdx] ? cols[subjectIdx].split(/[;,]/).map(t => t.trim()).filter(Boolean) : undefined,
           difficulty: diffIdx !== -1 && cols[diffIdx] ? cols[diffIdx].toUpperCase() : undefined,
         })
       }
