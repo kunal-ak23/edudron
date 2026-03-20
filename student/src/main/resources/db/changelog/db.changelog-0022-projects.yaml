@@ -1,0 +1,164 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0022-project
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26) }
+              - column: { name: section_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: title, type: varchar(500), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: max_marks, type: int, defaultValueNumeric: 100 }
+              - column: { name: submission_cutoff, type: timestamptz }
+              - column: { name: late_submission_allowed, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: status, type: varchar(20), defaultValue: 'DRAFT', constraints: { nullable: false } }
+              - column: { name: created_by, type: varchar(255) }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: project
+            schemaName: student
+            indexName: idx_project_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: project
+            schemaName: student
+            indexName: idx_project_section_id
+            columns:
+              - column: { name: section_id }
+        - createIndex:
+            tableName: project
+            schemaName: student
+            indexName: idx_project_course_id
+            columns:
+              - column: { name: course_id }
+        - createIndex:
+            tableName: project
+            schemaName: student
+            indexName: idx_project_status
+            columns:
+              - column: { name: status }
+
+  - changeSet:
+      id: student-0022-project-group
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_group
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: project_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: group_number, type: int, constraints: { nullable: false } }
+              - column: { name: problem_statement_id, type: varchar(26) }
+              - column: { name: submission_url, type: text }
+              - column: { name: submitted_at, type: timestamptz }
+              - column: { name: submitted_by, type: varchar(26) }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: project_group
+            schemaName: student
+            indexName: idx_project_group_project_id
+            columns:
+              - column: { name: project_id }
+        - createIndex:
+            tableName: project_group
+            schemaName: student
+            indexName: idx_project_group_client_id
+            columns:
+              - column: { name: client_id }
+
+  - changeSet:
+      id: student-0022-project-group-member
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_group_member
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: group_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+        - createIndex:
+            tableName: project_group_member
+            schemaName: student
+            indexName: idx_project_group_member_group_id
+            columns:
+              - column: { name: group_id }
+        - addUniqueConstraint:
+            tableName: project_group_member
+            schemaName: student
+            constraintName: uq_project_group_member_group_student
+            columnNames: group_id, student_id
+
+  - changeSet:
+      id: student-0022-project-event
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_event
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: project_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: name, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: date_time, type: timestamptz }
+              - column: { name: zoom_link, type: text }
+              - column: { name: has_marks, type: boolean, defaultValueBoolean: false }
+              - column: { name: max_marks, type: int }
+              - column: { name: sequence, type: int }
+        - createIndex:
+            tableName: project_event
+            schemaName: student
+            indexName: idx_project_event_project_id
+            columns:
+              - column: { name: project_id }
+
+  - changeSet:
+      id: student-0022-project-event-attendance
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_event_attendance
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: event_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: group_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: present, type: boolean, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: project_event_attendance
+            schemaName: student
+            constraintName: uq_project_event_attendance_event_student
+            columnNames: event_id, student_id
+
+  - changeSet:
+      id: student-0022-project-event-grade
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_event_grade
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: event_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: group_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: marks, type: int, constraints: { nullable: false } }
+        - addUniqueConstraint:
+            tableName: project_event_grade
+            schemaName: student
+            constraintName: uq_project_event_grade_event_student
+            columnNames: event_id, student_id
