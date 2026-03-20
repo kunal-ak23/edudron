@@ -33,7 +33,13 @@ public enum TenantFeatureType {
      * Controls whether immersive decision simulations are available.
      * Default: false (premium feature, must be explicitly enabled per tenant)
      */
-    SIMULATION(false, "Enable immersive decision-based simulations for experiential learning");
+    SIMULATION(false, "Enable immersive decision-based simulations for experiential learning"),
+
+    /**
+     * Controls whether group-based project management is available.
+     * Default: false (premium feature, must be explicitly enabled per tenant)
+     */
+    PROJECTS(false, "Enable group-based project management");
 
     private final boolean defaultValue;
     private final String description;
