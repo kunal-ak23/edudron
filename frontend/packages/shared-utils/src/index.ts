@@ -31,6 +31,12 @@ export type { BulkStudentImportResult, StudentImportRowResult, BulkEnrollmentRes
 export type { BulkEnrollmentResult as EnrollmentBulkEnrollmentResult } from './api/enrollments'
 export { AnalyticsApi } from './api/analytics'
 export { SimulationsApi } from './api/simulations'
+export { ProjectsApi, ProjectQuestionsApi } from './api/projects'
+export type {
+  ProjectDTO, ProjectGroupDTO, ProjectEventDTO, ProjectQuestionDTO,
+  CreateProjectRequest, GenerateGroupsRequest, SubmitProjectRequest,
+  AttendanceEntry, GradeEntry
+} from './api/projects'
 export type {
   GenerateSimulationRequest, SimulationDTO, SimulationStateDTO,
   SimulationDecisionDTO, SimulationPlayDTO, DecisionInput,
