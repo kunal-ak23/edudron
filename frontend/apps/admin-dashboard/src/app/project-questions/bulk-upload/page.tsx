@@ -22,7 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, Loader2, Upload, Eye, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Loader2, Upload, Eye, AlertCircle, Download } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { projectQuestionsApi, coursesApi } from '@/lib/api'
 import type { Course, ProjectQuestionDTO } from '@kunal-ak23/edudron-shared-utils'
@@ -62,43 +62,124 @@ export default function BulkUploadQuestionsPage() {
     loadCourses()
   }, [])
 
+  const downloadSampleCSV = () => {
+    const csv = `title,problemStatement,keyTechnologies,tags,difficulty
+"DA-01 Retail Performance Dashboard","Develop a robust Retail Performance Dashboard to monitor KPIs...","Excel;Power BI;Tableau","Data Analytics","MEDIUM"
+"DA-02 Healthcare Trend Analyzer","Perform a deep-dive analysis of historical Healthcare data...","Excel;Power BI;Tableau","Data Analytics","MEDIUM"
+"AAI-01 Autonomous Retail Researcher Agent","Develop an LLM-powered autonomous researcher agent...","Python;LangChain;CrewAI;LLM API","Agentic AI","HARD"`
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'project_questions_sample.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const downloadSampleJSON = () => {
+    const sample = [
+      {
+        title: 'DA-01 Retail Performance Dashboard',
+        problemStatement: 'Develop a robust Retail Performance Dashboard to monitor KPIs...',
+        keyTechnologies: ['Excel', 'Power BI', 'Tableau'],
+        tags: ['Data Analytics'],
+        difficulty: 'MEDIUM',
+      },
+      {
+        title: 'AAI-01 Autonomous Retail Researcher Agent',
+        problemStatement: 'Develop an LLM-powered autonomous researcher agent...',
+        keyTechnologies: ['Python', 'LangChain', 'CrewAI', 'LLM API'],
+        tags: ['Agentic AI'],
+        difficulty: 'HARD',
+      },
+    ]
+    const blob = new Blob([JSON.stringify(sample, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'project_questions_sample.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Detect if input is TSV (tab-separated, pasted from Excel) or JSON
+  const parseInput = (text: string): ParsedQuestion[] | null => {
+    const trimmed = text.trim()
+    // Try JSON first
+    if (trimmed.startsWith('[')) {
+      const parsed = JSON.parse(trimmed)
+      if (!Array.isArray(parsed)) return null
+      return parsed.map((item: any) => ({
+        title: item.title || '',
+        problemStatement: item.problemStatement || '',
+        keyTechnologies: Array.isArray(item.keyTechnologies) ? item.keyTechnologies : undefined,
+        tags: Array.isArray(item.tags) ? item.tags : undefined,
+        difficulty: item.difficulty || undefined,
+      }))
+    }
+    // Try TSV (tab-separated — Excel paste)
+    const lines = trimmed.split('\n').filter(l => l.trim())
+    if (lines.length < 2) return null
+    const firstLine = lines[0]
+    if (firstLine.includes('\t')) {
+      const headers = firstLine.split('\t').map(h => h.trim().toLowerCase())
+      // Map common column names
+      const findCol = (names: string[]) => headers.findIndex(h => names.some(n => h.includes(n)))
+      const titleIdx = findCol(['problem statement', 'title', 'project no'])
+      const descIdx = findCol(['description', 'details'])
+      const subjectIdx = findCol(['subject', 'tags', 'category'])
+      const toolsIdx = findCol(['tools', 'technologies', 'tech'])
+      const projectNoIdx = findCol(['project no', 'project_no', 'no'])
+
+      if (titleIdx === -1 && descIdx === -1) return null
+
+      const questions: ParsedQuestion[] = []
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split('\t').map(c => c.trim())
+        if (!cols[titleIdx] && !cols[descIdx]) continue
+        const projectNo = projectNoIdx !== -1 ? cols[projectNoIdx] : ''
+        const title = projectNo && titleIdx !== -1 ? `${projectNo} ${cols[titleIdx]}` : (cols[titleIdx] || '')
+        questions.push({
+          title,
+          problemStatement: descIdx !== -1 ? (cols[descIdx] || '') : '',
+          keyTechnologies: toolsIdx !== -1 && cols[toolsIdx] ? cols[toolsIdx].split(/[,\/]/).map(t => t.trim()).filter(Boolean) : undefined,
+          tags: subjectIdx !== -1 && cols[subjectIdx] ? [cols[subjectIdx]] : undefined,
+          difficulty: undefined,
+        })
+      }
+      return questions
+    }
+    return null
+  }
+
   const handlePreview = () => {
     setParseError(null)
     setParsedQuestions([])
 
     if (!jsonInput.trim()) {
-      setParseError('Please enter JSON data.')
+      setParseError('Please enter JSON data or paste from Excel.')
       return
     }
 
     try {
-      const parsed = JSON.parse(jsonInput.trim())
-      if (!Array.isArray(parsed)) {
-        setParseError('JSON must be an array of question objects.')
+      const result = parseInput(jsonInput.trim())
+      if (!result || result.length === 0) {
+        setParseError('Could not parse input. Use JSON array, CSV, or paste tab-separated data from Excel.')
         return
       }
 
-      // Validate structure
-      const validated: ParsedQuestion[] = []
-      for (let i = 0; i < parsed.length; i++) {
-        const item = parsed[i]
-        if (!item.title || !item.problemStatement) {
-          setParseError(`Item ${i + 1}: "title" and "problemStatement" are required fields.`)
+      // Validate required fields
+      for (let i = 0; i < result.length; i++) {
+        if (!result[i].title && !result[i].problemStatement) {
+          setParseError(`Row ${i + 1}: needs at least a title or problem statement.`)
           return
         }
-        validated.push({
-          title: item.title,
-          problemStatement: item.problemStatement,
-          keyTechnologies: Array.isArray(item.keyTechnologies) ? item.keyTechnologies : undefined,
-          tags: Array.isArray(item.tags) ? item.tags : undefined,
-          difficulty: item.difficulty || undefined,
-        })
       }
 
-      setParsedQuestions(validated)
+      setParsedQuestions(result)
       setPreviewing(true)
     } catch {
-      setParseError('Invalid JSON format. Please check your input.')
+      setParseError('Invalid format. Please check your input.')
     }
   }
 
@@ -229,14 +310,27 @@ export default function BulkUploadQuestionsPage() {
               />
             </div>
 
-            {/* JSON Input */}
+            {/* Download Samples */}
             <div className="space-y-2">
-              <Label>Or paste JSON array</Label>
+              <Label>Download Sample Template</Label>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={downloadSampleCSV}>
+                  <Download className="h-4 w-4 mr-1" /> Sample CSV
+                </Button>
+                <Button variant="outline" size="sm" onClick={downloadSampleJSON}>
+                  <Download className="h-4 w-4 mr-1" /> Sample JSON
+                </Button>
+              </div>
+            </div>
+
+            {/* Text Input — JSON, TSV (Excel paste), or CSV */}
+            <div className="space-y-2">
+              <Label>Or paste data (JSON, or directly from Excel)</Label>
               <Textarea
                 value={jsonInput}
                 onChange={(e) => { setJsonInput(e.target.value); setPreviewing(false) }}
-                placeholder={`[\n  {\n    "title": "E-commerce Platform",\n    "problemStatement": "Build a full-stack e-commerce platform...",\n    "keyTechnologies": ["React", "Node.js"],\n    "difficulty": "MEDIUM"\n  }\n]`}
-                rows={8}
+                placeholder={`Paste from Excel (tab-separated), or JSON array:\n[\n  {\n    "title": "E-commerce Platform",\n    "problemStatement": "Build a full-stack...",\n    "keyTechnologies": ["React", "Node.js"],\n    "difficulty": "MEDIUM"\n  }\n]`}
+                rows={10}
                 className="font-mono text-sm"
               />
             </div>
