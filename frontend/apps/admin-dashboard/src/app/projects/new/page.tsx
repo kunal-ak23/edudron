@@ -74,7 +74,7 @@ export default function CreateProjectPage() {
   }, [courseId])
 
   const handleSubmit = async () => {
-    if (!sectionId || !title.trim()) {
+    if (!courseId || !title.trim()) {
       toast({
         variant: 'destructive',
         title: 'Validation Error',
@@ -86,8 +86,8 @@ export default function CreateProjectPage() {
     setSubmitting(true)
     try {
       const project = await projectsApi.createProject({
-        courseId: courseId && courseId !== 'none' ? courseId : undefined,
-        sectionId,
+        courseId,
+        sectionId: sectionId || undefined,
         title: title.trim(),
         description: description.trim() || undefined,
         maxMarks,
@@ -120,13 +120,12 @@ export default function CreateProjectPage() {
           <div className="space-y-4">
             {/* Course */}
             <div className="space-y-2">
-              <Label>Course</Label>
+              <Label>Course <span className="text-destructive">*</span></Label>
               <Select value={courseId} onValueChange={(val) => { setCourseId(val); setSectionId('') }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a course..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
                   {courses.map((course) => (
                     <SelectItem key={course.id} value={course.id}>
                       {course.title}
@@ -138,9 +137,7 @@ export default function CreateProjectPage() {
 
             {/* Section */}
             <div className="space-y-2">
-              <Label>
-                Section <span className="text-destructive">*</span>
-              </Label>
+              <Label>Section</Label>
               {loadingSections ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                   <Loader2 className="h-4 w-4 animate-spin" /> Loading sections...
@@ -227,7 +224,7 @@ export default function CreateProjectPage() {
         </Button>
         <Button
           onClick={handleSubmit}
-          disabled={submitting || !sectionId || !title.trim()}
+          disabled={submitting || !courseId || !title.trim()}
         >
           {submitting ? (
             <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creating...</>

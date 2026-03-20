@@ -14,10 +14,10 @@ public class Project {
     @Column(name = "client_id", nullable = false)
     private UUID clientId;
 
-    @Column(name = "course_id")
+    @Column(name = "course_id", nullable = false)
     private String courseId;
 
-    @Column(name = "section_id", nullable = false)
+    @Column(name = "section_id")
     private String sectionId;
 
     @Column(name = "title", nullable = false, length = 500)

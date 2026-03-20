@@ -9,8 +9,8 @@ databaseChangeLog:
             columns:
               - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
               - column: { name: client_id, type: uuid, constraints: { nullable: false } }
-              - column: { name: course_id, type: varchar(26) }
-              - column: { name: section_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: section_id, type: varchar(26) }
               - column: { name: title, type: varchar(500), constraints: { nullable: false } }
               - column: { name: description, type: text }
               - column: { name: max_marks, type: int, defaultValueNumeric: 100 }

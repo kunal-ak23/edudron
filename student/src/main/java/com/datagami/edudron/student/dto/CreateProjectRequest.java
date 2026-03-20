@@ -6,9 +6,9 @@ import java.time.OffsetDateTime;
 
 public class CreateProjectRequest {
 
+    @NotBlank(message = "Course ID is required")
     private String courseId;
 
-    @NotBlank(message = "Section ID is required")
     private String sectionId;
 
     @NotBlank(message = "Title is required")
