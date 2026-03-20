@@ -1,4 +1,4 @@
-import { ApiClient, CoursesApi, CourseGenerationIndexApi, EnrollmentsApi, PaymentsApi, MediaApi, TenantsApi, TenantBrandingApi, TenantFeaturesApi, InstitutesApi, ClassesApi, SectionsApi, LecturesApi, StudentsApi, AnalyticsApi, SimulationsApi } from '@kunal-ak23/edudron-shared-utils'
+import { ApiClient, CoursesApi, CourseGenerationIndexApi, EnrollmentsApi, PaymentsApi, MediaApi, TenantsApi, TenantBrandingApi, TenantFeaturesApi, InstitutesApi, ClassesApi, SectionsApi, LecturesApi, StudentsApi, AnalyticsApi, SimulationsApi, ProjectsApi, ProjectQuestionsApi } from '@kunal-ak23/edudron-shared-utils'
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080'
 
@@ -18,6 +18,8 @@ export const lecturesApi = new LecturesApi(apiClient)
 export const studentsApi = new StudentsApi(apiClient)
 export const analyticsApi = new AnalyticsApi(apiClient)
 export const simulationsApi = new SimulationsApi(apiClient)
+export const projectsApi = new ProjectsApi(apiClient)
+export const projectQuestionsApi = new ProjectQuestionsApi(apiClient)
 
 // Question management API functions
 export interface QuestionOption {
