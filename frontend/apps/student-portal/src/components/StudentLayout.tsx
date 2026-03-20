@@ -6,6 +6,7 @@ import { useAuth, FontSizeControl, TenantBrandingApi, TenantsApi } from '@kunal-
 import { getApiClient } from '@/lib/api'
 import { usePsychometricTestFeature } from '@/hooks/usePsychometricTestFeature'
 import { useSimulationFeature } from '@/hooks/useSimulationFeature'
+import { useProjectsFeature } from '@/hooks/useProjectsFeature'
 
 interface StudentLayoutProps {
   children: React.ReactNode
@@ -20,6 +21,7 @@ export function StudentLayout({ children }: StudentLayoutProps) {
   const [logoError, setLogoError] = useState(false)
   const { enabled: psychometricTestEnabled } = usePsychometricTestFeature()
   const { enabled: simulationEnabled } = useSimulationFeature()
+  const { enabled: projectsEnabled } = useProjectsFeature()
 
   useEffect(() => {
     const loadTenantInfo = async () => {
@@ -180,6 +182,18 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                     }`}
                   >
                     Simulations
+                  </button>
+                )}
+                {projectsEnabled && (
+                  <button
+                    onClick={() => router.push('/projects')}
+                    className={`font-medium transition-colors ${
+                      pathname?.startsWith('/projects')
+                        ? 'text-primary-600'
+                        : 'text-gray-700 hover:text-primary-600'
+                    }`}
+                  >
+                    Projects
                   </button>
                 )}
               </nav>
