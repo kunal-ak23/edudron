@@ -25,7 +25,7 @@ public class ProjectGroupMember {
     @PrePersist
     public void prePersist() {
         if (id == null) {
-            id = com.datagami.edudron.common.UlidGenerator.generate();
+            id = com.datagami.edudron.common.UlidGenerator.nextUlid();
         }
     }
 

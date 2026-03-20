@@ -43,7 +43,7 @@ public class ProjectGroup {
     @PrePersist
     public void prePersist() {
         if (id == null) {
-            id = com.datagami.edudron.common.UlidGenerator.generate();
+            id = com.datagami.edudron.common.UlidGenerator.nextUlid();
         }
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();
