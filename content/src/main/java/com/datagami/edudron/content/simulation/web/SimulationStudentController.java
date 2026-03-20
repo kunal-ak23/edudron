@@ -25,18 +25,20 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-// TODO: Add backend feature flag check (SIMULATION feature type) once inter-service feature
-//  flag validation is available. Currently feature checks are frontend-only, consistent with
-//  PsychTestController which also lacks a backend feature flag check.
 @RestController
 @RequestMapping("/content/api/simulations")
 @Tag(name = "Simulations (Student)", description = "Student endpoints for playing simulations")
 public class SimulationStudentController {
+
+    private static final Logger logger = LoggerFactory.getLogger(SimulationStudentController.class);
 
     @Autowired
     private SimulationService simulationService;
@@ -138,10 +140,37 @@ public class SimulationStudentController {
         return null;
     }
 
+    /**
+     * Check that the SIMULATION feature flag is enabled for the current tenant.
+     * Calls the identity service via gateway to verify.
+     */
+    private void requireSimulationEnabled() {
+        try {
+            String url = gatewayUrl + "/api/tenant/features/SIMULATION";
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(new HttpHeaders()),
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object enabled = response.getBody().get("enabled");
+                if (Boolean.TRUE.equals(enabled)) {
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to check SIMULATION feature flag, denying access: {}", e.getMessage());
+        }
+        throw new IllegalStateException("Simulation feature is not enabled for this tenant");
+    }
+
     @GetMapping("/available")
     @Operation(summary = "Get available simulations",
                description = "List published simulations available to the current student")
     public ResponseEntity<List<SimulationDTO>> available() {
+        requireSimulationEnabled();
         String studentId = getCurrentUserId();
         String sectionId = getStudentSectionId(studentId);
         return ResponseEntity.ok(simulationService.getAvailableSimulations(studentId, sectionId));
@@ -151,6 +180,7 @@ public class SimulationStudentController {
     @Operation(summary = "Start playing a simulation",
                description = "Create a new play session for a simulation")
     public ResponseEntity<SimulationPlayDTO> startPlay(@PathVariable String id) {
+        requireSimulationEnabled();
         String studentId = getCurrentUserId();
         String sectionId = getStudentSectionId(studentId);
         return ResponseEntity.status(HttpStatus.CREATED)

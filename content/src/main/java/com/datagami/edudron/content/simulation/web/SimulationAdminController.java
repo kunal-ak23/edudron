@@ -1,6 +1,7 @@
 package com.datagami.edudron.content.simulation.web;
 
 import com.datagami.edudron.common.TenantContext;
+import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.content.dto.AIGenerationJobDTO;
 import com.datagami.edudron.content.service.AIJobQueueService;
 import com.datagami.edudron.content.service.AIJobWorker;
@@ -15,25 +16,34 @@ import com.datagami.edudron.content.simulation.repo.SimulationRepository;
 import com.datagami.edudron.content.simulation.service.SimulationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-// TODO: Add backend feature flag check (SIMULATION feature type) once inter-service feature
-//  flag validation is available. Currently feature checks are frontend-only, consistent with
-//  PsychTestController which also lacks a backend feature flag check.
 @RestController
 @RequestMapping("/content/api/simulations")
 @Tag(name = "Simulations (Admin)", description = "Admin endpoints for simulation management")
@@ -56,6 +66,12 @@ public class SimulationAdminController {
     @Autowired
     private LectureService lectureService;
 
+    @Value("${GATEWAY_URL:http://localhost:8080}")
+    private String gatewayUrl;
+
+    private volatile RestTemplate restTemplate;
+    private final Object restTemplateLock = new Object();
+
     /**
      * Check that current user is SYSTEM_ADMIN or TENANT_ADMIN.
      * Uses the same pattern as CourseController and ImageGenerationController.
@@ -65,6 +81,64 @@ public class SimulationAdminController {
         if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
             throw new IllegalArgumentException("Only SYSTEM_ADMIN and TENANT_ADMIN can manage simulations");
         }
+    }
+
+    /**
+     * Get a RestTemplate configured with tenant context and auth header forwarding.
+     */
+    private RestTemplate getRestTemplate() {
+        if (restTemplate == null) {
+            synchronized (restTemplateLock) {
+                if (restTemplate == null) {
+                    RestTemplate template = new RestTemplate();
+                    List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+                    interceptors.add(new TenantContextRestTemplateInterceptor());
+                    interceptors.add((request, body, execution) -> {
+                        ServletRequestAttributes attributes =
+                                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                        if (attributes != null) {
+                            HttpServletRequest currentRequest = attributes.getRequest();
+                            String authHeader = currentRequest.getHeader("Authorization");
+                            if (authHeader != null && !authHeader.isBlank()) {
+                                if (!request.getHeaders().containsKey("Authorization")) {
+                                    request.getHeaders().add("Authorization", authHeader);
+                                }
+                            }
+                        }
+                        return execution.execute(request, body);
+                    });
+                    template.setInterceptors(interceptors);
+                    restTemplate = template;
+                }
+            }
+        }
+        return restTemplate;
+    }
+
+    /**
+     * Check that the SIMULATION feature flag is enabled for the current tenant.
+     * Calls the identity service via gateway to verify.
+     */
+    private void requireSimulationEnabled() {
+        try {
+            String url = gatewayUrl + "/api/tenant/features/SIMULATION";
+            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(new HttpHeaders()),
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Object enabled = response.getBody().get("enabled");
+                if (Boolean.TRUE.equals(enabled)) {
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to check SIMULATION feature flag, denying access: {}", e.getMessage());
+        }
+        throw new IllegalStateException("Simulation feature is not enabled for this tenant");
     }
 
     private String getCurrentUserId() {
@@ -84,6 +158,7 @@ public class SimulationAdminController {
                description = "Submit AI simulation generation job. Only SYSTEM_ADMIN and TENANT_ADMIN.")
     public ResponseEntity<?> generateSimulation(@Valid @RequestBody GenerateSimulationRequest request) {
         requireAdmin();
+        requireSimulationEnabled();
 
         UUID clientId = UUID.fromString(TenantContext.getClientId());
 
@@ -183,6 +258,7 @@ public class SimulationAdminController {
     @Operation(summary = "Publish simulation", description = "Publish a simulation (must be in REVIEW status)")
     public ResponseEntity<SimulationDTO> publish(@PathVariable String id) {
         requireAdmin();
+        requireSimulationEnabled();
         return ResponseEntity.ok(simulationService.publish(id));
     }
 
