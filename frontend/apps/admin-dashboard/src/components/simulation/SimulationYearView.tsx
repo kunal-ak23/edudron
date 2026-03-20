@@ -125,7 +125,7 @@ export default function SimulationYearView({
                       >
                         <Star className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                         <span className="truncate flex-1">{label}</span>
-                        {decision.decisionType && decision.decisionType !== 'NARRATIVE_CHOICE' && (
+                        {decision.decisionType && (
                           <Badge
                             variant="outline"
                             className="text-[10px] px-1.5 py-0 bg-gray-50 text-gray-500 border-gray-200"
