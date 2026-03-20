@@ -80,3 +80,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0026-simulation-v2.yaml
   - include:
       file: db/changelog/db.changelog-0027-simulation-v3-budget.yaml
+  - include:
+      file: db/changelog/db.changelog-0028-project-question-bank.yaml
