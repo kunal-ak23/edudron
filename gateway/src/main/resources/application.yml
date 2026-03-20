@@ -33,12 +33,20 @@ spring:
           uri: ${CONTENT_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/question-bank/**
+        - id: content-service-project-questions
+          uri: ${CONTENT_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/project-questions/**
         - id: content-service
           uri: ${CONTENT_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/content/**, /api/content/**, /content/api/**
 
         # Student routes → Core API
+        - id: student-service-projects
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/projects/**
         - id: student-service-institutes
           uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
