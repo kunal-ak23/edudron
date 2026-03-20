@@ -43,6 +43,7 @@ public class ProjectQuestionBankService {
         entity.setCourseId(request.getCourseId());
         entity.setTitle(request.getTitle());
         entity.setProblemStatement(request.getProblemStatement());
+        entity.setProjectNumber(request.getProjectNumber());
         entity.setKeyTechnologies(request.getKeyTechnologies());
         entity.setTags(request.getTags());
         entity.setDifficulty(request.getDifficulty());
@@ -96,6 +97,7 @@ public class ProjectQuestionBankService {
 
         entity.setTitle(request.getTitle());
         entity.setProblemStatement(request.getProblemStatement());
+        entity.setProjectNumber(request.getProjectNumber());
         entity.setCourseId(request.getCourseId());
         entity.setKeyTechnologies(request.getKeyTechnologies());
         entity.setTags(request.getTags());
@@ -127,6 +129,7 @@ public class ProjectQuestionBankService {
             entity.setCourseId(request.getCourseId());
             entity.setTitle(request.getTitle());
             entity.setProblemStatement(request.getProblemStatement());
+            entity.setProjectNumber(request.getProjectNumber());
             entity.setKeyTechnologies(request.getKeyTechnologies());
             entity.setTags(request.getTags());
             entity.setDifficulty(request.getDifficulty());

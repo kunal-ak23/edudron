@@ -35,6 +35,9 @@ public class ProjectQuestionBank {
     @JdbcTypeCode(SqlTypes.ARRAY)
     private List<String> tags = new ArrayList<>();
 
+    @Column(name = "project_number", length = 50)
+    private String projectNumber;
+
     @Column(name = "difficulty", length = 20)
     private String difficulty;
 
@@ -79,6 +82,9 @@ public class ProjectQuestionBank {
 
     public List<String> getTags() { return tags; }
     public void setTags(List<String> tags) { this.tags = tags != null ? tags : new ArrayList<>(); }
+
+    public String getProjectNumber() { return projectNumber; }
+    public void setProjectNumber(String projectNumber) { this.projectNumber = projectNumber; }
 
     public String getDifficulty() { return difficulty; }
     public void setDifficulty(String difficulty) { this.difficulty = difficulty; }

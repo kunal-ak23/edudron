@@ -32,6 +32,7 @@ import { extractErrorMessage } from '@/lib/error-utils'
 export const dynamic = 'force-dynamic'
 
 interface ParsedQuestion {
+  projectNumber?: string
   title: string
   problemStatement: string
   keyTechnologies?: string[]
@@ -63,10 +64,10 @@ export default function BulkUploadQuestionsPage() {
   }, [])
 
   const downloadSampleCSV = () => {
-    const csv = `title,problemStatement,keyTechnologies,tags,difficulty
-"DA-01 Retail Performance Dashboard","Develop a robust Retail Performance Dashboard to monitor KPIs...","Excel;Power BI;Tableau","Data Analytics","MEDIUM"
-"DA-02 Healthcare Trend Analyzer","Perform a deep-dive analysis of historical Healthcare data...","Excel;Power BI;Tableau","Data Analytics","MEDIUM"
-"AAI-01 Autonomous Retail Researcher Agent","Develop an LLM-powered autonomous researcher agent...","Python;LangChain;CrewAI;LLM API","Agentic AI","HARD"`
+    const csv = `projectNumber,title,problemStatement,keyTechnologies,tags,difficulty
+"DA-01","Retail Performance Dashboard","Develop a robust Retail Performance Dashboard to monitor KPIs...","Excel;Power BI;Tableau","Data Analytics","MEDIUM"
+"DA-02","Healthcare Trend Analyzer","Perform a deep-dive analysis of historical Healthcare data...","Excel;Power BI;Tableau","Data Analytics","MEDIUM"
+"AAI-01","Autonomous Retail Researcher Agent","Develop an LLM-powered autonomous researcher agent...","Python;LangChain;CrewAI;LLM API","Agentic AI","HARD"`
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -79,14 +80,16 @@ export default function BulkUploadQuestionsPage() {
   const downloadSampleJSON = () => {
     const sample = [
       {
-        title: 'DA-01 Retail Performance Dashboard',
+        projectNumber: 'DA-01',
+        title: 'Retail Performance Dashboard',
         problemStatement: 'Develop a robust Retail Performance Dashboard to monitor KPIs...',
         keyTechnologies: ['Excel', 'Power BI', 'Tableau'],
         tags: ['Data Analytics'],
         difficulty: 'MEDIUM',
       },
       {
-        title: 'AAI-01 Autonomous Retail Researcher Agent',
+        projectNumber: 'AAI-01',
+        title: 'Autonomous Retail Researcher Agent',
         problemStatement: 'Develop an LLM-powered autonomous researcher agent...',
         keyTechnologies: ['Python', 'LangChain', 'CrewAI', 'LLM API'],
         tags: ['Agentic AI'],
@@ -110,6 +113,7 @@ export default function BulkUploadQuestionsPage() {
       const parsed = JSON.parse(trimmed)
       if (!Array.isArray(parsed)) return null
       return parsed.map((item: any) => ({
+        projectNumber: item.projectNumber || undefined,
         title: item.title || '',
         problemStatement: item.problemStatement || '',
         keyTechnologies: Array.isArray(item.keyTechnologies) ? item.keyTechnologies : undefined,
@@ -138,9 +142,9 @@ export default function BulkUploadQuestionsPage() {
         const cols = lines[i].split('\t').map(c => c.trim())
         if (!cols[titleIdx] && !cols[descIdx]) continue
         const projectNo = projectNoIdx !== -1 ? cols[projectNoIdx] : ''
-        const title = projectNo && titleIdx !== -1 ? `${projectNo} ${cols[titleIdx]}` : (cols[titleIdx] || '')
         questions.push({
-          title,
+          projectNumber: projectNo || undefined,
+          title: cols[titleIdx] || '',
           problemStatement: descIdx !== -1 ? (cols[descIdx] || '') : '',
           keyTechnologies: toolsIdx !== -1 && cols[toolsIdx] ? cols[toolsIdx].split(/[,\/]/).map(t => t.trim()).filter(Boolean) : undefined,
           tags: subjectIdx !== -1 && cols[subjectIdx] ? [cols[subjectIdx]] : undefined,
@@ -205,6 +209,7 @@ export default function BulkUploadQuestionsPage() {
           const techIdx = headers.indexOf('keytechnologies') !== -1 ? headers.indexOf('keytechnologies') : headers.indexOf('key_technologies')
           const tagsIdx = headers.indexOf('tags')
           const diffIdx = headers.indexOf('difficulty')
+          const projNumIdx = headers.indexOf('projectnumber') !== -1 ? headers.indexOf('projectnumber') : headers.indexOf('project_number')
 
           if (titleIdx === -1 || stmtIdx === -1) {
             setParseError('CSV must have "title" and "problemStatement" columns.')
@@ -215,6 +220,7 @@ export default function BulkUploadQuestionsPage() {
           for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].split(',').map((c) => c.trim())
             questions.push({
+              projectNumber: projNumIdx !== -1 && cols[projNumIdx] ? cols[projNumIdx] : undefined,
               title: cols[titleIdx] || '',
               problemStatement: cols[stmtIdx] || '',
               keyTechnologies: techIdx !== -1 && cols[techIdx] ? cols[techIdx].split(';').map((t) => t.trim()) : undefined,
@@ -253,6 +259,7 @@ export default function BulkUploadQuestionsPage() {
       const questionsToUpload = parsedQuestions.map((q) => ({
         ...q,
         courseId,
+        projectNumber: q.projectNumber || undefined,
         isActive: true,
       }))
       const result = await projectQuestionsApi.bulkUpload(questionsToUpload)
@@ -364,6 +371,7 @@ export default function BulkUploadQuestionsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>#</TableHead>
+                  <TableHead>Project No</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Problem Statement</TableHead>
                   <TableHead>Technologies</TableHead>
@@ -374,6 +382,7 @@ export default function BulkUploadQuestionsPage() {
                 {parsedQuestions.map((q, idx) => (
                   <TableRow key={idx}>
                     <TableCell>{idx + 1}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{q.projectNumber || '-'}</TableCell>
                     <TableCell className="font-medium max-w-[200px] truncate">{q.title}</TableCell>
                     <TableCell className="max-w-[300px] truncate text-sm text-muted-foreground">
                       {q.problemStatement}

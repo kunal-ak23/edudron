@@ -42,6 +42,7 @@ export interface ProjectEventDTO {
 export interface ProjectQuestionDTO {
   id: string
   courseId: string
+  projectNumber?: string
   title: string
   problemStatement: string
   keyTechnologies?: string[]

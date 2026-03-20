@@ -29,6 +29,7 @@ export default function NewProjectQuestionPage() {
   const editId = searchParams.get('editId')
 
   const [courseId, setCourseId] = useState<string>('')
+  const [projectNumber, setProjectNumber] = useState('')
   const [title, setTitle] = useState('')
   const [problemStatement, setProblemStatement] = useState('')
   const [keyTechnologies, setKeyTechnologies] = useState('')
@@ -58,6 +59,7 @@ export default function NewProjectQuestionPage() {
       try {
         const question = await projectQuestionsApi.getQuestion(editId)
         setCourseId(question.courseId || '')
+        setProjectNumber(question.projectNumber || '')
         setTitle(question.title)
         setProblemStatement(question.problemStatement)
         setKeyTechnologies(question.keyTechnologies?.join(', ') || '')
@@ -90,6 +92,7 @@ export default function NewProjectQuestionPage() {
     try {
       const data = {
         courseId,
+        projectNumber: projectNumber.trim() || undefined,
         title: title.trim(),
         problemStatement: problemStatement.trim(),
         keyTechnologies: keyTechnologies
@@ -156,6 +159,17 @@ export default function NewProjectQuestionPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Project Number */}
+            <div className="space-y-2">
+              <Label>Project Number</Label>
+              <Input
+                value={projectNumber}
+                onChange={(e) => setProjectNumber(e.target.value)}
+                placeholder="e.g. DA-01, AAI-01"
+              />
+              <p className="text-xs text-muted-foreground">Optional identifier for the project (e.g., DA-01).</p>
             </div>
 
             {/* Title */}

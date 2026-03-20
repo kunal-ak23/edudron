@@ -12,6 +12,7 @@ public class ProjectQuestionDTO {
     private String problemStatement;
     private List<String> keyTechnologies;
     private List<String> tags;
+    private String projectNumber;
     private String difficulty;
     private Boolean isActive;
     private OffsetDateTime createdAt;
@@ -27,6 +28,7 @@ public class ProjectQuestionDTO {
         dto.setProblemStatement(e.getProblemStatement());
         dto.setKeyTechnologies(e.getKeyTechnologies());
         dto.setTags(e.getTags());
+        dto.setProjectNumber(e.getProjectNumber());
         dto.setDifficulty(e.getDifficulty());
         dto.setIsActive(e.getIsActive());
         dto.setCreatedAt(e.getCreatedAt());
@@ -52,6 +54,9 @@ public class ProjectQuestionDTO {
 
     public List<String> getTags() { return tags; }
     public void setTags(List<String> tags) { this.tags = tags; }
+
+    public String getProjectNumber() { return projectNumber; }
+    public void setProjectNumber(String projectNumber) { this.projectNumber = projectNumber; }
 
     public String getDifficulty() { return difficulty; }
     public void setDifficulty(String difficulty) { this.difficulty = difficulty; }

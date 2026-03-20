@@ -174,6 +174,7 @@ export default function ProjectQuestionsPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Project No</TableHead>
                 <TableHead>Title</TableHead>
                 <TableHead>Problem Statement</TableHead>
                 <TableHead>Technologies</TableHead>
@@ -185,6 +186,9 @@ export default function ProjectQuestionsPage() {
             <TableBody>
               {questions.map((question) => (
                 <TableRow key={question.id}>
+                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                    {question.projectNumber || '-'}
+                  </TableCell>
                   <TableCell className="font-medium max-w-[200px] truncate">
                     {question.title}
                   </TableCell>

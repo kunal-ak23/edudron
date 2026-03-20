@@ -15,6 +15,7 @@ public class CreateProjectQuestionRequest {
     @NotBlank(message = "Problem statement is required")
     private String problemStatement;
 
+    private String projectNumber;
     private List<String> keyTechnologies;
     private List<String> tags;
     private String difficulty;
@@ -36,6 +37,9 @@ public class CreateProjectQuestionRequest {
 
     public List<String> getTags() { return tags; }
     public void setTags(List<String> tags) { this.tags = tags; }
+
+    public String getProjectNumber() { return projectNumber; }
+    public void setProjectNumber(String projectNumber) { this.projectNumber = projectNumber; }
 
     public String getDifficulty() { return difficulty; }
     public void setDifficulty(String difficulty) { this.difficulty = difficulty; }
