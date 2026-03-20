@@ -178,10 +178,15 @@ export default function BulkUploadQuestionsPage() {
         return -1
       }
       const projectNoIdx = findExact(['project no', 'project no.', 'project_no', 'projectnumber', 'project number'])
-      const titleIdx = findExact(['problem statement', 'title'])
-      const descIdx = findExact(['description in details', 'description', 'details'])
-      const subjectIdx = findExact(['subject', 'tags', 'category'])
-      const toolsIdx = findExact(['tools', 'technologies', 'tech'])
+      const titleIdx = findExact(['problem statement', 'title', 'name'])
+      const descIdx = findExact(['description in details', 'description in detail', 'description', 'details', 'detail'])
+      const subjectIdx = findExact(['subject', 'tags', 'category', 'domain'])
+      const toolsIdx = findExact(['tools', 'technologies', 'tech', 'key technologies'])
+      const diffIdx = findExact(['difficulty', 'level'])
+
+      // Debug: log matched columns
+      console.log('[TSV Parser] Headers:', headers)
+      console.log('[TSV Parser] Matched columns:', { projectNoIdx, titleIdx, descIdx, subjectIdx, toolsIdx, diffIdx })
 
       if (titleIdx === -1 && descIdx === -1) return null
 
@@ -192,11 +197,11 @@ export default function BulkUploadQuestionsPage() {
         const projectNo = projectNoIdx !== -1 ? (cols[projectNoIdx] || '') : ''
         questions.push({
           projectNumber: projectNo || undefined,
-          title: cols[titleIdx] || '',
+          title: titleIdx !== -1 ? (cols[titleIdx] || '') : '',
           problemStatement: descIdx !== -1 ? (cols[descIdx] || '') : '',
-          keyTechnologies: toolsIdx !== -1 && cols[toolsIdx] ? cols[toolsIdx].split(/[,\/]/).map(t => t.trim()).filter(Boolean) : undefined,
+          keyTechnologies: toolsIdx !== -1 && cols[toolsIdx] ? cols[toolsIdx].split(/[;,\/]/).map(t => t.trim()).filter(Boolean) : undefined,
           tags: subjectIdx !== -1 && cols[subjectIdx] ? [cols[subjectIdx]] : undefined,
-          difficulty: undefined,
+          difficulty: diffIdx !== -1 && cols[diffIdx] ? cols[diffIdx].toUpperCase() : undefined,
         })
       }
       return questions
