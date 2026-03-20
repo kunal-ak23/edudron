@@ -46,17 +46,22 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
     ) || config.npcResponses.find(r => r.round === currentRound)
 
     if (response) {
-      setDialogHistory(prev => [...prev, { speaker: config.npcName, text: response.response }])
       if (response.npcCounterOffer === null) {
         // NPC accepts
+        setDialogHistory(prev => [...prev, { speaker: config.npcName, text: response.response }])
         setResolved(true)
         onSubmit({ input: { finalAmount: amount, acceptedRound: currentRound, walkedAway: false } })
         return
       }
+
+      // Show NPC response and their counter-offer
+      const counterText = `${response.response} My counter: ${config.unit}${response.npcCounterOffer.toLocaleString()}.`
+      setDialogHistory(prev => [...prev, { speaker: config.npcName, text: counterText }])
       setLastNpcOffer(response.npcCounterOffer)
     }
 
     if (currentRound >= config.rounds) {
+      // Final round — auto-submit with the user's last offer
       setResolved(true)
       onSubmit({ input: { finalAmount: amount, acceptedRound: currentRound, walkedAway: false } })
       return
