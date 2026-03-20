@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
+import { useSimulationFeature } from '@/hooks/useSimulationFeature'
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -185,6 +186,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle }: SidebarProps) {
   const pathname = usePathname()
   const { user } = useAuth()
+  const { enabled: simulationEnabled } = useSimulationFeature()
   
   // Filter menu items based on user role and tenant selection
   const filteredMenuItems = menuItems
@@ -265,6 +267,11 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
         // INSTRUCTOR can view Dashboard (for student progress), Courses (view-only), Analytics
       }
       
+      // Hide Simulations when feature flag is disabled
+      if (item.href === '/simulations' && !simulationEnabled) {
+        return false
+      }
+
       // Show tenant-specific items only if user has a tenant selected
       if (item.requiresTenant) {
         const tenantId = localStorage.getItem('tenant_id') || 
