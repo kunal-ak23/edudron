@@ -122,26 +122,74 @@ export default function BulkUploadQuestionsPage() {
       }))
     }
     // Try TSV (tab-separated — Excel paste)
-    const lines = trimmed.split('\n').filter(l => l.trim())
-    if (lines.length < 2) return null
-    const firstLine = lines[0]
-    if (firstLine.includes('\t')) {
-      const headers = firstLine.split('\t').map(h => h.trim().toLowerCase())
-      // Map common column names
-      const findCol = (names: string[]) => headers.findIndex(h => names.some(n => h.includes(n)))
-      const titleIdx = findCol(['problem statement', 'title', 'project no'])
-      const descIdx = findCol(['description', 'details'])
-      const subjectIdx = findCol(['subject', 'tags', 'category'])
-      const toolsIdx = findCol(['tools', 'technologies', 'tech'])
-      const projectNoIdx = findCol(['project no', 'project_no', 'no'])
+    // Handle quoted fields that may contain newlines (Excel wraps long text in quotes)
+    const parseTsvLines = (text: string): string[][] => {
+      const rows: string[][] = []
+      let currentRow: string[] = []
+      let currentField = ''
+      let inQuotes = false
+
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i]
+        if (ch === '"') {
+          if (inQuotes && text[i + 1] === '"') {
+            currentField += '"'
+            i++ // skip escaped quote
+          } else {
+            inQuotes = !inQuotes
+          }
+        } else if (ch === '\t' && !inQuotes) {
+          currentRow.push(currentField.trim())
+          currentField = ''
+        } else if (ch === '\n' && !inQuotes) {
+          currentRow.push(currentField.trim())
+          if (currentRow.some(c => c)) rows.push(currentRow)
+          currentRow = []
+          currentField = ''
+        } else if (ch === '\r') {
+          // skip carriage return
+        } else {
+          currentField += ch
+        }
+      }
+      // Last field/row
+      currentRow.push(currentField.trim())
+      if (currentRow.some(c => c)) rows.push(currentRow)
+      return rows
+    }
+
+    const tsvRows = parseTsvLines(trimmed)
+    if (tsvRows.length < 2) return null
+    const firstLine = tsvRows[0].join('\t')
+    if (firstLine.includes('\t') || tsvRows[0].length > 2) {
+      const headers = tsvRows[0].map(h => h.trim().toLowerCase())
+      // Map columns by exact header name matching
+      const findCol = (names: string[]) => headers.findIndex(h => names.some(n => h === n || h.includes(n)))
+      const findExact = (names: string[]) => {
+        for (const name of names) {
+          const idx = headers.findIndex(h => h === name)
+          if (idx !== -1) return idx
+        }
+        // Fallback to includes
+        for (const name of names) {
+          const idx = headers.findIndex(h => h.includes(name))
+          if (idx !== -1) return idx
+        }
+        return -1
+      }
+      const projectNoIdx = findExact(['project no', 'project no.', 'project_no', 'projectnumber', 'project number'])
+      const titleIdx = findExact(['problem statement', 'title'])
+      const descIdx = findExact(['description in details', 'description', 'details'])
+      const subjectIdx = findExact(['subject', 'tags', 'category'])
+      const toolsIdx = findExact(['tools', 'technologies', 'tech'])
 
       if (titleIdx === -1 && descIdx === -1) return null
 
       const questions: ParsedQuestion[] = []
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split('\t').map(c => c.trim())
-        if (!cols[titleIdx] && !cols[descIdx]) continue
-        const projectNo = projectNoIdx !== -1 ? cols[projectNoIdx] : ''
+      for (let i = 1; i < tsvRows.length; i++) {
+        const cols = tsvRows[i]
+        if (!cols[titleIdx] && !(descIdx !== -1 && cols[descIdx])) continue
+        const projectNo = projectNoIdx !== -1 ? (cols[projectNoIdx] || '') : ''
         questions.push({
           projectNumber: projectNo || undefined,
           title: cols[titleIdx] || '',
