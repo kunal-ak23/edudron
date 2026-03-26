@@ -495,7 +495,7 @@ export default function ProjectDetailPage() {
     if (!file) return
     setUploadingAttachment(true)
     try {
-      const url = await mediaApi.uploadImage(file, 'resources')
+      const url = await mediaApi.uploadImage(file, 'projects/statements')
       const att = await projectsApi.addAttachment(projectId, {
         context: 'STATEMENT',
         fileUrl: url,
