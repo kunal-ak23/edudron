@@ -599,10 +599,44 @@ export default function ProjectDetailPage() {
                                       onChange={(e) => setEventSubmissionText(e.target.value)}
                                       className="text-sm"
                                     />
+                                    {/* File attachments */}
+                                    <div className="flex items-center gap-2">
+                                      <label className="cursor-pointer">
+                                        <input
+                                          type="file"
+                                          multiple
+                                          className="hidden"
+                                          onChange={handleFileUpload}
+                                          accept=".pdf,.doc,.docx,.ppt,.pptx,.zip,.rar,.txt,.png,.jpg,.jpeg"
+                                        />
+                                        <span className="inline-flex items-center gap-1.5 text-xs text-blue-600 hover:underline">
+                                          <FileUp className="h-3.5 w-3.5" />
+                                          {uploadingFiles ? 'Uploading...' : 'Attach files'}
+                                        </span>
+                                      </label>
+                                      {uploadingFiles && <Loader2 className="h-3 w-3 animate-spin text-blue-600" />}
+                                    </div>
+                                    {pendingAttachments.length > 0 && (
+                                      <div className="space-y-1">
+                                        {pendingAttachments.map((att, idx) => (
+                                          <div key={idx} className="flex items-center gap-2 text-xs text-gray-600 bg-gray-100 rounded px-2 py-1">
+                                            <Paperclip className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">{att.fileName}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setPendingAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                                              className="ml-auto text-gray-400 hover:text-red-500"
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                     <Button
                                       size="sm"
                                       onClick={() => handleEventSubmit(event.id)}
-                                      disabled={submittingEvent || (!eventSubmissionUrl.trim() && !eventSubmissionText.trim())}
+                                      disabled={submittingEvent || (!eventSubmissionUrl.trim() && !eventSubmissionText.trim() && pendingAttachments.length === 0)}
                                     >
                                       {submittingEvent ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
                                       {submission ? `Submit v${submission.version + 1}` : 'Submit'}
