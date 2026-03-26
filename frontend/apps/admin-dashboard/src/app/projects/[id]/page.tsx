@@ -48,8 +48,12 @@ import {
   ClipboardCheck,
   Award,
   ExternalLink,
+  Paperclip,
+  FileUp,
+  X,
+  FileDown,
 } from 'lucide-react'
-import { projectsApi, sectionsApi, coursesApi, projectQuestionsApi, enrollmentsApi } from '@/lib/api'
+import { projectsApi, sectionsApi, coursesApi, projectQuestionsApi, enrollmentsApi, mediaApi } from '@/lib/api'
 import type {
   ProjectDTO,
   ProjectGroupDTO,
@@ -104,17 +108,7 @@ export default function ProjectDetailPage() {
   const [eventMaxMarks, setEventMaxMarks] = useState(10)
   const [savingEvent, setSavingEvent] = useState(false)
 
-  // Attendance dialog state
-  const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false)
-  const [attendanceEventId, setAttendanceEventId] = useState('')
-  const [attendanceEntries, setAttendanceEntries] = useState<AttendanceEntry[]>([])
-  const [savingAttendance, setSavingAttendance] = useState(false)
-
-  // Grades dialog state
-  const [gradesDialogOpen, setGradesDialogOpen] = useState(false)
-  const [gradesEventId, setGradesEventId] = useState('')
-  const [gradeEntries, setGradeEntries] = useState<GradeEntry[]>([])
-  const [savingGrades, setSavingGrades] = useState(false)
+  // (Attendance and grades are now dedicated pages)
 
   // Course & section info
   const [courseName, setCourseName] = useState('')
@@ -131,6 +125,10 @@ export default function ProjectDetailPage() {
   const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([])
   const [addSectionsGroupSize, setAddSectionsGroupSize] = useState(3)
   const [addingSections, setAddingSections] = useState(false)
+
+  // Statement attachments
+  const [statementAttachments, setStatementAttachments] = useState<any[]>([])
+  const [uploadingAttachment, setUploadingAttachment] = useState(false)
 
   const loadProject = useCallback(async () => {
     setLoading(true)
@@ -188,6 +186,18 @@ export default function ProjectDetailPage() {
     loadInfo()
   }, [project])
 
+  // Load statement attachments
+  useEffect(() => {
+    if (!project) return
+    const loadAttachments = async () => {
+      try {
+        const atts = await projectsApi.getAttachments(projectId, 'STATEMENT')
+        setStatementAttachments(atts)
+      } catch { /* ok */ }
+    }
+    loadAttachments()
+  }, [project, projectId])
+
   const loadGroups = useCallback(async () => {
     setLoadingGroups(true)
     try {
@@ -201,10 +211,20 @@ export default function ProjectDetailPage() {
     }
   }, [projectId])
 
+  const loadEvents = useCallback(async () => {
+    try {
+      const data = await projectsApi.getEvents(projectId)
+      setEvents(data)
+    } catch {
+      setEvents([])
+    }
+  }, [projectId])
+
   useEffect(() => {
     loadProject()
     loadGroups()
-  }, [loadProject, loadGroups])
+    loadEvents()
+  }, [loadProject, loadGroups, loadEvents])
 
   // Resolve student names and problem statement titles when groups change
   useEffect(() => {
@@ -395,78 +415,7 @@ export default function ProjectDetailPage() {
     }
   }
 
-  // Attendance
-  const openAttendanceDialog = (eventId: string) => {
-    setAttendanceEventId(eventId)
-    // Build entries from all group members
-    const entries: AttendanceEntry[] = []
-    groups.forEach((group) => {
-      group.members.forEach((member) => {
-        entries.push({ studentId: member.studentId, present: false })
-      })
-    })
-    setAttendanceEntries(entries)
-    setAttendanceDialogOpen(true)
-  }
-
-  const toggleAttendance = (studentId: string) => {
-    setAttendanceEntries((prev) =>
-      prev.map((e) => (e.studentId === studentId ? { ...e, present: !e.present } : e))
-    )
-  }
-
-  const handleSaveAttendance = async () => {
-    setSavingAttendance(true)
-    try {
-      await projectsApi.saveAttendance(projectId, attendanceEventId, attendanceEntries)
-      setAttendanceDialogOpen(false)
-      toast({ title: 'Attendance Saved' })
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Failed to save attendance',
-        description: extractErrorMessage(error),
-      })
-    } finally {
-      setSavingAttendance(false)
-    }
-  }
-
-  // Grades
-  const openGradesDialog = (eventId: string) => {
-    setGradesEventId(eventId)
-    const entries: GradeEntry[] = []
-    groups.forEach((group) => {
-      group.members.forEach((member) => {
-        entries.push({ studentId: member.studentId, marks: 0 })
-      })
-    })
-    setGradeEntries(entries)
-    setGradesDialogOpen(true)
-  }
-
-  const updateGrade = (studentId: string, marks: number) => {
-    setGradeEntries((prev) =>
-      prev.map((e) => (e.studentId === studentId ? { ...e, marks } : e))
-    )
-  }
-
-  const handleSaveGrades = async () => {
-    setSavingGrades(true)
-    try {
-      await projectsApi.saveGrades(projectId, gradesEventId, gradeEntries)
-      setGradesDialogOpen(false)
-      toast({ title: 'Grades Saved' })
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Failed to save grades',
-        description: extractErrorMessage(error),
-      })
-    } finally {
-      setSavingGrades(false)
-    }
-  }
+  // Attendance and grades are now dedicated pages (see /projects/[id]/events/[eventId]/attendance and /grades)
 
   // Add Sections
   const openAddSectionsDialog = async () => {
@@ -533,6 +482,39 @@ export default function ProjectDetailPage() {
       })
     } finally {
       setAddingSections(false)
+    }
+  }
+
+  async function handleStatementUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingAttachment(true)
+    try {
+      const url = await mediaApi.uploadImage(file, 'projects/statements')
+      const att = await projectsApi.addAttachment(projectId, {
+        context: 'STATEMENT',
+        fileUrl: url,
+        fileName: file.name,
+        fileSizeBytes: file.size,
+        mimeType: file.type,
+      })
+      setStatementAttachments((prev) => [...prev, att])
+      toast({ title: 'File uploaded' })
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Upload failed', description: extractErrorMessage(error) })
+    } finally {
+      setUploadingAttachment(false)
+      e.target.value = ''
+    }
+  }
+
+  async function handleDeleteAttachment(attachmentId: string) {
+    try {
+      await projectsApi.deleteAttachment(projectId, attachmentId)
+      setStatementAttachments((prev) => prev.filter((a) => a.id !== attachmentId))
+      toast({ title: 'Attachment deleted' })
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Delete failed', description: extractErrorMessage(error) })
     }
   }
 
@@ -692,6 +674,53 @@ export default function ProjectDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-5 w-5" />
+                  <CardTitle>Project Files</CardTitle>
+                </div>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={handleStatementUpload}
+                    accept=".pdf,.doc,.docx,.ppt,.pptx,.zip,.rar,.txt,.png,.jpg,.jpeg,.xlsx,.csv"
+                  />
+                  <Button variant="outline" size="sm" asChild>
+                    <span>
+                      {uploadingAttachment ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <FileUp className="h-4 w-4 mr-1.5" />}
+                      Upload File
+                    </span>
+                  </Button>
+                </label>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {statementAttachments.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No files attached. Upload project statements, rubrics, or guidelines.</p>
+              ) : (
+                <div className="space-y-2">
+                  {statementAttachments.map((att: any) => (
+                    <div key={att.id} className="flex items-center gap-2 p-2 rounded border">
+                      <FileDown className="h-4 w-4 text-blue-600 shrink-0" />
+                      <a href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate flex-1">
+                        {att.fileName}
+                      </a>
+                      {att.fileSizeBytes && (
+                        <span className="text-xs text-muted-foreground">({(att.fileSizeBytes / 1024).toFixed(0)} KB)</span>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteAttachment(att.id)}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Groups Tab */}
@@ -758,6 +787,16 @@ export default function ProjectDetailPage() {
                               >
                                 <ExternalLink className="h-3 w-3 mr-1" /> View Submission
                               </a>
+                            )}
+                            {(group as any).submissionAttachments && (group as any).submissionAttachments.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {(group as any).submissionAttachments.map((att: any) => (
+                                  <a key={att.id} href={att.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline">
+                                    <FileDown className="h-3.5 w-3.5" />
+                                    {att.fileName}
+                                  </a>
+                                ))}
+                              </div>
                             )}
                           </div>
                         ) : (
@@ -848,7 +887,7 @@ export default function ProjectDetailPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => openAttendanceDialog(event.id)}
+                                onClick={() => router.push(`/projects/${projectId}/events/${event.id}/attendance`)}
                                 title="Attendance"
                               >
                                 <ClipboardCheck className="h-4 w-4" />
@@ -858,7 +897,7 @@ export default function ProjectDetailPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => openGradesDialog(event.id)}
+                                onClick={() => router.push(`/projects/${projectId}/events/${event.id}/grades`)}
                                 title="Grades"
                               >
                                 <Award className="h-4 w-4" />
@@ -988,106 +1027,6 @@ export default function ProjectDetailPage() {
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
               ) : (
                 'Save'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Attendance Dialog */}
-      <Dialog open={attendanceDialogOpen} onOpenChange={setAttendanceDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Mark Attendance</DialogTitle>
-            <DialogDescription>
-              Check the box for students who are present.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            {groups.map((group) => (
-              <div key={group.id}>
-                <h4 className="text-sm font-medium mb-2">Group {group.groupNumber}</h4>
-                <div className="space-y-2 ml-2">
-                  {group.members.map((member) => {
-                    const entry = attendanceEntries.find((e) => e.studentId === member.studentId)
-                    return (
-                      <label
-                        key={member.studentId}
-                        className="flex items-center gap-2 text-sm cursor-pointer"
-                      >
-                        <Checkbox
-                          checked={entry?.present || false}
-                          onCheckedChange={() => toggleAttendance(member.studentId)}
-                        />
-                        <span>{member.name || member.email || member.studentId}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAttendanceDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveAttendance} disabled={savingAttendance}>
-              {savingAttendance ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
-              ) : (
-                'Save Attendance'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Grades Dialog */}
-      <Dialog open={gradesDialogOpen} onOpenChange={setGradesDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Enter Grades</DialogTitle>
-            <DialogDescription>
-              Enter marks for each student.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            {groups.map((group) => (
-              <div key={group.id}>
-                <h4 className="text-sm font-medium mb-2">Group {group.groupNumber}</h4>
-                <div className="space-y-2 ml-2">
-                  {group.members.map((member) => {
-                    const entry = gradeEntries.find((e) => e.studentId === member.studentId)
-                    return (
-                      <div key={member.studentId} className="flex items-center gap-3">
-                        <span className="text-sm flex-1">
-                          {member.name || member.email || member.studentId}
-                        </span>
-                        <Input
-                          type="number"
-                          min={0}
-                          className="w-24"
-                          value={entry?.marks || 0}
-                          onChange={(e) =>
-                            updateGrade(member.studentId, parseInt(e.target.value) || 0)
-                          }
-                        />
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setGradesDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveGrades} disabled={savingGrades}>
-              {savingGrades ? (
-                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
-              ) : (
-                'Save Grades'
               )}
             </Button>
           </DialogFooter>
