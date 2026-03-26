@@ -1,0 +1,83 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0024-project-attachment
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_attachment
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: project_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: group_id, type: varchar(26) }
+              - column:
+                  name: context
+                  type: varchar(30)
+                  defaultValue: STATEMENT
+                  constraints: { nullable: false }
+                  remarks: "STATEMENT = project problem statement, SUBMISSION = student submission"
+              - column: { name: file_url, type: text, constraints: { nullable: false } }
+              - column: { name: file_name, type: varchar(500), constraints: { nullable: false } }
+              - column: { name: file_size_bytes, type: bigint }
+              - column: { name: mime_type, type: varchar(100) }
+              - column: { name: uploaded_by, type: varchar(255) }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: project_attachment
+            schemaName: student
+            indexName: idx_project_attachment_project_id
+            columns:
+              - column: { name: project_id }
+        - createIndex:
+            tableName: project_attachment
+            schemaName: student
+            indexName: idx_project_attachment_group_id
+            columns:
+              - column: { name: group_id }
+        - createIndex:
+            tableName: project_attachment
+            schemaName: student
+            indexName: idx_project_attachment_client_id
+            columns:
+              - column: { name: client_id }
+
+  - changeSet:
+      id: student-0024-widen-project-section-id
+      author: edudron
+      changes:
+        - modifyDataType:
+            tableName: project
+            schemaName: student
+            columnName: section_id
+            newDataType: text
+
+  - changeSet:
+      id: student-0024-project-group-name
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: project_group
+            schemaName: student
+            columns:
+              - column:
+                  name: group_name
+                  type: varchar(255)
+
+  - changeSet:
+      id: student-0024-event-section-id
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: project_event
+            schemaName: student
+            columns:
+              - column:
+                  name: section_id
+                  type: varchar(26)
+        - createIndex:
+            tableName: project_event
+            schemaName: student
+            indexName: idx_project_event_section_id
+            columns:
+              - column: { name: section_id }

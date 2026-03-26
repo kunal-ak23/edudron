@@ -79,5 +79,8 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, String>,
     @Modifying
     @Transactional
     int deleteByClientIdAndStudentIdAndBatchId(UUID clientId, String studentId, String batchId);
+
+    @Query("SELECT DISTINCT e.batchId FROM Enrollment e WHERE e.clientId = :clientId AND e.courseId = :courseId AND e.batchId IS NOT NULL")
+    List<String> findDistinctBatchIdsByClientIdAndCourseId(@Param("clientId") UUID clientId, @Param("courseId") String courseId);
 }
 

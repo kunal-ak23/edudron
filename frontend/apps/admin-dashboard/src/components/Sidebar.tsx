@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { useSimulationFeature } from '@/hooks/useSimulationFeature'
+import { useProjectsFeature } from '@/hooks/useProjectsFeature'
 import { 
   LayoutDashboard, 
   BookOpen, 
@@ -30,7 +31,8 @@ import {
   BarChart3,
   ScrollText,
   Layers,
-  Gamepad2
+  Gamepad2,
+  FolderKanban
 } from 'lucide-react'
 
 interface MenuItem {
@@ -128,6 +130,16 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
+    name: 'Projects',
+    href: '/projects',
+    icon: FolderKanban,
+    requiresTenant: true,
+    children: [
+      { name: 'All Projects', href: '/projects', icon: FolderKanban },
+      { name: 'Problem Statements', href: '/project-questions', icon: FileText },
+    ]
+  },
+  {
     name: 'Enrollments',
     href: '/enrollments',
     icon: Users,
@@ -187,6 +199,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
   const pathname = usePathname()
   const { user } = useAuth()
   const { enabled: simulationEnabled } = useSimulationFeature()
+  const { enabled: projectsEnabled } = useProjectsFeature()
   
   // Filter menu items based on user role and tenant selection
   const filteredMenuItems = menuItems
@@ -272,6 +285,11 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
         return false
       }
 
+      // Hide Projects when feature flag is disabled
+      if (item.href === '/projects' && !projectsEnabled) {
+        return false
+      }
+
       // Show tenant-specific items only if user has a tenant selected
       if (item.requiresTenant) {
         const tenantId = localStorage.getItem('tenant_id') || 
@@ -294,6 +312,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
     if (path.startsWith('/courses')) return 'Courses'
     if (path.startsWith('/exams') || path.startsWith('/question-bank')) return 'Exams'
     if (path.startsWith('/simulations')) return 'Simulations'
+    if (path.startsWith('/projects') || path.startsWith('/project-questions')) return 'Projects'
     if (path.startsWith('/enrollments')) return 'Enrollments'
     if (path.startsWith('/analytics')) return 'Analytics'
     if (path.startsWith('/payments')) return 'Payments'

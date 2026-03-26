@@ -1,0 +1,124 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0025-event-has-submission
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: project_event
+            schemaName: student
+            columns:
+              - column:
+                  name: has_submission
+                  type: boolean
+                  defaultValueBoolean: false
+
+  - changeSet:
+      id: student-0025-project-current-event
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: project
+            schemaName: student
+            columns:
+              - column:
+                  name: current_event_id
+                  type: varchar(26)
+
+  - changeSet:
+      id: student-0025-event-submission
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_event_submission
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: project_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: event_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: group_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: submission_url, type: text }
+              - column: { name: submission_text, type: text }
+              - column: { name: submitted_by, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: submitted_at, type: timestamptz, defaultValueComputed: now(), constraints: { nullable: false } }
+              - column: { name: version, type: int, defaultValueNumeric: 1, constraints: { nullable: false } }
+              - column:
+                  name: status
+                  type: varchar(30)
+                  defaultValue: SUBMITTED
+                  constraints: { nullable: false }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: project_event_submission
+            schemaName: student
+            indexName: idx_event_submission_event_group
+            columns:
+              - column: { name: event_id }
+              - column: { name: group_id }
+        - createIndex:
+            tableName: project_event_submission
+            schemaName: student
+            indexName: idx_event_submission_project
+            columns:
+              - column: { name: project_id }
+        - createIndex:
+            tableName: project_event_submission
+            schemaName: student
+            indexName: idx_event_submission_client
+            columns:
+              - column: { name: client_id }
+
+  - changeSet:
+      id: student-0025-event-feedback
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_event_feedback
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: submission_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: event_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: group_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: comment, type: text, constraints: { nullable: false } }
+              - column: { name: feedback_by, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: feedback_at, type: timestamptz, defaultValueComputed: now(), constraints: { nullable: false } }
+              - column:
+                  name: status
+                  type: varchar(30)
+                  defaultValue: REVIEWED
+                  constraints: { nullable: false }
+        - createIndex:
+            tableName: project_event_feedback
+            schemaName: student
+            indexName: idx_event_feedback_submission
+            columns:
+              - column: { name: submission_id }
+        - createIndex:
+            tableName: project_event_feedback
+            schemaName: student
+            indexName: idx_event_feedback_event_group
+            columns:
+              - column: { name: event_id }
+              - column: { name: group_id }
+
+  - changeSet:
+      id: student-0025-attachment-submission-id
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: project_attachment
+            schemaName: student
+            columns:
+              - column:
+                  name: submission_id
+                  type: varchar(26)
+        - createIndex:
+            tableName: project_attachment
+            schemaName: student
+            indexName: idx_project_attachment_submission_id
+            columns:
+              - column: { name: submission_id }
+              - column: { name: group_id }

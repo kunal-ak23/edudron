@@ -1,0 +1,32 @@
+databaseChangeLog:
+  - changeSet:
+      id: content-0028-project-question-bank
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_question_bank
+            schemaName: content
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: title, type: varchar(500), constraints: { nullable: false } }
+              - column: { name: problem_statement, type: text, constraints: { nullable: false } }
+              - column: { name: key_technologies, type: "text[]" }
+              - column: { name: tags, type: "text[]" }
+              - column: { name: difficulty, type: varchar(20) }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: project_question_bank
+            schemaName: content
+            indexName: idx_project_question_bank_client_id
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: project_question_bank
+            schemaName: content
+            indexName: idx_project_question_bank_course_id
+            columns:
+              - column: { name: course_id }
