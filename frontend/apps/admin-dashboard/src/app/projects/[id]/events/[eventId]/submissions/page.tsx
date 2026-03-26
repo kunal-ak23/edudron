@@ -8,7 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -140,6 +143,14 @@ export default function SubmissionsPage() {
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   const [historyGroupName, setHistoryGroupName] = useState('')
+  // Approve dialog state
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false)
+  const [approveGroupId, setApproveGroupId] = useState('')
+  const [approveGroupName, setApproveGroupName] = useState('')
+  const [approveMembers, setApproveMembers] = useState<Array<{ studentId: string; name?: string; email?: string }>>([])
+  const [approveAttendance, setApproveAttendance] = useState<Record<string, boolean>>({})
+  const [approveGrades, setApproveGrades] = useState<Record<string, number>>({})
+  const [approveSubmitting, setApproveSubmitting] = useState(false)
   const [advancingPhase, setAdvancingPhase] = useState(false)
 
   // ---------- Data loading ----------
@@ -234,6 +245,86 @@ export default function SubmissionsPage() {
       })
     } finally {
       setFeedbackSubmitting(false)
+    }
+  }
+
+  // ---------- Approve with attendance & grades ----------
+
+  const openApproveDialog = async (groupId: string, groupName: string, members: any[]) => {
+    setApproveGroupId(groupId)
+    setApproveGroupName(groupName)
+    setApproveMembers(members || [])
+
+    // Pre-populate attendance and grades from existing data
+    const attendance: Record<string, boolean> = {}
+    const grades: Record<string, number> = {}
+    members?.forEach((m: any) => {
+      attendance[m.studentId] = true // default to present
+      grades[m.studentId] = 0
+    })
+
+    // Load existing attendance & grades
+    try {
+      const [existingAtt, existingGrades] = await Promise.all([
+        projectsApi.getAttendance(projectId, eventId),
+        projectsApi.getGrades(projectId, eventId),
+      ])
+      existingAtt.forEach((a: any) => {
+        if (attendance.hasOwnProperty(a.studentId)) {
+          attendance[a.studentId] = a.present
+        }
+      })
+      existingGrades.forEach((g: any) => {
+        if (grades.hasOwnProperty(g.studentId)) {
+          grades[g.studentId] = g.marks
+        }
+      })
+    } catch { /* ok - no existing data */ }
+
+    setApproveAttendance(attendance)
+    setApproveGrades(grades)
+    setApproveDialogOpen(true)
+  }
+
+  const handleApproveWithGrades = async () => {
+    if (!feedbackComment.trim()) {
+      toast({ title: 'Comment required', variant: 'destructive' })
+      return
+    }
+    setApproveSubmitting(true)
+    try {
+      // 1. Give feedback (approve)
+      await projectsApi.giveEventFeedback(projectId, eventId, approveGroupId, {
+        comment: feedbackComment.trim(),
+        status: 'REVIEWED',
+      })
+
+      // 2. Save attendance
+      const attendanceEntries = Object.entries(approveAttendance).map(([studentId, present]) => ({
+        studentId,
+        present,
+      }))
+      await projectsApi.saveAttendance(projectId, eventId, attendanceEntries)
+
+      // 3. Save grades (if event has marks)
+      if (currentEvent?.hasMarks) {
+        const gradeEntries = Object.entries(approveGrades).map(([studentId, marks]) => ({
+          studentId,
+          marks,
+        }))
+        await projectsApi.saveGrades(projectId, eventId, gradeEntries)
+      }
+
+      toast({ title: 'Approved with attendance & grades saved' })
+      setFeedbackComment('')
+      setApproveDialogOpen(false)
+      setExpandedGroupId(null)
+      setGroupDetail(null)
+      await loadData()
+    } catch (err) {
+      toast({ title: 'Error', description: extractErrorMessage(err), variant: 'destructive' })
+    } finally {
+      setApproveSubmitting(false)
     }
   }
 
@@ -594,18 +685,18 @@ export default function SubmissionsPage() {
                                 <Button
                                   size="sm"
                                   onClick={() =>
-                                    handleFeedback(entry.groupId, 'REVIEWED')
+                                    openApproveDialog(
+                                      entry.groupId,
+                                      entry.groupName || `Group ${entry.groupNumber}`,
+                                      entry.members || []
+                                    )
                                   }
                                   disabled={
                                     feedbackSubmitting ||
                                     !feedbackComment.trim()
                                   }
                                 >
-                                  {feedbackSubmitting ? (
-                                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <CheckCircle2 className="mr-1 h-4 w-4" />
-                                  )}
+                                  <CheckCircle2 className="mr-1 h-4 w-4" />
                                   Approve
                                 </Button>
                                 <Button
@@ -643,6 +734,80 @@ export default function SubmissionsPage() {
           })}
         </div>
       )}
+      {/* Approve with Attendance & Grades Dialog */}
+      <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Approve — {approveGroupName}</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Attendance */}
+            <div>
+              <Label className="text-sm font-medium">Attendance</Label>
+              <div className="mt-2 space-y-2">
+                {approveMembers.map((m) => (
+                  <label key={m.studentId} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={approveAttendance[m.studentId] ?? false}
+                      onCheckedChange={(checked) =>
+                        setApproveAttendance((prev) => ({ ...prev, [m.studentId]: !!checked }))
+                      }
+                    />
+                    <span>{m.name || m.email || m.studentId}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Grades (if event has marks) */}
+            {currentEvent?.hasMarks && (
+              <div>
+                <Label className="text-sm font-medium">
+                  Grades {currentEvent.maxMarks ? `(max ${currentEvent.maxMarks})` : ''}
+                </Label>
+                <div className="mt-2 space-y-2">
+                  {approveMembers.map((m) => (
+                    <div key={m.studentId} className="flex items-center gap-3">
+                      <span className="text-sm flex-1 truncate">{m.name || m.email || m.studentId}</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={currentEvent.maxMarks || undefined}
+                        value={approveGrades[m.studentId] ?? 0}
+                        onChange={(e) =>
+                          setApproveGrades((prev) => ({ ...prev, [m.studentId]: parseInt(e.target.value) || 0 }))
+                        }
+                        className="w-20 h-8 text-sm"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Feedback comment (inherited from the textarea) */}
+            <div className="text-sm text-muted-foreground bg-muted/50 rounded p-2">
+              <span className="font-medium">Feedback:</span> {feedbackComment || '(none)'}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveDialogOpen(false)} disabled={approveSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleApproveWithGrades} disabled={approveSubmitting}>
+              {approveSubmitting ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-1 h-4 w-4" />
+              )}
+              Approve & Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Version History Dialog */}
       <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
