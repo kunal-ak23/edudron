@@ -253,7 +253,7 @@ export default function ProjectDetailPage() {
         const nameMap: Record<string, string> = {}
         for (const sid of sectionIds) {
           try {
-            const res = await enrollmentsApi.apiClient.get<any[]>(`/api/sections/${sid}/students`)
+            const res = await enrollmentsApi.apiClient.get(`/api/sections/${sid}/students`)
             const students = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : [])
             students.forEach((s: any) => {
               if (s.id && (s.name || s.email)) {
