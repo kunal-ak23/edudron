@@ -96,7 +96,7 @@ export default function CreateProjectPage() {
     try {
       const project = await projectsApi.createProject({
         courseId,
-        sectionId: sectionId || undefined,
+        sectionId: sectionId || '',
         title: title.trim(),
         description: description.trim() || undefined,
         maxMarks,
