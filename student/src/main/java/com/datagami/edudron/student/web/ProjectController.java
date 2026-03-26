@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.OffsetDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -157,8 +158,9 @@ public class ProjectController {
         Integer maxMarks = body.get("maxMarks") != null ? ((Number) body.get("maxMarks")).intValue() : null;
         Integer sequence = body.get("sequence") != null ? ((Number) body.get("sequence")).intValue() : null;
         String sectionId = (String) body.get("sectionId");
+        Boolean hasSubmission = (Boolean) body.get("hasSubmission");
 
-        ProjectEventDTO event = projectService.addEvent(id, name, dateTime, zoomLink, hasMarks, maxMarks, sequence, sectionId);
+        ProjectEventDTO event = projectService.addEvent(id, name, dateTime, zoomLink, hasMarks, maxMarks, sequence, sectionId, hasSubmission);
         return ResponseEntity.status(HttpStatus.CREATED).body(event);
     }
 
@@ -221,6 +223,49 @@ public class ProjectController {
             @Valid @RequestBody ProjectBulkGradeRequest request) {
         projectService.saveGrades(id, eventId, request.getEntries());
         return ResponseEntity.ok().build();
+    }
+
+    // ======================== Event Submissions (Admin) ========================
+
+    @GetMapping("/{id}/events/{eventId}/submissions")
+    @Operation(summary = "Get all event submissions", description = "Get submissions for all groups for an event")
+    public ResponseEntity<List<Map<String, Object>>> getEventSubmissions(
+            @PathVariable String id, @PathVariable String eventId) {
+        return ResponseEntity.ok(projectService.getAllEventSubmissions(id, eventId));
+    }
+
+    @GetMapping("/{id}/events/{eventId}/submissions/{groupId}")
+    @Operation(summary = "Get group submission", description = "Get latest submission and history for a group")
+    public ResponseEntity<Map<String, Object>> getGroupSubmission(
+            @PathVariable String id, @PathVariable String eventId, @PathVariable String groupId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("latest", projectService.getLatestEventSubmission(id, eventId, groupId));
+        result.put("history", projectService.getEventSubmissionHistory(id, eventId, groupId));
+        result.put("feedback", projectService.getEventGroupFeedback(eventId, groupId));
+        return ResponseEntity.ok(result);
+    }
+
+    @PostMapping("/{id}/events/{eventId}/submissions/{groupId}/feedback")
+    @Operation(summary = "Give feedback", description = "Give feedback on a group's submission")
+    public ResponseEntity<ProjectEventFeedbackDTO> giveFeedback(
+            @PathVariable String id, @PathVariable String eventId, @PathVariable String groupId,
+            @Valid @RequestBody EventFeedbackRequest request) {
+        // Use the latest submission
+        ProjectEventSubmissionDTO latest = projectService.getLatestEventSubmission(id, eventId, groupId);
+        if (latest == null) {
+            throw new IllegalStateException("No submission found for this group");
+        }
+        ProjectEventFeedbackDTO feedback = projectService.giveFeedback(id, eventId, groupId, latest.getId(), request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(feedback);
+    }
+
+    @PostMapping("/{id}/advance-phase")
+    @Operation(summary = "Advance phase", description = "Advance project to next event phase")
+    public ResponseEntity<ProjectDTO> advancePhase(
+            @PathVariable String id, @RequestBody Map<String, String> body) {
+        String nextEventId = body.get("nextEventId");
+        ProjectDTO project = projectService.advancePhase(id, nextEventId);
+        return ResponseEntity.ok(project);
     }
 
     // ======================== Attachments ========================

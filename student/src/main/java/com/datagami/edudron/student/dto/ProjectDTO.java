@@ -18,6 +18,7 @@ public class ProjectDTO {
     private OffsetDateTime submissionCutoff;
     private Boolean lateSubmissionAllowed;
     private String status;
+    private String currentEventId;
     private String createdBy;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
@@ -37,6 +38,7 @@ public class ProjectDTO {
         dto.setSubmissionCutoff(p.getSubmissionCutoff());
         dto.setLateSubmissionAllowed(p.getLateSubmissionAllowed());
         dto.setStatus(p.getStatus() != null ? p.getStatus().name() : null);
+        dto.setCurrentEventId(p.getCurrentEventId());
         dto.setCreatedBy(p.getCreatedBy());
         dto.setCreatedAt(p.getCreatedAt());
         dto.setUpdatedAt(p.getUpdatedAt());
@@ -73,6 +75,9 @@ public class ProjectDTO {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getCurrentEventId() { return currentEventId; }
+    public void setCurrentEventId(String currentEventId) { this.currentEventId = currentEventId; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }

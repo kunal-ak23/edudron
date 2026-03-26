@@ -1,8 +1,6 @@
 package com.datagami.edudron.student.web;
 
-import com.datagami.edudron.student.dto.ProjectDTO;
-import com.datagami.edudron.student.dto.ProjectGroupDTO;
-import com.datagami.edudron.student.dto.SubmitProjectRequest;
+import com.datagami.edudron.student.dto.*;
 import com.datagami.edudron.student.service.ProjectService;
 import com.datagami.edudron.student.util.UserUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,6 +9,7 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -72,5 +71,46 @@ public class ProjectStudentController {
         String studentId = UserUtil.getCurrentUserId();
         Map<String, Object> result = projectService.getMyAttendance(id, studentId);
         return ResponseEntity.ok(result);
+    }
+
+    // ======================== Event Submissions (Student) ========================
+
+    @PostMapping("/{id}/events/{eventId}/my-submission")
+    @Operation(summary = "Submit to event", description = "Submit to a project event for the current student's group")
+    public ResponseEntity<ProjectEventSubmissionDTO> submitToEvent(
+            @PathVariable String id, @PathVariable String eventId,
+            @RequestBody SubmitEventRequest request) {
+        String studentId = UserUtil.getCurrentUserId();
+        ProjectGroupDTO myGroup = projectService.getMyGroup(id, studentId);
+        ProjectEventSubmissionDTO result = projectService.submitToEvent(id, eventId, myGroup.getId(), studentId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(result);
+    }
+
+    @GetMapping("/{id}/events/{eventId}/my-submission")
+    @Operation(summary = "Get my event submission", description = "Get latest submission for current student's group")
+    public ResponseEntity<ProjectEventSubmissionDTO> getMyEventSubmission(
+            @PathVariable String id, @PathVariable String eventId) {
+        String studentId = UserUtil.getCurrentUserId();
+        ProjectGroupDTO myGroup = projectService.getMyGroup(id, studentId);
+        ProjectEventSubmissionDTO result = projectService.getLatestEventSubmission(id, eventId, myGroup.getId());
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/{id}/events/{eventId}/my-submission/history")
+    @Operation(summary = "Get my submission history", description = "Get submission version history")
+    public ResponseEntity<List<ProjectEventSubmissionDTO>> getMyEventSubmissionHistory(
+            @PathVariable String id, @PathVariable String eventId) {
+        String studentId = UserUtil.getCurrentUserId();
+        ProjectGroupDTO myGroup = projectService.getMyGroup(id, studentId);
+        return ResponseEntity.ok(projectService.getEventSubmissionHistory(id, eventId, myGroup.getId()));
+    }
+
+    @GetMapping("/{id}/events/{eventId}/my-submission/feedback")
+    @Operation(summary = "Get my submission feedback", description = "Get feedback for current student's group submission")
+    public ResponseEntity<List<ProjectEventFeedbackDTO>> getMyEventFeedback(
+            @PathVariable String id, @PathVariable String eventId) {
+        String studentId = UserUtil.getCurrentUserId();
+        ProjectGroupDTO myGroup = projectService.getMyGroup(id, studentId);
+        return ResponseEntity.ok(projectService.getEventGroupFeedback(eventId, myGroup.getId()));
     }
 }

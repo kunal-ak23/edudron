@@ -35,6 +35,9 @@ public class ProjectEvent {
     @Column(name = "sequence")
     private Integer sequence;
 
+    @Column(name = "has_submission")
+    private Boolean hasSubmission = false;
+
     @Column(name = "section_id", length = 26)
     private String sectionId;
 
@@ -75,6 +78,9 @@ public class ProjectEvent {
 
     public Integer getSequence() { return sequence; }
     public void setSequence(Integer sequence) { this.sequence = sequence; }
+
+    public Boolean getHasSubmission() { return hasSubmission; }
+    public void setHasSubmission(Boolean hasSubmission) { this.hasSubmission = hasSubmission; }
 
     public String getSectionId() { return sectionId; }
     public void setSectionId(String sectionId) { this.sectionId = sectionId; }

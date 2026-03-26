@@ -44,6 +44,7 @@ public class BulkProjectSetupRequest {
         private Boolean hasMarks;
         private Integer maxMarks;
         private Integer sequence;
+        private Boolean hasSubmission;
 
         public EventInput() {}
 
@@ -59,6 +60,9 @@ public class BulkProjectSetupRequest {
         public void setMaxMarks(Integer maxMarks) { this.maxMarks = maxMarks; }
         public Integer getSequence() { return sequence; }
         public void setSequence(Integer sequence) { this.sequence = sequence; }
+
+        public Boolean getHasSubmission() { return hasSubmission; }
+        public void setHasSubmission(Boolean hasSubmission) { this.hasSubmission = hasSubmission; }
     }
 
     public BulkProjectSetupRequest() {}

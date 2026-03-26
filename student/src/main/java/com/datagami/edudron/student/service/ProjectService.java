@@ -59,6 +59,12 @@ public class ProjectService {
     private ProjectAttachmentRepository projectAttachmentRepository;
 
     @Autowired
+    private ProjectEventSubmissionRepository eventSubmissionRepository;
+
+    @Autowired
+    private ProjectEventFeedbackRepository eventFeedbackRepository;
+
+    @Autowired
     private EnrollmentRepository enrollmentRepository;
 
     @Autowired
@@ -368,7 +374,8 @@ public class ProjectService {
                             ? OffsetDateTime.parse(ev.getDateTime())
                             : null;
                     addEvent(project.getId(), ev.getName(), dateTime, ev.getZoomLink(),
-                            ev.getHasMarks(), ev.getMaxMarks(), ev.getSequence() != null ? ev.getSequence() : i + 1, sectionId);
+                            ev.getHasMarks(), ev.getMaxMarks(), ev.getSequence() != null ? ev.getSequence() : i + 1, sectionId,
+                            ev.getHasSubmission());
                 }
             }
             log.info("Created per-section events for project {}", project.getId());
@@ -380,7 +387,8 @@ public class ProjectService {
                         ? OffsetDateTime.parse(ev.getDateTime())
                         : null;
                 addEvent(project.getId(), ev.getName(), dateTime, ev.getZoomLink(),
-                        ev.getHasMarks(), ev.getMaxMarks(), ev.getSequence() != null ? ev.getSequence() : i + 1, null);
+                        ev.getHasMarks(), ev.getMaxMarks(), ev.getSequence() != null ? ev.getSequence() : i + 1, null,
+                        ev.getHasSubmission());
             }
             log.info("Created {} global events for project {}", request.getEvents().size(), project.getId());
         }
@@ -800,7 +808,8 @@ public class ProjectService {
     // ======================== Events ========================
 
     public ProjectEventDTO addEvent(String projectId, String name, OffsetDateTime dateTime,
-                                     String zoomLink, Boolean hasMarks, Integer maxMarks, Integer sequence, String sectionId) {
+                                     String zoomLink, Boolean hasMarks, Integer maxMarks, Integer sequence, String sectionId,
+                                     Boolean hasSubmission) {
         UUID clientId = getClientId();
         // Verify project exists
         projectRepository.findByIdAndClientId(projectId, clientId)
@@ -817,6 +826,7 @@ public class ProjectService {
         event.setMaxMarks(maxMarks);
         event.setSequence(sequence);
         event.setSectionId(sectionId);
+        event.setHasSubmission(hasSubmission != null ? hasSubmission : false);
 
         event = projectEventRepository.save(event);
         log.info("Added event '{}' to project {}", name, projectId);
@@ -1129,6 +1139,206 @@ public class ProjectService {
         Map<String, Object> result = new HashMap<>();
         result.put("events", eventResults);
         return result;
+    }
+
+    // ======================== Event Submissions ========================
+
+    public ProjectEventSubmissionDTO submitToEvent(String projectId, String eventId,
+            String groupId, String studentId, SubmitEventRequest request) {
+        UUID clientId = getClientId();
+
+        // Verify project and event
+        Project project = projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+        ProjectEvent event = projectEventRepository.findByIdAndClientId(eventId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
+        if (!event.getProjectId().equals(projectId)) {
+            throw new IllegalArgumentException("Event does not belong to project");
+        }
+        if (!Boolean.TRUE.equals(event.getHasSubmission())) {
+            throw new IllegalStateException("This event does not accept submissions");
+        }
+
+        // Verify student is member of group
+        List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(groupId, clientId);
+        boolean isMember = members.stream().anyMatch(m -> m.getStudentId().equals(studentId));
+        if (!isMember) {
+            throw new IllegalArgumentException("Student is not a member of this group");
+        }
+
+        // Determine version
+        Optional<ProjectEventSubmission> latest = eventSubmissionRepository
+                .findFirstByEventIdAndGroupIdAndClientIdOrderByVersionDesc(eventId, groupId, clientId);
+        int nextVersion = latest.map(s -> s.getVersion() + 1).orElse(1);
+
+        // Create submission
+        ProjectEventSubmission submission = new ProjectEventSubmission();
+        submission.setId(UlidGenerator.nextUlid());
+        submission.setClientId(clientId);
+        submission.setProjectId(projectId);
+        submission.setEventId(eventId);
+        submission.setGroupId(groupId);
+        submission.setSubmissionUrl(request.getSubmissionUrl());
+        submission.setSubmissionText(request.getSubmissionText());
+        submission.setSubmittedBy(studentId);
+        submission.setVersion(nextVersion);
+        submission.setStatus(ProjectEventSubmission.SubmissionStatus.SUBMITTED);
+        submission = eventSubmissionRepository.save(submission);
+
+        // Save attachments if provided
+        if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
+            saveAttachments(projectId, groupId, ProjectAttachment.AttachmentContext.SUBMISSION,
+                    request.getAttachments(), studentId);
+        }
+
+        log.info("Student {} submitted v{} to event {} for group {} in project {}",
+                studentId, nextVersion, eventId, groupId, projectId);
+
+        ProjectEventSubmissionDTO dto = ProjectEventSubmissionDTO.fromEntity(submission);
+        dto.setAttachments(getSubmissionAttachments(groupId, clientId));
+        return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public ProjectEventSubmissionDTO getLatestEventSubmission(String projectId, String eventId, String groupId) {
+        UUID clientId = getClientId();
+        Optional<ProjectEventSubmission> latest = eventSubmissionRepository
+                .findFirstByEventIdAndGroupIdAndClientIdOrderByVersionDesc(eventId, groupId, clientId);
+        if (latest.isEmpty()) return null;
+
+        ProjectEventSubmissionDTO dto = ProjectEventSubmissionDTO.fromEntity(latest.get());
+        dto.setAttachments(getSubmissionAttachments(groupId, clientId));
+        return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectEventSubmissionDTO> getEventSubmissionHistory(String projectId, String eventId, String groupId) {
+        UUID clientId = getClientId();
+        return eventSubmissionRepository.findByEventIdAndGroupIdAndClientIdOrderByVersionDesc(eventId, groupId, clientId)
+                .stream()
+                .map(ProjectEventSubmissionDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAllEventSubmissions(String projectId, String eventId) {
+        UUID clientId = getClientId();
+        List<ProjectGroup> groups = projectGroupRepository.findByProjectIdAndClientId(projectId, clientId);
+
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (ProjectGroup group : groups) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("groupId", group.getId());
+            entry.put("groupName", group.getGroupName() != null ? group.getGroupName() : "Group " + group.getGroupNumber());
+            entry.put("groupNumber", group.getGroupNumber());
+
+            Optional<ProjectEventSubmission> latest = eventSubmissionRepository
+                    .findFirstByEventIdAndGroupIdAndClientIdOrderByVersionDesc(eventId, group.getId(), clientId);
+
+            if (latest.isPresent()) {
+                ProjectEventSubmission sub = latest.get();
+                entry.put("submission", ProjectEventSubmissionDTO.fromEntity(sub));
+                // Get latest feedback
+                List<ProjectEventFeedback> feedbacks = eventFeedbackRepository
+                        .findByEventIdAndGroupIdAndClientIdOrderByFeedbackAtDesc(eventId, group.getId(), clientId);
+                if (!feedbacks.isEmpty()) {
+                    entry.put("latestFeedback", ProjectEventFeedbackDTO.fromEntity(feedbacks.get(0)));
+                }
+            } else {
+                entry.put("submission", null);
+            }
+
+            // Get members
+            List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(group.getId(), clientId);
+            entry.put("members", resolveMemberInfo(members));
+
+            result.add(entry);
+        }
+        return result;
+    }
+
+    // ======================== Event Feedback ========================
+
+    public ProjectEventFeedbackDTO giveFeedback(String projectId, String eventId,
+            String groupId, String submissionId, EventFeedbackRequest request) {
+        UUID clientId = getClientId();
+
+        // Verify submission exists
+        ProjectEventSubmission submission = eventSubmissionRepository.findByIdAndClientId(submissionId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Submission not found: " + submissionId));
+
+        if (!submission.getEventId().equals(eventId) || !submission.getGroupId().equals(groupId)) {
+            throw new IllegalArgumentException("Submission does not match event/group");
+        }
+
+        String feedbackBy = UserUtil.getCurrentUserEmail();
+
+        // Create feedback
+        ProjectEventFeedback feedback = new ProjectEventFeedback();
+        feedback.setId(UlidGenerator.nextUlid());
+        feedback.setClientId(clientId);
+        feedback.setSubmissionId(submissionId);
+        feedback.setEventId(eventId);
+        feedback.setGroupId(groupId);
+        feedback.setComment(request.getComment());
+        feedback.setFeedbackBy(feedbackBy);
+        feedback.setStatus(ProjectEventFeedback.FeedbackStatus.valueOf(request.getStatus()));
+        feedback = eventFeedbackRepository.save(feedback);
+
+        // Update submission status based on feedback
+        ProjectEventSubmission.SubmissionStatus newStatus = "NEEDS_REVISION".equals(request.getStatus())
+                ? ProjectEventSubmission.SubmissionStatus.NEEDS_REVISION
+                : ProjectEventSubmission.SubmissionStatus.REVIEWED;
+        submission.setStatus(newStatus);
+        eventSubmissionRepository.save(submission);
+
+        log.info("Faculty {} gave {} feedback on submission {} for group {} event {}",
+                feedbackBy, request.getStatus(), submissionId, groupId, eventId);
+
+        return ProjectEventFeedbackDTO.fromEntity(feedback);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectEventFeedbackDTO> getSubmissionFeedback(String submissionId) {
+        UUID clientId = getClientId();
+        return eventFeedbackRepository.findBySubmissionIdAndClientId(submissionId, clientId)
+                .stream()
+                .map(ProjectEventFeedbackDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectEventFeedbackDTO> getEventGroupFeedback(String eventId, String groupId) {
+        UUID clientId = getClientId();
+        return eventFeedbackRepository.findByEventIdAndGroupIdAndClientIdOrderByFeedbackAtDesc(eventId, groupId, clientId)
+                .stream()
+                .map(ProjectEventFeedbackDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    // ======================== Phase Tracking ========================
+
+    public ProjectDTO advancePhase(String projectId, String nextEventId) {
+        UUID clientId = getClientId();
+        Project project = projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+        // Verify event belongs to project
+        if (nextEventId != null) {
+            ProjectEvent event = projectEventRepository.findByIdAndClientId(nextEventId, clientId)
+                    .orElseThrow(() -> new IllegalArgumentException("Event not found: " + nextEventId));
+            if (!event.getProjectId().equals(projectId)) {
+                throw new IllegalArgumentException("Event does not belong to project");
+            }
+        }
+
+        project.setCurrentEventId(nextEventId);
+        project = projectRepository.save(project);
+        log.info("Advanced project {} to event phase {}", projectId, nextEventId);
+
+        ProjectDTO dto = ProjectDTO.fromEntity(project);
+        dto.setStatementAttachments(getStatementAttachments(projectId, clientId));
+        return dto;
     }
 
     // ======================== Helpers ========================

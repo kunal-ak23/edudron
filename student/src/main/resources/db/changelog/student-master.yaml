@@ -49,3 +49,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0023-project-submission-history.yaml
   - include:
       file: db/changelog/db.changelog-0024-project-attachments.yaml
+  - include:
+      file: db/changelog/db.changelog-0025-event-submissions.yaml

@@ -39,6 +39,9 @@ public class Project {
     @Column(name = "status", nullable = false, length = 20)
     private ProjectStatus status = ProjectStatus.DRAFT;
 
+    @Column(name = "current_event_id", length = 26)
+    private String currentEventId;
+
     @Column(name = "created_by")
     private String createdBy;
 
@@ -106,6 +109,9 @@ public class Project {
 
     public ProjectStatus getStatus() { return status; }
     public void setStatus(ProjectStatus status) { this.status = status; }
+
+    public String getCurrentEventId() { return currentEventId; }
+    public void setCurrentEventId(String currentEventId) { this.currentEventId = currentEventId; }
 
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
