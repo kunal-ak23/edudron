@@ -54,7 +54,7 @@ import {
   FileDown,
   Send,
 } from 'lucide-react'
-import { projectsApi, sectionsApi, coursesApi, projectQuestionsApi, enrollmentsApi, mediaApi } from '@/lib/api'
+import { projectsApi, sectionsApi, coursesApi, projectQuestionsApi, enrollmentsApi, mediaApi, apiClient } from '@/lib/api'
 import type {
   ProjectDTO,
   ProjectGroupDTO,
@@ -253,7 +253,7 @@ export default function ProjectDetailPage() {
         const nameMap: Record<string, string> = {}
         for (const sid of sectionIds) {
           try {
-            const res = await enrollmentsApi.apiClient.get(`/api/sections/${sid}/students`)
+            const res = await apiClient.get(`/api/sections/${sid}/students`)
             const students = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : [])
             students.forEach((s: any) => {
               if (s.id && (s.name || s.email)) {
