@@ -34,6 +34,8 @@ import type {
   ProjectEventDTO,
   ProjectQuestionDTO,
   AttachmentInfo,
+  ProjectEventSubmissionDTO,
+  ProjectEventFeedbackDTO,
 } from '@kunal-ak23/edudron-shared-utils'
 
 export const dynamic = 'force-dynamic'
@@ -69,6 +71,12 @@ export default function ProjectDetailPage() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [uploadingFiles, setUploadingFiles] = useState(false)
   const [pendingAttachments, setPendingAttachments] = useState<AttachmentInfo[]>([])
+  const [eventSubmissions, setEventSubmissions] = useState<Record<string, ProjectEventSubmissionDTO | null>>({})
+  const [eventFeedback, setEventFeedback] = useState<Record<string, ProjectEventFeedbackDTO[]>>({})
+  const [expandedEvent, setExpandedEvent] = useState<string | null>(null)
+  const [eventSubmissionUrl, setEventSubmissionUrl] = useState('')
+  const [eventSubmissionText, setEventSubmissionText] = useState('')
+  const [submittingEvent, setSubmittingEvent] = useState(false)
 
   useEffect(() => {
     if (!enabled || !projectId) return
@@ -90,6 +98,19 @@ export default function ProjectDetailPage() {
       setProject(projectData)
       setGroup(groupData)
       setEvents(Array.isArray(eventsData) ? eventsData : [])
+
+      // Load submissions for events with hasSubmission
+      const evtsData = Array.isArray(eventsData) ? eventsData : []
+      for (const evt of evtsData) {
+        if (evt.hasSubmission) {
+          try {
+            const sub = await projectsApi.getMyEventSubmission(projectId, evt.id)
+            setEventSubmissions(prev => ({ ...prev, [evt.id]: sub }))
+            const fb = await projectsApi.getMyEventFeedback(projectId, evt.id)
+            setEventFeedback(prev => ({ ...prev, [evt.id]: fb }))
+          } catch { /* ok */ }
+        }
+      }
 
       // attendance may be an array of records
       if (Array.isArray(attendanceData)) {
@@ -174,6 +195,30 @@ export default function ProjectDetailPage() {
       setSubmitError(err?.response?.data?.error || 'Failed to submit project')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleEventSubmit(eventId: string) {
+    if (!eventSubmissionUrl.trim() && !eventSubmissionText.trim()) return
+    setSubmittingEvent(true)
+    try {
+      const result = await projectsApi.submitToEvent(projectId, eventId, {
+        submissionUrl: eventSubmissionUrl.trim() || undefined,
+        submissionText: eventSubmissionText.trim() || undefined,
+        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
+      })
+      setEventSubmissions(prev => ({ ...prev, [eventId]: result }))
+      setEventSubmissionUrl('')
+      setEventSubmissionText('')
+      setPendingAttachments([])
+      setExpandedEvent(null)
+      // Refresh feedback
+      const fb = await projectsApi.getMyEventFeedback(projectId, eventId)
+      setEventFeedback(prev => ({ ...prev, [eventId]: fb }))
+    } catch (err: any) {
+      console.error('Submit failed', err)
+    } finally {
+      setSubmittingEvent(false)
     }
   }
 
@@ -424,58 +469,150 @@ export default function ProjectDetailPage() {
                       return (
                         <div
                           key={event.id || idx}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                          className="p-3 bg-gray-50 rounded-lg"
                         >
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-gray-900">
-                              {event.name || `Event ${idx + 1}`}
-                            </p>
-                            {event.dateTime && (
-                              <p className="text-sm text-gray-500">
-                                {formatDateTime(event.dateTime)}
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-gray-900">
+                                {event.name || `Event ${idx + 1}`}
                               </p>
-                            )}
-                            {event.zoomLink && (
-                              <a
-                                href={event.zoomLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-1"
-                              >
-                                <Video className="h-3.5 w-3.5" />
-                                Join Meeting
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            )}
+                              {event.dateTime && (
+                                <p className="text-sm text-gray-500">
+                                  {formatDateTime(event.dateTime)}
+                                </p>
+                              )}
+                              {event.zoomLink && (
+                                <a
+                                  href={event.zoomLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-1"
+                                >
+                                  <Video className="h-3.5 w-3.5" />
+                                  Join Meeting
+                                  <ExternalLink className="h-3 w-3" />
+                                </a>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              {record ? (
+                                <>
+                                  {record.present === true ? (
+                                    <Badge className="bg-green-100 text-green-700 border-green-300">
+                                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                      Present
+                                    </Badge>
+                                  ) : record.present === false ? (
+                                    <Badge className="bg-red-100 text-red-700 border-red-300">
+                                      <XCircle className="h-3.5 w-3.5 mr-1" />
+                                      Absent
+                                    </Badge>
+                                  ) : null}
+                                  {record.hasMarks && record.marks != null ? (
+                                    <span className="text-sm font-medium text-gray-700">
+                                      {record.marks} / {record.maxMarks ?? '?'}
+                                    </span>
+                                  ) : record.hasMarks ? (
+                                    <span className="text-sm text-gray-400">&mdash;</span>
+                                  ) : null}
+                                </>
+                              ) : event.hasMarks ? (
+                                <span className="text-xs text-gray-400">
+                                  {event.maxMarks} marks
+                                </span>
+                              ) : null}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            {record ? (
-                              <>
-                                {record.present === true ? (
-                                  <Badge className="bg-green-100 text-green-700 border-green-300">
-                                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                                    Present
+                          {event.hasSubmission && (() => {
+                          const submission = eventSubmissions[event.id]
+                          const feedback = eventFeedback[event.id] || []
+                          const latestFeedback = feedback[0]
+                          const isExpanded = expandedEvent === event.id
+
+                          return (
+                            <div className="mt-2 border-t pt-2 space-y-2">
+                              {/* Status */}
+                              <div className="flex items-center gap-2">
+                                {submission ? (
+                                  <Badge className={
+                                    submission.status === 'APPROVED' || submission.status === 'REVIEWED'
+                                      ? 'bg-green-100 text-green-700 border-green-300'
+                                      : submission.status === 'NEEDS_REVISION'
+                                      ? 'bg-amber-100 text-amber-700 border-amber-300'
+                                      : 'bg-blue-100 text-blue-700 border-blue-300'
+                                  }>
+                                    {submission.status} (v{submission.version})
                                   </Badge>
-                                ) : record.present === false ? (
-                                  <Badge className="bg-red-100 text-red-700 border-red-300">
-                                    <XCircle className="h-3.5 w-3.5 mr-1" />
-                                    Absent
-                                  </Badge>
-                                ) : null}
-                                {record.hasMarks && record.marks != null ? (
-                                  <span className="text-sm font-medium text-gray-700">
-                                    {record.marks} / {record.maxMarks ?? '?'}
-                                  </span>
-                                ) : record.hasMarks ? (
-                                  <span className="text-sm text-gray-400">&mdash;</span>
-                                ) : null}
-                              </>
-                            ) : event.hasMarks ? (
-                              <span className="text-xs text-gray-400">
-                                {event.maxMarks} marks
-                              </span>
-                            ) : null}
-                          </div>
+                                ) : (
+                                  <Badge variant="outline" className="text-gray-400">Not submitted</Badge>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedEvent(isExpanded ? null : event.id)}
+                                  className="text-xs text-blue-600 hover:underline"
+                                >
+                                  {isExpanded ? 'Hide' : submission ? 'View / Resubmit' : 'Submit'}
+                                </button>
+                              </div>
+
+                              {/* Latest feedback */}
+                              {latestFeedback && (
+                                <div className={`text-sm p-2 rounded ${
+                                  latestFeedback.status === 'NEEDS_REVISION' ? 'bg-amber-50 text-amber-800' : 'bg-green-50 text-green-800'
+                                }`}>
+                                  <p className="font-medium text-xs">{latestFeedback.status === 'NEEDS_REVISION' ? 'Revision needed' : 'Reviewed'}</p>
+                                  <p>{latestFeedback.comment}</p>
+                                  <p className="text-xs mt-1 opacity-60">— {latestFeedback.feedbackBy}</p>
+                                </div>
+                              )}
+
+                              {/* Expanded: submission details + form */}
+                              {isExpanded && (
+                                <div className="space-y-3 pt-1">
+                                  {submission && (
+                                    <div className="text-sm space-y-1">
+                                      {submission.submissionUrl && (
+                                        <p>
+                                          <span className="text-gray-500">URL:</span>{' '}
+                                          <a href={submission.submissionUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                            {submission.submissionUrl}
+                                          </a>
+                                        </p>
+                                      )}
+                                      {submission.submissionText && (
+                                        <p><span className="text-gray-500">Notes:</span> {submission.submissionText}</p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {/* Submit form */}
+                                  <div className="space-y-2">
+                                    <Input
+                                      placeholder="Submission URL (e.g., GitHub link, Google Doc)"
+                                      value={eventSubmissionUrl}
+                                      onChange={(e) => setEventSubmissionUrl(e.target.value)}
+                                      className="text-sm"
+                                    />
+                                    <Input
+                                      placeholder="Notes (optional)"
+                                      value={eventSubmissionText}
+                                      onChange={(e) => setEventSubmissionText(e.target.value)}
+                                      className="text-sm"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleEventSubmit(event.id)}
+                                      disabled={submittingEvent || (!eventSubmissionUrl.trim() && !eventSubmissionText.trim())}
+                                    >
+                                      {submittingEvent ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />}
+                                      {submission ? `Submit v${submission.version + 1}` : 'Submit'}
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                         </div>
                       )
                     })}
