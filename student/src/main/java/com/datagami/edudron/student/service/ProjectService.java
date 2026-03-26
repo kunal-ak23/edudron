@@ -568,6 +568,51 @@ public class ProjectService {
         return ProjectDTO.fromEntity(project);
     }
 
+    public void deleteProject(String id) {
+        UUID clientId = getClientId();
+        Project project = projectRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + id));
+
+        // Delete in reverse dependency order
+        // 1. Event feedback and submissions
+        List<ProjectEvent> events = projectEventRepository.findByProjectIdAndClientIdOrderBySequenceAsc(id, clientId);
+        for (ProjectEvent event : events) {
+            List<ProjectEventSubmission> submissions = eventSubmissionRepository.findByEventIdAndClientId(event.getId(), clientId);
+            for (ProjectEventSubmission sub : submissions) {
+                List<ProjectEventFeedback> subFeedbacks = eventFeedbackRepository.findBySubmissionIdAndClientId(sub.getId(), clientId);
+                eventFeedbackRepository.deleteAll(subFeedbacks);
+            }
+            eventSubmissionRepository.deleteAll(submissions);
+
+            // Delete attendance and grades
+            List<ProjectEventAttendance> attendances = projectEventAttendanceRepository.findByEventIdAndClientId(event.getId(), clientId);
+            projectEventAttendanceRepository.deleteAll(attendances);
+            List<ProjectEventGrade> grades = projectEventGradeRepository.findByEventIdAndClientId(event.getId(), clientId);
+            projectEventGradeRepository.deleteAll(grades);
+        }
+        // Delete events
+        projectEventRepository.deleteAll(events);
+
+        // 2. Delete attachments
+        List<ProjectAttachment> attachments = projectAttachmentRepository.findByProjectIdAndClientId(id, clientId);
+        projectAttachmentRepository.deleteAll(attachments);
+
+        // 3. Delete submission history
+        List<ProjectSubmissionHistory> history = submissionHistoryRepository.findByProjectIdAndClientId(id, clientId);
+        submissionHistoryRepository.deleteAll(history);
+
+        // 4. Delete group members and groups
+        List<ProjectGroup> groups = projectGroupRepository.findByProjectIdAndClientId(id, clientId);
+        for (ProjectGroup group : groups) {
+            projectGroupMemberRepository.deleteByGroupId(group.getId());
+        }
+        projectGroupRepository.deleteAll(groups);
+
+        // 5. Delete the project
+        projectRepository.delete(project);
+        log.info("Deleted project {} and all related data", id);
+    }
+
     // ======================== Group Generation ========================
 
     public List<ProjectGroupDTO> generateGroups(String projectId, int groupSize) {
@@ -1015,6 +1060,10 @@ public class ProjectService {
         Project project = projectRepository.findByIdAndClientId(projectId, clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
 
+        if (project.getStatus() != Project.ProjectStatus.ACTIVE) {
+            throw new IllegalStateException("Project is not active. Submissions are only allowed for active projects.");
+        }
+
         if (project.getSubmissionCutoff() != null &&
                 OffsetDateTime.now().isAfter(project.getSubmissionCutoff()) &&
                 !Boolean.TRUE.equals(project.getLateSubmissionAllowed())) {
@@ -1157,6 +1206,9 @@ public class ProjectService {
         }
         if (!Boolean.TRUE.equals(event.getHasSubmission())) {
             throw new IllegalStateException("This event does not accept submissions");
+        }
+        if (project.getStatus() != Project.ProjectStatus.ACTIVE) {
+            throw new IllegalStateException("Project is not active. Submissions are only allowed for active projects.");
         }
 
         // Verify student is member of group

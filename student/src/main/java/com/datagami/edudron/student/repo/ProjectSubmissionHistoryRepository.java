@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface ProjectSubmissionHistoryRepository extends JpaRepository<ProjectSubmissionHistory, String> {
 
     List<ProjectSubmissionHistory> findByGroupIdAndClientIdOrderBySubmittedAtDesc(String groupId, UUID clientId);
+
+    List<ProjectSubmissionHistory> findByProjectIdAndClientId(String projectId, UUID clientId);
 }

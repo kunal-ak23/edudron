@@ -91,6 +91,13 @@ public class ProjectController {
         return ResponseEntity.ok(project);
     }
 
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete project", description = "Delete project and all related data")
+    public ResponseEntity<Void> deleteProject(@PathVariable String id) {
+        projectService.deleteProject(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/{id}/activate")
     @Operation(summary = "Activate project")
     public ResponseEntity<ProjectDTO> activateProject(@PathVariable String id) {
@@ -129,6 +136,17 @@ public class ProjectController {
             @RequestBody ProjectGroupDTO updateData) {
         ProjectGroupDTO group = projectService.updateGroup(id, groupId, updateData);
         return ResponseEntity.ok(group);
+    }
+
+    @PostMapping("/{id}/groups/{groupId}/submit")
+    @Operation(summary = "Submit project for group", description = "Admin submits project on behalf of a group")
+    public ResponseEntity<ProjectGroupDTO> submitProjectForGroup(
+            @PathVariable String id,
+            @PathVariable String groupId,
+            @Valid @RequestBody SubmitProjectRequest request) {
+        String submittedBy = UserUtil.getCurrentUserId();
+        ProjectGroupDTO result = projectService.submitProject(id, groupId, submittedBy, request.getSubmissionUrl(), request.getAttachments());
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/{id}/assign-statements")
