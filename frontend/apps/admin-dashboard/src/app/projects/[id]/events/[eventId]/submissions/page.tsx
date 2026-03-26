@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -19,6 +20,7 @@ import {
   FileDown,
   Loader2,
   ChevronRight,
+  History,
 } from 'lucide-react'
 import { projectsApi } from '@/lib/api'
 import type {
@@ -136,6 +138,8 @@ export default function SubmissionsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [feedbackComment, setFeedbackComment] = useState('')
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+  const [historyGroupName, setHistoryGroupName] = useState('')
   const [advancingPhase, setAdvancingPhase] = useState(false)
 
   // ---------- Data loading ----------
@@ -405,7 +409,7 @@ export default function SubmissionsPage() {
                         {sub && (
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                             <span>
-                              Submitted by {sub.submittedBy} on{' '}
+                              Submitted by {entry.members?.find((m: any) => m.studentId === sub.submittedBy)?.name || entry.members?.find((m: any) => m.studentId === sub.submittedBy)?.email || sub.submittedBy} on{' '}
                               {formatDate(sub.submittedAt)}
                             </span>
                             <span>Version {sub.version}</span>
@@ -524,14 +528,17 @@ export default function SubmissionsPage() {
                                   )}
                                 {groupDetail?.history &&
                                   groupDetail.history.length > 1 && (
-                                    <p className="text-xs text-muted-foreground">
-                                      {groupDetail.history.length} previous
-                                      version
-                                      {groupDetail.history.length > 1
-                                        ? 's'
-                                        : ''}{' '}
-                                      available
-                                    </p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setHistoryGroupName(entry.groupName || `Group ${entry.groupNumber}`)
+                                        setHistoryDialogOpen(true)
+                                      }}
+                                      className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1"
+                                    >
+                                      <History className="h-3 w-3" />
+                                      View {groupDetail.history.length - 1} previous version{groupDetail.history.length > 2 ? 's' : ''}
+                                    </button>
                                   )}
                               </div>
                             </div>
@@ -636,6 +643,56 @@ export default function SubmissionsPage() {
           })}
         </div>
       )}
+      {/* Version History Dialog */}
+      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Submission History — {historyGroupName}</DialogTitle>
+          </DialogHeader>
+          {groupDetail?.history && groupDetail.history.length > 0 ? (
+            <div className="space-y-3">
+              {groupDetail.history.map((h: any, idx: number) => (
+                <div key={h.id || idx} className={`rounded-md border p-3 space-y-2 ${idx === 0 ? 'border-blue-200 bg-blue-50/30' : ''}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge variant={idx === 0 ? 'default' : 'secondary'} className="text-xs">
+                        v{h.version}
+                      </Badge>
+                      {idx === 0 && <span className="text-xs text-blue-600 font-medium">Latest</span>}
+                      {statusBadge(h.status)}
+                    </div>
+                    <span className="text-xs text-muted-foreground">{formatDate(h.submittedAt)}</span>
+                  </div>
+                  {h.submissionUrl && (
+                    <p className="text-sm">
+                      <span className="text-muted-foreground">URL:</span>{' '}
+                      <a href={h.submissionUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">
+                        {h.submissionUrl} <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </p>
+                  )}
+                  {h.submissionText && (
+                    <p className="text-sm"><span className="text-muted-foreground">Notes:</span> {h.submissionText}</p>
+                  )}
+                  {h.attachments && h.attachments.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Files:</p>
+                      {h.attachments.map((att: any) => (
+                        <a key={att.id} href={att.fileUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline">
+                          <FileDown className="h-3 w-3" /> {att.fileName}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground py-4 text-center">No submission history</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
