@@ -78,6 +78,7 @@ export default function BulkCreateProjectPage() {
     zoomLink: string
     hasMarks: boolean
     maxMarks: number
+    hasSubmission: boolean
   }
   const [eventsBySectionId, setEventsBySectionId] = useState<Record<string, EventEntry[]>>({})
   const [activeEventTab, setActiveEventTab] = useState<string>('_global')
@@ -87,7 +88,7 @@ export default function BulkCreateProjectPage() {
   const addEventToTab = (tabId: string) => {
     setEventsBySectionId((prev) => ({
       ...prev,
-      [tabId]: [...(prev[tabId] || []), { name: '', dateTime: '', zoomLink: '', hasMarks: false, maxMarks: 10 }],
+      [tabId]: [...(prev[tabId] || []), { name: '', dateTime: '', zoomLink: '', hasMarks: false, maxMarks: 10, hasSubmission: false }],
     }))
   }
 
@@ -446,6 +447,7 @@ export default function BulkCreateProjectPage() {
                     zoomLink: e.zoomLink.trim() || undefined,
                     hasMarks: e.hasMarks,
                     maxMarks: e.hasMarks ? e.maxMarks : undefined,
+                    hasSubmission: e.hasSubmission,
                     sequence: idx + 1,
                   })),
                 ])
@@ -1174,6 +1176,13 @@ export default function BulkCreateProjectPage() {
                               />
                               <Label className="text-xs">Has Marks</Label>
                             </div>
+                            <div className="flex items-center space-x-2">
+                              <Switch
+                                checked={event.hasSubmission}
+                                onCheckedChange={(val) => updateEventInTab(currentTabId, idx, 'hasSubmission', val)}
+                              />
+                              <Label className="text-xs">Accepts Submission</Label>
+                            </div>
                             {event.hasMarks && (
                               <div className="flex items-center gap-2">
                                 <Label className="text-xs">Max Marks:</Label>
@@ -1281,6 +1290,7 @@ export default function BulkCreateProjectPage() {
                                   <span className="text-muted-foreground text-xs">
                                     {ev.dateTime ? new Date(ev.dateTime).toLocaleString() : 'No date'}
                                     {ev.hasMarks && ` · ${ev.maxMarks} marks`}
+                                    {ev.hasSubmission && ` · Submission`}
                                   </span>
                                 </div>
                               ))}

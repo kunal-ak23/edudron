@@ -52,6 +52,7 @@ import {
   FileUp,
   X,
   FileDown,
+  Send,
 } from 'lucide-react'
 import { projectsApi, sectionsApi, coursesApi, projectQuestionsApi, enrollmentsApi, mediaApi } from '@/lib/api'
 import type {
@@ -106,6 +107,7 @@ export default function ProjectDetailPage() {
   const [eventZoomLink, setEventZoomLink] = useState('')
   const [eventHasMarks, setEventHasMarks] = useState(false)
   const [eventMaxMarks, setEventMaxMarks] = useState(10)
+  const [eventHasSubmission, setEventHasSubmission] = useState(false)
   const [savingEvent, setSavingEvent] = useState(false)
 
   // (Attendance and grades are now dedicated pages)
@@ -358,6 +360,7 @@ export default function ProjectDetailPage() {
       setEventZoomLink(event.zoomLink || '')
       setEventHasMarks(event.hasMarks)
       setEventMaxMarks(event.maxMarks || 10)
+      setEventHasSubmission(event.hasSubmission || false)
     } else {
       setEditingEvent(null)
       setEventName('')
@@ -365,6 +368,7 @@ export default function ProjectDetailPage() {
       setEventZoomLink('')
       setEventHasMarks(false)
       setEventMaxMarks(10)
+      setEventHasSubmission(false)
     }
     setEventDialogOpen(true)
   }
@@ -379,6 +383,7 @@ export default function ProjectDetailPage() {
         zoomLink: eventZoomLink.trim() || undefined,
         hasMarks: eventHasMarks,
         maxMarks: eventHasMarks ? eventMaxMarks : undefined,
+        hasSubmission: eventHasSubmission,
       }
 
       if (editingEvent) {
@@ -852,6 +857,7 @@ export default function ProjectDetailPage() {
                       <TableHead>Date & Time</TableHead>
                       <TableHead>Zoom Link</TableHead>
                       <TableHead>Marks</TableHead>
+                      <TableHead>Submission</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -881,8 +887,28 @@ export default function ProjectDetailPage() {
                             '-'
                           )}
                         </TableCell>
+                        <TableCell>
+                          {event.hasSubmission ? (
+                            <Badge variant="secondary" className="text-xs">Accepts submission</Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">-</span>
+                          )}
+                          {project?.currentEventId === event.id && (
+                            <Badge className="ml-1.5 text-[10px] bg-blue-100 text-blue-700 border-blue-300">Active Phase</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
+                            {event.hasSubmission && groups.length > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => router.push(`/projects/${projectId}/events/${event.id}/submissions`)}
+                                title="Submissions"
+                              >
+                                <Send className="h-4 w-4" />
+                              </Button>
+                            )}
                             {groups.length > 0 && (
                               <Button
                                 variant="ghost"
@@ -1017,6 +1043,10 @@ export default function ProjectDetailPage() {
                 />
               </div>
             )}
+            <div className="flex items-center space-x-3">
+              <Switch checked={eventHasSubmission} onCheckedChange={setEventHasSubmission} />
+              <Label>Accepts Submission</Label>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEventDialogOpen(false)}>
