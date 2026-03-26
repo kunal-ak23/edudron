@@ -202,8 +202,9 @@ public class ProjectController {
         Boolean hasMarks = (Boolean) body.get("hasMarks");
         Integer maxMarks = body.get("maxMarks") != null ? ((Number) body.get("maxMarks")).intValue() : null;
         Integer sequence = body.get("sequence") != null ? ((Number) body.get("sequence")).intValue() : null;
+        Boolean hasSubmission = (Boolean) body.get("hasSubmission");
 
-        ProjectEventDTO event = projectService.updateEvent(id, eventId, name, dateTime, zoomLink, hasMarks, maxMarks, sequence);
+        ProjectEventDTO event = projectService.updateEvent(id, eventId, name, dateTime, zoomLink, hasMarks, maxMarks, sequence, hasSubmission);
         return ResponseEntity.ok(event);
     }
 

@@ -883,7 +883,8 @@ public class ProjectService {
 
     public ProjectEventDTO updateEvent(String projectId, String eventId, String name,
                                         OffsetDateTime dateTime, String zoomLink,
-                                        Boolean hasMarks, Integer maxMarks, Integer sequence) {
+                                        Boolean hasMarks, Integer maxMarks, Integer sequence,
+                                        Boolean hasSubmission) {
         UUID clientId = getClientId();
         ProjectEvent event = projectEventRepository.findByIdAndClientId(eventId, clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + eventId));
@@ -898,6 +899,7 @@ public class ProjectService {
         if (hasMarks != null) event.setHasMarks(hasMarks);
         if (maxMarks != null) event.setMaxMarks(maxMarks);
         if (sequence != null) event.setSequence(sequence);
+        if (hasSubmission != null) event.setHasSubmission(hasSubmission);
 
         event = projectEventRepository.save(event);
         log.info("Updated event {} for project {}", eventId, projectId);
