@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@kunal-ak23/edudron-ui-components'
 import { StudentLayout } from '@/components/StudentLayout'
-import { projectsApi } from '@/lib/api'
+import { projectsApi, mediaApi } from '@/lib/api'
 import { useProjectsFeature } from '@/hooks/useProjectsFeature'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,12 +23,17 @@ import {
   Send,
   Clock,
   AlertTriangle,
+  FileDown,
+  FileUp,
+  Paperclip,
+  X,
 } from 'lucide-react'
 import type {
   ProjectDTO,
   ProjectGroupDTO,
   ProjectEventDTO,
   ProjectQuestionDTO,
+  AttachmentInfo,
 } from '@kunal-ak23/edudron-shared-utils'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +67,8 @@ export default function ProjectDetailPage() {
   const [editing, setEditing] = useState(false)
   const [submissionHistory, setSubmissionHistory] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
+  const [uploadingFiles, setUploadingFiles] = useState(false)
+  const [pendingAttachments, setPendingAttachments] = useState<AttachmentInfo[]>([])
 
   useEffect(() => {
     if (!enabled || !projectId) return
@@ -73,14 +80,16 @@ export default function ProjectDetailPage() {
       setLoading(true)
       setError(null)
 
-      const [projectData, groupData, attendanceData] = await Promise.all([
+      const [projectData, groupData, attendanceData, eventsData] = await Promise.all([
         projectsApi.getProject(projectId),
         projectsApi.getMyGroup(projectId).catch(() => null),
         projectsApi.getMyAttendance(projectId).catch(() => []),
+        projectsApi.getEvents(projectId).catch(() => []),
       ])
 
       setProject(projectData)
       setGroup(groupData)
+      setEvents(Array.isArray(eventsData) ? eventsData : [])
 
       // attendance may be an array of records
       if (Array.isArray(attendanceData)) {
@@ -88,13 +97,7 @@ export default function ProjectDetailPage() {
       } else if (attendanceData?.attendance) {
         setAttendance(attendanceData.attendance)
       } else if (attendanceData?.events) {
-        setEvents(attendanceData.events)
         setAttendance(attendanceData.records || [])
-      }
-
-      // If the response includes events, store them
-      if (attendanceData?.events) {
-        setEvents(attendanceData.events)
       }
 
       // If there's a problem statement, try to get question details
@@ -124,6 +127,30 @@ export default function ProjectDetailPage() {
     }
   }
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    setUploadingFiles(true)
+    try {
+      const newAttachments: AttachmentInfo[] = []
+      for (const file of Array.from(files)) {
+        const url = await mediaApi.uploadImage(file, 'projects/submissions')
+        newAttachments.push({
+          fileUrl: url,
+          fileName: file.name,
+          fileSizeBytes: file.size,
+          mimeType: file.type,
+        })
+      }
+      setPendingAttachments((prev) => [...prev, ...newAttachments])
+    } catch (err) {
+      console.error('Upload failed', err)
+    } finally {
+      setUploadingFiles(false)
+      e.target.value = '' // reset input
+    }
+  }
+
   async function handleSubmit() {
     if (!submissionUrl.trim() || !group) return
     try {
@@ -131,9 +158,11 @@ export default function ProjectDetailPage() {
       setSubmitError(null)
       const updated = await projectsApi.submitMyProject(projectId, {
         submissionUrl: submissionUrl.trim(),
+        attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
       })
       setGroup(updated)
       setSubmissionUrl('')
+      setPendingAttachments([])
       setEditing(false)
       // Refresh submission history
       try {
@@ -305,7 +334,7 @@ export default function ProjectDetailPage() {
                   <div className="flex items-center gap-2">
                     <Users className="h-5 w-5 text-primary-600" />
                     <CardTitle className="text-lg">
-                      Group {group.groupNumber}
+                      {group.groupName || `Group ${group.groupNumber}`}
                     </CardTitle>
                   </div>
                 </CardHeader>
@@ -344,35 +373,69 @@ export default function ProjectDetailPage() {
               </Card>
             )}
 
+            {/* Statement Attachments */}
+            {project.statementAttachments && project.statementAttachments.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="h-5 w-5 text-primary-600" />
+                    <CardTitle className="text-lg">Project Files</CardTitle>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {project.statementAttachments.map((att: any) => (
+                      <a
+                        key={att.id}
+                        href={att.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2 rounded-lg border hover:bg-gray-50 transition-colors"
+                      >
+                        <FileDown className="h-4 w-4 text-blue-600 shrink-0" />
+                        <span className="text-sm text-blue-600 hover:underline truncate">
+                          {att.fileName || 'Download'}
+                        </span>
+                        {att.fileSizeBytes && (
+                          <span className="text-xs text-gray-400 shrink-0">
+                            ({(att.fileSizeBytes / 1024).toFixed(0)} KB)
+                          </span>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Events Timeline */}
-            {attendance.length > 0 && (
+            {events.length > 0 && (
               <Card>
                 <CardHeader>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-5 w-5 text-primary-600" />
-                    <CardTitle className="text-lg">Events</CardTitle>
+                    <CardTitle className="text-lg">Events ({events.length})</CardTitle>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {attendance.map((record, idx) => {
-                      // Try to find matching event for zoom link / dateTime
-                      const event = events.find((e) => e.id === record.eventId)
+                    {events.map((event, idx) => {
+                      const record = attendance.find((a) => a.eventId === event.id)
                       return (
                         <div
-                          key={record.eventId || idx}
+                          key={event.id || idx}
                           className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                         >
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-gray-900">
-                              {record.eventName || event?.name || `Event ${idx + 1}`}
+                              {event.name || `Event ${idx + 1}`}
                             </p>
-                            {event?.dateTime && (
+                            {event.dateTime && (
                               <p className="text-sm text-gray-500">
                                 {formatDateTime(event.dateTime)}
                               </p>
                             )}
-                            {event?.zoomLink && (
+                            {event.zoomLink && (
                               <a
                                 href={event.zoomLink}
                                 target="_blank"
@@ -380,36 +443,37 @@ export default function ProjectDetailPage() {
                                 className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-1"
                               >
                                 <Video className="h-3.5 w-3.5" />
-                                Join Zoom
+                                Join Meeting
                                 <ExternalLink className="h-3 w-3" />
                               </a>
                             )}
                           </div>
                           <div className="flex items-center gap-3 shrink-0">
-                            {/* Attendance badge */}
-                            {record.present === true ? (
-                              <Badge className="bg-green-100 text-green-700 border-green-300">
-                                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                                Present
-                              </Badge>
-                            ) : record.present === false ? (
-                              <Badge className="bg-red-100 text-red-700 border-red-300">
-                                <XCircle className="h-3.5 w-3.5 mr-1" />
-                                Absent
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-gray-400">
-                                <MinusCircle className="h-3.5 w-3.5 mr-1" />
-                                Not recorded
-                              </Badge>
-                            )}
-                            {/* Marks */}
-                            {record.hasMarks && record.marks != null ? (
-                              <span className="text-sm font-medium text-gray-700">
-                                {record.marks} / {record.maxMarks ?? '?'}
+                            {record ? (
+                              <>
+                                {record.present === true ? (
+                                  <Badge className="bg-green-100 text-green-700 border-green-300">
+                                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                                    Present
+                                  </Badge>
+                                ) : record.present === false ? (
+                                  <Badge className="bg-red-100 text-red-700 border-red-300">
+                                    <XCircle className="h-3.5 w-3.5 mr-1" />
+                                    Absent
+                                  </Badge>
+                                ) : null}
+                                {record.hasMarks && record.marks != null ? (
+                                  <span className="text-sm font-medium text-gray-700">
+                                    {record.marks} / {record.maxMarks ?? '?'}
+                                  </span>
+                                ) : record.hasMarks ? (
+                                  <span className="text-sm text-gray-400">&mdash;</span>
+                                ) : null}
+                              </>
+                            ) : event.hasMarks ? (
+                              <span className="text-xs text-gray-400">
+                                {event.maxMarks} marks
                               </span>
-                            ) : record.hasMarks ? (
-                              <span className="text-sm text-gray-400">&mdash;</span>
                             ) : null}
                           </div>
                         </div>
@@ -472,6 +536,26 @@ export default function ProjectDetailPage() {
                           </p>
                         )}
                       </div>
+                      {/* Submission Attachments */}
+                      {group.submissionAttachments && group.submissionAttachments.length > 0 && (
+                        <div className="mt-3 border-t pt-3">
+                          <p className="text-xs font-medium text-gray-500 mb-2">Attachments</p>
+                          <div className="space-y-1">
+                            {group.submissionAttachments.map((att: any) => (
+                              <a
+                                key={att.id}
+                                href={att.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                              >
+                                <FileDown className="h-3.5 w-3.5" />
+                                {att.fileName || 'Download'}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {/* Submission History */}
                       {submissionHistory.length > 1 && (
                         <div className="mt-3 border-t pt-3">
@@ -529,6 +613,43 @@ export default function ProjectDetailPage() {
                           )}
                           Submit
                         </Button>
+                      </div>
+                      {/* File attachments */}
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={handleFileUpload}
+                              accept=".pdf,.doc,.docx,.ppt,.pptx,.zip,.rar,.txt,.png,.jpg,.jpeg"
+                            />
+                            <span className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline">
+                              <FileUp className="h-4 w-4" />
+                              {uploadingFiles ? 'Uploading...' : 'Attach files'}
+                            </span>
+                          </label>
+                          {uploadingFiles && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />}
+                        </div>
+                        {pendingAttachments.length > 0 && (
+                          <div className="space-y-1">
+                            {pendingAttachments.map((att, idx) => (
+                              <div key={idx} className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 rounded px-2 py-1">
+                                <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{att.fileName}</span>
+                                <span className="text-xs text-gray-400">({((att.fileSizeBytes || 0) / 1024).toFixed(0)} KB)</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setPendingAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                                  className="ml-auto text-gray-400 hover:text-red-500"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       {submitError && (
                         <p className="text-sm text-red-600">{submitError}</p>
