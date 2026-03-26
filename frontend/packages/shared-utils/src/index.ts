@@ -33,8 +33,8 @@ export { AnalyticsApi } from './api/analytics'
 export { SimulationsApi } from './api/simulations'
 export { ProjectsApi, ProjectQuestionsApi } from './api/projects'
 export type {
-  ProjectDTO, ProjectGroupDTO, ProjectEventDTO, ProjectQuestionDTO,
-  CreateProjectRequest, GenerateGroupsRequest, SubmitProjectRequest,
+  ProjectDTO, ProjectGroupDTO, ProjectEventDTO, ProjectQuestionDTO, ProjectAttachmentDTO,
+  CreateProjectRequest, GenerateGroupsRequest, SubmitProjectRequest, AttachmentInfo,
   AttendanceEntry, GradeEntry
 } from './api/projects'
 export type {

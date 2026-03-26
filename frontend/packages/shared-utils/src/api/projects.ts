@@ -2,6 +2,19 @@ import { ApiClient } from './ApiClient'
 
 // ============ Types ============
 
+export interface ProjectAttachmentDTO {
+  id: string
+  projectId: string
+  groupId?: string
+  context: string
+  fileUrl: string
+  fileName: string
+  fileSizeBytes?: number
+  mimeType?: string
+  uploadedBy?: string
+  createdAt?: string
+}
+
 export interface ProjectDTO {
   id: string
   courseId?: string
@@ -15,17 +28,20 @@ export interface ProjectDTO {
   createdBy?: string
   createdAt?: string
   updatedAt?: string
+  statementAttachments?: ProjectAttachmentDTO[]
 }
 
 export interface ProjectGroupDTO {
   id: string
   projectId: string
   groupNumber: number
+  groupName?: string
   problemStatementId?: string
   submissionUrl?: string
   submittedAt?: string
   submittedBy?: string
   members: Array<{ studentId: string; name?: string; email?: string }>
+  submissionAttachments?: ProjectAttachmentDTO[]
 }
 
 export interface ProjectEventDTO {
@@ -37,6 +53,7 @@ export interface ProjectEventDTO {
   hasMarks: boolean
   maxMarks?: number
   sequence?: number
+  sectionId?: string
 }
 
 export interface ProjectQuestionDTO {
@@ -72,6 +89,20 @@ export interface BulkProjectSetupRequest {
   maxMarks?: number
   submissionCutoff?: string
   lateSubmissionAllowed?: boolean
+  mixSections?: boolean
+  sectionNames?: Record<string, string>
+  sectionGroupCounts?: Record<string, number>
+  totalGroupCount?: number
+  selectedQuestionIds?: string[]
+  events?: Array<{
+    name: string
+    dateTime?: string
+    zoomLink?: string
+    hasMarks?: boolean
+    maxMarks?: number
+    sequence?: number
+  }>
+  eventsBySectionId?: Record<string, Array<{ name: string; dateTime?: string; zoomLink?: string; hasMarks?: boolean; maxMarks?: number; sequence?: number }>>
 }
 
 export interface AddSectionsRequest {
@@ -83,8 +114,16 @@ export interface GenerateGroupsRequest {
   groupSize: number
 }
 
+export interface AttachmentInfo {
+  fileUrl: string
+  fileName: string
+  fileSizeBytes?: number
+  mimeType?: string
+}
+
 export interface SubmitProjectRequest {
   submissionUrl: string
+  attachments?: AttachmentInfo[]
 }
 
 export interface AttendanceEntry {
@@ -177,6 +216,12 @@ export class ProjectsApi {
     return Array.isArray(data) ? data : ((data as any)?.data || [])
   }
 
+  async getEvents(id: string): Promise<ProjectEventDTO[]> {
+    const response = await this.apiClient.get<ProjectEventDTO[]>(`/api/projects/${id}/events`)
+    const data = response.data
+    return Array.isArray(data) ? data : ((data as any)?.data || [])
+  }
+
   async addEvent(id: string, data: Partial<ProjectEventDTO>): Promise<ProjectEventDTO> {
     const response = await this.apiClient.post<ProjectEventDTO>(`/api/projects/${id}/events`, data)
     return response.data
@@ -191,17 +236,44 @@ export class ProjectsApi {
     await this.apiClient.delete(`/api/projects/${id}/events/${eventId}`)
   }
 
+  async getAttendance(id: string, eventId: string): Promise<Array<{ studentId: string; groupId: string; present: boolean }>> {
+    const response = await this.apiClient.get<any[]>(`/api/projects/${id}/events/${eventId}/attendance`)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async getGrades(id: string, eventId: string): Promise<Array<{ studentId: string; groupId: string; marks: number }>> {
+    const response = await this.apiClient.get<any[]>(`/api/projects/${id}/events/${eventId}/grades`)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
   async saveAttendance(id: string, eventId: string, entries: AttendanceEntry[]): Promise<void> {
-    await this.apiClient.post(`/api/projects/${id}/events/${eventId}/attendance`, entries)
+    await this.apiClient.post(`/api/projects/${id}/events/${eventId}/attendance`, { entries })
   }
 
   async saveGrades(id: string, eventId: string, entries: GradeEntry[]): Promise<void> {
-    await this.apiClient.post(`/api/projects/${id}/events/${eventId}/grades`, entries)
+    await this.apiClient.post(`/api/projects/${id}/events/${eventId}/grades`, { entries })
   }
 
   async submitProject(id: string, groupId: string, data: SubmitProjectRequest): Promise<ProjectGroupDTO> {
     const response = await this.apiClient.post<ProjectGroupDTO>(`/api/projects/${id}/groups/${groupId}/submit`, data)
     return response.data
+  }
+
+  // ---- Attachments ----
+
+  async getAttachments(id: string, context?: 'STATEMENT' | 'SUBMISSION'): Promise<ProjectAttachmentDTO[]> {
+    const url = context ? `/api/projects/${id}/attachments?context=${context}` : `/api/projects/${id}/attachments`
+    const response = await this.apiClient.get<ProjectAttachmentDTO[]>(url)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async addAttachment(id: string, data: { groupId?: string; context: string; fileUrl: string; fileName: string; fileSizeBytes?: number; mimeType?: string }): Promise<ProjectAttachmentDTO> {
+    const response = await this.apiClient.post<ProjectAttachmentDTO>(`/api/projects/${id}/attachments`, data)
+    return response.data
+  }
+
+  async deleteAttachment(id: string, attachmentId: string): Promise<void> {
+    await this.apiClient.delete(`/api/projects/${id}/attachments/${attachmentId}`)
   }
 
   // ---- Student ----
