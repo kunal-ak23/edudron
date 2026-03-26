@@ -103,3 +103,22 @@ databaseChangeLog:
             columns:
               - column: { name: event_id }
               - column: { name: group_id }
+
+  - changeSet:
+      id: student-0025-attachment-submission-id
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: project_attachment
+            schemaName: student
+            columns:
+              - column:
+                  name: submission_id
+                  type: varchar(26)
+        - createIndex:
+            tableName: project_attachment
+            schemaName: student
+            indexName: idx_project_attachment_submission_id
+            columns:
+              - column: { name: submission_id }
+              - column: { name: group_id }

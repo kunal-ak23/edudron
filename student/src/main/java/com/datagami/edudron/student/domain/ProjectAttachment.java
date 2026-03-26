@@ -21,6 +21,9 @@ public class ProjectAttachment {
     @Column(name = "group_id")
     private String groupId;
 
+    @Column(name = "submission_id", length = 26)
+    private String submissionId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "context", nullable = false, length = 30)
     private AttachmentContext context = AttachmentContext.STATEMENT;
@@ -73,6 +76,9 @@ public class ProjectAttachment {
 
     public String getGroupId() { return groupId; }
     public void setGroupId(String groupId) { this.groupId = groupId; }
+
+    public String getSubmissionId() { return submissionId; }
+    public void setSubmissionId(String submissionId) { this.submissionId = submissionId; }
 
     public AttachmentContext getContext() { return context; }
     public void setContext(AttachmentContext context) { this.context = context; }

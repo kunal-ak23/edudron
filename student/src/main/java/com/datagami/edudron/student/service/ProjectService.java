@@ -208,7 +208,7 @@ public class ProjectService {
         project = projectRepository.save(project);
         log.info("Created project '{}' (id={}) for section {}", project.getTitle(), project.getId(), project.getSectionId());
 
-        saveAttachments(project.getId(), null, ProjectAttachment.AttachmentContext.STATEMENT,
+        saveAttachments(project.getId(), null, null, ProjectAttachment.AttachmentContext.STATEMENT,
                 request.getStatementAttachments(), UserUtil.getCurrentUserEmail());
 
         String userId = UserUtil.getCurrentUserId();
@@ -244,7 +244,7 @@ public class ProjectService {
         project.setCreatedBy(createdBy);
         project = projectRepository.save(project);
 
-        saveAttachments(project.getId(), null, ProjectAttachment.AttachmentContext.STATEMENT,
+        saveAttachments(project.getId(), null, null, ProjectAttachment.AttachmentContext.STATEMENT,
                 request.getStatementAttachments(), createdBy);
 
         // 2. Collect students and create groups
@@ -1041,7 +1041,7 @@ public class ProjectService {
         history.setAction(action);
         submissionHistoryRepository.save(history);
 
-        saveAttachments(projectId, groupId, ProjectAttachment.AttachmentContext.SUBMISSION,
+        saveAttachments(projectId, groupId, null, ProjectAttachment.AttachmentContext.SUBMISSION,
                 attachments, studentId);
 
         log.info("Student {} {} project {} for group {}", studentId, action.toLowerCase(), projectId, groupId);
@@ -1185,9 +1185,9 @@ public class ProjectService {
         submission.setStatus(ProjectEventSubmission.SubmissionStatus.SUBMITTED);
         submission = eventSubmissionRepository.save(submission);
 
-        // Save attachments if provided
+        // Save attachments linked to this specific submission
         if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
-            saveAttachments(projectId, groupId, ProjectAttachment.AttachmentContext.SUBMISSION,
+            saveAttachments(projectId, groupId, submission.getId(), ProjectAttachment.AttachmentContext.SUBMISSION,
                     request.getAttachments(), studentId);
         }
 
@@ -1195,7 +1195,7 @@ public class ProjectService {
                 studentId, nextVersion, eventId, groupId, projectId);
 
         ProjectEventSubmissionDTO dto = ProjectEventSubmissionDTO.fromEntity(submission);
-        dto.setAttachments(getSubmissionAttachments(groupId, clientId));
+        dto.setAttachments(getAttachmentsBySubmissionId(submission.getId(), clientId));
         return dto;
     }
 
@@ -1207,7 +1207,7 @@ public class ProjectService {
         if (latest.isEmpty()) return null;
 
         ProjectEventSubmissionDTO dto = ProjectEventSubmissionDTO.fromEntity(latest.get());
-        dto.setAttachments(getSubmissionAttachments(groupId, clientId));
+        dto.setAttachments(getAttachmentsBySubmissionId(latest.get().getId(), clientId));
         return dto;
     }
 
@@ -1357,7 +1357,7 @@ public class ProjectService {
 
     // ======================== Attachments ========================
 
-    private void saveAttachments(String projectId, String groupId,
+    private void saveAttachments(String projectId, String groupId, String submissionId,
                                  ProjectAttachment.AttachmentContext context,
                                  List<SubmitProjectRequest.AttachmentInfo> attachments,
                                  String uploadedBy) {
@@ -1372,6 +1372,7 @@ public class ProjectService {
             attachment.setClientId(clientId);
             attachment.setProjectId(projectId);
             attachment.setGroupId(groupId);
+            attachment.setSubmissionId(submissionId);
             attachment.setContext(context);
             attachment.setFileUrl(info.getFileUrl());
             attachment.setFileName(info.getFileName() != null ? info.getFileName() : "attachment");
@@ -1393,6 +1394,14 @@ public class ProjectService {
     private List<ProjectAttachmentDTO> getSubmissionAttachments(String groupId, UUID clientId) {
         return projectAttachmentRepository
                 .findByGroupIdAndClientIdAndContext(groupId, clientId, ProjectAttachment.AttachmentContext.SUBMISSION)
+                .stream()
+                .map(ProjectAttachmentDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    private List<ProjectAttachmentDTO> getAttachmentsBySubmissionId(String submissionId, UUID clientId) {
+        return projectAttachmentRepository
+                .findBySubmissionIdAndClientId(submissionId, clientId)
                 .stream()
                 .map(ProjectAttachmentDTO::fromEntity)
                 .collect(Collectors.toList());

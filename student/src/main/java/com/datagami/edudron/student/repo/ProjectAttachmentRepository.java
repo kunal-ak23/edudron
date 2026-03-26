@@ -22,4 +22,6 @@ public interface ProjectAttachmentRepository extends JpaRepository<ProjectAttach
     Optional<ProjectAttachment> findByIdAndClientId(String id, UUID clientId);
 
     void deleteByIdAndClientId(String id, UUID clientId);
+
+    List<ProjectAttachment> findBySubmissionIdAndClientId(String submissionId, UUID clientId);
 }
