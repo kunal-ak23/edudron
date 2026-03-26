@@ -155,7 +155,7 @@ export default function ProjectDetailPage() {
     try {
       const newAttachments: AttachmentInfo[] = []
       for (const file of Array.from(files)) {
-        const url = await mediaApi.uploadImage(file, 'projects/submissions')
+        const url = await mediaApi.uploadImage(file, 'resources')
         newAttachments.push({
           fileUrl: url,
           fileName: file.name,
