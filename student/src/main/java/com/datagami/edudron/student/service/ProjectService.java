@@ -56,7 +56,13 @@ public class ProjectService {
     private ProjectSubmissionHistoryRepository submissionHistoryRepository;
 
     @Autowired
+    private ProjectAttachmentRepository projectAttachmentRepository;
+
+    @Autowired
     private EnrollmentRepository enrollmentRepository;
+
+    @Autowired
+    private CommonEventService eventService;
 
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -113,6 +119,8 @@ public class ProjectService {
         List<String> submitterIds = history.stream().map(ProjectSubmissionHistory::getSubmittedBy).distinct().collect(Collectors.toList());
         Map<String, String[]> nameMap = resolveStudentInfo(submitterIds);
 
+        List<ProjectAttachmentDTO> submissionAttachmentDTOs = getSubmissionAttachments(groupId, clientId);
+
         return history.stream().map(h -> {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("id", h.getId());
@@ -122,6 +130,7 @@ public class ProjectService {
             entry.put("submittedByName", info != null ? info[0] : null);
             entry.put("submittedAt", h.getSubmittedAt());
             entry.put("action", h.getAction());
+            entry.put("attachments", submissionAttachmentDTOs);
             return entry;
         }).collect(Collectors.toList());
     }
@@ -192,6 +201,20 @@ public class ProjectService {
 
         project = projectRepository.save(project);
         log.info("Created project '{}' (id={}) for section {}", project.getTitle(), project.getId(), project.getSectionId());
+
+        saveAttachments(project.getId(), null, ProjectAttachment.AttachmentContext.STATEMENT,
+                request.getStatementAttachments(), UserUtil.getCurrentUserEmail());
+
+        String userId = UserUtil.getCurrentUserId();
+        String userEmail = UserUtil.getCurrentUserEmail();
+        eventService.logUserAction("PROJECT_CREATED", userId, userEmail, "/api/projects", Map.of(
+                "projectId", project.getId(),
+                "projectTitle", project.getTitle(),
+                "courseId", project.getCourseId() != null ? project.getCourseId() : "",
+                "sectionId", project.getSectionId() != null ? project.getSectionId() : "",
+                "status", project.getStatus().name()
+        ));
+
         return ProjectDTO.fromEntity(project);
     }
 
@@ -215,56 +238,151 @@ public class ProjectService {
         project.setCreatedBy(createdBy);
         project = projectRepository.save(project);
 
-        // 2. Collect students from all sections
-        List<String> allStudentIds = new ArrayList<>();
-        for (String sectionId : request.getSectionIds()) {
-            List<String> sectionStudents = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId)
-                    .stream()
-                    .map(e -> e.getStudentId())
-                    .distinct()
-                    .collect(Collectors.toList());
-            allStudentIds.addAll(sectionStudents);
-        }
-        allStudentIds = allStudentIds.stream().distinct().collect(Collectors.toList());
+        saveAttachments(project.getId(), null, ProjectAttachment.AttachmentContext.STATEMENT,
+                request.getStatementAttachments(), createdBy);
 
-        if (allStudentIds.isEmpty()) {
+        // 2. Collect students and create groups
+        int groupSize = request.getGroupSize();
+        boolean mixSections = Boolean.TRUE.equals(request.getMixSections());
+        Map<String, String> sectionNames = request.getSectionNames() != null ? request.getSectionNames() : Map.of();
+        Map<String, Integer> sectionGroupCounts = request.getSectionGroupCounts() != null ? request.getSectionGroupCounts() : Map.of();
+        List<ProjectGroup> allGroups = new ArrayList<>();
+        int totalStudents = 0;
+        int globalGroupNumber = 0;
+
+        if (mixSections) {
+            // Cross-section mode: pool all students, shuffle, distribute
+            List<String> allStudentIds = new ArrayList<>();
+            for (String sectionId : request.getSectionIds()) {
+                List<String> sectionStudents = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId)
+                        .stream().map(e -> e.getStudentId()).distinct().collect(Collectors.toList());
+                allStudentIds.addAll(sectionStudents);
+            }
+            allStudentIds = allStudentIds.stream().distinct().collect(Collectors.toList());
+            totalStudents = allStudentIds.size();
+
+            if (!allStudentIds.isEmpty()) {
+                Collections.shuffle(allStudentIds);
+                // Use frontend-specified group count if available, else compute
+                int numGroups = request.getTotalGroupCount() != null && request.getTotalGroupCount() > 0
+                        ? request.getTotalGroupCount()
+                        : (int) Math.ceil((double) allStudentIds.size() / groupSize);
+                for (int i = 0; i < numGroups; i++) {
+                    globalGroupNumber++;
+                    ProjectGroup group = new ProjectGroup();
+                    group.setId(UlidGenerator.nextUlid());
+                    group.setClientId(clientId);
+                    group.setProjectId(project.getId());
+                    group.setGroupNumber(globalGroupNumber);
+                    group.setGroupName("Group " + globalGroupNumber);
+                    allGroups.add(projectGroupRepository.save(group));
+                }
+                for (int i = 0; i < allStudentIds.size(); i++) {
+                    ProjectGroupMember member = new ProjectGroupMember();
+                    member.setId(UlidGenerator.nextUlid());
+                    member.setClientId(clientId);
+                    member.setGroupId(allGroups.get(i % allGroups.size()).getId());
+                    member.setStudentId(allStudentIds.get(i));
+                    projectGroupMemberRepository.save(member);
+                }
+            }
+        } else {
+            // Per-section mode (default): groups created within each section
+            for (String sectionId : request.getSectionIds()) {
+                List<String> sectionStudents = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId)
+                        .stream().map(e -> e.getStudentId()).distinct().collect(Collectors.toList());
+                if (sectionStudents.isEmpty()) continue;
+
+                totalStudents += sectionStudents.size();
+                Collections.shuffle(sectionStudents);
+
+                String sectionName = sectionNames.getOrDefault(sectionId, sectionId);
+                // Use frontend-specified group count if available, else compute
+                int numSectionGroups = sectionGroupCounts.containsKey(sectionId) && sectionGroupCounts.get(sectionId) > 0
+                        ? sectionGroupCounts.get(sectionId)
+                        : (int) Math.ceil((double) sectionStudents.size() / groupSize);
+
+                List<ProjectGroup> sectionGroups = new ArrayList<>();
+                for (int i = 0; i < numSectionGroups; i++) {
+                    globalGroupNumber++;
+                    ProjectGroup group = new ProjectGroup();
+                    group.setId(UlidGenerator.nextUlid());
+                    group.setClientId(clientId);
+                    group.setProjectId(project.getId());
+                    group.setGroupNumber(globalGroupNumber);
+                    group.setGroupName(sectionName + " Group " + (i + 1));
+                    sectionGroups.add(projectGroupRepository.save(group));
+                }
+
+                for (int i = 0; i < sectionStudents.size(); i++) {
+                    ProjectGroupMember member = new ProjectGroupMember();
+                    member.setId(UlidGenerator.nextUlid());
+                    member.setClientId(clientId);
+                    member.setGroupId(sectionGroups.get(i % numSectionGroups).getId());
+                    member.setStudentId(sectionStudents.get(i));
+                    projectGroupMemberRepository.save(member);
+                }
+                allGroups.addAll(sectionGroups);
+            }
+        }
+
+        if (totalStudents == 0) {
             log.warn("No students found in selected sections for bulk setup");
             return ProjectDTO.fromEntity(project);
         }
 
-        // 3. Shuffle and generate groups
-        Collections.shuffle(allStudentIds);
-        int groupSize = request.getGroupSize();
-        int numGroups = (int) Math.ceil((double) allStudentIds.size() / groupSize);
+        log.info("Bulk setup: created project '{}' with {} groups from {} students across {} sections (mixSections={})",
+                project.getTitle(), allGroups.size(), totalStudents, request.getSectionIds().size(), mixSections);
 
-        List<ProjectGroup> groups = new ArrayList<>();
-        for (int i = 0; i < numGroups; i++) {
-            ProjectGroup group = new ProjectGroup();
-            group.setId(UlidGenerator.nextUlid());
-            group.setClientId(clientId);
-            group.setProjectId(project.getId());
-            group.setGroupNumber(i + 1);
-            groups.add(projectGroupRepository.save(group));
-        }
+        eventService.logUserAction("PROJECT_BULK_SETUP", createdBy, createdBy, "/api/projects/bulk-setup", Map.of(
+                "projectId", project.getId(),
+                "projectTitle", project.getTitle(),
+                "courseId", project.getCourseId() != null ? project.getCourseId() : "",
+                "sectionCount", request.getSectionIds().size(),
+                "studentCount", totalStudents,
+                "groupCount", allGroups.size(),
+                "groupSize", request.getGroupSize(),
+                "mixSections", mixSections
+        ));
 
-        // 4. Assign students round-robin to groups
-        for (int i = 0; i < allStudentIds.size(); i++) {
-            ProjectGroupMember member = new ProjectGroupMember();
-            member.setId(UlidGenerator.nextUlid());
-            member.setClientId(clientId);
-            member.setGroupId(groups.get(i % numGroups).getId());
-            member.setStudentId(allStudentIds.get(i));
-            projectGroupMemberRepository.save(member);
-        }
-
-        log.info("Bulk setup: created project '{}' with {} groups from {} students across {} sections",
-                project.getTitle(), numGroups, allStudentIds.size(), request.getSectionIds().size());
-
-        // 5. Assign problem statements
+        // 5. Assign problem statements (filtered by selected IDs if provided)
         try {
-            assignStatements(project.getId());
+            if (request.getSelectedQuestionIds() != null && !request.getSelectedQuestionIds().isEmpty()) {
+                assignStatementsFromIds(project.getId(), request.getSelectedQuestionIds());
+            } else {
+                assignStatements(project.getId());
+            }
         } catch (Exception e) {
             log.warn("Problem statement assignment failed (can be done later): {}", e.getMessage());
+        }
+
+        // 6. Create events if provided
+        if (request.getEventsBySectionId() != null && !request.getEventsBySectionId().isEmpty()) {
+            for (Map.Entry<String, List<BulkProjectSetupRequest.EventInput>> entry : request.getEventsBySectionId().entrySet()) {
+                String sectionId = "_global".equals(entry.getKey()) ? null : entry.getKey();
+                List<BulkProjectSetupRequest.EventInput> sectionEvents = entry.getValue();
+                for (int i = 0; i < sectionEvents.size(); i++) {
+                    BulkProjectSetupRequest.EventInput ev = sectionEvents.get(i);
+                    if (ev.getName() == null || ev.getName().isBlank()) continue;
+                    OffsetDateTime dateTime = ev.getDateTime() != null && !ev.getDateTime().isBlank()
+                            ? OffsetDateTime.parse(ev.getDateTime())
+                            : null;
+                    addEvent(project.getId(), ev.getName(), dateTime, ev.getZoomLink(),
+                            ev.getHasMarks(), ev.getMaxMarks(), ev.getSequence() != null ? ev.getSequence() : i + 1, sectionId);
+                }
+            }
+            log.info("Created per-section events for project {}", project.getId());
+        } else if (request.getEvents() != null && !request.getEvents().isEmpty()) {
+            for (int i = 0; i < request.getEvents().size(); i++) {
+                BulkProjectSetupRequest.EventInput ev = request.getEvents().get(i);
+                if (ev.getName() == null || ev.getName().isBlank()) continue;
+                OffsetDateTime dateTime = ev.getDateTime() != null && !ev.getDateTime().isBlank()
+                        ? OffsetDateTime.parse(ev.getDateTime())
+                        : null;
+                addEvent(project.getId(), ev.getName(), dateTime, ev.getZoomLink(),
+                        ev.getHasMarks(), ev.getMaxMarks(), ev.getSequence() != null ? ev.getSequence() : i + 1, null);
+            }
+            log.info("Created {} global events for project {}", request.getEvents().size(), project.getId());
         }
 
         return ProjectDTO.fromEntity(project);
@@ -352,6 +470,16 @@ public class ProjectService {
         log.info("Added {} sections to project '{}': {} new students, {} new groups",
                 request.getSectionIds().size(), project.getTitle(), newStudentIds.size(), numNewGroups);
 
+        String userId = UserUtil.getCurrentUserId();
+        String userEmail = UserUtil.getCurrentUserEmail();
+        eventService.logUserAction("PROJECT_SECTIONS_ADDED", userId, userEmail, "/api/projects/" + projectId + "/add-sections", Map.of(
+                "projectId", projectId,
+                "projectTitle", project.getTitle(),
+                "newSectionCount", request.getSectionIds().size(),
+                "newStudentCount", newStudentIds.size(),
+                "newGroupCount", numNewGroups
+        ));
+
         return ProjectDTO.fromEntity(project);
     }
 
@@ -360,7 +488,9 @@ public class ProjectService {
         UUID clientId = getClientId();
         Project project = projectRepository.findByIdAndClientId(id, clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + id));
-        return ProjectDTO.fromEntity(project);
+        ProjectDTO dto = ProjectDTO.fromEntity(project);
+        dto.setStatementAttachments(getStatementAttachments(id, clientId));
+        return dto;
     }
 
     @Transactional(readOnly = true)
@@ -502,6 +632,7 @@ public class ProjectService {
             ProjectGroupDTO dto = ProjectGroupDTO.fromEntity(g);
             List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(g.getId(), clientId);
             dto.setMembers(resolveMemberInfo(members));
+            dto.setSubmissionAttachments(getSubmissionAttachments(g.getId(), clientId));
             return dto;
         }).collect(Collectors.toList());
     }
@@ -527,6 +658,17 @@ public class ProjectService {
         List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(group.getId(), clientId);
         dto.setMembers(resolveMemberInfo(members));
         return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectEventDTO> getEvents(String projectId) {
+        UUID clientId = getClientId();
+        projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+        return projectEventRepository.findByProjectIdAndClientIdOrderBySequenceAsc(projectId, clientId)
+                .stream()
+                .map(ProjectEventDTO::fromEntity)
+                .collect(Collectors.toList());
     }
 
     @SuppressWarnings("unchecked")
@@ -590,6 +732,37 @@ public class ProjectService {
         }
     }
 
+    public void assignStatementsFromIds(String projectId, List<String> questionIds) {
+        UUID clientId = getClientId();
+        projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+        List<ProjectGroup> groups = projectGroupRepository.findByProjectIdAndClientId(projectId, clientId);
+        if (groups.isEmpty()) {
+            throw new IllegalStateException("No groups found for project. Generate groups first.");
+        }
+
+        List<ProjectGroup> unassigned = groups.stream()
+                .filter(g -> g.getProblemStatementId() == null || g.getProblemStatementId().isBlank())
+                .collect(Collectors.toList());
+
+        if (unassigned.isEmpty()) {
+            log.info("All groups already have problem statements assigned for project {}", projectId);
+            return;
+        }
+
+        // Round-robin assign the selected question IDs
+        for (int i = 0; i < unassigned.size(); i++) {
+            int questionIndex = i % questionIds.size();
+            ProjectGroup group = unassigned.get(i);
+            group.setProblemStatementId(questionIds.get(questionIndex));
+            projectGroupRepository.save(group);
+        }
+
+        log.info("Assigned {} selected problem statements to {} groups for project {}",
+                questionIds.size(), unassigned.size(), projectId);
+    }
+
     @SuppressWarnings("unchecked")
     private void assignStatementsToGroups(String projectId, List<ProjectGroup> targetGroups) {
         UUID clientId = getClientId();
@@ -627,7 +800,7 @@ public class ProjectService {
     // ======================== Events ========================
 
     public ProjectEventDTO addEvent(String projectId, String name, OffsetDateTime dateTime,
-                                     String zoomLink, Boolean hasMarks, Integer maxMarks, Integer sequence) {
+                                     String zoomLink, Boolean hasMarks, Integer maxMarks, Integer sequence, String sectionId) {
         UUID clientId = getClientId();
         // Verify project exists
         projectRepository.findByIdAndClientId(projectId, clientId)
@@ -643,6 +816,7 @@ public class ProjectService {
         event.setHasMarks(hasMarks != null ? hasMarks : false);
         event.setMaxMarks(maxMarks);
         event.setSequence(sequence);
+        event.setSectionId(sectionId);
 
         event = projectEventRepository.save(event);
         log.info("Added event '{}' to project {}", name, projectId);
@@ -708,6 +882,7 @@ public class ProjectService {
         // Delete existing attendance for this event
         List<ProjectEventAttendance> existing = projectEventAttendanceRepository.findByEventIdAndClientId(eventId, clientId);
         projectEventAttendanceRepository.deleteAll(existing);
+        projectEventAttendanceRepository.flush();
 
         // Build student-to-group map for this project
         Map<String, String> studentGroupMap = buildStudentGroupMap(projectId, clientId);
@@ -746,6 +921,7 @@ public class ProjectService {
         // Delete existing grades for this event
         List<ProjectEventGrade> existing = projectEventGradeRepository.findByEventIdAndClientId(eventId, clientId);
         projectEventGradeRepository.deleteAll(existing);
+        projectEventGradeRepository.flush();
 
         // Build student-to-group map for this project
         Map<String, String> studentGroupMap = buildStudentGroupMap(projectId, clientId);
@@ -775,9 +951,40 @@ public class ProjectService {
         log.info("Saved {} grade records for event {} of project {}", entries.size(), eventId, projectId);
     }
 
+    // ======================== Get Attendance ========================
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getEventAttendance(String projectId, String eventId) {
+        UUID clientId = getClientId();
+        List<ProjectEventAttendance> records = projectEventAttendanceRepository.findByEventIdAndClientId(eventId, clientId);
+        return records.stream().map(a -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("studentId", a.getStudentId());
+            entry.put("groupId", a.getGroupId());
+            entry.put("present", a.getPresent());
+            return entry;
+        }).collect(Collectors.toList());
+    }
+
+    // ======================== Get Grades ========================
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getEventGrades(String projectId, String eventId) {
+        UUID clientId = getClientId();
+        List<ProjectEventGrade> records = projectEventGradeRepository.findByEventIdAndClientId(eventId, clientId);
+        return records.stream().map(g -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("studentId", g.getStudentId());
+            entry.put("groupId", g.getGroupId());
+            entry.put("marks", g.getMarks());
+            return entry;
+        }).collect(Collectors.toList());
+    }
+
     // ======================== Submission ========================
 
-    public ProjectGroupDTO submitProject(String projectId, String groupId, String studentId, String submissionUrl) {
+    public ProjectGroupDTO submitProject(String projectId, String groupId, String studentId,
+                                         String submissionUrl, List<SubmitProjectRequest.AttachmentInfo> attachments) {
         UUID clientId = getClientId();
 
         ProjectGroup group = projectGroupRepository.findByIdAndClientId(groupId, clientId)
@@ -824,10 +1031,14 @@ public class ProjectService {
         history.setAction(action);
         submissionHistoryRepository.save(history);
 
+        saveAttachments(projectId, groupId, ProjectAttachment.AttachmentContext.SUBMISSION,
+                attachments, studentId);
+
         log.info("Student {} {} project {} for group {}", studentId, action.toLowerCase(), projectId, groupId);
 
         ProjectGroupDTO dto = ProjectGroupDTO.fromEntity(group);
         dto.setMembers(resolveMemberInfo(members));
+        dto.setSubmissionAttachments(getSubmissionAttachments(groupId, clientId));
         return dto;
     }
 
@@ -855,6 +1066,7 @@ public class ProjectService {
         return projectIds.stream()
                 .map(pid -> projectRepository.findByIdAndClientId(pid, clientId).orElse(null))
                 .filter(Objects::nonNull)
+                .filter(p -> p.getStatus() != Project.ProjectStatus.DRAFT)
                 .map(ProjectDTO::fromEntity)
                 .collect(Collectors.toList());
     }
@@ -873,6 +1085,7 @@ public class ProjectService {
                 ProjectGroupDTO dto = ProjectGroupDTO.fromEntity(group);
                 List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(group.getId(), clientId);
                 dto.setMembers(resolveMemberInfo(members));
+                dto.setSubmissionAttachments(getSubmissionAttachments(group.getId(), clientId));
                 return dto;
             }
         }
@@ -930,5 +1143,105 @@ public class ProjectService {
             }
         }
         return studentGroupMap;
+    }
+
+    // ======================== Attachments ========================
+
+    private void saveAttachments(String projectId, String groupId,
+                                 ProjectAttachment.AttachmentContext context,
+                                 List<SubmitProjectRequest.AttachmentInfo> attachments,
+                                 String uploadedBy) {
+        if (attachments == null || attachments.isEmpty()) return;
+        UUID clientId = getClientId();
+
+        for (SubmitProjectRequest.AttachmentInfo info : attachments) {
+            if (info.getFileUrl() == null || info.getFileUrl().isBlank()) continue;
+
+            ProjectAttachment attachment = new ProjectAttachment();
+            attachment.setId(UlidGenerator.nextUlid());
+            attachment.setClientId(clientId);
+            attachment.setProjectId(projectId);
+            attachment.setGroupId(groupId);
+            attachment.setContext(context);
+            attachment.setFileUrl(info.getFileUrl());
+            attachment.setFileName(info.getFileName() != null ? info.getFileName() : "attachment");
+            attachment.setFileSizeBytes(info.getFileSizeBytes());
+            attachment.setMimeType(info.getMimeType());
+            attachment.setUploadedBy(uploadedBy);
+            projectAttachmentRepository.save(attachment);
+        }
+    }
+
+    private List<ProjectAttachmentDTO> getStatementAttachments(String projectId, UUID clientId) {
+        return projectAttachmentRepository
+                .findByProjectIdAndClientIdAndContext(projectId, clientId, ProjectAttachment.AttachmentContext.STATEMENT)
+                .stream()
+                .map(ProjectAttachmentDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    private List<ProjectAttachmentDTO> getSubmissionAttachments(String groupId, UUID clientId) {
+        return projectAttachmentRepository
+                .findByGroupIdAndClientIdAndContext(groupId, clientId, ProjectAttachment.AttachmentContext.SUBMISSION)
+                .stream()
+                .map(ProjectAttachmentDTO::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    public ProjectAttachmentDTO addAttachment(String projectId, String groupId,
+                                               String contextStr,
+                                               SubmitProjectRequest.AttachmentInfo info) {
+        UUID clientId = getClientId();
+        projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+        ProjectAttachment.AttachmentContext context = ProjectAttachment.AttachmentContext.valueOf(contextStr);
+        String uploadedBy = UserUtil.getCurrentUserEmail();
+
+        ProjectAttachment attachment = new ProjectAttachment();
+        attachment.setId(UlidGenerator.nextUlid());
+        attachment.setClientId(clientId);
+        attachment.setProjectId(projectId);
+        attachment.setGroupId(groupId);
+        attachment.setContext(context);
+        attachment.setFileUrl(info.getFileUrl());
+        attachment.setFileName(info.getFileName() != null ? info.getFileName() : "attachment");
+        attachment.setFileSizeBytes(info.getFileSizeBytes());
+        attachment.setMimeType(info.getMimeType());
+        attachment.setUploadedBy(uploadedBy);
+
+        attachment = projectAttachmentRepository.save(attachment);
+        log.info("Added {} attachment '{}' to project {} group {}",
+                context, attachment.getFileName(), projectId, groupId);
+        return ProjectAttachmentDTO.fromEntity(attachment);
+    }
+
+    public void deleteAttachment(String projectId, String attachmentId) {
+        UUID clientId = getClientId();
+        ProjectAttachment attachment = projectAttachmentRepository.findByIdAndClientId(attachmentId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Attachment not found: " + attachmentId));
+
+        if (!attachment.getProjectId().equals(projectId)) {
+            throw new IllegalArgumentException("Attachment does not belong to project");
+        }
+
+        projectAttachmentRepository.delete(attachment);
+        log.info("Deleted attachment {} from project {}", attachmentId, projectId);
+    }
+
+    public List<ProjectAttachmentDTO> getAttachments(String projectId, String contextStr) {
+        UUID clientId = getClientId();
+        if (contextStr != null) {
+            ProjectAttachment.AttachmentContext context = ProjectAttachment.AttachmentContext.valueOf(contextStr);
+            return projectAttachmentRepository
+                    .findByProjectIdAndClientIdAndContext(projectId, clientId, context)
+                    .stream()
+                    .map(ProjectAttachmentDTO::fromEntity)
+                    .collect(Collectors.toList());
+        }
+        return projectAttachmentRepository.findByProjectIdAndClientId(projectId, clientId)
+                .stream()
+                .map(ProjectAttachmentDTO::fromEntity)
+                .collect(Collectors.toList());
     }
 }

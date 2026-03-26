@@ -35,6 +35,9 @@ public class ProjectEvent {
     @Column(name = "sequence")
     private Integer sequence;
 
+    @Column(name = "section_id", length = 26)
+    private String sectionId;
+
     // Constructors
     public ProjectEvent() {}
 
@@ -72,4 +75,7 @@ public class ProjectEvent {
 
     public Integer getSequence() { return sequence; }
     public void setSequence(Integer sequence) { this.sequence = sequence; }
+
+    public String getSectionId() { return sectionId; }
+    public void setSectionId(String sectionId) { this.sectionId = sectionId; }
 }

@@ -3,6 +3,7 @@ package com.datagami.edudron.student.dto;
 import jakarta.validation.constraints.NotBlank;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public class CreateProjectRequest {
 
@@ -18,6 +19,7 @@ public class CreateProjectRequest {
     private Integer maxMarks;
     private OffsetDateTime submissionCutoff;
     private Boolean lateSubmissionAllowed;
+    private List<SubmitProjectRequest.AttachmentInfo> statementAttachments;
 
     public CreateProjectRequest() {}
 
@@ -42,4 +44,7 @@ public class CreateProjectRequest {
 
     public Boolean getLateSubmissionAllowed() { return lateSubmissionAllowed; }
     public void setLateSubmissionAllowed(Boolean lateSubmissionAllowed) { this.lateSubmissionAllowed = lateSubmissionAllowed; }
+
+    public List<SubmitProjectRequest.AttachmentInfo> getStatementAttachments() { return statementAttachments; }
+    public void setStatementAttachments(List<SubmitProjectRequest.AttachmentInfo> statementAttachments) { this.statementAttachments = statementAttachments; }
 }

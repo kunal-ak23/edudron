@@ -52,7 +52,8 @@ public class ProjectStudentController {
         String studentId = UserUtil.getCurrentUserId();
         // First get the student's group
         ProjectGroupDTO myGroup = projectService.getMyGroup(id, studentId);
-        ProjectGroupDTO result = projectService.submitProject(id, myGroup.getId(), studentId, request.getSubmissionUrl());
+        ProjectGroupDTO result = projectService.submitProject(id, myGroup.getId(), studentId,
+                request.getSubmissionUrl(), request.getAttachments());
         return ResponseEntity.ok(result);
     }
 

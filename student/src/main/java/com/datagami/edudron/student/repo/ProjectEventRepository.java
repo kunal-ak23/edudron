@@ -14,4 +14,10 @@ public interface ProjectEventRepository extends JpaRepository<ProjectEvent, Stri
     List<ProjectEvent> findByProjectIdAndClientIdOrderBySequenceAsc(String projectId, UUID clientId);
 
     Optional<ProjectEvent> findByIdAndClientId(String id, UUID clientId);
+
+    List<ProjectEvent> findByProjectIdAndSectionIdAndClientIdOrderBySequenceAsc(
+        String projectId, String sectionId, UUID clientId);
+
+    List<ProjectEvent> findByProjectIdAndSectionIdIsNullAndClientIdOrderBySequenceAsc(
+        String projectId, UUID clientId);
 }

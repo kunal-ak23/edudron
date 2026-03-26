@@ -13,6 +13,7 @@ public class ProjectEventDTO {
     private Boolean hasMarks;
     private Integer maxMarks;
     private Integer sequence;
+    private String sectionId;
 
     public ProjectEventDTO() {}
 
@@ -26,6 +27,7 @@ public class ProjectEventDTO {
         dto.setHasMarks(e.getHasMarks());
         dto.setMaxMarks(e.getMaxMarks());
         dto.setSequence(e.getSequence());
+        dto.setSectionId(e.getSectionId());
         return dto;
     }
 
@@ -53,4 +55,7 @@ public class ProjectEventDTO {
 
     public Integer getSequence() { return sequence; }
     public void setSequence(Integer sequence) { this.sequence = sequence; }
+
+    public String getSectionId() { return sectionId; }
+    public void setSectionId(String sectionId) { this.sectionId = sectionId; }
 }

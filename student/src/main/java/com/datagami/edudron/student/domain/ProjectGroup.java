@@ -20,6 +20,9 @@ public class ProjectGroup {
     @Column(name = "group_number", nullable = false)
     private Integer groupNumber;
 
+    @Column(name = "group_name", length = 255)
+    private String groupName;
+
     @Column(name = "problem_statement_id")
     private String problemStatementId;
 
@@ -62,6 +65,9 @@ public class ProjectGroup {
 
     public Integer getGroupNumber() { return groupNumber; }
     public void setGroupNumber(Integer groupNumber) { this.groupNumber = groupNumber; }
+
+    public String getGroupName() { return groupName; }
+    public void setGroupName(String groupName) { this.groupName = groupName; }
 
     public String getProblemStatementId() { return problemStatementId; }
     public void setProblemStatementId(String problemStatementId) { this.problemStatementId = problemStatementId; }

@@ -3,6 +3,8 @@ package com.datagami.edudron.student.dto;
 import com.datagami.edudron.student.domain.Project;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class ProjectDTO {
@@ -19,6 +21,7 @@ public class ProjectDTO {
     private String createdBy;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
+    private List<ProjectAttachmentDTO> statementAttachments = new ArrayList<>();
 
     public ProjectDTO() {}
 
@@ -79,4 +82,7 @@ public class ProjectDTO {
 
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public List<ProjectAttachmentDTO> getStatementAttachments() { return statementAttachments; }
+    public void setStatementAttachments(List<ProjectAttachmentDTO> statementAttachments) { this.statementAttachments = statementAttachments; }
 }

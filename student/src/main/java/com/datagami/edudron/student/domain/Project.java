@@ -17,7 +17,7 @@ public class Project {
     @Column(name = "course_id", nullable = false)
     private String courseId;
 
-    @Column(name = "section_id")
+    @Column(name = "section_id", columnDefinition = "text")
     private String sectionId;
 
     @Column(name = "title", nullable = false, length = 500)

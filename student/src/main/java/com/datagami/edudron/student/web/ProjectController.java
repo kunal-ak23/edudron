@@ -137,6 +137,13 @@ public class ProjectController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/{id}/events")
+    @Operation(summary = "Get events", description = "Get all events for a project")
+    public ResponseEntity<List<ProjectEventDTO>> getEvents(@PathVariable String id) {
+        List<ProjectEventDTO> events = projectService.getEvents(id);
+        return ResponseEntity.ok(events);
+    }
+
     @PostMapping("/{id}/events")
     @Operation(summary = "Add event")
     public ResponseEntity<ProjectEventDTO> addEvent(
@@ -149,8 +156,9 @@ public class ProjectController {
         Boolean hasMarks = (Boolean) body.get("hasMarks");
         Integer maxMarks = body.get("maxMarks") != null ? ((Number) body.get("maxMarks")).intValue() : null;
         Integer sequence = body.get("sequence") != null ? ((Number) body.get("sequence")).intValue() : null;
+        String sectionId = (String) body.get("sectionId");
 
-        ProjectEventDTO event = projectService.addEvent(id, name, dateTime, zoomLink, hasMarks, maxMarks, sequence);
+        ProjectEventDTO event = projectService.addEvent(id, name, dateTime, zoomLink, hasMarks, maxMarks, sequence, sectionId);
         return ResponseEntity.status(HttpStatus.CREATED).body(event);
     }
 
@@ -181,6 +189,20 @@ public class ProjectController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/{id}/events/{eventId}/attendance")
+    @Operation(summary = "Get attendance", description = "Get existing attendance records for a project event")
+    public ResponseEntity<List<Map<String, Object>>> getAttendance(
+            @PathVariable String id, @PathVariable String eventId) {
+        return ResponseEntity.ok(projectService.getEventAttendance(id, eventId));
+    }
+
+    @GetMapping("/{id}/events/{eventId}/grades")
+    @Operation(summary = "Get grades", description = "Get existing grade records for a project event")
+    public ResponseEntity<List<Map<String, Object>>> getGrades(
+            @PathVariable String id, @PathVariable String eventId) {
+        return ResponseEntity.ok(projectService.getEventGrades(id, eventId));
+    }
+
     @PostMapping("/{id}/events/{eventId}/attendance")
     @Operation(summary = "Save attendance", description = "Bulk save attendance for a project event")
     public ResponseEntity<Void> saveAttendance(
@@ -199,5 +221,45 @@ public class ProjectController {
             @Valid @RequestBody ProjectBulkGradeRequest request) {
         projectService.saveGrades(id, eventId, request.getEntries());
         return ResponseEntity.ok().build();
+    }
+
+    // ======================== Attachments ========================
+
+    @GetMapping("/{id}/attachments")
+    @Operation(summary = "Get attachments", description = "Get attachments for a project, optionally filtered by context (STATEMENT or SUBMISSION)")
+    public ResponseEntity<List<ProjectAttachmentDTO>> getAttachments(
+            @PathVariable String id,
+            @RequestParam(required = false) String context) {
+        List<ProjectAttachmentDTO> attachments = projectService.getAttachments(id, context);
+        return ResponseEntity.ok(attachments);
+    }
+
+    @PostMapping("/{id}/attachments")
+    @Operation(summary = "Add attachment", description = "Add an attachment to a project (statement) or group (submission)")
+    public ResponseEntity<ProjectAttachmentDTO> addAttachment(
+            @PathVariable String id,
+            @RequestBody Map<String, Object> body) {
+        String groupId = (String) body.get("groupId");
+        String context = (String) body.getOrDefault("context", "STATEMENT");
+
+        SubmitProjectRequest.AttachmentInfo info = new SubmitProjectRequest.AttachmentInfo();
+        info.setFileUrl((String) body.get("fileUrl"));
+        info.setFileName((String) body.get("fileName"));
+        if (body.get("fileSizeBytes") != null) {
+            info.setFileSizeBytes(((Number) body.get("fileSizeBytes")).longValue());
+        }
+        info.setMimeType((String) body.get("mimeType"));
+
+        ProjectAttachmentDTO attachment = projectService.addAttachment(id, groupId, context, info);
+        return ResponseEntity.status(HttpStatus.CREATED).body(attachment);
+    }
+
+    @DeleteMapping("/{id}/attachments/{attachmentId}")
+    @Operation(summary = "Delete attachment")
+    public ResponseEntity<Void> deleteAttachment(
+            @PathVariable String id,
+            @PathVariable String attachmentId) {
+        projectService.deleteAttachment(id, attachmentId);
+        return ResponseEntity.noContent().build();
     }
 }

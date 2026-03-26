@@ -10,11 +10,13 @@ public class ProjectGroupDTO {
     private String id;
     private String projectId;
     private Integer groupNumber;
+    private String groupName;
     private String problemStatementId;
     private String submissionUrl;
     private OffsetDateTime submittedAt;
     private String submittedBy;
     private List<MemberInfo> members = new ArrayList<>();
+    private List<ProjectAttachmentDTO> submissionAttachments = new ArrayList<>();
 
     public ProjectGroupDTO() {}
 
@@ -23,6 +25,7 @@ public class ProjectGroupDTO {
         dto.setId(g.getId());
         dto.setProjectId(g.getProjectId());
         dto.setGroupNumber(g.getGroupNumber());
+        dto.setGroupName(g.getGroupName());
         dto.setProblemStatementId(g.getProblemStatementId());
         dto.setSubmissionUrl(g.getSubmissionUrl());
         dto.setSubmittedAt(g.getSubmittedAt());
@@ -40,6 +43,9 @@ public class ProjectGroupDTO {
     public Integer getGroupNumber() { return groupNumber; }
     public void setGroupNumber(Integer groupNumber) { this.groupNumber = groupNumber; }
 
+    public String getGroupName() { return groupName; }
+    public void setGroupName(String groupName) { this.groupName = groupName; }
+
     public String getProblemStatementId() { return problemStatementId; }
     public void setProblemStatementId(String problemStatementId) { this.problemStatementId = problemStatementId; }
 
@@ -54,6 +60,9 @@ public class ProjectGroupDTO {
 
     public List<MemberInfo> getMembers() { return members; }
     public void setMembers(List<MemberInfo> members) { this.members = members; }
+
+    public List<ProjectAttachmentDTO> getSubmissionAttachments() { return submissionAttachments; }
+    public void setSubmissionAttachments(List<ProjectAttachmentDTO> submissionAttachments) { this.submissionAttachments = submissionAttachments; }
 
     public static class MemberInfo {
         private String studentId;
