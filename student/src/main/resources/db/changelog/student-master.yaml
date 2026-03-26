@@ -53,3 +53,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0025-event-submissions.yaml
   - include:
       file: db/changelog/db.changelog-0026-foreign-keys.yaml
+  - include:
+      file: db/changelog/db.changelog-0027-project-templates.yaml

@@ -166,6 +166,21 @@ export interface SubmitProjectRequest {
   attachments?: AttachmentInfo[]
 }
 
+export interface ProjectTemplateDTO {
+  id: string
+  name: string
+  description?: string
+  maxMarks: number
+  groupSize: number
+  templateData: {
+    events: Array<{ name: string; hasMarks?: boolean; maxMarks?: number; hasSubmission?: boolean; sequence?: number }>
+    maxMarks?: number
+    lateSubmissionAllowed?: boolean
+  }
+  createdBy?: string
+  createdAt?: string
+}
+
 export interface AttendanceEntry {
   studentId: string
   present: boolean
@@ -320,6 +335,34 @@ export class ProjectsApi {
   async advancePhase(id: string, nextEventId: string | null): Promise<ProjectDTO> {
     const response = await this.apiClient.post<ProjectDTO>(`/api/projects/${id}/advance-phase`, { nextEventId })
     return response.data
+  }
+
+  // ---- Dashboard ----
+
+  async getProjectDashboard(id: string): Promise<any> {
+    const response = await this.apiClient.get<any>(`/api/projects/${id}/dashboard`)
+    return response.data
+  }
+
+  // ---- Templates ----
+
+  async listTemplates(): Promise<ProjectTemplateDTO[]> {
+    const response = await this.apiClient.get<ProjectTemplateDTO[]>('/api/projects/templates')
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async getTemplate(templateId: string): Promise<ProjectTemplateDTO> {
+    const response = await this.apiClient.get<ProjectTemplateDTO>(`/api/projects/templates/${templateId}`)
+    return response.data
+  }
+
+  async saveAsTemplate(id: string, data: { name: string; description?: string }): Promise<ProjectTemplateDTO> {
+    const response = await this.apiClient.post<ProjectTemplateDTO>(`/api/projects/${id}/save-as-template`, data)
+    return response.data
+  }
+
+  async deleteTemplate(templateId: string): Promise<void> {
+    await this.apiClient.delete(`/api/projects/templates/${templateId}`)
   }
 
   // ---- Attachments ----

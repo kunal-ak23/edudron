@@ -65,6 +65,9 @@ public class ProjectService {
     private ProjectEventFeedbackRepository eventFeedbackRepository;
 
     @Autowired
+    private ProjectTemplateRepository projectTemplateRepository;
+
+    @Autowired
     private EnrollmentRepository enrollmentRepository;
 
     @Autowired
@@ -1514,5 +1517,165 @@ public class ProjectService {
                 .stream()
                 .map(ProjectAttachmentDTO::fromEntity)
                 .collect(Collectors.toList());
+    }
+
+    // ======================== Dashboard ========================
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getProjectDashboard(String projectId) {
+        UUID clientId = getClientId();
+        Project project = projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+        Map<String, Object> dashboard = new LinkedHashMap<>();
+
+        // Groups summary
+        List<ProjectGroup> groups = projectGroupRepository.findByProjectIdAndClientId(projectId, clientId);
+        int totalStudents = 0;
+        int groupsWithSubmission = 0;
+        for (ProjectGroup g : groups) {
+            List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(g.getId(), clientId);
+            totalStudents += members.size();
+            if (g.getSubmittedAt() != null) groupsWithSubmission++;
+        }
+        dashboard.put("totalGroups", groups.size());
+        dashboard.put("totalStudents", totalStudents);
+        dashboard.put("groupsSubmitted", groupsWithSubmission);
+
+        // Events summary
+        List<ProjectEvent> events = projectEventRepository.findByProjectIdAndClientIdOrderBySequenceAsc(projectId, clientId);
+        List<Map<String, Object>> eventStats = new ArrayList<>();
+        for (ProjectEvent event : events) {
+            Map<String, Object> eventStat = new LinkedHashMap<>();
+            eventStat.put("eventId", event.getId());
+            eventStat.put("eventName", event.getName());
+            eventStat.put("hasMarks", event.getHasMarks());
+            eventStat.put("maxMarks", event.getMaxMarks());
+            eventStat.put("hasSubmission", event.getHasSubmission());
+            eventStat.put("isCurrentPhase", event.getId().equals(project.getCurrentEventId()));
+
+            // Attendance stats
+            List<ProjectEventAttendance> attendances = projectEventAttendanceRepository.findByEventIdAndClientId(event.getId(), clientId);
+            long presentCount = attendances.stream().filter(a -> Boolean.TRUE.equals(a.getPresent())).count();
+            eventStat.put("attendanceTotal", attendances.size());
+            eventStat.put("attendancePresent", presentCount);
+
+            // Grade stats
+            if (Boolean.TRUE.equals(event.getHasMarks())) {
+                List<ProjectEventGrade> grades = projectEventGradeRepository.findByEventIdAndClientId(event.getId(), clientId);
+                if (!grades.isEmpty()) {
+                    double avg = grades.stream().mapToInt(ProjectEventGrade::getMarks).average().orElse(0);
+                    int max = grades.stream().mapToInt(ProjectEventGrade::getMarks).max().orElse(0);
+                    int min = grades.stream().mapToInt(ProjectEventGrade::getMarks).min().orElse(0);
+                    eventStat.put("gradesCount", grades.size());
+                    eventStat.put("gradesAvg", Math.round(avg * 10.0) / 10.0);
+                    eventStat.put("gradesMax", max);
+                    eventStat.put("gradesMin", min);
+                }
+            }
+
+            // Event submission stats
+            if (Boolean.TRUE.equals(event.getHasSubmission())) {
+                List<ProjectEventSubmission> submissions = eventSubmissionRepository.findByEventIdAndClientId(event.getId(), clientId);
+                // Count unique groups that submitted
+                long submittedGroups = submissions.stream()
+                        .map(ProjectEventSubmission::getGroupId)
+                        .distinct()
+                        .count();
+                long reviewedCount = submissions.stream()
+                        .filter(s -> s.getStatus() == ProjectEventSubmission.SubmissionStatus.REVIEWED ||
+                                     s.getStatus() == ProjectEventSubmission.SubmissionStatus.APPROVED)
+                        .map(ProjectEventSubmission::getGroupId)
+                        .distinct()
+                        .count();
+                long needsRevisionCount = submissions.stream()
+                        .filter(s -> s.getStatus() == ProjectEventSubmission.SubmissionStatus.NEEDS_REVISION)
+                        .map(ProjectEventSubmission::getGroupId)
+                        .distinct()
+                        .count();
+                eventStat.put("submissionsTotal", groups.size());
+                eventStat.put("submissionsSubmitted", submittedGroups);
+                eventStat.put("submissionsReviewed", reviewedCount);
+                eventStat.put("submissionsNeedsRevision", needsRevisionCount);
+            }
+
+            eventStats.add(eventStat);
+        }
+        dashboard.put("events", eventStats);
+
+        // Project status
+        dashboard.put("status", project.getStatus().name());
+        dashboard.put("currentEventId", project.getCurrentEventId());
+        dashboard.put("submissionCutoff", project.getSubmissionCutoff());
+
+        return dashboard;
+    }
+
+    // ======================== Templates ========================
+
+    public ProjectTemplate saveTemplate(String name, String description, String projectId) {
+        UUID clientId = getClientId();
+        Project project = projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+        // Build template data from project's events
+        List<ProjectEvent> events = projectEventRepository.findByProjectIdAndClientIdOrderBySequenceAsc(projectId, clientId);
+        List<Map<String, Object>> eventConfigs = new ArrayList<>();
+        for (ProjectEvent event : events) {
+            Map<String, Object> eventConfig = new LinkedHashMap<>();
+            eventConfig.put("name", event.getName());
+            eventConfig.put("hasMarks", event.getHasMarks());
+            eventConfig.put("maxMarks", event.getMaxMarks());
+            eventConfig.put("hasSubmission", event.getHasSubmission());
+            eventConfig.put("sequence", event.getSequence());
+            eventConfigs.add(eventConfig);
+        }
+
+        Map<String, Object> templateData = new LinkedHashMap<>();
+        templateData.put("events", eventConfigs);
+        templateData.put("maxMarks", project.getMaxMarks());
+        templateData.put("lateSubmissionAllowed", project.getLateSubmissionAllowed());
+
+        // Find group size from first group (all should be same size ideally)
+        List<ProjectGroup> groups = projectGroupRepository.findByProjectIdAndClientId(projectId, clientId);
+        int groupSize = 3;
+        if (!groups.isEmpty()) {
+            List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(groups.get(0).getId(), clientId);
+            groupSize = members.size();
+        }
+
+        ProjectTemplate template = new ProjectTemplate();
+        template.setClientId(clientId);
+        template.setName(name);
+        template.setDescription(description);
+        template.setMaxMarks(project.getMaxMarks());
+        template.setGroupSize(groupSize);
+        template.setTemplateData(templateData);
+        template.setCreatedBy(UserUtil.getCurrentUserEmail());
+
+        template = projectTemplateRepository.save(template);
+        log.info("Saved project template '{}' from project {}", name, projectId);
+        return template;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProjectTemplate> listTemplates() {
+        UUID clientId = getClientId();
+        return projectTemplateRepository.findByClientIdOrderByCreatedAtDesc(clientId);
+    }
+
+    @Transactional(readOnly = true)
+    public ProjectTemplate getTemplate(String id) {
+        UUID clientId = getClientId();
+        return projectTemplateRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Template not found: " + id));
+    }
+
+    public void deleteTemplate(String id) {
+        UUID clientId = getClientId();
+        ProjectTemplate template = projectTemplateRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Template not found: " + id));
+        projectTemplateRepository.delete(template);
+        log.info("Deleted project template {}", id);
     }
 }

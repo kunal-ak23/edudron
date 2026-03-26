@@ -1,0 +1,29 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0027-project-template
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_template
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: max_marks, type: int, defaultValueNumeric: 100 }
+              - column: { name: group_size, type: int, defaultValueNumeric: 3 }
+              - column:
+                  name: template_data
+                  type: jsonb
+                  constraints: { nullable: false }
+                  remarks: "JSON containing events config, marks breakdown, settings"
+              - column: { name: created_by, type: varchar(255) }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: project_template
+            schemaName: student
+            indexName: idx_project_template_client_id
+            columns:
+              - column: { name: client_id }

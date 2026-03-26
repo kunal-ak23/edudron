@@ -128,6 +128,9 @@ export default function ProjectDetailPage() {
   const [addSectionsGroupSize, setAddSectionsGroupSize] = useState(3)
   const [addingSections, setAddingSections] = useState(false)
 
+  // Dashboard state
+  const [dashboard, setDashboard] = useState<any>(null)
+
   // Statement attachments
   const [statementAttachments, setStatementAttachments] = useState<any[]>([])
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
@@ -198,6 +201,18 @@ export default function ProjectDetailPage() {
       } catch { /* ok */ }
     }
     loadAttachments()
+  }, [project, projectId])
+
+  // Load dashboard when project loads
+  useEffect(() => {
+    if (!project) return
+    const loadDashboard = async () => {
+      try {
+        const data = await projectsApi.getProjectDashboard(projectId)
+        setDashboard(data)
+      } catch { /* ok */ }
+    }
+    loadDashboard()
   }, [project, projectId])
 
   const loadGroups = useCallback(async () => {
@@ -576,6 +591,21 @@ export default function ProjectDetailPage() {
           </Badge>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const name = prompt('Template name:')
+              if (!name) return
+              try {
+                await projectsApi.saveAsTemplate(projectId, { name })
+                toast({ title: 'Template saved', description: `Template "${name}" created successfully.` })
+              } catch (error) {
+                toast({ variant: 'destructive', title: 'Failed to save template', description: extractErrorMessage(error) })
+              }
+            }}
+          >
+            Save as Template
+          </Button>
           <Button variant="outline" onClick={openAddSectionsDialog}>
             <Plus className="h-4 w-4 mr-2" /> Add Sections
           </Button>
@@ -593,12 +623,122 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue="dashboard">
         <TabsList>
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="groups">Groups ({groups.length})</TabsTrigger>
           <TabsTrigger value="events">Events ({events.length})</TabsTrigger>
         </TabsList>
+
+        {/* Dashboard Tab */}
+        <TabsContent value="dashboard">
+          {dashboard ? (
+            <div className="space-y-4">
+              {/* Summary cards */}
+              <div className="grid grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Groups</p>
+                    <p className="text-2xl font-bold">{dashboard.totalGroups}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Total Students</p>
+                    <p className="text-2xl font-bold">{dashboard.totalStudents}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <p className="text-sm text-muted-foreground">Groups Submitted</p>
+                    <p className="text-2xl font-bold">
+                      {dashboard.groupsSubmitted} / {dashboard.totalGroups}
+                      <span className="text-sm font-normal text-muted-foreground ml-2">
+                        ({dashboard.totalGroups > 0 ? Math.round((dashboard.groupsSubmitted / dashboard.totalGroups) * 100) : 0}%)
+                      </span>
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Event-wise stats */}
+              {dashboard.events && dashboard.events.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Event Progress</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {dashboard.events.map((evt: any, idx: number) => (
+                        <div key={evt.eventId} className={`rounded-lg border p-4 ${evt.isCurrentPhase ? 'border-blue-300 bg-blue-50/30' : ''}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{evt.eventName}</span>
+                              {evt.isCurrentPhase && <Badge className="bg-blue-100 text-blue-700 text-xs">Active Phase</Badge>}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              {evt.hasMarks && <Badge variant="secondary">{evt.maxMarks} marks</Badge>}
+                              {evt.hasSubmission && <Badge variant="outline">Accepts submission</Badge>}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                            {/* Attendance */}
+                            <div className="rounded bg-muted/50 p-2">
+                              <p className="text-xs text-muted-foreground">Attendance</p>
+                              <p className="font-medium">
+                                {evt.attendancePresent || 0} / {evt.attendanceTotal || 0} present
+                              </p>
+                            </div>
+
+                            {/* Grades */}
+                            {evt.hasMarks && evt.gradesCount != null && (
+                              <div className="rounded bg-muted/50 p-2">
+                                <p className="text-xs text-muted-foreground">Grades</p>
+                                <p className="font-medium">
+                                  Avg: {evt.gradesAvg || 0} / {evt.maxMarks}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Min: {evt.gradesMin} | Max: {evt.gradesMax} | Graded: {evt.gradesCount}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Submissions */}
+                            {evt.hasSubmission && (
+                              <div className="rounded bg-muted/50 p-2">
+                                <p className="text-xs text-muted-foreground">Submissions</p>
+                                <p className="font-medium">
+                                  {evt.submissionsSubmitted || 0} / {evt.submissionsTotal || 0}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Review status */}
+                            {evt.hasSubmission && (evt.submissionsReviewed > 0 || evt.submissionsNeedsRevision > 0) && (
+                              <div className="rounded bg-muted/50 p-2">
+                                <p className="text-xs text-muted-foreground">Review Status</p>
+                                <p className="font-medium text-green-600">{evt.submissionsReviewed || 0} reviewed</p>
+                                {evt.submissionsNeedsRevision > 0 && (
+                                  <p className="text-xs text-amber-600">{evt.submissionsNeedsRevision} needs revision</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          ) : (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          )}
+        </TabsContent>
 
         {/* Overview Tab */}
         <TabsContent value="overview">

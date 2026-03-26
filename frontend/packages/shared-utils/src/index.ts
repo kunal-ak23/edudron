@@ -36,7 +36,8 @@ export type {
   ProjectDTO, ProjectGroupDTO, ProjectEventDTO, ProjectQuestionDTO, ProjectAttachmentDTO,
   CreateProjectRequest, GenerateGroupsRequest, SubmitProjectRequest, AttachmentInfo,
   AttendanceEntry, GradeEntry,
-  ProjectEventSubmissionDTO, ProjectEventFeedbackDTO, SubmitEventRequest, EventFeedbackRequest
+  ProjectEventSubmissionDTO, ProjectEventFeedbackDTO, SubmitEventRequest, EventFeedbackRequest,
+  ProjectTemplateDTO
 } from './api/projects'
 export type {
   GenerateSimulationRequest, SimulationDTO, SimulationStateDTO,

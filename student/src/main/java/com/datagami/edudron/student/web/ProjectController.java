@@ -1,5 +1,6 @@
 package com.datagami.edudron.student.web;
 
+import com.datagami.edudron.student.domain.ProjectTemplate;
 import com.datagami.edudron.student.dto.*;
 import com.datagami.edudron.student.service.ProjectService;
 import com.datagami.edudron.student.util.UserUtil;
@@ -80,6 +81,12 @@ public class ProjectController {
     public ResponseEntity<ProjectDTO> getProject(@PathVariable String id) {
         ProjectDTO project = projectService.getProject(id);
         return ResponseEntity.ok(project);
+    }
+
+    @GetMapping("/{id}/dashboard")
+    @Operation(summary = "Get project dashboard", description = "Get analytics dashboard for a project")
+    public ResponseEntity<Map<String, Object>> getProjectDashboard(@PathVariable String id) {
+        return ResponseEntity.ok(projectService.getProjectDashboard(id));
     }
 
     @PutMapping("/{id}")
@@ -323,6 +330,41 @@ public class ProjectController {
             @PathVariable String id,
             @PathVariable String attachmentId) {
         projectService.deleteAttachment(id, attachmentId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ======================== Templates ========================
+
+    @GetMapping("/templates")
+    @Operation(summary = "List templates", description = "List all project templates")
+    public ResponseEntity<List<ProjectTemplate>> listTemplates() {
+        return ResponseEntity.ok(projectService.listTemplates());
+    }
+
+    @GetMapping("/templates/{templateId}")
+    @Operation(summary = "Get template")
+    public ResponseEntity<ProjectTemplate> getTemplate(@PathVariable String templateId) {
+        return ResponseEntity.ok(projectService.getTemplate(templateId));
+    }
+
+    @PostMapping("/{id}/save-as-template")
+    @Operation(summary = "Save as template", description = "Save project's event structure as a reusable template")
+    public ResponseEntity<ProjectTemplate> saveAsTemplate(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body) {
+        String name = body.get("name");
+        String description = body.get("description");
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Template name is required");
+        }
+        ProjectTemplate template = projectService.saveTemplate(name, description, id);
+        return ResponseEntity.status(HttpStatus.CREATED).body(template);
+    }
+
+    @DeleteMapping("/templates/{templateId}")
+    @Operation(summary = "Delete template")
+    public ResponseEntity<Void> deleteTemplate(@PathVariable String templateId) {
+        projectService.deleteTemplate(templateId);
         return ResponseEntity.noContent().build();
     }
 }
