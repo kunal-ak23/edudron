@@ -1,9 +1,11 @@
 package com.datagami.edudron.content.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 
 import java.util.List;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CreateProjectQuestionRequest {
 
     @NotBlank(message = "Course ID is required")

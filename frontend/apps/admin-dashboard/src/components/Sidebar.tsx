@@ -136,7 +136,7 @@ const menuItems: MenuItem[] = [
     requiresTenant: true,
     children: [
       { name: 'All Projects', href: '/projects', icon: FolderKanban },
-      { name: 'Question Bank', href: '/project-questions', icon: FileText },
+      { name: 'Problem Statements', href: '/project-questions', icon: FileText },
     ]
   },
   {

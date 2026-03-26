@@ -20,7 +20,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { FileText, Plus, Loader2, Upload, Trash2, Pencil } from 'lucide-react'
+import { FileText, Plus, Loader2, Upload, Trash2, Pencil, Download } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { projectQuestionsApi, coursesApi } from '@/lib/api'
 import type { ProjectQuestionDTO, Course } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -101,6 +107,22 @@ export default function ProjectQuestionsPage() {
           {totalElements} question{totalElements !== 1 ? 's' : ''}
         </Badge>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              const csv = `projectNumber,title,problemStatement,keyTechnologies,tags,difficulty\n"DA-01","Retail Performance Dashboard","Develop a robust Retail Performance Dashboard to monitor KPIs...","Excel;Power BI;Tableau","Data Analytics","MEDIUM"\n"DA-02","Healthcare Trend Analyzer","Perform a deep-dive analysis of historical Healthcare data...","Excel;Power BI;Tableau","Data Analytics","MEDIUM"\n"AAI-01","Autonomous Retail Researcher Agent","Develop an LLM-powered autonomous researcher agent...","Python;LangChain;CrewAI;LLM API","Agentic AI","HARD"`
+              const blob = new Blob([csv], { type: 'text/csv' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'project_questions_sample.csv'
+              a.click()
+              URL.revokeObjectURL(url)
+            }}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download Sample
+          </Button>
           <Button variant="outline" onClick={() => router.push('/project-questions/bulk-upload')}>
             <Upload className="h-4 w-4 mr-2" />
             Bulk Upload
@@ -203,9 +225,24 @@ export default function ProjectQuestionsPage() {
                         </Badge>
                       ))}
                       {(question.keyTechnologies?.length || 0) > 3 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{(question.keyTechnologies?.length || 0) - 3}
-                        </Badge>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge variant="secondary" className="text-xs cursor-help">
+                                +{(question.keyTechnologies?.length || 0) - 3}
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="flex flex-wrap gap-1 max-w-[250px]">
+                                {question.keyTechnologies!.slice(3).map((tech) => (
+                                  <Badge key={tech} variant="secondary" className="text-xs">
+                                    {tech}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
                     </div>
                   </TableCell>

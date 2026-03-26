@@ -59,6 +59,9 @@ export default function ProjectDetailPage() {
   const [submissionUrl, setSubmissionUrl] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [submissionHistory, setSubmissionHistory] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
 
   useEffect(() => {
     if (!enabled || !projectId) return
@@ -106,6 +109,13 @@ export default function ProjectDetailPage() {
           // Not accessible - that's fine
         }
       }
+      // Load submission history
+      if (groupData?.submittedAt) {
+        try {
+          const history = await projectsApi.getSubmissionHistory(projectId)
+          setSubmissionHistory(history)
+        } catch { /* Not critical */ }
+      }
     } catch (err) {
       console.error('Failed to load project details', err)
       setError('Failed to load project details')
@@ -124,6 +134,12 @@ export default function ProjectDetailPage() {
       })
       setGroup(updated)
       setSubmissionUrl('')
+      setEditing(false)
+      // Refresh submission history
+      try {
+        const history = await projectsApi.getSubmissionHistory(projectId)
+        setSubmissionHistory(history)
+      } catch { /* Not critical */ }
     } catch (err: any) {
       console.error('Failed to submit project', err)
       setSubmitError(err?.response?.data?.error || 'Failed to submit project')
@@ -414,12 +430,23 @@ export default function ProjectDetailPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {group.submittedAt ? (
-                    // Already submitted
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-green-700">
-                        <CheckCircle2 className="h-5 w-5" />
-                        <span className="font-medium">Submitted</span>
+                  {group.submittedAt && !editing ? (
+                    // Already submitted — show details + edit button
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-green-700">
+                          <CheckCircle2 className="h-5 w-5" />
+                          <span className="font-medium">Submitted</span>
+                        </div>
+                        {canSubmit && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setEditing(true); setSubmissionUrl(group.submissionUrl || '') }}
+                          >
+                            Edit Submission
+                          </Button>
+                        )}
                       </div>
                       <div className="text-sm text-gray-600">
                         <p>
@@ -441,10 +468,33 @@ export default function ProjectDetailPage() {
                         {group.submittedBy && (
                           <p className="mt-1">
                             <span className="text-gray-500">Submitted by:</span>{' '}
-                            {group.submittedBy}
+                            {group.members?.find((m: any) => m.studentId === group.submittedBy)?.name || group.members?.find((m: any) => m.studentId === group.submittedBy)?.email || group.submittedBy}
                           </p>
                         )}
                       </div>
+                      {/* Submission History */}
+                      {submissionHistory.length > 1 && (
+                        <div className="mt-3 border-t pt-3">
+                          <p className="text-xs font-medium text-gray-500 mb-2">Submission History</p>
+                          <div className="space-y-2">
+                            {submissionHistory.map((h: any, i: number) => (
+                              <div key={h.id} className="flex items-start gap-2 text-xs text-gray-500">
+                                <Badge variant="outline" className={`text-[10px] shrink-0 ${h.action === 'EDIT' ? 'border-amber-300 text-amber-600' : 'border-green-300 text-green-600'}`}>
+                                  {h.action}
+                                </Badge>
+                                <div>
+                                  <a href={h.submissionUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+                                    {h.submissionUrl}
+                                  </a>
+                                  <span className="text-gray-400 ml-1">
+                                    by {h.submittedByName || h.submittedBy} &middot; {formatDateTime(h.submittedAt)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : canSubmit ? (
                     // Can submit

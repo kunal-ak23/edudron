@@ -49,7 +49,7 @@ import {
   Award,
   ExternalLink,
 } from 'lucide-react'
-import { projectsApi } from '@/lib/api'
+import { projectsApi, sectionsApi, coursesApi, projectQuestionsApi, enrollmentsApi } from '@/lib/api'
 import type {
   ProjectDTO,
   ProjectGroupDTO,
@@ -116,6 +116,22 @@ export default function ProjectDetailPage() {
   const [gradeEntries, setGradeEntries] = useState<GradeEntry[]>([])
   const [savingGrades, setSavingGrades] = useState(false)
 
+  // Course & section info
+  const [courseName, setCourseName] = useState('')
+  const [sectionNames, setSectionNames] = useState<string[]>([])
+
+  // Name lookup maps
+  const [studentNames, setStudentNames] = useState<Record<string, string>>({})
+  const [statementTitles, setStatementTitles] = useState<Record<string, string>>({})
+
+  // Add Sections dialog state
+  const [addSectionsDialogOpen, setAddSectionsDialogOpen] = useState(false)
+  const [availableSections, setAvailableSections] = useState<{ id: string; name: string; studentCount: number }[]>([])
+  const [loadingSections, setLoadingSections] = useState(false)
+  const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([])
+  const [addSectionsGroupSize, setAddSectionsGroupSize] = useState(3)
+  const [addingSections, setAddingSections] = useState(false)
+
   const loadProject = useCallback(async () => {
     setLoading(true)
     try {
@@ -124,7 +140,14 @@ export default function ProjectDetailPage() {
       setTitle(data.title)
       setDescription(data.description || '')
       setMaxMarks(data.maxMarks)
-      setSubmissionCutoff(data.submissionCutoff || '')
+      // Convert ISO datetime to datetime-local format (YYYY-MM-DDTHH:mm)
+      if (data.submissionCutoff) {
+        const d = new Date(data.submissionCutoff)
+        const pad = (n: number) => n.toString().padStart(2, '0')
+        setSubmissionCutoff(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`)
+      } else {
+        setSubmissionCutoff('')
+      }
       setLateSubmissionAllowed(data.lateSubmissionAllowed)
     } catch (error) {
       toast({
@@ -136,6 +159,34 @@ export default function ProjectDetailPage() {
       setLoading(false)
     }
   }, [projectId, toast])
+
+  // Load course and section names
+  useEffect(() => {
+    if (!project) return
+    const loadInfo = async () => {
+      try {
+        if (project.courseId) {
+          const courses = await coursesApi.listCourses()
+          const course = courses.find((c: any) => c.id === project.courseId)
+          if (course) setCourseName(course.title)
+        }
+        if (project.sectionId) {
+          const ids = project.sectionId.split(',').map((s: string) => s.trim()).filter(Boolean)
+          const names: string[] = []
+          for (const id of ids) {
+            try {
+              const section = await sectionsApi.getSection(id)
+              names.push(section.name || id)
+            } catch {
+              names.push(id)
+            }
+          }
+          setSectionNames(names)
+        }
+      } catch { /* Non-critical */ }
+    }
+    loadInfo()
+  }, [project])
 
   const loadGroups = useCallback(async () => {
     setLoadingGroups(true)
@@ -155,6 +206,43 @@ export default function ProjectDetailPage() {
     loadGroups()
   }, [loadProject, loadGroups])
 
+  // Resolve student names and problem statement titles when groups change
+  useEffect(() => {
+    if (!groups.length || !project) return
+    const resolve = async () => {
+      // Resolve student names from sections
+      try {
+        const sectionIds = project.sectionId ? project.sectionId.split(',').map((s: string) => s.trim()).filter(Boolean) : []
+        const nameMap: Record<string, string> = {}
+        for (const sid of sectionIds) {
+          try {
+            const res = await enrollmentsApi.apiClient.get<any[]>(`/api/sections/${sid}/students`)
+            const students = Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : [])
+            students.forEach((s: any) => {
+              if (s.id && (s.name || s.email)) {
+                nameMap[s.id] = s.name || s.email
+              }
+            })
+          } catch { /* skip */ }
+        }
+        if (Object.keys(nameMap).length > 0) setStudentNames(nameMap)
+      } catch { /* skip */ }
+
+      // Resolve problem statement titles
+      try {
+        if (project.courseId) {
+          const result = await projectQuestionsApi.listQuestions({ courseId: project.courseId })
+          const titleMap: Record<string, string> = {}
+          result.content.forEach((q: any) => {
+            titleMap[q.id] = q.projectNumber ? `${q.projectNumber}: ${q.title}` : q.title
+          })
+          if (Object.keys(titleMap).length > 0) setStatementTitles(titleMap)
+        }
+      } catch { /* skip */ }
+    }
+    resolve()
+  }, [groups, project])
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -162,7 +250,7 @@ export default function ProjectDetailPage() {
         title: title.trim(),
         description: description.trim() || undefined,
         maxMarks,
-        submissionCutoff: submissionCutoff || undefined,
+        submissionCutoff: submissionCutoff ? new Date(submissionCutoff).toISOString() : undefined,
         lateSubmissionAllowed,
       })
       setProject(updated)
@@ -227,8 +315,8 @@ export default function ProjectDetailPage() {
   const handleAssignStatements = async () => {
     setAssigningStatements(true)
     try {
-      const updatedGroups = await projectsApi.assignStatements(projectId)
-      setGroups(updatedGroups)
+      await projectsApi.assignStatements(projectId)
+      await loadGroups()
       toast({ title: 'Statements Assigned' })
     } catch (error) {
       toast({
@@ -380,6 +468,74 @@ export default function ProjectDetailPage() {
     }
   }
 
+  // Add Sections
+  const openAddSectionsDialog = async () => {
+    if (!project?.courseId) return
+    setAddSectionsDialogOpen(true)
+    setLoadingSections(true)
+    setSelectedSectionIds([])
+    setAddSectionsGroupSize(3)
+    try {
+      const allSectionIds: string[] = await projectsApi.getSectionsByCourse(project.courseId)
+      const existingSectionIds = project.sectionId
+        ? project.sectionId.split(',').map((s: string) => s.trim()).filter(Boolean)
+        : []
+      const remainingIds = allSectionIds.filter((id: string) => !existingSectionIds.includes(id))
+
+      const sectionDetails = await Promise.all(
+        remainingIds.map(async (id: string) => {
+          try {
+            const section = await sectionsApi.getSection(id)
+            return { id, name: section.name || id, studentCount: section.studentCount ?? 0 }
+          } catch {
+            return { id, name: id, studentCount: 0 }
+          }
+        })
+      )
+      setAvailableSections(sectionDetails)
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to load sections',
+        description: extractErrorMessage(error),
+      })
+      setAvailableSections([])
+    } finally {
+      setLoadingSections(false)
+    }
+  }
+
+  const toggleSectionSelection = (sectionId: string) => {
+    setSelectedSectionIds((prev) =>
+      prev.includes(sectionId)
+        ? prev.filter((id) => id !== sectionId)
+        : [...prev, sectionId]
+    )
+  }
+
+  const handleAddSections = async () => {
+    if (selectedSectionIds.length === 0) return
+    setAddingSections(true)
+    try {
+      await projectsApi.addSections(projectId, {
+        sectionIds: selectedSectionIds,
+        groupSize: addSectionsGroupSize,
+      })
+      setAddSectionsDialogOpen(false)
+      toast({ title: 'Sections Added', description: `${selectedSectionIds.length} section(s) added to the project.` })
+      await loadProject()
+      await loadGroups()
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to add sections',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setAddingSections(false)
+    }
+  }
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'
     return new Date(dateStr).toLocaleDateString('en-US', {
@@ -433,6 +589,9 @@ export default function ProjectDetailPage() {
           </Badge>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={openAddSectionsDialog}>
+            <Plus className="h-4 w-4 mr-2" /> Add Sections
+          </Button>
           {project.status === 'DRAFT' && (
             <Button variant="outline" onClick={handleActivate}>
               <Play className="h-4 w-4 mr-2" /> Activate
@@ -462,6 +621,27 @@ export default function ProjectDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                {/* Course & Sections (read-only info) */}
+                {(courseName || sectionNames.length > 0) && (
+                  <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
+                    {courseName && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Course</Label>
+                        <p className="text-sm font-medium">{courseName}</p>
+                      </div>
+                    )}
+                    {sectionNames.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Sections</Label>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {sectionNames.map((name, i) => (
+                            <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label>Title</Label>
                   <Input value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -557,7 +737,7 @@ export default function ProjectDetailPage() {
                           <h3 className="font-medium">Group {group.groupNumber}</h3>
                           {group.problemStatementId && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              Statement assigned: {group.problemStatementId}
+                              Statement: {statementTitles[group.problemStatementId] || group.problemStatementId}
                             </p>
                           )}
                         </div>
@@ -594,7 +774,7 @@ export default function ProjectDetailPage() {
                               key={member.studentId}
                               className="inline-flex items-center px-2 py-1 rounded-md bg-muted text-xs"
                             >
-                              {member.name || member.email || member.studentId}
+                              {member.name || member.email || studentNames[member.studentId] || member.studentId}
                             </span>
                           ))}
                         </div>
@@ -908,6 +1088,76 @@ export default function ProjectDetailPage() {
                 <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...</>
               ) : (
                 'Save Grades'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Sections Dialog */}
+      <Dialog open={addSectionsDialogOpen} onOpenChange={setAddSectionsDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add Sections</DialogTitle>
+            <DialogDescription>
+              Select sections to add to this project. Students from these sections will be grouped automatically.
+            </DialogDescription>
+          </DialogHeader>
+          {loadingSections ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : availableSections.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No additional sections available for this course.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                {availableSections.map((section) => (
+                  <label
+                    key={section.id}
+                    className="flex items-center gap-3 p-2 rounded-md hover:bg-muted cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={selectedSectionIds.includes(section.id)}
+                      onCheckedChange={() => toggleSectionSelection(section.id)}
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium">{section.name}</span>
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({section.studentCount} students)
+                      </span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <Label>Group Size</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={addSectionsGroupSize}
+                  onChange={(e) => setAddSectionsGroupSize(parseInt(e.target.value) || 3)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Students in each new section will be grouped into teams of this size.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddSectionsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddSections}
+              disabled={addingSections || selectedSectionIds.length === 0}
+            >
+              {addingSections ? (
+                <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding...</>
+              ) : (
+                `Add ${selectedSectionIds.length > 0 ? selectedSectionIds.length + ' ' : ''}Section${selectedSectionIds.length !== 1 ? 's' : ''}`
               )}
             </Button>
           </DialogFooter>

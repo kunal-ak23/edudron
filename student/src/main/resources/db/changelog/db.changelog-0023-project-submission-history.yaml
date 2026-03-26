@@ -1,0 +1,61 @@
+databaseChangeLog:
+  - changeSet:
+      id: student-0023-project-submission-history
+      author: edudron
+      changes:
+        - createTable:
+            tableName: project_submission_history
+            schemaName: student
+            columns:
+              - column:
+                  name: id
+                  type: varchar(26)
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: client_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: group_id
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: project_id
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: submission_url
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: submitted_by
+                  type: varchar(26)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: submitted_at
+                  type: timestamptz
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+              - column:
+                  name: action
+                  type: varchar(20)
+                  defaultValue: SUBMIT
+                  constraints:
+                    nullable: false
+        - createIndex:
+            indexName: idx_submission_history_group
+            tableName: project_submission_history
+            schemaName: student
+            columns:
+              - column:
+                  name: group_id
+              - column:
+                  name: client_id

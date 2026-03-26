@@ -56,6 +56,15 @@ public class ProjectStudentController {
         return ResponseEntity.ok(result);
     }
 
+    @GetMapping("/{id}/my-group/history")
+    @Operation(summary = "Get submission history", description = "Get submission history for the current student's group")
+    public ResponseEntity<List<Map<String, Object>>> getSubmissionHistory(@PathVariable String id) {
+        String studentId = UserUtil.getCurrentUserId();
+        ProjectGroupDTO myGroup = projectService.getMyGroup(id, studentId);
+        List<Map<String, Object>> history = projectService.getSubmissionHistory(id, myGroup.getId());
+        return ResponseEntity.ok(history);
+    }
+
     @GetMapping("/{id}/my-attendance")
     @Operation(summary = "Get my attendance", description = "Get attendance and grades for the current student in a project")
     public ResponseEntity<Map<String, Object>> getMyAttendance(@PathVariable String id) {

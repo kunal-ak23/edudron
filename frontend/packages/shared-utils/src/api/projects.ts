@@ -63,6 +63,22 @@ export interface CreateProjectRequest {
   lateSubmissionAllowed?: boolean
 }
 
+export interface BulkProjectSetupRequest {
+  courseId: string
+  sectionIds: string[]
+  groupSize: number
+  title: string
+  description?: string
+  maxMarks?: number
+  submissionCutoff?: string
+  lateSubmissionAllowed?: boolean
+}
+
+export interface AddSectionsRequest {
+  sectionIds: string[]
+  groupSize: number
+}
+
 export interface GenerateGroupsRequest {
   groupSize: number
 }
@@ -90,6 +106,21 @@ export class ProjectsApi {
 
   async createProject(data: CreateProjectRequest): Promise<ProjectDTO> {
     const response = await this.apiClient.post<ProjectDTO>('/api/projects', data)
+    return response.data
+  }
+
+  async bulkSetup(data: BulkProjectSetupRequest): Promise<ProjectDTO> {
+    const response = await this.apiClient.post<ProjectDTO>('/api/projects/bulk-setup', data)
+    return response.data
+  }
+
+  async getSectionsByCourse(courseId: string): Promise<string[]> {
+    const response = await this.apiClient.get<string[]>(`/api/projects/sections-by-course/${courseId}`)
+    return Array.isArray(response.data) ? response.data : (Array.isArray(response) ? response : [])
+  }
+
+  async addSections(projectId: string, data: AddSectionsRequest): Promise<ProjectDTO> {
+    const response = await this.apiClient.post<ProjectDTO>(`/api/projects/${projectId}/add-sections`, data)
     return response.data
   }
 
@@ -195,6 +226,11 @@ export class ProjectsApi {
     const response = await this.apiClient.get<any>(`/api/projects/${id}/my-attendance`)
     return response.data
   }
+
+  async getSubmissionHistory(id: string): Promise<any[]> {
+    const response = await this.apiClient.get<any[]>(`/api/projects/${id}/my-group/history`)
+    return Array.isArray(response.data) ? response.data : (Array.isArray(response) ? response : [])
+  }
 }
 
 // ============ ProjectQuestionsApi ============
@@ -236,7 +272,7 @@ export class ProjectQuestionsApi {
   }
 
   async bulkUpload(questions: Partial<ProjectQuestionDTO>[]): Promise<ProjectQuestionDTO[]> {
-    const response = await this.apiClient.post<ProjectQuestionDTO[]>('/api/project-questions/bulk-upload', questions)
+    const response = await this.apiClient.post<ProjectQuestionDTO[]>('/api/project-questions/bulk-upload', { questions })
     const data = response.data
     return Array.isArray(data) ? data : ((data as any)?.data || [])
   }

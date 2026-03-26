@@ -248,44 +248,91 @@ export default function BulkUploadQuestionsPage() {
     reader.onload = (event) => {
       const text = event.target?.result as string
 
-      if (file.name.endsWith('.csv')) {
-        // Parse CSV
+      if (file.name.endsWith('.csv') || file.name.endsWith('.tsv')) {
+        // Parse CSV/TSV with proper quoted-field handling
         try {
-          const lines = text.split('\n').filter((l) => l.trim())
-          if (lines.length < 2) {
-            setParseError('CSV must have a header row and at least one data row.')
+          const delimiter = file.name.endsWith('.tsv') ? '\t' : ','
+          const parseCsvRows = (text: string): string[][] => {
+            const rows: string[][] = []
+            let currentRow: string[] = []
+            let currentField = ''
+            let inQuotes = false
+
+            for (let i = 0; i < text.length; i++) {
+              const ch = text[i]
+              if (ch === '"') {
+                if (inQuotes && text[i + 1] === '"') {
+                  currentField += '"'
+                  i++
+                } else {
+                  inQuotes = !inQuotes
+                }
+              } else if (ch === delimiter && !inQuotes) {
+                currentRow.push(currentField.trim())
+                currentField = ''
+              } else if (ch === '\n' && !inQuotes) {
+                currentRow.push(currentField.trim())
+                if (currentRow.some(c => c)) rows.push(currentRow)
+                currentRow = []
+                currentField = ''
+              } else if (ch === '\r') {
+                // skip
+              } else {
+                currentField += ch
+              }
+            }
+            currentRow.push(currentField.trim())
+            if (currentRow.some(c => c)) rows.push(currentRow)
+            return rows
+          }
+
+          const rows = parseCsvRows(text)
+          if (rows.length < 2) {
+            setParseError('File must have a header row and at least one data row.')
             return
           }
-          const headers = lines[0].split(',').map((h) => h.trim().toLowerCase())
-          const titleIdx = headers.indexOf('title')
-          const stmtIdx = headers.indexOf('problemstatement') !== -1 ? headers.indexOf('problemstatement') : headers.indexOf('problem_statement')
-          const techIdx = headers.indexOf('keytechnologies') !== -1 ? headers.indexOf('keytechnologies') : headers.indexOf('key_technologies')
-          const tagsIdx = headers.indexOf('tags')
-          const diffIdx = headers.indexOf('difficulty')
-          const projNumIdx = headers.indexOf('projectnumber') !== -1 ? headers.indexOf('projectnumber') : headers.indexOf('project_number')
+          const headers = rows[0].map((h) => h.trim().toLowerCase())
+          const findExact = (names: string[]) => {
+            for (const name of names) {
+              const idx = headers.findIndex(h => h === name)
+              if (idx !== -1) return idx
+            }
+            for (const name of names) {
+              const idx = headers.findIndex(h => h.includes(name))
+              if (idx !== -1) return idx
+            }
+            return -1
+          }
+          const projNumIdx = findExact(['projectnumber', 'project no', 'project no.', 'project_no', 'project number'])
+          const titleIdx = findExact(['title', 'name'])
+          const stmtIdx = findExact(['problemstatement', 'problem_statement', 'description in details', 'description in detail', 'description', 'details', 'problem statement'])
+          const techIdx = findExact(['keytechnologies', 'key_technologies', 'tools', 'technologies', 'tech', 'key technologies'])
+          const tagsIdx = findExact(['tags', 'subject', 'category', 'domain'])
+          const diffIdx = findExact(['difficulty', 'level'])
 
-          if (titleIdx === -1 || stmtIdx === -1) {
-            setParseError('CSV must have "title" and "problemStatement" columns.')
+          if (titleIdx === -1 && stmtIdx === -1) {
+            setParseError('File must have at least a "title" or "problemStatement" column.')
             return
           }
 
           const questions: ParsedQuestion[] = []
-          for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map((c) => c.trim())
+          for (let i = 1; i < rows.length; i++) {
+            const cols = rows[i]
+            if (!cols[titleIdx] && !(stmtIdx !== -1 && cols[stmtIdx])) continue
             questions.push({
-              projectNumber: projNumIdx !== -1 && cols[projNumIdx] ? cols[projNumIdx] : undefined,
-              title: cols[titleIdx] || '',
-              problemStatement: cols[stmtIdx] || '',
-              keyTechnologies: techIdx !== -1 && cols[techIdx] ? cols[techIdx].split(';').map((t) => t.trim()) : undefined,
-              tags: tagsIdx !== -1 && cols[tagsIdx] ? cols[tagsIdx].split(';').map((t) => t.trim()) : undefined,
-              difficulty: diffIdx !== -1 ? cols[diffIdx] : undefined,
+              projectNumber: projNumIdx !== -1 ? (cols[projNumIdx] || undefined) : undefined,
+              title: titleIdx !== -1 ? (cols[titleIdx] || '') : '',
+              problemStatement: stmtIdx !== -1 ? (cols[stmtIdx] || '') : '',
+              keyTechnologies: techIdx !== -1 && cols[techIdx] ? cols[techIdx].split(/[;,\/]/).map((t) => t.trim()).filter(Boolean) : undefined,
+              tags: tagsIdx !== -1 && cols[tagsIdx] ? cols[tagsIdx].split(/[;,]/).map((t) => t.trim()).filter(Boolean) : undefined,
+              difficulty: diffIdx !== -1 && cols[diffIdx] ? cols[diffIdx].toUpperCase() : undefined,
             })
           }
           setParsedQuestions(questions)
           setPreviewing(true)
           setParseError(null)
         } catch {
-          setParseError('Failed to parse CSV file.')
+          setParseError('Failed to parse file.')
         }
       } else {
         // Assume JSON
@@ -364,7 +411,7 @@ export default function BulkUploadQuestionsPage() {
               <Label>Upload File (JSON or CSV)</Label>
               <input
                 type="file"
-                accept=".json,.csv"
+                accept=".json,.csv,.tsv"
                 onChange={handleFileUpload}
                 className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
               />

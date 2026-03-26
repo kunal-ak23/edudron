@@ -36,6 +36,34 @@ public class ProjectController {
         return ResponseEntity.status(HttpStatus.CREATED).body(project);
     }
 
+    @PostMapping("/bulk-setup")
+    @Operation(summary = "Bulk project setup",
+               description = "Create project, generate groups from multiple sections, assign problem statements")
+    public ResponseEntity<ProjectDTO> bulkSetup(@Valid @RequestBody BulkProjectSetupRequest request) {
+        log.info("POST /api/projects/bulk-setup - Bulk setup '{}' for course {} with {} sections",
+                request.getTitle(), request.getCourseId(), request.getSectionIds().size());
+        ProjectDTO project = projectService.bulkSetup(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(project);
+    }
+
+    @GetMapping("/sections-by-course/{courseId}")
+    @Operation(summary = "Get sections with enrollments for a course")
+    public ResponseEntity<List<String>> getSectionsByCourse(@PathVariable String courseId) {
+        List<String> sectionIds = projectService.getSectionIdsByCourse(courseId);
+        return ResponseEntity.ok(sectionIds);
+    }
+
+    @PostMapping("/{id}/add-sections")
+    @Operation(summary = "Add sections to existing project",
+               description = "Add new sections, generate groups for new students, assign problem statements")
+    public ResponseEntity<ProjectDTO> addSections(
+            @PathVariable String id,
+            @Valid @RequestBody AddSectionsRequest request) {
+        log.info("POST /api/projects/{}/add-sections - Adding {} sections", id, request.getSectionIds().size());
+        ProjectDTO project = projectService.addSections(id, request);
+        return ResponseEntity.ok(project);
+    }
+
     @GetMapping
     @Operation(summary = "List projects")
     public ResponseEntity<List<ProjectDTO>> listProjects(

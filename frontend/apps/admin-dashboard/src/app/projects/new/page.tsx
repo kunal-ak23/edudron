@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ArrowLeft, Loader2 } from 'lucide-react'
-import { projectsApi, coursesApi, sectionsApi } from '@/lib/api'
+import { projectsApi, coursesApi, classesApi, sectionsApi, institutesApi } from '@/lib/api'
 import type { Course } from '@kunal-ak23/edudron-shared-utils'
 import type { Section } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -37,24 +37,33 @@ export default function CreateProjectPage() {
   const [lateSubmissionAllowed, setLateSubmissionAllowed] = useState(false)
 
   const [courses, setCourses] = useState<Course[]>([])
+  const [classes, setClasses] = useState<any[]>([])
+  const [classId, setClassId] = useState<string>('')
   const [sections, setSections] = useState<Section[]>([])
   const [loadingSections, setLoadingSections] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Load courses
+  // Load courses and classes (classes require institute context)
   useEffect(() => {
-    const loadCourses = async () => {
+    const loadData = async () => {
       try {
-        const data = await coursesApi.listCourses()
-        setCourses(data)
+        const courseData = await coursesApi.listCourses()
+        setCourses(courseData)
+        const institutes = await institutesApi.listInstitutes()
+        const allClasses: any[] = []
+        for (const inst of institutes) {
+          const instClasses = await classesApi.listClassesByInstitute(inst.id)
+          allClasses.push(...instClasses)
+        }
+        setClasses(allClasses)
       } catch { /* Non-critical */ }
     }
-    loadCourses()
+    loadData()
   }, [])
 
-  // Load sections when course changes
+  // Load sections when class changes
   useEffect(() => {
-    if (!courseId || courseId === 'none') {
+    if (!classId) {
       setSections([])
       setSectionId('')
       return
@@ -62,7 +71,7 @@ export default function CreateProjectPage() {
     const loadSections = async () => {
       setLoadingSections(true)
       try {
-        const data = await coursesApi.getSections(courseId)
+        const data = await sectionsApi.listSectionsByClass(classId)
         setSections(data)
       } catch {
         setSections([])
@@ -71,7 +80,7 @@ export default function CreateProjectPage() {
       }
     }
     loadSections()
-  }, [courseId])
+  }, [classId])
 
   const handleSubmit = async () => {
     if (!courseId || !title.trim()) {
@@ -91,7 +100,7 @@ export default function CreateProjectPage() {
         title: title.trim(),
         description: description.trim() || undefined,
         maxMarks,
-        submissionCutoff: submissionCutoff || undefined,
+        submissionCutoff: submissionCutoff ? new Date(submissionCutoff).toISOString() : undefined,
         lateSubmissionAllowed,
       })
       toast({
@@ -135,6 +144,23 @@ export default function CreateProjectPage() {
               </Select>
             </div>
 
+            {/* Class */}
+            <div className="space-y-2">
+              <Label>Class</Label>
+              <Select value={classId} onValueChange={(val) => { setClassId(val); setSectionId('') }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a class..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {classes.map((cls: any) => (
+                    <SelectItem key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Section */}
             <div className="space-y-2">
               <Label>Section</Label>
@@ -150,14 +176,14 @@ export default function CreateProjectPage() {
                   <SelectContent>
                     {sections.map((section) => (
                       <SelectItem key={section.id} value={section.id}>
-                        {section.title || section.name || section.id}
+                        {section.name || section.id}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
-              {!courseId && (
-                <p className="text-xs text-muted-foreground">Select a course first to see available sections.</p>
+              {!classId && (
+                <p className="text-xs text-muted-foreground">Select a class first to see available sections.</p>
               )}
             </div>
 

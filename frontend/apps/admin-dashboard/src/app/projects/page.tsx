@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { FolderKanban, Plus, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { FolderKanban, Plus, Loader2, ChevronLeft, ChevronRight, Layers } from 'lucide-react'
 import { projectsApi, coursesApi } from '@/lib/api'
 import type { ProjectDTO, Course } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
@@ -96,10 +96,16 @@ export default function ProjectsPage() {
             {totalElements} project{totalElements !== 1 ? 's' : ''}
           </Badge>
         </div>
-        <Button onClick={() => router.push('/projects/new')}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Project
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push('/projects/bulk-create')}>
+            <Layers className="h-4 w-4 mr-2" />
+            Bulk Setup
+          </Button>
+          <Button onClick={() => router.push('/projects/new')}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Project
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

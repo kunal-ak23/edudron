@@ -6,6 +6,7 @@ import com.datagami.edudron.common.UlidGenerator;
 import com.datagami.edudron.student.domain.*;
 import com.datagami.edudron.student.dto.*;
 import com.datagami.edudron.student.repo.*;
+import com.datagami.edudron.student.util.UserUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +51,9 @@ public class ProjectService {
 
     @Autowired
     private ProjectEventGradeRepository projectEventGradeRepository;
+
+    @Autowired
+    private ProjectSubmissionHistoryRepository submissionHistoryRepository;
 
     @Autowired
     private EnrollmentRepository enrollmentRepository;
@@ -97,6 +101,74 @@ public class ProjectService {
         return UUID.fromString(clientIdStr);
     }
 
+    // ======================== Submission History ========================
+
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getSubmissionHistory(String projectId, String groupId) {
+        UUID clientId = getClientId();
+        List<ProjectSubmissionHistory> history = submissionHistoryRepository
+                .findByGroupIdAndClientIdOrderBySubmittedAtDesc(groupId, clientId);
+
+        // Resolve submitter names
+        List<String> submitterIds = history.stream().map(ProjectSubmissionHistory::getSubmittedBy).distinct().collect(Collectors.toList());
+        Map<String, String[]> nameMap = resolveStudentInfo(submitterIds);
+
+        return history.stream().map(h -> {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("id", h.getId());
+            entry.put("submissionUrl", h.getSubmissionUrl());
+            entry.put("submittedBy", h.getSubmittedBy());
+            String[] info = nameMap.get(h.getSubmittedBy());
+            entry.put("submittedByName", info != null ? info[0] : null);
+            entry.put("submittedAt", h.getSubmittedAt());
+            entry.put("action", h.getAction());
+            return entry;
+        }).collect(Collectors.toList());
+    }
+
+    // ======================== User Lookup ========================
+
+    private Map<String, String[]> resolveStudentInfo(List<String> studentIds) {
+        Map<String, String[]> infoMap = new HashMap<>(); // studentId -> [name, email]
+        for (String studentId : studentIds) {
+            try {
+                String url = gatewayUrl + "/idp/users/" + studentId;
+                ResponseEntity<Map<String, Object>> resp = getRestTemplate().exchange(
+                        url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()),
+                        new ParameterizedTypeReference<Map<String, Object>>() {}
+                );
+                Map<String, Object> user = resp.getBody();
+                if (user != null) {
+                    String name = (String) user.get("name");
+                    String email = (String) user.get("email");
+                    infoMap.put(studentId, new String[]{name, email});
+                }
+            } catch (Exception e) {
+                log.debug("Could not resolve student {}: {}", studentId, e.getMessage());
+            }
+        }
+        return infoMap;
+    }
+
+    private List<ProjectGroupDTO.MemberInfo> resolveMemberInfo(List<ProjectGroupMember> members) {
+        List<String> studentIds = members.stream().map(ProjectGroupMember::getStudentId).collect(Collectors.toList());
+        Map<String, String[]> infoMap = resolveStudentInfo(studentIds);
+        return members.stream().map(m -> {
+            String[] info = infoMap.get(m.getStudentId());
+            String name = info != null ? info[0] : null;
+            String email = info != null ? info[1] : null;
+            return new ProjectGroupDTO.MemberInfo(m.getStudentId(), name, email);
+        }).collect(Collectors.toList());
+    }
+
+    // ======================== Queries ========================
+
+    @Transactional(readOnly = true)
+    public List<String> getSectionIdsByCourse(String courseId) {
+        UUID clientId = getClientId();
+        return enrollmentRepository.findDistinctBatchIdsByClientIdAndCourseId(clientId, courseId);
+    }
+
     // ======================== CRUD ========================
 
     public ProjectDTO createProject(CreateProjectRequest request) {
@@ -120,6 +192,166 @@ public class ProjectService {
 
         project = projectRepository.save(project);
         log.info("Created project '{}' (id={}) for section {}", project.getTitle(), project.getId(), project.getSectionId());
+        return ProjectDTO.fromEntity(project);
+    }
+
+    @Transactional
+    public ProjectDTO bulkSetup(BulkProjectSetupRequest request) {
+        UUID clientId = getClientId();
+        String createdBy = UserUtil.getCurrentUserEmail();
+
+        // 1. Create the project
+        Project project = new Project();
+        project.setId(UlidGenerator.nextUlid());
+        project.setClientId(clientId);
+        project.setCourseId(request.getCourseId());
+        project.setSectionId(String.join(",", request.getSectionIds()));
+        project.setTitle(request.getTitle());
+        project.setDescription(request.getDescription());
+        project.setMaxMarks(request.getMaxMarks() != null ? request.getMaxMarks() : 100);
+        project.setSubmissionCutoff(request.getSubmissionCutoff());
+        project.setLateSubmissionAllowed(request.getLateSubmissionAllowed() != null ? request.getLateSubmissionAllowed() : false);
+        project.setStatus(Project.ProjectStatus.DRAFT);
+        project.setCreatedBy(createdBy);
+        project = projectRepository.save(project);
+
+        // 2. Collect students from all sections
+        List<String> allStudentIds = new ArrayList<>();
+        for (String sectionId : request.getSectionIds()) {
+            List<String> sectionStudents = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId)
+                    .stream()
+                    .map(e -> e.getStudentId())
+                    .distinct()
+                    .collect(Collectors.toList());
+            allStudentIds.addAll(sectionStudents);
+        }
+        allStudentIds = allStudentIds.stream().distinct().collect(Collectors.toList());
+
+        if (allStudentIds.isEmpty()) {
+            log.warn("No students found in selected sections for bulk setup");
+            return ProjectDTO.fromEntity(project);
+        }
+
+        // 3. Shuffle and generate groups
+        Collections.shuffle(allStudentIds);
+        int groupSize = request.getGroupSize();
+        int numGroups = (int) Math.ceil((double) allStudentIds.size() / groupSize);
+
+        List<ProjectGroup> groups = new ArrayList<>();
+        for (int i = 0; i < numGroups; i++) {
+            ProjectGroup group = new ProjectGroup();
+            group.setId(UlidGenerator.nextUlid());
+            group.setClientId(clientId);
+            group.setProjectId(project.getId());
+            group.setGroupNumber(i + 1);
+            groups.add(projectGroupRepository.save(group));
+        }
+
+        // 4. Assign students round-robin to groups
+        for (int i = 0; i < allStudentIds.size(); i++) {
+            ProjectGroupMember member = new ProjectGroupMember();
+            member.setId(UlidGenerator.nextUlid());
+            member.setClientId(clientId);
+            member.setGroupId(groups.get(i % numGroups).getId());
+            member.setStudentId(allStudentIds.get(i));
+            projectGroupMemberRepository.save(member);
+        }
+
+        log.info("Bulk setup: created project '{}' with {} groups from {} students across {} sections",
+                project.getTitle(), numGroups, allStudentIds.size(), request.getSectionIds().size());
+
+        // 5. Assign problem statements
+        try {
+            assignStatements(project.getId());
+        } catch (Exception e) {
+            log.warn("Problem statement assignment failed (can be done later): {}", e.getMessage());
+        }
+
+        return ProjectDTO.fromEntity(project);
+    }
+
+    @Transactional
+    public ProjectDTO addSections(String projectId, AddSectionsRequest request) {
+        UUID clientId = getClientId();
+        Project project = projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
+
+        // Get existing group members to exclude
+        List<ProjectGroup> existingGroups = projectGroupRepository.findByProjectIdAndClientId(projectId, clientId);
+        Set<String> existingStudentIds = new HashSet<>();
+        for (ProjectGroup g : existingGroups) {
+            List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(g.getId(), clientId);
+            members.forEach(m -> existingStudentIds.add(m.getStudentId()));
+        }
+
+        // Collect new students from new sections (excluding already grouped)
+        List<String> newStudentIds = new ArrayList<>();
+        for (String sectionId : request.getSectionIds()) {
+            List<String> sectionStudents = enrollmentRepository.findByClientIdAndBatchId(clientId, sectionId)
+                    .stream()
+                    .map(e -> e.getStudentId())
+                    .distinct()
+                    .filter(sid -> !existingStudentIds.contains(sid))
+                    .collect(Collectors.toList());
+            newStudentIds.addAll(sectionStudents);
+        }
+        newStudentIds = newStudentIds.stream().distinct().collect(Collectors.toList());
+
+        if (newStudentIds.isEmpty()) {
+            throw new IllegalStateException("No new students found in selected sections (all may already be in groups)");
+        }
+
+        // Determine next group number
+        int maxGroupNumber = existingGroups.stream()
+                .mapToInt(ProjectGroup::getGroupNumber)
+                .max()
+                .orElse(0);
+
+        // Generate new groups
+        Collections.shuffle(newStudentIds);
+        int groupSize = request.getGroupSize();
+        int numNewGroups = (int) Math.ceil((double) newStudentIds.size() / groupSize);
+
+        List<ProjectGroup> newGroups = new ArrayList<>();
+        for (int i = 0; i < numNewGroups; i++) {
+            ProjectGroup group = new ProjectGroup();
+            group.setId(UlidGenerator.nextUlid());
+            group.setClientId(clientId);
+            group.setProjectId(projectId);
+            group.setGroupNumber(maxGroupNumber + i + 1);
+            newGroups.add(projectGroupRepository.save(group));
+        }
+
+        // Assign students to new groups
+        for (int i = 0; i < newStudentIds.size(); i++) {
+            ProjectGroupMember member = new ProjectGroupMember();
+            member.setId(UlidGenerator.nextUlid());
+            member.setClientId(clientId);
+            member.setGroupId(newGroups.get(i % numNewGroups).getId());
+            member.setStudentId(newStudentIds.get(i));
+            projectGroupMemberRepository.save(member);
+        }
+
+        // Update sectionId on project (append new sections)
+        String existingSections = project.getSectionId() != null ? project.getSectionId() : "";
+        Set<String> allSectionIds = new LinkedHashSet<>();
+        if (!existingSections.isBlank()) {
+            allSectionIds.addAll(Arrays.asList(existingSections.split(",")));
+        }
+        allSectionIds.addAll(request.getSectionIds());
+        project.setSectionId(String.join(",", allSectionIds));
+        projectRepository.save(project);
+
+        // Assign problem statements to new groups only
+        try {
+            assignStatementsToGroups(projectId, newGroups);
+        } catch (Exception e) {
+            log.warn("Problem statement assignment for new groups failed: {}", e.getMessage());
+        }
+
+        log.info("Added {} sections to project '{}': {} new students, {} new groups",
+                request.getSectionIds().size(), project.getTitle(), newStudentIds.size(), numNewGroups);
+
         return ProjectDTO.fromEntity(project);
     }
 
@@ -212,15 +444,24 @@ public class ProjectService {
         }
         projectGroupRepository.deleteAll(existingGroups);
 
-        // Get students in the section via enrollment repository
-        List<String> studentIds = enrollmentRepository.findByClientIdAndBatchId(clientId, project.getSectionId())
-                .stream()
-                .map(e -> e.getStudentId())
-                .distinct()
-                .collect(Collectors.toList());
+        // Get students from all sections (handles comma-separated sectionIds)
+        List<String> studentIds = new ArrayList<>();
+        String sectionIdValue = project.getSectionId();
+        if (sectionIdValue != null && !sectionIdValue.isBlank()) {
+            for (String sid : sectionIdValue.split(",")) {
+                String trimmed = sid.trim();
+                if (!trimmed.isEmpty()) {
+                    enrollmentRepository.findByClientIdAndBatchId(clientId, trimmed)
+                            .stream()
+                            .map(e -> e.getStudentId())
+                            .forEach(studentIds::add);
+                }
+            }
+        }
+        studentIds = studentIds.stream().distinct().collect(Collectors.toList());
 
         if (studentIds.isEmpty()) {
-            throw new IllegalStateException("No students found in section " + project.getSectionId());
+            throw new IllegalStateException("No students found in sections for project " + projectId);
         }
 
         // Shuffle students
@@ -260,9 +501,7 @@ public class ProjectService {
         return groups.stream().map(g -> {
             ProjectGroupDTO dto = ProjectGroupDTO.fromEntity(g);
             List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(g.getId(), clientId);
-            dto.setMembers(members.stream().map(m ->
-                    new ProjectGroupDTO.MemberInfo(m.getStudentId(), null, null)
-            ).collect(Collectors.toList()));
+            dto.setMembers(resolveMemberInfo(members));
             return dto;
         }).collect(Collectors.toList());
     }
@@ -286,9 +525,7 @@ public class ProjectService {
         group = projectGroupRepository.save(group);
         ProjectGroupDTO dto = ProjectGroupDTO.fromEntity(group);
         List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(group.getId(), clientId);
-        dto.setMembers(members.stream().map(m ->
-                new ProjectGroupDTO.MemberInfo(m.getStudentId(), null, null)
-        ).collect(Collectors.toList()));
+        dto.setMembers(resolveMemberInfo(members));
         return dto;
     }
 
@@ -323,13 +560,24 @@ public class ProjectService {
                 throw new IllegalStateException("No project questions found for course " + courseId);
             }
 
-            // Shuffle questions
-            Collections.shuffle(questions);
+            // Only assign to groups that don't already have a statement
+            List<ProjectGroup> unassigned = groups.stream()
+                    .filter(g -> g.getProblemStatementId() == null || g.getProblemStatementId().isBlank())
+                    .collect(Collectors.toList());
 
-            // Round-robin assign to groups
-            for (int i = 0; i < groups.size(); i++) {
-                Map<String, Object> question = questions.get(i % questions.size());
-                ProjectGroup group = groups.get(i);
+            if (unassigned.isEmpty()) {
+                log.info("All groups already have problem statements assigned for project {}", projectId);
+                return;
+            }
+
+            // Count already-assigned to continue round-robin
+            int alreadyAssigned = groups.size() - unassigned.size();
+
+            // Round-robin assign to unassigned groups
+            for (int i = 0; i < unassigned.size(); i++) {
+                int questionIndex = (alreadyAssigned + i) % questions.size();
+                Map<String, Object> question = questions.get(questionIndex);
+                ProjectGroup group = unassigned.get(i);
                 group.setProblemStatementId((String) question.get("id"));
                 projectGroupRepository.save(group);
             }
@@ -339,6 +587,40 @@ public class ProjectService {
         } catch (Exception e) {
             log.error("Failed to fetch project questions from content service: {}", e.getMessage());
             throw new IllegalStateException("Failed to assign problem statements: " + e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assignStatementsToGroups(String projectId, List<ProjectGroup> targetGroups) {
+        UUID clientId = getClientId();
+        Project project = projectRepository.findByIdAndClientId(projectId, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Project not found"));
+
+        String courseId = project.getCourseId();
+        if (courseId == null || courseId.isBlank()) return;
+
+        // Find the highest assignment index from existing groups
+        List<ProjectGroup> allGroups = projectGroupRepository.findByProjectIdAndClientId(projectId, clientId);
+        int assignedCount = (int) allGroups.stream()
+                .filter(g -> g.getProblemStatementId() != null && !g.getProblemStatementId().isBlank())
+                .count();
+
+        String url = gatewayUrl + "/api/project-questions?courseId=" + courseId;
+        ResponseEntity<List<Map<String, Object>>> response = getRestTemplate().exchange(
+                url, HttpMethod.GET, new HttpEntity<>(new HttpHeaders()),
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+        );
+
+        List<Map<String, Object>> questions = response.getBody();
+        if (questions == null || questions.isEmpty()) return;
+
+        // Continue round-robin from where existing assignment left off
+        for (int i = 0; i < targetGroups.size(); i++) {
+            int questionIndex = (assignedCount + i) % questions.size();
+            Map<String, Object> question = questions.get(questionIndex);
+            ProjectGroup group = targetGroups.get(i);
+            group.setProblemStatementId((String) question.get("id"));
+            projectGroupRepository.save(group);
         }
     }
 
@@ -522,17 +804,30 @@ public class ProjectService {
             throw new IllegalStateException("Submission deadline has passed and late submissions are not allowed");
         }
 
+        // Determine action: first submission or edit
+        String action = group.getSubmittedAt() != null ? "EDIT" : "SUBMIT";
+
         group.setSubmissionUrl(submissionUrl);
         group.setSubmittedAt(OffsetDateTime.now());
         group.setSubmittedBy(studentId);
         group = projectGroupRepository.save(group);
 
-        log.info("Student {} submitted project {} for group {}", studentId, projectId, groupId);
+        // Save submission history
+        ProjectSubmissionHistory history = new ProjectSubmissionHistory();
+        history.setId(UlidGenerator.nextUlid());
+        history.setClientId(clientId);
+        history.setGroupId(groupId);
+        history.setProjectId(projectId);
+        history.setSubmissionUrl(submissionUrl);
+        history.setSubmittedBy(studentId);
+        history.setSubmittedAt(group.getSubmittedAt());
+        history.setAction(action);
+        submissionHistoryRepository.save(history);
+
+        log.info("Student {} {} project {} for group {}", studentId, action.toLowerCase(), projectId, groupId);
 
         ProjectGroupDTO dto = ProjectGroupDTO.fromEntity(group);
-        dto.setMembers(members.stream().map(m ->
-                new ProjectGroupDTO.MemberInfo(m.getStudentId(), null, null)
-        ).collect(Collectors.toList()));
+        dto.setMembers(resolveMemberInfo(members));
         return dto;
     }
 
@@ -577,9 +872,7 @@ public class ProjectService {
             if (group != null && group.getProjectId().equals(projectId)) {
                 ProjectGroupDTO dto = ProjectGroupDTO.fromEntity(group);
                 List<ProjectGroupMember> members = projectGroupMemberRepository.findByGroupIdAndClientId(group.getId(), clientId);
-                dto.setMembers(members.stream().map(mem ->
-                        new ProjectGroupDTO.MemberInfo(mem.getStudentId(), null, null)
-                ).collect(Collectors.toList()));
+                dto.setMembers(resolveMemberInfo(members));
                 return dto;
             }
         }
