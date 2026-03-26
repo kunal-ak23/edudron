@@ -72,6 +72,7 @@ export default function ProjectDetailPage() {
   const [uploadingFiles, setUploadingFiles] = useState(false)
   const [pendingAttachments, setPendingAttachments] = useState<AttachmentInfo[]>([])
   const [eventSubmissions, setEventSubmissions] = useState<Record<string, ProjectEventSubmissionDTO | null>>({})
+  const [eventSubmissionHistories, setEventSubmissionHistories] = useState<Record<string, ProjectEventSubmissionDTO[]>>({})
   const [eventFeedback, setEventFeedback] = useState<Record<string, ProjectEventFeedbackDTO[]>>({})
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null)
   const [eventSubmissionUrl, setEventSubmissionUrl] = useState('')
@@ -104,9 +105,13 @@ export default function ProjectDetailPage() {
       for (const evt of evtsData) {
         if (evt.hasSubmission) {
           try {
-            const sub = await projectsApi.getMyEventSubmission(projectId, evt.id)
+            const [sub, history, fb] = await Promise.all([
+              projectsApi.getMyEventSubmission(projectId, evt.id),
+              projectsApi.getMyEventSubmissionHistory(projectId, evt.id),
+              projectsApi.getMyEventFeedback(projectId, evt.id),
+            ])
             setEventSubmissions(prev => ({ ...prev, [evt.id]: sub }))
-            const fb = await projectsApi.getMyEventFeedback(projectId, evt.id)
+            setEventSubmissionHistories(prev => ({ ...prev, [evt.id]: history }))
             setEventFeedback(prev => ({ ...prev, [evt.id]: fb }))
           } catch { /* ok */ }
         }
@@ -569,23 +574,69 @@ export default function ProjectDetailPage() {
                               {/* Expanded: submission details + form */}
                               {isExpanded && (
                                 <div className="space-y-3 pt-1">
+                                  {/* Current submission details */}
                                   {submission && (
-                                    <div className="text-sm space-y-1">
+                                    <div className="text-sm space-y-1 p-2 bg-white rounded border">
+                                      <p className="text-xs font-medium text-gray-500">Current submission (v{submission.version})</p>
                                       {submission.submissionUrl && (
                                         <p>
                                           <span className="text-gray-500">URL:</span>{' '}
-                                          <a href={submission.submissionUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                          <a href={submission.submissionUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline inline-flex items-center gap-1">
                                             {submission.submissionUrl}
+                                            <ExternalLink className="h-3 w-3" />
                                           </a>
                                         </p>
                                       )}
                                       {submission.submissionText && (
                                         <p><span className="text-gray-500">Notes:</span> {submission.submissionText}</p>
                                       )}
+                                      {/* Submission attachments */}
+                                      {submission.attachments && submission.attachments.length > 0 && (
+                                        <div className="space-y-1 mt-1">
+                                          <p className="text-xs text-gray-500">Attached files:</p>
+                                          {submission.attachments.map((att: any) => (
+                                            <a
+                                              key={att.id}
+                                              href={att.fileUrl}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline"
+                                            >
+                                              <FileDown className="h-3 w-3" />
+                                              {att.fileName}
+                                            </a>
+                                          ))}
+                                        </div>
+                                      )}
+                                      <p className="text-xs text-gray-400 mt-1">
+                                        Submitted {new Date(submission.submittedAt).toLocaleString()}
+                                      </p>
                                     </div>
                                   )}
 
-                                  {/* Submit form */}
+                                  {/* Previous submissions */}
+                                  {(() => {
+                                    const history = eventSubmissionHistories[event.id] || []
+                                    return history.length > 1 ? (
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-medium text-gray-500">Previous versions</p>
+                                        {history.slice(1).map((h: any) => (
+                                          <div key={h.id} className="text-xs text-gray-500 p-1.5 bg-gray-50 rounded flex items-center justify-between">
+                                            <span>
+                                              v{h.version}
+                                              {h.submissionUrl && (
+                                                <> &middot; <a href={h.submissionUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{h.submissionUrl}</a></>
+                                              )}
+                                              {h.submissionText && <> &middot; {h.submissionText}</>}
+                                            </span>
+                                            <span className="text-gray-400">{new Date(h.submittedAt).toLocaleDateString()}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null
+                                  })()}
+
+                                  {/* Resubmit form */}
                                   <div className="space-y-2">
                                     <Input
                                       placeholder="Submission URL (e.g., GitHub link, Google Doc)"
