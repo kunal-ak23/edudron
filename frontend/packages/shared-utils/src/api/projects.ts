@@ -15,6 +15,44 @@ export interface ProjectAttachmentDTO {
   createdAt?: string
 }
 
+export interface ProjectEventSubmissionDTO {
+  id: string
+  projectId: string
+  eventId: string
+  groupId: string
+  submissionUrl?: string
+  submissionText?: string
+  submittedBy: string
+  submittedAt: string
+  version: number
+  status: string
+  attachments?: ProjectAttachmentDTO[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ProjectEventFeedbackDTO {
+  id: string
+  submissionId: string
+  eventId: string
+  groupId: string
+  comment: string
+  feedbackBy: string
+  feedbackAt: string
+  status: string
+}
+
+export interface SubmitEventRequest {
+  submissionUrl?: string
+  submissionText?: string
+  attachments?: AttachmentInfo[]
+}
+
+export interface EventFeedbackRequest {
+  comment: string
+  status: string // REVIEWED or NEEDS_REVISION
+}
+
 export interface ProjectDTO {
   id: string
   courseId?: string
@@ -28,6 +66,7 @@ export interface ProjectDTO {
   createdBy?: string
   createdAt?: string
   updatedAt?: string
+  currentEventId?: string
   statementAttachments?: ProjectAttachmentDTO[]
 }
 
@@ -54,6 +93,7 @@ export interface ProjectEventDTO {
   maxMarks?: number
   sequence?: number
   sectionId?: string
+  hasSubmission?: boolean
 }
 
 export interface ProjectQuestionDTO {
@@ -259,6 +299,29 @@ export class ProjectsApi {
     return response.data
   }
 
+  // ---- Event Submissions (Admin) ----
+
+  async getEventSubmissions(id: string, eventId: string): Promise<any[]> {
+    const response = await this.apiClient.get<any[]>(`/api/projects/${id}/events/${eventId}/submissions`)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async getGroupEventSubmission(id: string, eventId: string, groupId: string): Promise<any> {
+    const response = await this.apiClient.get<any>(`/api/projects/${id}/events/${eventId}/submissions/${groupId}`)
+    return response.data
+  }
+
+  async giveEventFeedback(id: string, eventId: string, groupId: string, data: EventFeedbackRequest): Promise<ProjectEventFeedbackDTO> {
+    const response = await this.apiClient.post<ProjectEventFeedbackDTO>(
+      `/api/projects/${id}/events/${eventId}/submissions/${groupId}/feedback`, data)
+    return response.data
+  }
+
+  async advancePhase(id: string, nextEventId: string | null): Promise<ProjectDTO> {
+    const response = await this.apiClient.post<ProjectDTO>(`/api/projects/${id}/advance-phase`, { nextEventId })
+    return response.data
+  }
+
   // ---- Attachments ----
 
   async getAttachments(id: string, context?: 'STATEMENT' | 'SUBMISSION'): Promise<ProjectAttachmentDTO[]> {
@@ -302,6 +365,32 @@ export class ProjectsApi {
   async getSubmissionHistory(id: string): Promise<any[]> {
     const response = await this.apiClient.get<any[]>(`/api/projects/${id}/my-group/history`)
     return Array.isArray(response.data) ? response.data : (Array.isArray(response) ? response : [])
+  }
+
+  async submitToEvent(id: string, eventId: string, data: SubmitEventRequest): Promise<ProjectEventSubmissionDTO> {
+    const response = await this.apiClient.post<ProjectEventSubmissionDTO>(
+      `/api/projects/${id}/events/${eventId}/my-submission`, data)
+    return response.data
+  }
+
+  async getMyEventSubmission(id: string, eventId: string): Promise<ProjectEventSubmissionDTO | null> {
+    try {
+      const response = await this.apiClient.get<ProjectEventSubmissionDTO>(
+        `/api/projects/${id}/events/${eventId}/my-submission`)
+      return response.data
+    } catch { return null }
+  }
+
+  async getMyEventSubmissionHistory(id: string, eventId: string): Promise<ProjectEventSubmissionDTO[]> {
+    const response = await this.apiClient.get<ProjectEventSubmissionDTO[]>(
+      `/api/projects/${id}/events/${eventId}/my-submission/history`)
+    return Array.isArray(response.data) ? response.data : []
+  }
+
+  async getMyEventFeedback(id: string, eventId: string): Promise<ProjectEventFeedbackDTO[]> {
+    const response = await this.apiClient.get<ProjectEventFeedbackDTO[]>(
+      `/api/projects/${id}/events/${eventId}/my-submission/feedback`)
+    return Array.isArray(response.data) ? response.data : []
   }
 }
 
