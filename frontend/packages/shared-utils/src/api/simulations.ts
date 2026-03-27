@@ -262,7 +262,9 @@ export class SimulationsApi {
   }
 
   async regenerateMentorGuidance(id: string): Promise<{ status: string; message: string }> {
-    const response = await this.apiClient.post<{ status: string; message: string }>(`/content/api/simulations/${id}/regenerate-mentor-guidance`, {})
+    const response = await this.apiClient.post<{ status: string; message: string }>(
+      `/content/api/simulations/${id}/regenerate-mentor-guidance`, {}, { timeout: 120000 }
+    )
     return response.data
   }
 
