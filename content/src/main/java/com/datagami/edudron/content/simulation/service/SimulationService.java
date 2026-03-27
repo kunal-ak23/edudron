@@ -477,15 +477,14 @@ public class SimulationService {
         int existingPlays = playRepository.countBySimulationIdAndStudentId(simulationId, studentId);
         boolean isPrimary = (existingPlays == 0);
 
-        // If not primary (replay), verify student has at least one completed/fired play
+        // If not primary (replay), verify no play is currently IN_PROGRESS
         if (!isPrimary) {
             List<SimulationPlay> plays = playRepository
                     .findBySimulationIdAndStudentIdOrderByAttemptNumberDesc(simulationId, studentId);
-            boolean hasFinished = plays.stream()
-                    .anyMatch(p -> p.getStatus() == SimulationPlay.PlayStatus.COMPLETED
-                            || p.getStatus() == SimulationPlay.PlayStatus.FIRED);
-            if (!hasFinished) {
-                throw new IllegalStateException("Must complete simulation before replaying");
+            boolean hasInProgress = plays.stream()
+                    .anyMatch(p -> p.getStatus() == SimulationPlay.PlayStatus.IN_PROGRESS);
+            if (hasInProgress) {
+                throw new IllegalStateException("Must complete or abandon current simulation before replaying");
             }
         }
 
