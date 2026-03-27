@@ -782,49 +782,33 @@ public class SimulationGenerationService {
                 decisionsSummary.append("  ").append(d.get("id")).append(" (").append(d.get("decisionType")).append("): ");
                 decisionsSummary.append(((String) d.getOrDefault("narrative", "")).substring(0,
                     Math.min(120, ((String) d.getOrDefault("narrative", "")).length()))).append("...\n");
-                decisionsSummary.append("  Choices (with quality 1=worst, 3=best): ");
+                decisionsSummary.append("  Choices: ");
                 List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
                 if (choices != null) {
                     for (Map<String, Object> c : choices) {
-                        decisionsSummary.append("[").append(c.get("id"))
-                            .append(" (quality=").append(c.get("quality")).append("): ")
+                        decisionsSummary.append("[").append(c.get("id")).append(": ")
                             .append(((String) c.getOrDefault("text", "")).substring(0,
-                                Math.min(80, ((String) c.getOrDefault("text", "")).length())))
+                                Math.min(60, ((String) c.getOrDefault("text", "")).length())))
                             .append("...] ");
                     }
                 }
                 decisionsSummary.append("\n");
-                // Include config details for interactive types
+                // Include stakeholder/candidate names for context (priorities computed deterministically)
                 Map<String, Object> config = (Map<String, Object>) d.get("decisionConfig");
                 if (config != null) {
-                    // Mappings: show which conditions map to which choices (critical for hint accuracy)
-                    List<Map<String, Object>> mappings = (List<Map<String, Object>>) config.get("mappings");
-                    if (mappings != null) {
-                        decisionsSummary.append("  Scoring mappings: ");
-                        for (Map<String, Object> m : mappings) {
-                            decisionsSummary.append("[condition: ").append(m.get("condition"))
-                                .append(" → choiceId: ").append(m.get("choiceId")).append("] ");
-                        }
-                        decisionsSummary.append("\n");
-                    }
-                    // Stakeholders
                     List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
                     if (stakeholders != null) {
                         decisionsSummary.append("  Stakeholders: ");
                         for (Map<String, Object> s : stakeholders) {
-                            decisionsSummary.append("[").append(s.get("id")).append(": ")
-                                .append(s.get("name")).append(" - ").append(s.get("role"))
-                                .append(", teaser: ").append(s.get("teaser")).append("] ");
+                            decisionsSummary.append("[").append(s.get("name")).append(" - ").append(s.get("role")).append("] ");
                         }
                         decisionsSummary.append("\n");
                     }
-                    // Candidates
                     List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
                     if (candidates != null) {
                         decisionsSummary.append("  Candidates: ");
                         for (Map<String, Object> c : candidates) {
-                            decisionsSummary.append("[").append(c.get("id")).append(": ")
-                                .append(c.get("name")).append(" - ").append(c.get("title")).append("] ");
+                            decisionsSummary.append("[").append(c.get("name")).append(" - ").append(c.get("title")).append("] ");
                         }
                         decisionsSummary.append("\n");
                     }
@@ -882,11 +866,9 @@ public class SimulationGenerationService {
                 IMPORTANT RULES:
                 - Choice hints should educate, not give away the answer. Frame consequences
                   in terms of trade-offs, not "this is right/wrong". Even the best choice has downsides.
-                - CRITICAL: The "Scoring mappings" show which conditions map to which choiceIds, and each
-                  choice has a quality score (1=worst, 3=best). Your stakeholderHints and candidateHints
-                  MUST be consistent with the actual scoring — if selecting stakeholder X leads to the
-                  quality=3 choice via the mappings, that stakeholder should have priority "high".
-                  Read the mapping conditions carefully to determine the correct priorities.
+                - For stakeholderHints and candidateHints: focus on educational value of the hint text.
+                  The priority/fit labels will be computed separately — just provide useful "hint" text
+                  explaining what each person brings to the table.
 
                 Here are the decisions to enrich:
 
