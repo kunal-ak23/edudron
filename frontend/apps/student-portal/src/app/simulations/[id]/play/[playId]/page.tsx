@@ -392,8 +392,6 @@ export default function SimulationPlayPage() {
               concept={simulation?.concept || ''}
               keywords={(state?.decision as any)?.conceptKeywords || []}
               keyInsights={state?.keyInsights || []}
-              courseConnection={(state?.decision as any)?.mentorGuidance?.courseConnection}
-              realWorldExample={(state?.decision as any)?.mentorGuidance?.realWorldExample}
             />
           </aside>
 
@@ -406,8 +404,6 @@ export default function SimulationPlayPage() {
                   concept={simulation?.concept || ''}
                   keywords={(state?.decision as any)?.conceptKeywords || []}
                   keyInsights={state?.keyInsights || []}
-                  courseConnection={(state?.decision as any)?.mentorGuidance?.courseConnection}
-                  realWorldExample={(state?.decision as any)?.mentorGuidance?.realWorldExample}
                 />
               </div>
             )}
