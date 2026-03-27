@@ -74,19 +74,40 @@ public class SimulationGenerationService {
                     simulationId, roleProgression.size(), ((List<?>) metrics.get("definitions")).size(),
                     financialModel != null, advisorCharacter != null);
 
-            // ── Phase 2: Decisions (1 AI call per year) ──
+            // ── Phase 2: Decisions (1 AI call per year, with validation + retry) ──
             logger.info("Phase 2: Generating decisions for {} years for {}", targetYears, simulationId);
             List<List<Map<String, Object>>> allYearDecisions = new ArrayList<>();
             for (int year = 1; year <= targetYears; year++) {
                 String currentTitle = roleProgression.get(year - 1);
                 String previousContext = buildPreviousContext(allYearDecisions, year);
-                List<Map<String, Object>> yearDecisions = phaseTwoDecisions(
-                        concept, subject, audience, year, targetYears,
-                        currentTitle, previousContext, decisionsPerYear,
-                        financialModel);
+
+                List<Map<String, Object>> yearDecisions = null;
+                int maxRetries = 2;
+                for (int attempt = 0; attempt <= maxRetries; attempt++) {
+                    yearDecisions = phaseTwoDecisions(
+                            concept, subject, audience, year, targetYears,
+                            currentTitle, previousContext, decisionsPerYear,
+                            financialModel);
+
+                    // Validate: correct count and each decision has choices
+                    List<String> issues = validateYearDecisions(yearDecisions, year, decisionsPerYear);
+                    if (issues.isEmpty()) {
+                        logger.info("Phase 2: Year {} validated OK ({} decisions) for {}",
+                                year, yearDecisions.size(), simulationId);
+                        break;
+                    }
+
+                    if (attempt < maxRetries) {
+                        logger.warn("Phase 2: Year {} validation failed (attempt {}/{}): {}. Retrying...",
+                                year, attempt + 1, maxRetries + 1, issues);
+                        try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                    } else {
+                        logger.warn("Phase 2: Year {} still has issues after {} attempts: {}. Using best result.",
+                                year, maxRetries + 1, issues);
+                    }
+                }
+
                 allYearDecisions.add(yearDecisions);
-                logger.info("Phase 2: Year {} decisions generated ({} decisions) for {}",
-                        year, yearDecisions.size(), simulationId);
 
                 // Throttle between years to avoid Azure OpenAI TPM rate limits
                 if (year < targetYears) {
@@ -719,6 +740,69 @@ public class SimulationGenerationService {
             // Log warnings but don't fail — AI output may have minor structural differences
             // that can be edited by instructors in REVIEW status
         }
+    }
+
+    /**
+     * Validate a year's decisions: correct count, all have choices with quality scores,
+     * and interactive types have the required config fields.
+     */
+    @SuppressWarnings("unchecked")
+    private List<String> validateYearDecisions(List<Map<String, Object>> decisions, int year, int expectedCount) {
+        List<String> issues = new ArrayList<>();
+        if (decisions == null) {
+            issues.add("Year " + year + ": decisions is null");
+            return issues;
+        }
+        if (decisions.size() < expectedCount) {
+            issues.add("Year " + year + ": only " + decisions.size() + "/" + expectedCount + " decisions generated");
+        }
+        for (int i = 0; i < decisions.size(); i++) {
+            Map<String, Object> d = decisions.get(i);
+            String did = (String) d.getOrDefault("id", "d" + i);
+            String type = (String) d.get("decisionType");
+
+            // Must have choices
+            List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
+            if (choices == null || choices.isEmpty()) {
+                issues.add(did + ": no choices");
+                continue;
+            }
+
+            // All choices must have quality scores
+            for (Map<String, Object> c : choices) {
+                if (c.get("quality") == null) {
+                    issues.add(did + ": choice " + c.get("id") + " missing quality");
+                }
+            }
+
+            // Interactive types must have decisionConfig
+            Map<String, Object> config = (Map<String, Object>) d.get("decisionConfig");
+            if (type != null && !"NARRATIVE_CHOICE".equals(type) && (config == null || config.isEmpty())) {
+                issues.add(did + " (" + type + "): missing decisionConfig");
+            }
+
+            // Type-specific config validation
+            if (config != null && type != null) {
+                switch (type) {
+                    case "STAKEHOLDER_MEETING":
+                        if (config.get("stakeholders") == null) issues.add(did + ": missing stakeholders");
+                        break;
+                    case "HIRE_FIRE":
+                        if (config.get("candidates") == null) issues.add(did + ": missing candidates");
+                        break;
+                    case "INVESTMENT_PORTFOLIO":
+                        if (config.get("departments") == null) issues.add(did + ": missing departments");
+                        break;
+                    case "DASHBOARD_ANALYSIS":
+                        if (config.get("metrics") == null) issues.add(did + ": missing metrics");
+                        break;
+                    case "NEGOTIATION":
+                        if (config.get("npcResponses") == null) issues.add(did + ": missing npcResponses");
+                        break;
+                }
+            }
+        }
+        return issues;
     }
 
     /**
