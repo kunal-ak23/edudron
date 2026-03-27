@@ -43,7 +43,7 @@ export type {
   GenerateSimulationRequest, SimulationDTO, SimulationStateDTO,
   SimulationDecisionDTO, SimulationPlayDTO, DecisionInput,
   ChoiceDTO, DebriefDTO, YearEndReviewDTO,
-  SimulationExportDTO
+  SimulationExportDTO, MentorGuidance
 } from './api/simulations'
 export type {
   LectureViewSession,

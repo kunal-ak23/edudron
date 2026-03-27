@@ -82,7 +82,8 @@ public class SimulationGenerationService {
                 String previousContext = buildPreviousContext(allYearDecisions, year);
                 List<Map<String, Object>> yearDecisions = phaseTwoDecisions(
                         concept, subject, audience, year, targetYears,
-                        currentTitle, previousContext, decisionsPerYear);
+                        currentTitle, previousContext, decisionsPerYear,
+                        financialModel);
                 allYearDecisions.add(yearDecisions);
                 logger.info("Phase 2: Year {} decisions generated ({} decisions) for {}",
                         year, yearDecisions.size(), simulationId);
@@ -121,6 +122,13 @@ public class SimulationGenerationService {
             logger.info("Phase 5: Generating final debriefs for {}", simulationId);
             Map<String, Object> debriefs = phaseFiveDebriefs(concept, subject, audience, targetYears);
             logger.info("Phase 5 complete for {}", simulationId);
+
+            // ── Phase 5.5: Mentor Enrichment (guided years 1-2, fading year 3) ──
+            int guidedYears = Math.min(3, targetYears);
+            logger.info("Phase 5.5: Generating mentor guidance for years 1-{} for {}", guidedYears, simulationId);
+            try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            phaseMentorEnrichment(concept, subject, audience, guidedYears, allYearDecisions);
+            logger.info("Phase 5.5 complete for {}", simulationId);
 
             // ── Phase 6: Validation ──
             logger.info("Phase 6: Validating structure for {}", simulationId);
@@ -205,7 +213,16 @@ public class SimulationGenerationService {
                     "name": "Dr. Rivera",
                     "role": "Your mentor and former division head",
                     "characterId": "mentor_female_1",
-                    "personality": "Wise, direct, occasionally sarcastic"
+                    "personality": "Wise, direct, occasionally sarcastic",
+                    "retirementYear": 3,
+                    "backstory": "A 30-year veteran who has announced retirement in 2 years. Agreed to mentor you before leaving.",
+                    "yearTone": {
+                      "year1": "Warm, patient, detailed teaching — 'Let me show you how this works...'",
+                      "year2": "More urgent, references departure — 'Pay attention, I won't be here next year to explain this...'",
+                      "year3": "Already retired but left notes — 'I prepared these notes before I left. Use them wisely.'",
+                      "year4plus": "Gone. Brief farewell at start of year 4 only."
+                    },
+                    "farewellMessage": "A heartfelt 2-3 sentence farewell from the mentor, referencing what they taught and expressing confidence in the student."
                   }
                 }
 
@@ -236,7 +253,26 @@ public class SimulationGenerationService {
     private List<Map<String, Object>> phaseTwoDecisions(
             String concept, String subject, String audience,
             int year, int targetYears, String currentTitle,
-            String previousContext, int decisionsPerYear) {
+            String previousContext, int decisionsPerYear,
+            Map<String, Object> financialModelParam) {
+
+        // Build department ID list from financialModel so INVESTMENT_PORTFOLIO uses matching IDs
+        String deptInstruction = "";
+        if (financialModelParam != null) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> fmDepts = (List<Map<String, Object>>) financialModelParam.get("departments");
+            if (fmDepts != null && !fmDepts.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("CRITICAL — INVESTMENT_PORTFOLIO departments MUST use these exact IDs from the financial model:\n");
+                for (Map<String, Object> d : fmDepts) {
+                    sb.append("                  - id: \"").append(d.get("id"))
+                      .append("\", label: \"").append(d.get("label")).append("\"\n");
+                }
+                sb.append("                Do NOT invent new department IDs. The year-end budget calculation matches by these IDs.\n");
+                sb.append("                You may adapt the department labels and descriptions to the domain, but the \"id\" field MUST match exactly.");
+                deptInstruction = sb.toString();
+            }
+        }
 
         String systemPrompt = """
                 You are generating Year %d of a %d-year career simulation about %s in %s.
@@ -281,12 +317,20 @@ public class SimulationGenerationService {
                   Each keyword is {"term": "...", "explanation": "1-2 sentence plain English explanation suitable for an undergraduate student"}
                   Example: [{"term": "Cross-functional Team", "explanation": "A team with members from different departments working toward a common goal."}]
                 - "advisorMood": one of ["neutral", "concerned", "excited", "disappointed", "proud"]
-                - "advisorDialog": 1-2 sentences the mentor says to set up this decision
+                - "advisorDialog": 1-2 sentences the mentor says to set up this decision.
+                  MENTOR STORY ARC — The mentor is retiring and this affects their tone:
+                  * Year 1-2: Active mentor, present and engaged. Year 1 is warm/patient ("Let me walk you through this..."),
+                    Year 2 is more urgent ("Pay close attention — I won't be here to explain this next year...")
+                  * Year 3: Mentor has retired. advisorDialog should feel like written notes left behind
+                    ("Before I left, I jotted down some thoughts on situations like this...")
+                  * Year 4+: No mentor. Set advisorDialog to null and advisorMood to null.
                 - "advisorReaction": {
                     "quality_3": {"mood": "...", "text": "..."},
                     "quality_2": {"mood": "...", "text": "..."},
                     "quality_1": {"mood": "...", "text": "..."}
                   }
+                  For Year 3: reactions should feel like imagining what the mentor would say.
+                  For Year 4+: set advisorReaction to null (student is on their own).
 
                 DECISION CONFIG SCHEMAS BY TYPE:
 
@@ -308,6 +352,7 @@ public class SimulationGenerationService {
                 INVESTMENT_PORTFOLIO: {"totalBudget": N, "currency": "$",
                   "departments": [{"id": "...", "label": "...", "description": "...", "minAllocation": N, "maxAllocation": N, "projectedRoiRange": "..."}],
                   "mappings": [...]}
+                %s
 
                 STAKEHOLDER_MEETING: {"maxSelections": 2, "instruction": "...",
                   "stakeholders": [{"id": "...", "name": "...", "role": "...", "characterId": "medical_female_1", "teaser": "...", "revealedInfo": "..."}],
@@ -337,7 +382,7 @@ public class SimulationGenerationService {
                   }
                 ]
                 """.formatted(year, targetYears, concept, subject,
-                currentTitle, previousContext, decisionsPerYear)
+                currentTitle, previousContext, decisionsPerYear, deptInstruction)
                 .replace("{YEAR}", String.valueOf(year));
 
         String userPrompt = "Generate the " + decisionsPerYear + " decisions for Year " + year +
@@ -673,6 +718,128 @@ public class SimulationGenerationService {
             logger.warn("Phase 6 validation issues: {}", errorMsg);
             // Log warnings but don't fail — AI output may have minor structural differences
             // that can be edited by instructors in REVIEW status
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Phase 5.5 — Mentor Enrichment for guided years
+    // ════════════════════════════════════════════════════════════════════
+
+    @SuppressWarnings("unchecked")
+    private void phaseMentorEnrichment(
+            String concept, String subject, String audience,
+            int guidedYears,
+            List<List<Map<String, Object>>> allYearDecisions) {
+
+        // Build a compact summary of all decisions for the guided years
+        StringBuilder decisionsSummary = new StringBuilder();
+        for (int y = 0; y < guidedYears && y < allYearDecisions.size(); y++) {
+            List<Map<String, Object>> yearDecisions = allYearDecisions.get(y);
+            decisionsSummary.append("Year ").append(y + 1).append(":\n");
+            for (Map<String, Object> d : yearDecisions) {
+                decisionsSummary.append("  ").append(d.get("id")).append(" (").append(d.get("decisionType")).append("): ");
+                decisionsSummary.append(((String) d.getOrDefault("narrative", "")).substring(0,
+                    Math.min(120, ((String) d.getOrDefault("narrative", "")).length()))).append("...\n");
+                decisionsSummary.append("  Choices: ");
+                List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
+                if (choices != null) {
+                    for (Map<String, Object> c : choices) {
+                        decisionsSummary.append("[").append(c.get("id")).append(": ")
+                            .append(((String) c.getOrDefault("text", "")).substring(0,
+                                Math.min(80, ((String) c.getOrDefault("text", "")).length())))
+                            .append("...] ");
+                    }
+                }
+                decisionsSummary.append("\n");
+            }
+        }
+
+        String guidanceLevel = guidedYears >= 3
+            ? "Years 1-2: FULL guidance (always visible). Year 3: LIGHT guidance (hints available on request — shorter, less specific)."
+            : "All years: FULL guidance (always visible).";
+
+        String systemPrompt = """
+                You are a course mentor creating learning guidance for a career simulation about %s in %s for %s students.
+
+                The simulation teaches the concept through experiential decisions. For the first %d years,
+                students receive mentor guidance to reinforce course learnings.
+
+                %s
+
+                MENTOR RETIREMENT STORY ARC:
+                The mentor is a seasoned veteran who has announced retirement in 2 years. This shapes the tone:
+                - Year 1: The mentor is actively present. Guidance is warm, patient, and detailed.
+                  Voice: "Let me walk you through this..." / "In my 30 years, I've seen this play out..."
+                  Include rich real-world examples and thorough explanations.
+                - Year 2: The mentor is still present but departure looms. Tone becomes more urgent and focused.
+                  Voice: "Pay close attention here — I won't be around next year to explain this..."
+                  / "This is one of the most important lessons I can give you before I go..."
+                  Guidance is still detailed but emphasizes what matters most.
+                - Year 3 (if included): The mentor has retired. Guidance feels like written notes left behind.
+                  Voice: "Before I left, I jotted down some thoughts on situations like this..."
+                  / "You'll find my notes on this topic in the margin..."
+                  Hints are shorter, vaguer — enough to point direction but not hold hands.
+
+                For each decision, generate:
+                1. "courseConnection": One sentence linking this decision to a specific course concept or theory
+                   (e.g., "This tests your understanding of Porter's Five Forces from Chapter 3.")
+                2. "realWorldExample": 1-2 sentences describing a real company/scenario that faced this exact type of decision
+                   (e.g., "When Spotify expanded to India in 2019, they faced a similar market entry budget question...")
+                   For Year 1-2: detailed and specific. For Year 3: briefer, just a pointer.
+                3. "choiceHints": For EACH choice ID, provide:
+                   - "hint": What this choice likely leads to (1 sentence, practical consequence)
+                   - "risk": "low", "medium", or "high"
+                   For Year 1: warm, educational hints. Year 2: direct, no-nonsense. Year 3: vague pointers.
+                4. "mentorNote": A 1-sentence in-character note from the mentor, written in their voice for that year.
+                   Year 1: encouraging teaching. Year 2: urgent wisdom. Year 3: a brief scribbled note.
+
+                IMPORTANT: Choice hints should educate, not give away the answer. Frame consequences
+                in terms of trade-offs, not "this is right/wrong". Even the best choice has downsides.
+
+                Here are the decisions to enrich:
+
+                %s
+
+                Output JSON keyed by decision ID:
+                {
+                  "y1_d1": {
+                    "courseConnection": "...",
+                    "realWorldExample": "...",
+                    "mentorNote": "...",
+                    "choiceHints": {
+                      "y1_d1_a": {"hint": "Conservative approach preserves cash but may slow growth", "risk": "low"},
+                      "y1_d1_b": {"hint": "Balanced spend, but market timing is uncertain", "risk": "medium"},
+                      "y1_d1_c": {"hint": "Aggressive investment could capture market share or drain reserves", "risk": "high"}
+                    }
+                  }
+                }
+                """.formatted(concept, subject, audience, guidedYears, guidanceLevel, decisionsSummary);
+
+        String userPrompt = "Generate mentor guidance for all decisions in years 1-" + guidedYears +
+                ". Return ONLY valid JSON object. No markdown, no comments.";
+
+        String response = foundryAIService.callOpenAI(systemPrompt, userPrompt);
+        String json = extractJsonObject(response);
+
+        try {
+            Map<String, Object> guidance = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+
+            // Inject mentorGuidance into each decision
+            for (int y = 0; y < guidedYears && y < allYearDecisions.size(); y++) {
+                boolean isLightYear = (y == 2); // Year 3 = index 2
+                for (Map<String, Object> decision : allYearDecisions.get(y)) {
+                    String decisionId = (String) decision.get("id");
+                    if (guidance.containsKey(decisionId)) {
+                        Map<String, Object> mg = (Map<String, Object>) guidance.get(decisionId);
+                        mg.put("guidanceLevel", isLightYear ? "LIGHT" : "FULL");
+                        decision.put("mentorGuidance", mg);
+                    }
+                }
+            }
+            logger.info("Mentor enrichment applied to {} decisions", guidance.size());
+        } catch (Exception e) {
+            logger.warn("Failed to parse mentor enrichment response, skipping: {}", e.getMessage());
+            // Non-fatal — simulation works without mentor guidance
         }
     }
 

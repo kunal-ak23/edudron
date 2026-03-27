@@ -345,6 +345,7 @@ export default function SimulationPlayPage() {
                   choices={state.decision.choices}
                   onSubmit={handleSubmit}
                   disabled={submitting}
+                  mentorGuidance={(state.decision as any).mentorGuidance}
                 />
               </div>
             </div>
@@ -391,6 +392,8 @@ export default function SimulationPlayPage() {
               concept={simulation?.concept || ''}
               keywords={(state?.decision as any)?.conceptKeywords || []}
               keyInsights={state?.keyInsights || []}
+              courseConnection={(state?.decision as any)?.mentorGuidance?.courseConnection}
+              realWorldExample={(state?.decision as any)?.mentorGuidance?.realWorldExample}
             />
           </aside>
 
@@ -403,6 +406,8 @@ export default function SimulationPlayPage() {
                   concept={simulation?.concept || ''}
                   keywords={(state?.decision as any)?.conceptKeywords || []}
                   keyInsights={state?.keyInsights || []}
+                  courseConnection={(state?.decision as any)?.mentorGuidance?.courseConnection}
+                  realWorldExample={(state?.decision as any)?.mentorGuidance?.realWorldExample}
                 />
               </div>
             )}
@@ -522,12 +527,23 @@ export default function SimulationPlayPage() {
         )}
 
         {/* Overlays */}
-        {playPhase === 'YEAR_TRANSITION' && state && (
-          <YearTransition
-            yearCompleted={state.currentYear}
-            onComplete={handleYearTransitionComplete}
-          />
-        )}
+        {playPhase === 'YEAR_TRANSITION' && state && (() => {
+          const retYear = (state.advisorDialog as any)?.retirementYear
+          const farewell = (state.advisorDialog as any)?.farewellMessage
+          const advisorName = state.advisorDialog?.advisorName || 'Mentor'
+          const isFarewellYear = retYear && state.currentYear === retYear - 1
+          return (
+            <YearTransition
+              yearCompleted={state.currentYear}
+              onComplete={handleYearTransitionComplete}
+              mentorFarewell={isFarewellYear && farewell ? {
+                advisorName,
+                farewellMessage: farewell,
+                characterId: state.advisorDialog?.characterId,
+              } : undefined}
+            />
+          )
+        })()}
 
         {playPhase === 'PROMOTION' && state?.yearEndReview?.promotionTitle && state.currentRole && (
           <PromotionCelebration

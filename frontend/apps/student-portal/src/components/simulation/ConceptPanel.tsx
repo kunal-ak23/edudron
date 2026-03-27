@@ -7,9 +7,14 @@ interface ConceptPanelProps {
   keywords?: Array<{ term: string; explanation: string }>
   keyInsights?: string[]
   activeKeywordIndex?: number
+  courseConnection?: string
+  realWorldExample?: string
 }
 
-export default function ConceptPanel({ concept, keywords = [], keyInsights = [], activeKeywordIndex = 0 }: ConceptPanelProps) {
+export default function ConceptPanel({
+  concept, keywords = [], keyInsights = [], activeKeywordIndex = 0,
+  courseConnection, realWorldExample
+}: ConceptPanelProps) {
   return (
     <div className="p-6 space-y-8">
       {/* Concept Header */}
@@ -24,6 +29,32 @@ export default function ConceptPanel({ concept, keywords = [], keyInsights = [],
           {concept || 'Strategic Decision Making'}
         </h2>
       </section>
+
+      {/* Course Connection — from mentor guidance */}
+      {courseConnection && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 text-amber-400">
+            <span className="text-sm">📚</span>
+            <span className="text-[11px] uppercase font-bold tracking-widest">Course Connection</span>
+          </div>
+          <p className="text-xs text-[#bdc8ce] leading-relaxed bg-amber-400/5 border border-amber-400/10 rounded-lg p-3">
+            {courseConnection}
+          </p>
+        </section>
+      )}
+
+      {/* Real-World Example — from mentor guidance */}
+      {realWorldExample && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 text-emerald-400">
+            <span className="text-sm">🌍</span>
+            <span className="text-[11px] uppercase font-bold tracking-widest">Real World</span>
+          </div>
+          <p className="text-xs text-[#bdc8ce] leading-relaxed bg-emerald-400/5 border border-emerald-400/10 rounded-lg p-3">
+            {realWorldExample}
+          </p>
+        </section>
+      )}
 
       {/* Keywords Section */}
       {keywords.length > 0 && (

@@ -39,6 +39,8 @@ export interface AdvisorDialog {
   text: string
   advisorName?: string
   characterId?: string
+  retirementYear?: number
+  farewellMessage?: string
 }
 
 export interface FinancialReport {
@@ -84,6 +86,14 @@ export interface SimulationStateDTO {
   keyInsights?: string[]
 }
 
+export interface MentorGuidance {
+  courseConnection?: string
+  realWorldExample?: string
+  mentorNote?: string
+  choiceHints?: Record<string, { hint: string; risk: 'low' | 'medium' | 'high' }>
+  guidanceLevel?: 'FULL' | 'LIGHT'
+}
+
 export interface SimulationDecisionDTO {
   decisionId: string
   narrative: string
@@ -92,6 +102,7 @@ export interface SimulationDecisionDTO {
   decisionConfig?: any
   choices?: ChoiceDTO[]
   conceptKeywords?: Array<{ term: string; explanation: string }>
+  mentorGuidance?: MentorGuidance
 }
 
 export interface ChoiceDTO {
@@ -230,6 +241,20 @@ export class SimulationsApi {
 
   async archiveSimulation(id: string): Promise<SimulationDTO> {
     const response = await this.apiClient.post<SimulationDTO>(`/content/api/simulations/${id}/archive`, {})
+    return response.data
+  }
+
+  async deleteSimulation(id: string): Promise<void> {
+    await this.apiClient.delete(`/content/api/simulations/${id}`)
+  }
+
+  async moveToDraft(id: string): Promise<SimulationDTO> {
+    const response = await this.apiClient.post<SimulationDTO>(`/content/api/simulations/${id}/move-to-draft`, {})
+    return response.data
+  }
+
+  async moveToPublished(id: string): Promise<SimulationDTO> {
+    const response = await this.apiClient.post<SimulationDTO>(`/content/api/simulations/${id}/move-to-published`, {})
     return response.data
   }
 

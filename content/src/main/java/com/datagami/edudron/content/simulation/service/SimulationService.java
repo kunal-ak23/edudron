@@ -199,6 +199,59 @@ public class SimulationService {
         return dto;
     }
 
+    @Transactional
+    public void deleteSimulation(String id) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+        // Delete all plays for this simulation first
+        playRepository.deleteBySimulationIdAndClientId(id, clientId);
+        simulationRepository.delete(sim);
+    }
+
+    @Transactional
+    public SimulationDTO moveToDraft(String id) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+
+        if (sim.getStatus() == Simulation.SimulationStatus.GENERATING) {
+            throw new IllegalStateException("Cannot move a simulation that is currently generating.");
+        }
+
+        sim.setStatus(Simulation.SimulationStatus.REVIEW);
+        sim.setPublishedAt(null);
+        simulationRepository.save(sim);
+
+        SimulationDTO dto = SimulationDTO.fromEntity(sim);
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
+        return dto;
+    }
+
+    @Transactional
+    public SimulationDTO moveToPublished(String id) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+
+        if (sim.getStatus() == Simulation.SimulationStatus.GENERATING) {
+            throw new IllegalStateException("Cannot publish a simulation that is currently generating.");
+        }
+        if (sim.getSimulationData() == null) {
+            throw new IllegalStateException("Cannot publish a simulation without generated content.");
+        }
+
+        sim.setStatus(Simulation.SimulationStatus.PUBLISHED);
+        if (sim.getPublishedAt() == null) {
+            sim.setPublishedAt(OffsetDateTime.now());
+        }
+        simulationRepository.save(sim);
+
+        SimulationDTO dto = SimulationDTO.fromEntity(sim);
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
+        return dto;
+    }
+
     @Transactional(readOnly = true)
     public SimulationExportDTO exportSimulation(String id) {
         UUID clientId = UUID.fromString(TenantContext.getClientId());
@@ -655,6 +708,13 @@ public class SimulationService {
                 if (advisorCharacter.get("characterId") != null) {
                     dialog.put("characterId", advisorCharacter.get("characterId"));
                 }
+                // Mentor retirement story arc metadata
+                if (advisorCharacter.get("retirementYear") != null) {
+                    dialog.put("retirementYear", advisorCharacter.get("retirementYear"));
+                }
+                if (advisorCharacter.get("farewellMessage") != null) {
+                    dialog.put("farewellMessage", advisorCharacter.get("farewellMessage"));
+                }
             }
             state.setAdvisorDialog(dialog);
         }
@@ -1070,6 +1130,12 @@ public class SimulationService {
         List<Map<String, String>> conceptKeywords = (List<Map<String, String>>) decision.get("conceptKeywords");
         if (conceptKeywords != null) {
             dto.setConceptKeywords(conceptKeywords);
+        }
+
+        // Pass through mentor guidance (for guided years 1-3)
+        Map<String, Object> mentorGuidance = (Map<String, Object>) decision.get("mentorGuidance");
+        if (mentorGuidance != null) {
+            dto.setMentorGuidance(mentorGuidance);
         }
 
         // Convert choices, stripping quality scores
