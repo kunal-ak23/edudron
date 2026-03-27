@@ -100,6 +100,27 @@ export function NegotiationInput({ config, onSubmit, disabled, negotiationHint }
       const counterText = `${response.response} My counter: ${unit}${response.npcCounterOffer.toLocaleString()}.`
       setDialogHistory(prev => [...prev, { speaker: npcName, text: counterText }])
       setLastNpcOffer(response.npcCounterOffer)
+    } else {
+      // No NPC response for this round — generate a synthetic response
+      // Move the NPC offer closer to the player's offer (split the difference)
+      const midPoint = Math.round((lastNpcOffer + amount) / 2)
+      if (currentRound >= rounds) {
+        // Final round with no response — NPC accepts the midpoint
+        setDialogHistory(prev => [...prev, {
+          speaker: npcName,
+          text: `Let's meet in the middle at ${unit}${midPoint.toLocaleString()}. Deal.`
+        }])
+        setResolved(true)
+        onSubmit({ input: { finalAmount: midPoint, acceptedRound: currentRound, walkedAway: false } })
+        return
+      } else {
+        // Mid-round — NPC counters with the midpoint
+        setDialogHistory(prev => [...prev, {
+          speaker: npcName,
+          text: `Hmm, that's a stretch. How about ${unit}${midPoint.toLocaleString()}?`
+        }])
+        setLastNpcOffer(midPoint)
+      }
     }
 
     if (currentRound >= rounds) {
