@@ -336,6 +336,7 @@ public class BatchService {
         dto.setEndDate(batch.getEndDate());
         dto.setMaxStudents(batch.getMaxStudents());
         dto.setIsActive(batch.getIsActive());
+        dto.setCoordinatorUserId(batch.getCoordinatorUserId());
         dto.setCreatedAt(batch.getCreatedAt());
         dto.setUpdatedAt(batch.getUpdatedAt());
         

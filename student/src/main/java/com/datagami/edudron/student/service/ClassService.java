@@ -525,6 +525,7 @@ public class ClassService {
         dto.setLevel(classEntity.getLevel());
         dto.setIsActive(classEntity.getIsActive());
         dto.setIsBacklog(classEntity.getIsBacklog());
+        dto.setCoordinatorUserId(classEntity.getCoordinatorUserId());
         dto.setCreatedAt(classEntity.getCreatedAt());
         dto.setUpdatedAt(classEntity.getUpdatedAt());
         

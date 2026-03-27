@@ -14,6 +14,7 @@ public class BatchDTO {
     private LocalDate endDate;
     private Integer maxStudents;
     private Boolean isActive;
+    private String coordinatorUserId;
     private Long studentCount;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
@@ -45,6 +46,9 @@ public class BatchDTO {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
+
+    public String getCoordinatorUserId() { return coordinatorUserId; }
+    public void setCoordinatorUserId(String coordinatorUserId) { this.coordinatorUserId = coordinatorUserId; }
 
     public Long getStudentCount() { return studentCount; }
     public void setStudentCount(Long studentCount) { this.studentCount = studentCount; }
