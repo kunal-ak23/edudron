@@ -8,6 +8,7 @@ import com.azure.ai.openai.models.ChatRequestMessage;
 import com.azure.ai.openai.models.ChatRequestSystemMessage;
 import com.azure.ai.openai.models.ChatRequestUserMessage;
 import com.azure.core.credential.AzureKeyCredential;
+import com.azure.core.http.netty.NettyAsyncHttpClientBuilder;
 import com.datagami.edudron.content.dto.CourseRequirements;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -60,6 +61,9 @@ public class FoundryAIService {
             this.client = new OpenAIClientBuilder()
                     .endpoint(normalizedEndpoint)
                     .credential(new AzureKeyCredential(apiKey))
+                    .httpClient(new NettyAsyncHttpClientBuilder()
+                            .responseTimeout(java.time.Duration.ofSeconds(180))
+                            .build())
                     .buildClient();
             logger.info("Azure OpenAI client initialized successfully with deployment: {}", deploymentName);
             logger.warn("⚠️  If you get 404 errors, verify the deployment name '{}' exists in Azure AI Studio", deploymentName);
