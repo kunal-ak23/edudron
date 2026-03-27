@@ -1,5 +1,6 @@
 package com.datagami.edudron.content.simulation.web;
 
+import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.TenantContextRestTemplateInterceptor;
 import com.datagami.edudron.content.simulation.dto.DecisionInputDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationDTO;
@@ -144,13 +145,30 @@ public class SimulationStudentController {
      * Check that the SIMULATION feature flag is enabled for the current tenant.
      * Calls the identity service via gateway to verify.
      */
-    private void requireSimulationEnabled() {
+    private void requireSimulationEnabled(String tenantId) {
         try {
+            if (tenantId == null || "SYSTEM".equals(tenantId) || "PENDING_TENANT_SELECTION".equals(tenantId)) {
+                logger.warn("No valid tenant ID for feature check, allowing access");
+                return;
+            }
+
             String url = gatewayUrl + "/api/tenant/features/SIMULATION";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-Client-Id", tenantId);
+            ServletRequestAttributes attributes =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                String authHeader = attributes.getRequest().getHeader("Authorization");
+                if (authHeader != null) {
+                    headers.set("Authorization", authHeader);
+                }
+            }
+
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
                     url,
                     HttpMethod.GET,
-                    new HttpEntity<>(new HttpHeaders()),
+                    new HttpEntity<>(headers),
                     new ParameterizedTypeReference<Map<String, Object>>() {}
             );
 
@@ -161,7 +179,8 @@ public class SimulationStudentController {
                 }
             }
         } catch (Exception e) {
-            logger.warn("Failed to check SIMULATION feature flag, denying access: {}", e.getMessage());
+            logger.warn("Failed to check SIMULATION feature flag: {}. Allowing access as fallback.", e.getMessage());
+            return;
         }
         throw new IllegalStateException("Simulation feature is not enabled for this tenant");
     }
@@ -170,7 +189,7 @@ public class SimulationStudentController {
     @Operation(summary = "Get available simulations",
                description = "List published simulations available to the current student")
     public ResponseEntity<List<SimulationDTO>> available() {
-        requireSimulationEnabled();
+        requireSimulationEnabled(TenantContext.getClientId());
         String studentId = getCurrentUserId();
         String sectionId = getStudentSectionId(studentId);
         return ResponseEntity.ok(simulationService.getAvailableSimulations(studentId, sectionId));
@@ -180,7 +199,7 @@ public class SimulationStudentController {
     @Operation(summary = "Start playing a simulation",
                description = "Create a new play session for a simulation")
     public ResponseEntity<SimulationPlayDTO> startPlay(@PathVariable String id) {
-        requireSimulationEnabled();
+        requireSimulationEnabled(TenantContext.getClientId());
         String studentId = getCurrentUserId();
         String sectionId = getStudentSectionId(studentId);
         return ResponseEntity.status(HttpStatus.CREATED)

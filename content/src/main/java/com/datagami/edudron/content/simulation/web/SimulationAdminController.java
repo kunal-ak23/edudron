@@ -119,25 +119,47 @@ public class SimulationAdminController {
      * Check that the SIMULATION feature flag is enabled for the current tenant.
      * Calls the identity service via gateway to verify.
      */
-    private void requireSimulationEnabled() {
+    private void requireSimulationEnabled(String tenantId) {
         try {
+            if (tenantId == null || "SYSTEM".equals(tenantId) || "PENDING_TENANT_SELECTION".equals(tenantId)) {
+                logger.warn("No valid tenant ID for feature check, allowing access");
+                return;
+            }
+
             String url = gatewayUrl + "/api/tenant/features/SIMULATION";
+            logger.debug("Checking SIMULATION feature flag at {} for tenant {}", url, tenantId);
+
+            // Build headers explicitly to ensure they're forwarded
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-Client-Id", tenantId);
+
+            // Forward auth header from current request
+            ServletRequestAttributes attributes =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                String authHeader = attributes.getRequest().getHeader("Authorization");
+                if (authHeader != null) {
+                    headers.set("Authorization", authHeader);
+                }
+            }
+
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
                     url,
                     HttpMethod.GET,
-                    new HttpEntity<>(new HttpHeaders()),
+                    new HttpEntity<>(headers),
                     new ParameterizedTypeReference<Map<String, Object>>() {}
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object enabled = response.getBody().get("enabled");
+                logger.debug("SIMULATION feature flag response: enabled={}", enabled);
                 if (Boolean.TRUE.equals(enabled)) {
                     return;
                 }
             }
         } catch (Exception e) {
-            logger.warn("Failed to check SIMULATION feature flag, allowing access (feature check failed): {}", e.getMessage());
-            return; // Default to allow if check fails — frontend already gates access
+            logger.warn("Failed to check SIMULATION feature flag: {}. Allowing access as fallback.", e.getMessage());
+            return; // Allow access if inter-service call fails — requireAdmin() already verified the user
         }
         throw new IllegalStateException("Simulation feature is not enabled for this tenant");
     }
@@ -159,8 +181,7 @@ public class SimulationAdminController {
                description = "Submit AI simulation generation job. Only SYSTEM_ADMIN and TENANT_ADMIN.")
     public ResponseEntity<?> generateSimulation(@Valid @RequestBody GenerateSimulationRequest request) {
         requireAdmin();
-        // Feature check removed - frontend gates access via useSimulationsFeature hook
-        // requireSimulationEnabled();
+        requireSimulationEnabled(TenantContext.getClientId());
 
         UUID clientId = UUID.fromString(TenantContext.getClientId());
 
@@ -260,7 +281,7 @@ public class SimulationAdminController {
     @Operation(summary = "Publish simulation", description = "Publish a simulation (must be in REVIEW status)")
     public ResponseEntity<SimulationDTO> publish(@PathVariable String id) {
         requireAdmin();
-        // requireSimulationEnabled(); // Frontend gates access
+        requireSimulationEnabled(TenantContext.getClientId());
         return ResponseEntity.ok(simulationService.publish(id));
     }
 
