@@ -398,6 +398,7 @@ export default function SimulationPlayPage() {
             size="sm"
             onClick={async () => {
               try {
+                await simulationsApi.abandonPlay(playId)
                 const newPlay = await simulationsApi.startPlay(simulationId)
                 router.push(`/simulations/${simulationId}/play/${newPlay.id}`)
               } catch (e) {

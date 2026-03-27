@@ -200,6 +200,16 @@ public class SimulationService {
     }
 
     @Transactional
+    public void abandonPlay(String playId, String studentId) {
+        SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
+                .orElseThrow(() -> new IllegalArgumentException("Play not found"));
+        if (play.getStatus() == SimulationPlay.PlayStatus.IN_PROGRESS) {
+            play.setStatus(SimulationPlay.PlayStatus.ABANDONED);
+            playRepository.save(play);
+        }
+    }
+
+    @Transactional
     public void deleteSimulation(String id) {
         UUID clientId = UUID.fromString(TenantContext.getClientId());
         Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)

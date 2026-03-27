@@ -232,6 +232,14 @@ public class SimulationStudentController {
         return ResponseEntity.ok(simulationService.advanceYear(playId, studentId));
     }
 
+    @PostMapping("/play/{playId}/abandon")
+    @Operation(summary = "Abandon play", description = "Abandon the current play attempt (for restarting)")
+    public ResponseEntity<Void> abandonPlay(@PathVariable String playId) {
+        String studentId = getCurrentUserId();
+        simulationService.abandonPlay(playId, studentId);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{id}/history")
     @Operation(summary = "Get play history for a simulation",
                description = "Get all play attempts for a specific simulation by the current student")
