@@ -121,7 +121,7 @@ public class SimulationStudentController {
      */
     private String getStudentSectionId(String studentId) {
         try {
-            String url = gatewayUrl + "/api/enrollments/students/" + studentId + "/class-section";
+            String url = gatewayUrl + "/api/students/" + studentId + "/class-section";
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
                     url,
                     HttpMethod.GET,
