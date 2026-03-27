@@ -341,29 +341,46 @@ public class SimulationGenerationService {
                 .replace("{YEAR}", String.valueOf(year));
 
         String userPrompt = "Generate the " + decisionsPerYear + " decisions for Year " + year +
-                ". Return ONLY the JSON array, no additional text.";
+                ". Return ONLY valid strict JSON array. No comments, no trailing commas, no markdown. Just the raw JSON array starting with [ and ending with ].";
 
         String response = foundryAIService.callOpenAI(systemPrompt, userPrompt);
         String json = extractJsonObject(response);
 
         try {
-            // Sanitize common LLM JSON issues: trailing commas before } or ]
-            String sanitized = json
-                    .replaceAll(",\\s*}", "}")
-                    .replaceAll(",\\s*]", "]");
-
-            // Use lenient parser that accepts unquoted field names
-            com.fasterxml.jackson.core.JsonFactory factory = new com.fasterxml.jackson.core.JsonFactory();
-            factory.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
-            factory.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
-            ObjectMapper lenientMapper = new ObjectMapper(factory);
-
-            return lenientMapper.readValue(sanitized, new TypeReference<List<Map<String, Object>>>() {});
+            return parseJsonLenient(json);
         } catch (Exception e) {
-            logger.error("Failed to parse Phase 2 JSON for year {}. JSON length: {}. First 500 chars: {}",
-                    year, json != null ? json.length() : 0, json != null ? json.substring(0, Math.min(500, json.length())) : "null");
+            // Log full JSON for debugging
+            logger.error("Failed to parse Phase 2 JSON for year {}. JSON length: {}. Full JSON:\n{}",
+                    year, json != null ? json.length() : 0, json);
+            // Retry: ask AI to fix the JSON
+            try {
+                logger.info("Retrying Phase 2 parse for year {} with AI JSON repair", year);
+                String fixPrompt = "The following JSON array has a syntax error. Fix ONLY the JSON syntax (do not change content). Return ONLY the corrected JSON array:\n\n" + json;
+                String fixed = foundryAIService.callOpenAI("You are a JSON repair tool. Fix syntax errors in JSON. Return ONLY valid JSON.", fixPrompt);
+                String fixedJson = extractJsonObject(fixed);
+                return parseJsonLenient(fixedJson);
+            } catch (Exception retryEx) {
+                logger.error("AI JSON repair also failed for year {}", year);
+            }
             throw new RuntimeException("Failed to parse Phase 2 (decisions) response for year " + year, e);
         }
+    }
+
+    private List<Map<String, Object>> parseJsonLenient(String json) throws Exception {
+        // Sanitize common LLM JSON issues
+        String sanitized = json
+                .replaceAll(",\\s*}", "}")           // trailing commas before }
+                .replaceAll(",\\s*]", "]")            // trailing commas before ]
+                .replaceAll("//[^\n]*", "")           // remove JS-style line comments
+                .replaceAll("/\\*.*?\\*/", "");        // remove block comments
+
+        // Use lenient parser
+        ObjectMapper lenientMapper = new ObjectMapper();
+        lenientMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+        lenientMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+        lenientMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_COMMENTS, true);
+
+        return lenientMapper.readValue(sanitized, new TypeReference<List<Map<String, Object>>>() {});
     }
 
     private String buildPreviousContext(List<List<Map<String, Object>>> allYearDecisions, int currentYear) {
