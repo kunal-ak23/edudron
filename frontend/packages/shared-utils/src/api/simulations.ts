@@ -90,6 +90,7 @@ export interface SimulationDecisionDTO {
   decisionType?: string
   decisionConfig?: any
   choices?: ChoiceDTO[]
+  conceptKeywords?: Array<{ term: string; explanation: string }>
 }
 
 export interface ChoiceDTO {

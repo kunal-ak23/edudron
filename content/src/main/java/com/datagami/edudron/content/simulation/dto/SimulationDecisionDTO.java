@@ -9,6 +9,7 @@ public class SimulationDecisionDTO {
     private String decisionType;   // NARRATIVE_CHOICE, BUDGET_ALLOCATION, etc.
     private Map<String, Object> decisionConfig;
     private List<ChoiceDTO> choices;
+    private List<Map<String, String>> conceptKeywords;
 
     public static class ChoiceDTO {
         private String id;
@@ -43,4 +44,7 @@ public class SimulationDecisionDTO {
 
     public List<ChoiceDTO> getChoices() { return choices; }
     public void setChoices(List<ChoiceDTO> choices) { this.choices = choices; }
+
+    public List<Map<String, String>> getConceptKeywords() { return conceptKeywords; }
+    public void setConceptKeywords(List<Map<String, String>> conceptKeywords) { this.conceptKeywords = conceptKeywords; }
 }

@@ -1065,6 +1065,12 @@ public class SimulationService {
             dto.setDecisionConfig(studentConfig);
         }
 
+        // Pass through concept keywords
+        List<Map<String, String>> conceptKeywords = (List<Map<String, String>>) decision.get("conceptKeywords");
+        if (conceptKeywords != null) {
+            dto.setConceptKeywords(conceptKeywords);
+        }
+
         // Convert choices, stripping quality scores
         List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");
         if (choices != null) {

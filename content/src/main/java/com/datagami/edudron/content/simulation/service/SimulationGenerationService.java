@@ -269,6 +269,9 @@ public class SimulationGenerationService {
                 7. Vary the set of interactive types used each year
 
                 For each decision, also generate:
+                - "conceptKeywords": array of 2-3 business/management terms used in this decision that an undergraduate might not know.
+                  Each keyword is {"term": "...", "explanation": "1-2 sentence plain English explanation suitable for an undergraduate student"}
+                  Example: [{"term": "Cross-functional Team", "explanation": "A team with members from different departments working toward a common goal."}]
                 - "advisorMood": one of ["neutral", "concerned", "excited", "disappointed", "proud"]
                 - "advisorDialog": 1-2 sentences the mentor says to set up this decision
                 - "advisorReaction": {
@@ -312,6 +315,7 @@ public class SimulationGenerationService {
                     "id": "y{YEAR}_d1",
                     "narrative": "...",
                     "decisionType": "INVESTMENT_PORTFOLIO",
+                    "conceptKeywords": [{"term": "Capital Allocation", "explanation": "The process of distributing financial resources across departments."}],
                     "advisorMood": "neutral",
                     "advisorDialog": "...",
                     "advisorReaction": {"quality_3": {"mood": "excited", "text": "..."}, "quality_2": {"mood": "neutral", "text": "..."}, "quality_1": {"mood": "disappointed", "text": "..."}},
