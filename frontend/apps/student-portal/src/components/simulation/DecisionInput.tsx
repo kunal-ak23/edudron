@@ -59,7 +59,8 @@ export function DecisionInput({ decisionType, decisionConfig, choices, onSubmit,
       break
     case 'NEGOTIATION':
       inputComponent = !config.npcResponses?.length ? fallback
-        : <NegotiationInput config={config} onSubmit={onSubmit} disabled={disabled} />
+        : <NegotiationInput config={config} onSubmit={onSubmit} disabled={disabled}
+            negotiationHint={mentorGuidance?.mentorTip} />
       break
     case 'DASHBOARD_ANALYSIS':
       inputComponent = !config.metrics?.length ? fallback

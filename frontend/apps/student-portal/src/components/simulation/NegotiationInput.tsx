@@ -23,9 +23,10 @@ interface NegotiationInputProps {
   config: NegotiationConfig
   onSubmit: (data: { input: Record<string, any> }) => void
   disabled?: boolean
+  negotiationHint?: string
 }
 
-export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInputProps) {
+export function NegotiationInput({ config, onSubmit, disabled, negotiationHint }: NegotiationInputProps) {
   const rounds = config.rounds ?? 3
   const unit = config.unit ?? '$'
   const npcName = config.npcName ?? 'Counterparty'
@@ -45,22 +46,34 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [dialogHistory])
 
-  // Determine negotiation direction from NPC responses
-  const getNegotiationHint = (): string => {
-    if (!config.npcResponses?.length) return 'Make your counter-offer'
-    // Look at round 1 responses to infer if player should go higher or lower
+  // Determine negotiation direction and suggested range from NPC responses
+  const getNegotiationHint = (): { direction: string; range?: string } => {
+    if (!config.npcResponses?.length) return { direction: 'Make your counter-offer' }
     const round1 = config.npcResponses.filter(r => r.round === 1)
-    if (round1.length === 0) return 'Make your counter-offer'
-    // If npcCounterOffer is lower than initial, NPC is negotiating down — player should push higher
+    if (round1.length === 0) return { direction: 'Make your counter-offer' }
+
+    // Get the player range from round 1 to suggest a ballpark
+    const ranges = round1.map(r => r.playerRange).filter(Boolean)
+    const allMins = ranges.map(r => r.min)
+    const allMaxs = ranges.map(r => r.max)
+    const suggestedMin = allMins.length ? Math.min(...allMins) : null
+    const suggestedMax = allMaxs.length ? Math.max(...allMaxs) : null
+
     const firstWithCounter = round1.find(r => r.npcCounterOffer !== null)
+    let direction = 'Make your counter-offer'
     if (firstWithCounter && firstWithCounter.npcCounterOffer !== null) {
       if (firstWithCounter.npcCounterOffer < config.initialOffer) {
-        return `Try negotiating higher than ${unit}${config.initialOffer.toLocaleString()}`
-      } else if (firstWithCounter.npcCounterOffer > config.initialOffer) {
-        return `Try negotiating lower than ${unit}${config.initialOffer.toLocaleString()}`
+        direction = `Push higher than their ${unit}${config.initialOffer.toLocaleString()}`
+      } else {
+        direction = `Negotiate lower than ${unit}${config.initialOffer.toLocaleString()}`
       }
     }
-    return 'Make your counter-offer'
+
+    const range = suggestedMin && suggestedMax
+      ? `Aim around ${unit}${suggestedMin.toLocaleString()} – ${unit}${suggestedMax.toLocaleString()}`
+      : undefined
+
+    return { direction, range }
   }
 
   const handleCounter = () => {
@@ -142,6 +155,14 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
         )}
       </div>
 
+      {/* Negotiation strategy hint from mentor */}
+      {!resolved && negotiationHint && (
+        <div className="flex items-start gap-2 px-3 py-2 bg-[#6cd3f7]/5 border border-[#6cd3f7]/10 rounded-lg">
+          <span className="text-[#6cd3f7] text-sm flex-shrink-0">💡</span>
+          <p className="text-xs text-[#6cd3f7]/80 leading-relaxed">{negotiationHint}</p>
+        </div>
+      )}
+
       {/* Offer comparison bar — shows when there's a gap to close */}
       {!resolved && (
         <div className="bg-[#0F1729] rounded-lg p-3 space-y-2">
@@ -156,8 +177,11 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
                 <p className="text-yellow-400 font-bold text-sm">{unit}{gap?.toLocaleString()}</p>
               </div>
             ) : (
-              <div className="text-center">
-                <span className="text-slate-400 text-[10px] italic">{getNegotiationHint()}</span>
+              <div className="text-center max-w-[200px]">
+                <p className="text-[#6cd3f7] text-[10px] font-bold">{getNegotiationHint().direction}</p>
+                {getNegotiationHint().range && (
+                  <p className="text-amber-400 text-[10px] mt-0.5">{getNegotiationHint().range}</p>
+                )}
               </div>
             )}
             <div className="text-right">
