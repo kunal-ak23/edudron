@@ -88,6 +88,7 @@ export interface SimulationDecisionDTO {
   decisionId: string
   narrative: string
   decisionType?: string
+  displayLabel?: string
   decisionConfig?: any
   choices?: ChoiceDTO[]
   conceptKeywords?: Array<{ term: string; explanation: string }>

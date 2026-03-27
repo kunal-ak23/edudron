@@ -250,7 +250,15 @@ public class SimulationGenerationService {
                 - Have 2-3 choices ordered by quality (1=worst, 2=mid, 3=best)
                 - For interactive types (not NARRATIVE_CHOICE), include decisionConfig with appropriate structure and mappings
 
-                Available decision types (use ALL of them across the simulation):
+                CRITICAL - ADAPT ALL LANGUAGE TO THE SUBJECT AND AUDIENCE:
+                - Do NOT use generic corporate jargon if the simulation is about farming, healthcare, sports, etc.
+                - Use terminology natural to the domain. Examples:
+                  * Farming: "Cooperative Meeting" not "Stakeholder Meeting", "Seasonal Budget" not "Investment Portfolio"
+                  * Healthcare: "Patient Care Conference" not "Stakeholder Meeting", "Department Funding" not "Budget Allocation"
+                  * Sports: "Team Strategy Session" not "Stakeholder Meeting", "Player Draft" not "Hire/Fire"
+                - The "displayLabel" field on each decision should be a context-appropriate name for the interaction type
+
+                Available decision types (these are INTERNAL type codes — the student never sees these names):
                 NARRATIVE_CHOICE, BUDGET_ALLOCATION, PRIORITY_RANKING, TRADEOFF_SLIDER,
                 RESOURCE_ASSIGNMENT, TIMELINE_CHOICE, COMPOUND, NEGOTIATION,
                 DASHBOARD_ANALYSIS, HIRE_FIRE, CRISIS_RESPONSE, INVESTMENT_PORTFOLIO,
@@ -315,6 +323,7 @@ public class SimulationGenerationService {
                     "id": "y{YEAR}_d1",
                     "narrative": "...",
                     "decisionType": "INVESTMENT_PORTFOLIO",
+                    "displayLabel": "Seasonal Budget Planning",
                     "conceptKeywords": [{"term": "Capital Allocation", "explanation": "The process of distributing financial resources across departments."}],
                     "advisorMood": "neutral",
                     "advisorDialog": "...",

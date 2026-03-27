@@ -7,6 +7,7 @@ public class SimulationDecisionDTO {
     private String decisionId;
     private String narrative;
     private String decisionType;   // NARRATIVE_CHOICE, BUDGET_ALLOCATION, etc.
+    private String displayLabel;   // Context-appropriate name (e.g., "Cooperative Meeting" instead of "Stakeholder Meeting")
     private Map<String, Object> decisionConfig;
     private List<ChoiceDTO> choices;
     private List<Map<String, String>> conceptKeywords;
@@ -44,6 +45,9 @@ public class SimulationDecisionDTO {
 
     public List<ChoiceDTO> getChoices() { return choices; }
     public void setChoices(List<ChoiceDTO> choices) { this.choices = choices; }
+
+    public String getDisplayLabel() { return displayLabel; }
+    public void setDisplayLabel(String displayLabel) { this.displayLabel = displayLabel; }
 
     public List<Map<String, String>> getConceptKeywords() { return conceptKeywords; }
     public void setConceptKeywords(List<Map<String, String>> conceptKeywords) { this.conceptKeywords = conceptKeywords; }

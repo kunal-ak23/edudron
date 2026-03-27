@@ -1056,6 +1056,7 @@ public class SimulationService {
         dto.setDecisionId((String) decision.get("id"));
         dto.setNarrative((String) decision.get("narrative"));
         dto.setDecisionType((String) decision.get("decisionType"));
+        dto.setDisplayLabel((String) decision.get("displayLabel"));
 
         // Include decision config but strip mappings (server-side only)
         Map<String, Object> config = (Map<String, Object>) decision.get("decisionConfig");
