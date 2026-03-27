@@ -71,6 +71,17 @@ export interface SimulationStateDTO {
   yearEndReview?: YearEndReviewDTO
   debrief?: DebriefDTO
   openingNarrative?: string
+  decisionHistory?: Array<{
+    year: number
+    decision: number
+    label: string
+    quality: 'GOOD' | 'MEDIUM' | 'BAD'
+    points: number
+  }>
+  goodDecisionCount?: number
+  badDecisionCount?: number
+  neutralDecisionCount?: number
+  keyInsights?: string[]
 }
 
 export interface SimulationDecisionDTO {

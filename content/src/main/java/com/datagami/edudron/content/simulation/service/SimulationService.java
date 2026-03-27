@@ -501,6 +501,84 @@ public class SimulationService {
         state.setPerformanceBand(play.getPerformanceBand());
         state.setCurrentBudget(play.getCurrentBudget());
 
+        // Build decision history from decisionsJson
+        List<Map<String, Object>> history = new ArrayList<>();
+        int goodCount = 0, badCount = 0, neutralCount = 0;
+        List<String> insights = new ArrayList<>();
+
+        if (play.getDecisionsJson() != null) {
+            List<Map<String, Object>> years = (List<Map<String, Object>>) simData.get("years");
+
+            for (Map<String, Object> decision : play.getDecisionsJson()) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                int year = ((Number) decision.get("year")).intValue();
+                int decIndex = ((Number) decision.get("decisionIndex")).intValue();
+                String choiceId = (String) decision.get("choiceId");
+                int quality = ((Number) decision.get("quality")).intValue();
+                int points = ((Number) decision.getOrDefault("points", 0)).intValue();
+
+                // Get the decision narrative snippet from simulation data
+                String label = choiceId; // fallback
+                try {
+                    if (years != null && year > 0 && year <= years.size()) {
+                        Map<String, Object> yearData = years.get(year - 1);
+                        List<Map<String, Object>> decisions = (List<Map<String, Object>>) yearData.get("decisions");
+                        if (decisions != null && decIndex >= 0 && decIndex < decisions.size()) {
+                            Map<String, Object> decData = decisions.get(decIndex);
+                            // Find the choice text
+                            List<Map<String, Object>> choices = (List<Map<String, Object>>) decData.get("choices");
+                            if (choices != null) {
+                                for (Map<String, Object> choice : choices) {
+                                    if (choiceId.equals(choice.get("id"))) {
+                                        label = (String) choice.get("text");
+                                        break;
+                                    }
+                                }
+                            }
+                            // Get advisor reaction as insight
+                            Map<String, Object> reactions = (Map<String, Object>) decData.get("advisorReaction");
+                            if (reactions != null) {
+                                Map<String, Object> reaction = (Map<String, Object>) reactions.get("quality_" + quality);
+                                if (reaction != null && reaction.get("text") != null) {
+                                    String reactionText = (String) reaction.get("text");
+                                    if (reactionText.length() > 20) { // Only meaningful reactions
+                                        insights.add(reactionText);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    // Safe fallback — use choiceId as label
+                }
+
+                // Truncate label if too long
+                if (label != null && label.length() > 60) {
+                    label = label.substring(0, 57) + "...";
+                }
+
+                entry.put("year", year);
+                entry.put("decision", decIndex + 1);
+                entry.put("label", label);
+                entry.put("quality", quality == 3 ? "GOOD" : quality == 2 ? "MEDIUM" : "BAD");
+                entry.put("points", points);
+                entry.put("choiceId", choiceId);
+
+                history.add(entry);
+
+                if (quality == 3) goodCount++;
+                else if (quality == 2) neutralCount++;
+                else badCount++;
+            }
+        }
+
+        state.setDecisionHistory(history);
+        state.setGoodDecisionCount(goodCount);
+        state.setBadDecisionCount(badCount);
+        state.setNeutralDecisionCount(neutralCount);
+        // Keep only latest 5 insights
+        state.setKeyInsights(insights.size() > 5 ? insights.subList(insights.size() - 5, insights.size()) : insights);
+
         // v3: Include advisor dialog from current decision
         Map<String, Object> advisorCharacter = (Map<String, Object>) simData.get("advisorCharacter");
 

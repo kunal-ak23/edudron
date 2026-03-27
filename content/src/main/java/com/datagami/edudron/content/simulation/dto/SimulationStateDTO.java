@@ -1,6 +1,7 @@
 package com.datagami.edudron.content.simulation.dto;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 
 public class SimulationStateDTO {
@@ -31,6 +32,13 @@ public class SimulationStateDTO {
 
     // Opening narrative for the current year (shown at start of each year)
     private String openingNarrative;
+
+    // Dashboard panel fields: decision history, quality counts, insights
+    private List<Map<String, Object>> decisionHistory;
+    private Integer goodDecisionCount;
+    private Integer badDecisionCount;
+    private Integer neutralDecisionCount;
+    private List<String> keyInsights;
 
     // Getters and Setters
     public String getPhase() { return phase; }
@@ -83,4 +91,19 @@ public class SimulationStateDTO {
 
     public String getOpeningNarrative() { return openingNarrative; }
     public void setOpeningNarrative(String openingNarrative) { this.openingNarrative = openingNarrative; }
+
+    public List<Map<String, Object>> getDecisionHistory() { return decisionHistory; }
+    public void setDecisionHistory(List<Map<String, Object>> decisionHistory) { this.decisionHistory = decisionHistory; }
+
+    public Integer getGoodDecisionCount() { return goodDecisionCount; }
+    public void setGoodDecisionCount(Integer goodDecisionCount) { this.goodDecisionCount = goodDecisionCount; }
+
+    public Integer getBadDecisionCount() { return badDecisionCount; }
+    public void setBadDecisionCount(Integer badDecisionCount) { this.badDecisionCount = badDecisionCount; }
+
+    public Integer getNeutralDecisionCount() { return neutralDecisionCount; }
+    public void setNeutralDecisionCount(Integer neutralDecisionCount) { this.neutralDecisionCount = neutralDecisionCount; }
+
+    public List<String> getKeyInsights() { return keyInsights; }
+    public void setKeyInsights(List<String> keyInsights) { this.keyInsights = keyInsights; }
 }
