@@ -43,6 +43,11 @@ public class DecisionMappingService {
             logger.info("Auto-generated {} mappings for type {}", mappings.size(), decisionType);
         }
 
+        // INVESTMENT_PORTFOLIO: score based on allocation balance (no condition-based mappings needed)
+        if ("INVESTMENT_PORTFOLIO".equals(decisionType) && input != null) {
+            return resolveInvestmentPortfolioChoice(node, config, input);
+        }
+
         Map<String, Object> flatInput = "COMPOUND".equals(decisionType)
                 ? flattenCompoundInput(input)
                 : flattenInput(input);
@@ -444,5 +449,82 @@ public class DecisionMappingService {
         }
 
         return null;
+    }
+
+    /**
+     * Resolve INVESTMENT_PORTFOLIO choice based on allocation balance.
+     * Measures how evenly budget is spread across departments.
+     * Balanced = best quality, concentrated = worst quality.
+     */
+    @SuppressWarnings("unchecked")
+    private String resolveInvestmentPortfolioChoice(
+            Map<String, Object> node, Map<String, Object> config, Map<String, Object> input) {
+
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
+        if (choices == null || choices.isEmpty()) {
+            throw new IllegalStateException("INVESTMENT_PORTFOLIO has no choices");
+        }
+
+        // Sort choices by quality descending
+        List<Map<String, Object>> sortedChoices = new ArrayList<>(choices);
+        sortedChoices.sort((a, b) -> {
+            int qa = a.get("quality") != null ? ((Number) a.get("quality")).intValue() : 1;
+            int qb = b.get("quality") != null ? ((Number) b.get("quality")).intValue() : 1;
+            return qb - qa;
+        });
+
+        // Calculate how balanced the allocation is using coefficient of variation
+        List<Map<String, Object>> departments = (List<Map<String, Object>>) config.get("departments");
+        if (departments == null || departments.isEmpty()) {
+            return (String) sortedChoices.get(sortedChoices.size() - 1).get("id");
+        }
+
+        List<Double> allocations = new ArrayList<>();
+        double total = 0;
+        for (Map<String, Object> dept : departments) {
+            String deptId = (String) dept.get("id");
+            Object val = input.get(deptId);
+            double amount = val != null ? ((Number) val).doubleValue() : 0;
+            allocations.add(amount);
+            total += amount;
+        }
+
+        if (total <= 0 || allocations.isEmpty()) {
+            return (String) sortedChoices.get(sortedChoices.size() - 1).get("id");
+        }
+
+        // Calculate coefficient of variation (lower = more balanced)
+        double mean = total / allocations.size();
+        double variance = 0;
+        for (double a : allocations) {
+            variance += (a - mean) * (a - mean);
+        }
+        double stdDev = Math.sqrt(variance / allocations.size());
+        double cv = stdDev / mean; // 0 = perfectly balanced, higher = more concentrated
+
+        // Also check: does the largest allocation exceed 50% of total?
+        double maxAllocation = allocations.stream().mapToDouble(Double::doubleValue).max().orElse(0);
+        double maxPct = maxAllocation / total;
+
+        // Scoring:
+        // Quality 3 (best): CV < 0.3 and no single dept > 40%  → balanced
+        // Quality 2 (mid):  CV < 0.5 or no single dept > 55%   → moderately balanced
+        // Quality 1 (worst): everything else                     → concentrated
+        String choiceId;
+        if (cv < 0.3 && maxPct <= 0.40) {
+            choiceId = (String) sortedChoices.get(0).get("id"); // quality 3
+        } else if (cv < 0.5 || maxPct <= 0.55) {
+            choiceId = sortedChoices.size() >= 2
+                ? (String) sortedChoices.get(1).get("id")   // quality 2
+                : (String) sortedChoices.get(0).get("id");
+        } else {
+            choiceId = (String) sortedChoices.get(sortedChoices.size() - 1).get("id"); // quality 1
+        }
+
+        logger.info("INVESTMENT_PORTFOLIO scoring: total={}, cv={:.2f}, maxPct={:.1f}%, choiceId={} (quality={})",
+                total, cv, maxPct * 100, choiceId,
+                choices.stream().filter(c -> choiceId.equals(c.get("id"))).findFirst()
+                    .map(c -> c.get("quality")).orElse("?"));
+        return choiceId;
     }
 }
