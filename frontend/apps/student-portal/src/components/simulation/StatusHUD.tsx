@@ -51,7 +51,7 @@ export function StatusHUD({ role, year, totalYears, decision, totalDecisions, bu
 
         {/* Right: Budget + Score + Band */}
         <div className="flex items-center gap-3 shrink-0">
-          {budget !== undefined && budget > 0 && (
+          {budget !== undefined && (
             <span className="font-mono text-xs text-[#E2E8F0]">{formatBudget(budget)}</span>
           )}
           <div className="flex items-center gap-1.5">

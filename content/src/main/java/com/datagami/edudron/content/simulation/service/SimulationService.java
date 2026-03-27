@@ -499,7 +499,15 @@ public class SimulationService {
         state.setCumulativeScore(play.getCumulativeScore());
         state.setYearScore(calculateCurrentYearScore(play));
         state.setPerformanceBand(play.getPerformanceBand());
-        state.setCurrentBudget(play.getCurrentBudget());
+        // Set budget with fallback to startingBudget from financialModel
+        BigDecimal budget = play.getCurrentBudget();
+        if ((budget == null || budget.compareTo(BigDecimal.ZERO) == 0) && simData != null) {
+            Map<String, Object> financialModel = (Map<String, Object>) simData.get("financialModel");
+            if (financialModel != null && financialModel.get("startingBudget") != null) {
+                budget = new BigDecimal(financialModel.get("startingBudget").toString());
+            }
+        }
+        state.setCurrentBudget(budget);
 
         // Build decision history from decisionsJson
         List<Map<String, Object>> history = new ArrayList<>();
