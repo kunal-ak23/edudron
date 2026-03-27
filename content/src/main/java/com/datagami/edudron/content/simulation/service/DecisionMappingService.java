@@ -4,9 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;;
 
 @Service
 public class DecisionMappingService {
@@ -36,8 +34,13 @@ public class DecisionMappingService {
             mappings = (List<Map<String, Object>>) config.get("outcomes");
         }
         if (mappings == null || mappings.isEmpty()) {
-            logger.warn("Mappings missing for type {}. Falling back.", decisionType);
-            return fallbackChoiceId(node, choiceId, decisionType);
+            // Auto-generate mappings for STAKEHOLDER_MEETING and HIRE_FIRE when AI omitted them
+            mappings = autoGenerateMappings(node, config, decisionType);
+            if (mappings == null || mappings.isEmpty()) {
+                logger.warn("Mappings missing for type {} and auto-generation failed. Falling back.", decisionType);
+                return fallbackChoiceId(node, choiceId, decisionType);
+            }
+            logger.info("Auto-generated {} mappings for type {}", mappings.size(), decisionType);
         }
 
         Map<String, Object> flatInput = "COMPOUND".equals(decisionType)
@@ -53,15 +56,19 @@ public class DecisionMappingService {
         }
 
         // Evaluate mappings in order; return first match
+        logger.info("Evaluating mappings for type {}. Flat input keys: {}", decisionType, flatInput.keySet());
         for (Map<String, Object> mapping : mappings) {
             String condition = (String) mapping.get("condition");
             String mappedChoiceId = (String) mapping.get("choiceId");
 
             if ("default".equals(condition)) {
+                logger.info("Matched default mapping → {}", mappedChoiceId);
                 return validateChoiceId(node, mappedChoiceId);
             }
 
-            if (evaluateCondition(condition, flatInput)) {
+            boolean matched = evaluateCondition(condition, flatInput);
+            logger.info("Condition [{}] → {} (choiceId: {})", condition, matched, mappedChoiceId);
+            if (matched) {
                 return validateChoiceId(node, mappedChoiceId);
             }
         }
@@ -337,5 +344,97 @@ public class DecisionMappingService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    /**
+     * Auto-generate mappings when the AI omitted them.
+     * For STAKEHOLDER_MEETING: maps stakeholder combinations to quality-ordered choices.
+     * For HIRE_FIRE: maps candidate selection to quality-ordered choices.
+     */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> autoGenerateMappings(
+            Map<String, Object> node, Map<String, Object> config, String decisionType) {
+
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
+        if (choices == null || choices.isEmpty()) return null;
+
+        // Sort choices by quality descending (best first)
+        List<Map<String, Object>> sortedChoices = new ArrayList<>(choices);
+        sortedChoices.sort((a, b) -> {
+            int qa = a.get("quality") != null ? ((Number) a.get("quality")).intValue() : 1;
+            int qb = b.get("quality") != null ? ((Number) b.get("quality")).intValue() : 1;
+            return qb - qa;
+        });
+
+        if ("STAKEHOLDER_MEETING".equals(decisionType)) {
+            List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
+            if (stakeholders == null || stakeholders.size() < 2) return null;
+
+            int maxSelections = config.get("maxSelections") != null
+                    ? ((Number) config.get("maxSelections")).intValue() : 2;
+
+            List<Map<String, Object>> mappings = new ArrayList<>();
+
+            // Strategy: first stakeholders are "best" picks, last are "worst"
+            // Best combo (quality 3): first two stakeholders
+            // Medium combo (quality 2): first + any other
+            // Default (quality 1): anything else
+            if (stakeholders.size() >= 2 && sortedChoices.size() >= 2) {
+                String bestId1 = (String) stakeholders.get(0).get("id");
+                String bestId2 = (String) stakeholders.get(1).get("id");
+
+                if (maxSelections >= 2) {
+                    // Best: select both top stakeholders
+                    Map<String, Object> bestMapping = new LinkedHashMap<>();
+                    bestMapping.put("condition",
+                        "selected_contains('" + bestId1 + "') && selected_contains('" + bestId2 + "')");
+                    bestMapping.put("choiceId", sortedChoices.get(0).get("id"));
+                    mappings.add(bestMapping);
+
+                    // Medium: select at least the first stakeholder
+                    if (sortedChoices.size() >= 2) {
+                        Map<String, Object> midMapping = new LinkedHashMap<>();
+                        midMapping.put("condition", "selected_contains('" + bestId1 + "')");
+                        midMapping.put("choiceId", sortedChoices.get(1).get("id"));
+                        mappings.add(midMapping);
+                    }
+                }
+
+                // Default: anything else
+                Map<String, Object> defaultMapping = new LinkedHashMap<>();
+                defaultMapping.put("condition", "default");
+                defaultMapping.put("choiceId", sortedChoices.get(sortedChoices.size() - 1).get("id"));
+                mappings.add(defaultMapping);
+            }
+
+            logger.info("Auto-generated STAKEHOLDER_MEETING mappings: best=[{},{}], {} total mappings",
+                    stakeholders.get(0).get("id"), stakeholders.get(1).get("id"), mappings.size());
+            return mappings;
+
+        } else if ("HIRE_FIRE".equals(decisionType)) {
+            List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
+            if (candidates == null || candidates.isEmpty()) return null;
+
+            List<Map<String, Object>> mappings = new ArrayList<>();
+
+            // Map each candidate to a choice in quality order
+            for (int i = 0; i < candidates.size() && i < sortedChoices.size(); i++) {
+                Map<String, Object> mapping = new LinkedHashMap<>();
+                String candidateId = (String) candidates.get(i).get("id");
+                mapping.put("condition", "selected == '" + candidateId + "'");
+                mapping.put("choiceId", sortedChoices.get(i).get("id"));
+                mappings.add(mapping);
+            }
+
+            // Default
+            Map<String, Object> defaultMapping = new LinkedHashMap<>();
+            defaultMapping.put("condition", "default");
+            defaultMapping.put("choiceId", sortedChoices.get(sortedChoices.size() - 1).get("id"));
+            mappings.add(defaultMapping);
+
+            return mappings;
+        }
+
+        return null;
     }
 }
