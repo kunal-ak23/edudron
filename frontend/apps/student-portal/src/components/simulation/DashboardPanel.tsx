@@ -57,9 +57,8 @@ export default function DashboardPanel({
   decisionHistory = [], goodDecisionCount = 0, badDecisionCount = 0,
   neutralDecisionCount = 0, keyInsights = []
 }: DashboardPanelProps) {
-  // Max possible score: totalDecisions × totalYears × 10 points (quality=3)
-  const calculatedMax = maxScore || (totalDecisions * totalYears * 10) || 300
-  const scorePercent = calculatedMax > 0 ? Math.min((score / calculatedMax) * 100, 100) : 0
+  // Year progress: how many decisions completed in current year
+  const yearProgress = totalDecisions > 0 ? Math.min(((currentDecision) / totalDecisions) * 100, 100) : 0
 
   return (
     <div className="p-6 space-y-8">
@@ -75,9 +74,10 @@ export default function DashboardPanel({
           <div className="h-2 w-full bg-[#2d3448] rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-[#6cd3f7] to-[#0891B2] rounded-full transition-all duration-700 ease-out"
-              style={{ width: `${scorePercent}%`, boxShadow: scorePercent > 0 ? '0 0 8px rgba(108,211,247,0.5)' : 'none' }}
+              style={{ width: `${yearProgress}%`, boxShadow: yearProgress > 0 ? '0 0 8px rgba(108,211,247,0.5)' : 'none' }}
             />
           </div>
+          <p className="text-[10px] text-[#879298] text-right">Year {currentYear} — {currentDecision}/{totalDecisions} decisions</p>
         </div>
 
         {/* Stats Grid */}
