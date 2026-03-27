@@ -261,6 +261,11 @@ export class SimulationsApi {
     return response.data
   }
 
+  async regenerateMentorGuidance(id: string): Promise<{ status: string; message: string }> {
+    const response = await this.apiClient.post<{ status: string; message: string }>(`/content/api/simulations/${id}/regenerate-mentor-guidance`, {})
+    return response.data
+  }
+
   async exportSimulation(id: string): Promise<SimulationExportDTO> {
     const response = await this.apiClient.post<SimulationExportDTO>(`/content/api/simulations/${id}/export`, {})
     return response.data

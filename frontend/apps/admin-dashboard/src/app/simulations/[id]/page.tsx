@@ -33,6 +33,7 @@ import {
   Download,
   Trash2,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react'
 import { simulationsApi, apiClient } from '@/lib/api'
 import type { SimulationDTO } from '@kunal-ak23/edudron-shared-utils'
@@ -85,6 +86,7 @@ export default function SimulationEditorPage() {
   const [exporting, setExporting] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [changingStatus, setChangingStatus] = useState(false)
+  const [regeneratingMentor, setRegeneratingMentor] = useState(false)
 
   const loadSimulation = useCallback(async () => {
     try {
@@ -348,6 +350,25 @@ export default function SimulationEditorPage() {
     }
   }
 
+  // Regenerate Mentor Guidance
+  const handleRegenerateMentor = async () => {
+    setRegeneratingMentor(true)
+    try {
+      await simulationsApi.regenerateMentorGuidance(simulationId)
+      // Reload to get updated data
+      await loadSimulation()
+      toast({ title: 'Mentor Guidance Updated', description: 'Mentor hints, tips, and stakeholder guidance have been regenerated.' })
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Regeneration failed',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setRegeneratingMentor(false)
+    }
+  }
+
   // Export
   const handleExport = async () => {
     setExporting(true)
@@ -426,7 +447,23 @@ export default function SimulationEditorPage() {
             {simulation.status}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Regenerate Mentor Guidance — only if simulation has data */}
+          {simulation.status !== 'DRAFT' && simulation.status !== 'GENERATING' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRegenerateMentor}
+              disabled={regeneratingMentor}
+            >
+              {regeneratingMentor ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4 mr-1" />
+              )}
+              {regeneratingMentor ? 'Regenerating...' : 'Regenerate Mentor Hints'}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

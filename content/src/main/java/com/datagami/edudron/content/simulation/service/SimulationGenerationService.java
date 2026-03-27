@@ -721,6 +721,48 @@ public class SimulationGenerationService {
         }
     }
 
+    /**
+     * Backfill mentor guidance on an existing simulation without regenerating anything else.
+     * Loads the simulation, extracts decisions for years 1-3, runs Phase 5.5, and saves.
+     */
+    @SuppressWarnings("unchecked")
+    public void regenerateMentorGuidance(String simulationId) {
+        Simulation sim = simulationRepository.findById(simulationId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+
+        Map<String, Object> simData = sim.getSimulationData();
+        if (simData == null) {
+            throw new IllegalStateException("Simulation has no generated data");
+        }
+
+        String concept = sim.getConcept();
+        String subject = sim.getSubject();
+        String audience = sim.getAudience();
+        int targetYears = sim.getTargetYears();
+        int guidedYears = Math.min(3, targetYears);
+
+        List<Map<String, Object>> yearsList = (List<Map<String, Object>>) simData.get("years");
+        if (yearsList == null || yearsList.isEmpty()) {
+            throw new IllegalStateException("Simulation has no years data");
+        }
+
+        // Extract decisions per year into the same structure Phase 5.5 expects
+        List<List<Map<String, Object>>> allYearDecisions = new ArrayList<>();
+        for (Map<String, Object> yearData : yearsList) {
+            List<Map<String, Object>> decisions = (List<Map<String, Object>>) yearData.get("decisions");
+            allYearDecisions.add(decisions != null ? decisions : List.of());
+        }
+
+        logger.info("Regenerating mentor guidance for simulation {} (years 1-{})", simulationId, guidedYears);
+        phaseMentorEnrichment(concept, subject, audience, guidedYears, allYearDecisions);
+
+        // The enrichment mutates the decision maps in place, which are references
+        // into yearsList → simData, so just save
+        sim.setSimulationData(simData);
+        simulationRepository.save(sim);
+        logger.info("Mentor guidance regenerated for simulation {}", simulationId);
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Phase 5.5 — Mentor Enrichment for guided years
     // ════════════════════════════════════════════════════════════════════
