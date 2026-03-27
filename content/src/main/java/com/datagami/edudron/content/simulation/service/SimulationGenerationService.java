@@ -933,12 +933,121 @@ public class SimulationGenerationService {
                         mg.put("guidanceLevel", isLightYear ? "LIGHT" : "FULL");
                         decision.put("mentorGuidance", mg);
                     }
+                    // Override AI-generated priorities with deterministic values from mappings
+                    fixHintPrioritiesFromMappings(decision);
                 }
             }
             logger.info("Mentor enrichment applied to {} decisions", guidance.size());
         } catch (Exception e) {
             logger.warn("Failed to parse mentor enrichment response, skipping: {}", e.getMessage());
             // Non-fatal — simulation works without mentor guidance
+        }
+    }
+
+    /**
+     * Override AI-generated stakeholder/candidate priorities with deterministic values
+     * computed from the actual mapping conditions and choice quality scores.
+     */
+    @SuppressWarnings("unchecked")
+    private void fixHintPrioritiesFromMappings(Map<String, Object> decision) {
+        Map<String, Object> mentorGuidance = (Map<String, Object>) decision.get("mentorGuidance");
+        if (mentorGuidance == null) return;
+
+        Map<String, Object> config = (Map<String, Object>) decision.get("decisionConfig");
+        if (config == null) return;
+
+        List<Map<String, Object>> mappings = (List<Map<String, Object>>) config.get("mappings");
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");
+        if (mappings == null || choices == null) return;
+
+        // Build choiceId → quality lookup
+        Map<String, Integer> choiceQuality = new HashMap<>();
+        for (Map<String, Object> c : choices) {
+            String cid = (String) c.get("id");
+            Object q = c.get("quality");
+            if (cid != null && q != null) {
+                choiceQuality.put(cid, ((Number) q).intValue());
+            }
+        }
+
+        String decisionType = (String) decision.get("decisionType");
+
+        // For STAKEHOLDER_MEETING: compute which stakeholders appear in high-quality mappings
+        if ("STAKEHOLDER_MEETING".equals(decisionType)) {
+            Map<String, Object> stakeholderHints = (Map<String, Object>) mentorGuidance.get("stakeholderHints");
+            if (stakeholderHints == null) return;
+
+            // Score each stakeholder by how often they appear in conditions leading to high-quality choices
+            Map<String, Integer> stakeholderBestQuality = new HashMap<>();
+            for (Map<String, Object> mapping : mappings) {
+                String condition = (String) mapping.get("condition");
+                String choiceId = (String) mapping.get("choiceId");
+                if (condition == null || "default".equals(condition) || choiceId == null) continue;
+                int quality = choiceQuality.getOrDefault(choiceId, 1);
+
+                // Extract stakeholder IDs from selected_contains('xxx') in the condition
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                    .compile("selected_contains\\('([^']+)'\\)").matcher(condition);
+                while (matcher.find()) {
+                    String sid = matcher.group(1);
+                    stakeholderBestQuality.merge(sid, quality, Math::max);
+                }
+            }
+
+            // Update priorities based on best quality score
+            for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
+                String sid = entry.getKey();
+                int bestQ = stakeholderBestQuality.getOrDefault(sid, 1);
+                Map<String, Object> hint = (Map<String, Object>) entry.getValue();
+                if (hint != null) {
+                    hint.put("priority", bestQ >= 3 ? "high" : bestQ >= 2 ? "medium" : "low");
+                }
+            }
+        }
+
+        // For HIRE_FIRE: compute which candidates map to high-quality choices
+        if ("HIRE_FIRE".equals(decisionType)) {
+            Map<String, Object> candidateHints = (Map<String, Object>) mentorGuidance.get("candidateHints");
+            if (candidateHints == null) return;
+
+            Map<String, Integer> candidateBestQuality = new HashMap<>();
+            for (Map<String, Object> mapping : mappings) {
+                String condition = (String) mapping.get("condition");
+                String choiceId = (String) mapping.get("choiceId");
+                if (condition == null || "default".equals(condition) || choiceId == null) continue;
+                int quality = choiceQuality.getOrDefault(choiceId, 1);
+
+                // Extract candidate IDs from selected == 'xxx' or similar conditions
+                java.util.regex.Matcher matcher = java.util.regex.Pattern
+                    .compile("(?:selected\\s*==\\s*'([^']+)'|selected_contains\\('([^']+)'\\))").matcher(condition);
+                while (matcher.find()) {
+                    String cid = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+                    candidateBestQuality.merge(cid, quality, Math::max);
+                }
+            }
+
+            for (Map.Entry<String, Object> entry : candidateHints.entrySet()) {
+                String cid = entry.getKey();
+                int bestQ = candidateBestQuality.getOrDefault(cid, 1);
+                Map<String, Object> hint = (Map<String, Object>) entry.getValue();
+                if (hint != null) {
+                    hint.put("fit", bestQ >= 3 ? "strong" : bestQ >= 2 ? "moderate" : "weak");
+                }
+            }
+        }
+
+        // For all choice-based types: fix choiceHints risk levels
+        Map<String, Object> choiceHints = (Map<String, Object>) mentorGuidance.get("choiceHints");
+        if (choiceHints != null) {
+            for (Map.Entry<String, Object> entry : choiceHints.entrySet()) {
+                String cid = entry.getKey();
+                int quality = choiceQuality.getOrDefault(cid, 1);
+                Map<String, Object> hint = (Map<String, Object>) entry.getValue();
+                if (hint != null) {
+                    // quality 3 = best = low risk, quality 1 = worst = high risk
+                    hint.put("risk", quality >= 3 ? "low" : quality >= 2 ? "medium" : "high");
+                }
+            }
         }
     }
 
