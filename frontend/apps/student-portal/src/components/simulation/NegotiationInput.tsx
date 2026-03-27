@@ -143,9 +143,8 @@ export function NegotiationInput({ config, onSubmit, disabled, negotiationHint }
     }
 
     if (currentRound >= rounds) {
-      // Final round -- auto-submit with the user's last offer
-      setResolved(true)
-      onSubmit({ input: { finalAmount: amount, acceptedRound: currentRound, walkedAway: false } })
+      // Final round — don't auto-submit, let the player Accept or Walk Away
+      // The NPC has made their final offer, player decides
       return
     }
 

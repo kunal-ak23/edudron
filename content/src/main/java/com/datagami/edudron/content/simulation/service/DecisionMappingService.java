@@ -269,6 +269,29 @@ public class DecisionMappingService {
             return "true".equals(context.get("has_" + id));
         }
 
+        // Handle NEGOTIATION conditions: agreement_above_N, agreement_below_N, walked_away
+        if (condition.startsWith("agreement_above_")) {
+            String threshold = condition.replace("agreement_above_", "");
+            Object finalAmount = context.get("final_amount");
+            if (finalAmount != null && !"true".equals(context.get("walked_away"))) {
+                try { return Double.parseDouble(finalAmount.toString()) >= Double.parseDouble(threshold); }
+                catch (NumberFormatException e) { return false; }
+            }
+            return false;
+        }
+        if (condition.startsWith("agreement_below_")) {
+            String threshold = condition.replace("agreement_below_", "");
+            Object finalAmount = context.get("final_amount");
+            if (finalAmount != null && !"true".equals(context.get("walked_away"))) {
+                try { return Double.parseDouble(finalAmount.toString()) <= Double.parseDouble(threshold); }
+                catch (NumberFormatException e) { return false; }
+            }
+            return false;
+        }
+        if ("walked_away".equals(condition)) {
+            return "true".equals(context.get("walked_away"));
+        }
+
         // Try each operator (longer operators first to avoid partial matches)
         String[][] operators = {
                 {">=", ">="},
