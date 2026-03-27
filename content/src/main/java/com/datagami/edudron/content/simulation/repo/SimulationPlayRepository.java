@@ -26,4 +26,6 @@ public interface SimulationPlayRepository extends JpaRepository<SimulationPlay, 
     long countBySimulationId(String simulationId);
 
     long countBySimulationIdAndClientId(String simulationId, UUID clientId);
+
+    void deleteBySimulationIdAndClientId(String simulationId, UUID clientId);
 }

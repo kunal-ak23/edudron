@@ -31,6 +31,8 @@ import {
   Globe,
   Archive,
   Download,
+  Trash2,
+  RotateCcw,
 } from 'lucide-react'
 import { simulationsApi, apiClient } from '@/lib/api'
 import type { SimulationDTO } from '@kunal-ak23/edudron-shared-utils'
@@ -77,9 +79,12 @@ export default function SimulationEditorPage() {
 
   // Dialogs
   const [publishDialogOpen, setPublishDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [archiving, setArchiving] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [changingStatus, setChangingStatus] = useState(false)
 
   const loadSimulation = useCallback(async () => {
     try {
@@ -288,6 +293,61 @@ export default function SimulationEditorPage() {
     }
   }
 
+  // Delete
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      await simulationsApi.deleteSimulation(simulationId)
+      toast({ title: 'Deleted', description: 'Simulation has been permanently deleted.' })
+      router.push('/simulations')
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Delete failed',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setDeleting(false)
+      setDeleteDialogOpen(false)
+    }
+  }
+
+  // Move to Draft (Review)
+  const handleMoveToDraft = async () => {
+    setChangingStatus(true)
+    try {
+      const updated = await simulationsApi.moveToDraft(simulationId)
+      setSimulation(updated)
+      toast({ title: 'Moved to Review', description: 'Simulation is now in review status for editing.' })
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Status change failed',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
+  // Move to Published (re-publish)
+  const handleMoveToPublished = async () => {
+    setChangingStatus(true)
+    try {
+      const updated = await simulationsApi.moveToPublished(simulationId)
+      setSimulation(updated)
+      toast({ title: 'Published', description: 'Simulation is now live for students.' })
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Publish failed',
+        description: extractErrorMessage(error),
+      })
+    } finally {
+      setChangingStatus(false)
+    }
+  }
+
   // Export
   const handleExport = async () => {
     setExporting(true)
@@ -380,6 +440,23 @@ export default function SimulationEditorPage() {
             )}
             Export
           </Button>
+          {/* Move to Draft/Review — from Published or Archived */}
+          {(simulation.status === 'PUBLISHED' || simulation.status === 'ARCHIVED') && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleMoveToDraft}
+              disabled={changingStatus}
+            >
+              {changingStatus ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-1" />
+              )}
+              Move to Review
+            </Button>
+          )}
+          {/* Archive — from any non-archived status */}
           {simulation.status !== 'ARCHIVED' && (
             <Button
               variant="outline"
@@ -395,6 +472,22 @@ export default function SimulationEditorPage() {
               Archive
             </Button>
           )}
+          {/* Re-publish — from Archived */}
+          {simulation.status === 'ARCHIVED' && (
+            <Button
+              size="sm"
+              onClick={handleMoveToPublished}
+              disabled={changingStatus}
+            >
+              {changingStatus ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Globe className="h-4 w-4 mr-1" />
+              )}
+              Re-publish
+            </Button>
+          )}
+          {/* Publish — from Draft or Review */}
           {(simulation.status === 'DRAFT' ||
             simulation.status === 'REVIEW') && (
             <Button
@@ -405,6 +498,15 @@ export default function SimulationEditorPage() {
               Publish
             </Button>
           )}
+          {/* Delete — always available */}
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete
+          </Button>
         </div>
       </div>
 
@@ -631,6 +733,39 @@ export default function SimulationEditorPage() {
                 <Globe className="h-4 w-4 mr-1" />
               )}
               Publish
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Simulation</DialogTitle>
+            <DialogDescription>
+              This will permanently delete &quot;{title}&quot; and all associated
+              student play data. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-1" />
+              )}
+              Delete Permanently
             </Button>
           </DialogFooter>
         </DialogContent>

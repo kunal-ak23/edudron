@@ -297,6 +297,29 @@ public class SimulationAdminController {
         return ResponseEntity.ok(simulationService.archive(id));
     }
 
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete simulation", description = "Permanently delete a simulation and all its play data")
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        requireAdmin();
+        simulationService.deleteSimulation(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/move-to-draft")
+    @Operation(summary = "Move to draft", description = "Move simulation back to review/draft status for editing")
+    public ResponseEntity<SimulationDTO> moveToDraft(@PathVariable String id) {
+        requireAdmin();
+        return ResponseEntity.ok(simulationService.moveToDraft(id));
+    }
+
+    @PostMapping("/{id}/move-to-published")
+    @Operation(summary = "Move to published", description = "Re-publish a simulation (from any non-generating status)")
+    public ResponseEntity<SimulationDTO> moveToPublished(@PathVariable String id) {
+        requireAdmin();
+        requireSimulationEnabled(TenantContext.getClientId());
+        return ResponseEntity.ok(simulationService.moveToPublished(id));
+    }
+
     @PostMapping("/{id}/export")
     @Operation(summary = "Export simulation", description = "Export simulation as portable JSON")
     public ResponseEntity<SimulationExportDTO> exportSimulation(@PathVariable String id) {
