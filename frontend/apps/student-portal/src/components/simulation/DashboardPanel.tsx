@@ -52,12 +52,14 @@ function qualityIcon(quality: string) {
 }
 
 export default function DashboardPanel({
-  score, maxScore = 2000, budget, role, performanceBand,
+  score, maxScore, budget, role, performanceBand,
   currentYear, totalYears, currentDecision, totalDecisions,
   decisionHistory = [], goodDecisionCount = 0, badDecisionCount = 0,
   neutralDecisionCount = 0, keyInsights = []
 }: DashboardPanelProps) {
-  const scorePercent = maxScore > 0 ? Math.min((score / maxScore) * 100, 100) : 0
+  // Max possible score: totalDecisions × totalYears × 10 points (quality=3)
+  const calculatedMax = maxScore || (totalDecisions * totalYears * 10) || 300
+  const scorePercent = calculatedMax > 0 ? Math.min((score / calculatedMax) * 100, 100) : 0
 
   return (
     <div className="p-6 space-y-8">
