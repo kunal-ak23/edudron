@@ -30,9 +30,6 @@ public class Batch {
     @Column(nullable = false)
     private Boolean isActive = true;
 
-    @Column(name = "coordinator_user_id")
-    private String coordinatorUserId;
-
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -72,9 +69,6 @@ public class Batch {
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }
-
-    public String getCoordinatorUserId() { return coordinatorUserId; }
-    public void setCoordinatorUserId(String coordinatorUserId) { this.coordinatorUserId = coordinatorUserId; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

@@ -2,17 +2,14 @@ package com.datagami.edudron.student.service;
 
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.UlidGenerator;
-import com.datagami.edudron.student.client.IdentityUserClient;
 import com.datagami.edudron.student.domain.Batch;
 import com.datagami.edudron.student.dto.BatchDTO;
 import com.datagami.edudron.student.dto.BatchProgressDTO;
-import com.datagami.edudron.student.dto.CoordinatorResponse;
 import com.datagami.edudron.student.dto.CreateBatchRequest;
 import com.datagami.edudron.student.dto.StudentProgressDTO;
 import com.datagami.edudron.student.repo.BatchRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.ProgressRepository;
-import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,9 +36,6 @@ public class BatchService {
     @Autowired
     private StudentAuditService auditService;
 
-    @Autowired
-    private IdentityUserClient identityUserClient;
-    
     public BatchDTO createBatch(CreateBatchRequest request) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -232,99 +226,6 @@ public class BatchService {
         return batchProgress;
     }
     
-    public CoordinatorResponse assignBatchCoordinator(String batchId, String coordinatorUserId, String actorEmail) {
-        String clientIdStr = TenantContext.getClientId();
-        if (clientIdStr == null) {
-            throw new IllegalStateException("Tenant context is not set");
-        }
-        UUID clientId = UUID.fromString(clientIdStr);
-
-        Batch batch = batchRepository.findByIdAndClientId(batchId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + batchId));
-
-        // Validate the coordinator user exists and has INSTRUCTOR role
-        JsonNode userNode = identityUserClient.getUser(coordinatorUserId);
-        if (userNode == null) {
-            throw new IllegalArgumentException("User not found: " + coordinatorUserId);
-        }
-
-        String role = userNode.has("role") ? userNode.get("role").asText() : null;
-        if (!"INSTRUCTOR".equals(role)) {
-            throw new IllegalArgumentException("User " + coordinatorUserId + " does not have INSTRUCTOR role");
-        }
-
-        Boolean active = userNode.has("active") ? userNode.get("active").asBoolean() : null;
-        if (active == null || !active) {
-            throw new IllegalArgumentException("User " + coordinatorUserId + " is not active");
-        }
-
-        String previousCoordinator = batch.getCoordinatorUserId();
-        String operation = (previousCoordinator == null) ? "CREATE" : "UPDATE";
-
-        batch.setCoordinatorUserId(coordinatorUserId);
-        batchRepository.save(batch);
-
-        String coordinatorName = userNode.has("name") ? userNode.get("name").asText() : null;
-        String coordinatorEmail = userNode.has("email") ? userNode.get("email").asText() : null;
-
-        java.util.Map<String, Object> meta = new java.util.HashMap<>();
-        meta.put("batchName", batch.getName());
-        meta.put("coordinatorUserId", coordinatorUserId);
-        if (coordinatorName != null) meta.put("coordinatorName", coordinatorName);
-        if (previousCoordinator != null) meta.put("previousCoordinatorUserId", previousCoordinator);
-        auditService.logCrud(clientId, operation, "BatchCoordinator", batchId, null, actorEmail, meta);
-
-        return new CoordinatorResponse(coordinatorUserId, coordinatorName, coordinatorEmail);
-    }
-
-    public void removeBatchCoordinator(String batchId, String actorEmail) {
-        String clientIdStr = TenantContext.getClientId();
-        if (clientIdStr == null) {
-            throw new IllegalStateException("Tenant context is not set");
-        }
-        UUID clientId = UUID.fromString(clientIdStr);
-
-        Batch batch = batchRepository.findByIdAndClientId(batchId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + batchId));
-
-        if (batch.getCoordinatorUserId() == null) {
-            throw new IllegalArgumentException("Batch " + batchId + " does not have a coordinator assigned");
-        }
-
-        String previousCoordinator = batch.getCoordinatorUserId();
-        batch.setCoordinatorUserId(null);
-        batchRepository.save(batch);
-
-        auditService.logCrud(clientId, "DELETE", "BatchCoordinator", batchId, null, actorEmail,
-            java.util.Map.of("batchName", batch.getName(), "removedCoordinatorUserId", previousCoordinator));
-    }
-
-    @Transactional(readOnly = true)
-    public CoordinatorResponse getBatchCoordinator(String batchId) {
-        String clientIdStr = TenantContext.getClientId();
-        if (clientIdStr == null) {
-            throw new IllegalStateException("Tenant context is not set");
-        }
-        UUID clientId = UUID.fromString(clientIdStr);
-
-        Batch batch = batchRepository.findByIdAndClientId(batchId, clientId)
-            .orElseThrow(() -> new IllegalArgumentException("Batch not found: " + batchId));
-
-        if (batch.getCoordinatorUserId() == null) {
-            return null;
-        }
-
-        JsonNode userNode = identityUserClient.getUser(batch.getCoordinatorUserId());
-        String coordinatorName = null;
-        String coordinatorEmail = null;
-        if (userNode != null) {
-            coordinatorName = userNode.has("name") ? userNode.get("name").asText() : null;
-            coordinatorEmail = userNode.has("email") ? userNode.get("email").asText() : null;
-        }
-
-        return new CoordinatorResponse(batch.getCoordinatorUserId(), coordinatorName, coordinatorEmail);
-    }
-
     private BatchDTO toDTO(Batch batch, UUID clientId) {
         BatchDTO dto = new BatchDTO();
         dto.setId(batch.getId());
@@ -336,7 +237,6 @@ public class BatchService {
         dto.setEndDate(batch.getEndDate());
         dto.setMaxStudents(batch.getMaxStudents());
         dto.setIsActive(batch.getIsActive());
-        dto.setCoordinatorUserId(batch.getCoordinatorUserId());
         dto.setCreatedAt(batch.getCreatedAt());
         dto.setUpdatedAt(batch.getUpdatedAt());
         

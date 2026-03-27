@@ -1,4 +1,5 @@
 import { ApiClient } from './ApiClient'
+import type { CoordinatorResponse } from './classes'
 
 export interface Section {
   id: string
@@ -93,6 +94,24 @@ export class SectionsApi {
 
   async activateSection(id: string): Promise<void> {
     await this.apiClient.put(`/api/sections/${id}/activate`, {})
+  }
+
+  async assignSectionCoordinator(sectionId: string, coordinatorUserId: string): Promise<CoordinatorResponse> {
+    const response = await this.apiClient.put<CoordinatorResponse>(`/api/sections/${sectionId}/coordinator`, { coordinatorUserId })
+    return response.data
+  }
+
+  async removeSectionCoordinator(sectionId: string): Promise<void> {
+    await this.apiClient.delete(`/api/sections/${sectionId}/coordinator`)
+  }
+
+  async getSectionCoordinator(sectionId: string): Promise<CoordinatorResponse | null> {
+    try {
+      const response = await this.apiClient.get<CoordinatorResponse>(`/api/sections/${sectionId}/coordinator`)
+      return response.data || null
+    } catch {
+      return null
+    }
   }
 }
 

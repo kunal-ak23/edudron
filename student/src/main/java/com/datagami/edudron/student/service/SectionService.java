@@ -2,6 +2,7 @@ package com.datagami.edudron.student.service;
 
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.UlidGenerator;
+import com.datagami.edudron.student.client.IdentityUserClient;
 import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.Section;
 import com.datagami.edudron.student.dto.*;
@@ -9,6 +10,7 @@ import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.ProgressRepository;
 import com.datagami.edudron.student.repo.SectionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,7 +38,10 @@ public class SectionService {
 
     @Autowired
     private StudentAuditService auditService;
-    
+
+    @Autowired
+    private IdentityUserClient identityUserClient;
+
     public SectionDTO createSection(String classId, CreateSectionRequest request) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -428,6 +433,99 @@ public class SectionService {
         return sectionProgress;
     }
     
+    public CoordinatorResponse assignSectionCoordinator(String sectionId, String coordinatorUserId, String actorEmail) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+
+        // Validate the coordinator user exists and has INSTRUCTOR role
+        JsonNode userNode = identityUserClient.getUser(coordinatorUserId);
+        if (userNode == null) {
+            throw new IllegalArgumentException("User not found: " + coordinatorUserId);
+        }
+
+        String role = userNode.has("role") ? userNode.get("role").asText() : null;
+        if (!"INSTRUCTOR".equals(role)) {
+            throw new IllegalArgumentException("User " + coordinatorUserId + " does not have INSTRUCTOR role");
+        }
+
+        Boolean active = userNode.has("active") ? userNode.get("active").asBoolean() : null;
+        if (active == null || !active) {
+            throw new IllegalArgumentException("User " + coordinatorUserId + " is not active");
+        }
+
+        String previousCoordinator = section.getCoordinatorUserId();
+        String operation = (previousCoordinator == null) ? "CREATE" : "UPDATE";
+
+        section.setCoordinatorUserId(coordinatorUserId);
+        sectionRepository.save(section);
+
+        String coordinatorName = userNode.has("name") ? userNode.get("name").asText() : null;
+        String coordinatorEmail = userNode.has("email") ? userNode.get("email").asText() : null;
+
+        java.util.Map<String, Object> meta = new java.util.HashMap<>();
+        meta.put("sectionName", section.getName());
+        meta.put("coordinatorUserId", coordinatorUserId);
+        if (coordinatorName != null) meta.put("coordinatorName", coordinatorName);
+        if (previousCoordinator != null) meta.put("previousCoordinatorUserId", previousCoordinator);
+        auditService.logCrud(clientId, operation, "SectionCoordinator", sectionId, null, actorEmail, meta);
+
+        return new CoordinatorResponse(coordinatorUserId, coordinatorName, coordinatorEmail);
+    }
+
+    public void removeSectionCoordinator(String sectionId, String actorEmail) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+
+        if (section.getCoordinatorUserId() == null) {
+            throw new IllegalArgumentException("Section " + sectionId + " does not have a coordinator assigned");
+        }
+
+        String previousCoordinator = section.getCoordinatorUserId();
+        section.setCoordinatorUserId(null);
+        sectionRepository.save(section);
+
+        auditService.logCrud(clientId, "DELETE", "SectionCoordinator", sectionId, null, actorEmail,
+            java.util.Map.of("sectionName", section.getName(), "removedCoordinatorUserId", previousCoordinator));
+    }
+
+    @Transactional(readOnly = true)
+    public CoordinatorResponse getSectionCoordinator(String sectionId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+
+        if (section.getCoordinatorUserId() == null) {
+            return null;
+        }
+
+        JsonNode userNode = identityUserClient.getUser(section.getCoordinatorUserId());
+        String coordinatorName = null;
+        String coordinatorEmail = null;
+        if (userNode != null) {
+            coordinatorName = userNode.has("name") ? userNode.get("name").asText() : null;
+            coordinatorEmail = userNode.has("email") ? userNode.get("email").asText() : null;
+        }
+
+        return new CoordinatorResponse(section.getCoordinatorUserId(), coordinatorName, coordinatorEmail);
+    }
+
     private SectionDTO toDTO(Section section, UUID clientId) {
         SectionDTO dto = new SectionDTO();
         dto.setId(section.getId());
@@ -440,6 +538,7 @@ public class SectionService {
         dto.setMaxStudents(section.getMaxStudents());
         dto.setIsActive(section.getIsActive());
         dto.setIsBacklog(section.getIsBacklog());
+        dto.setCoordinatorUserId(section.getCoordinatorUserId());
         dto.setCreatedAt(section.getCreatedAt());
         dto.setUpdatedAt(section.getUpdatedAt());
         

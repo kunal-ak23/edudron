@@ -2,41 +2,28 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ArrowLeft, Save, UserCircle, Mail, X } from 'lucide-react'
+import { Loader2, ArrowLeft, Save } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { enrollmentsApi, apiClient } from '@/lib/api'
-import type { Batch, CoordinatorResponse, User } from '@kunal-ak23/edudron-shared-utils'
+import { enrollmentsApi } from '@/lib/api'
+import type { Batch } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
-import { SearchableSelect } from '@/components/ui/searchable-select'
 
 export default function BatchDetailPage() {
   const router = useRouter()
   const params = useParams()
   const batchId = params.id as string
   const { toast } = useToast()
-  const { user } = useAuth()
   const [batch, setBatch] = useState<Batch | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-
-  // Coordinator state
-  const [coordinator, setCoordinator] = useState<CoordinatorResponse | null>(null)
-  const [coordinatorLoading, setCoordinatorLoading] = useState(false)
-  const [instructors, setInstructors] = useState<User[]>([])
-  const [selectedInstructorId, setSelectedInstructorId] = useState('')
-  const [coordinatorSubmitting, setCoordinatorSubmitting] = useState(false)
-  const [showRemoveCoordinatorDialog, setShowRemoveCoordinatorDialog] = useState(false)
-
-  const canManageCoordinator = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
 
   // Edit form state
   const [formData, setFormData] = useState({
@@ -71,36 +58,11 @@ export default function BatchDetailPage() {
     }
   }, [batchId, toast, router])
 
-  const loadCoordinator = useCallback(async () => {
-    try {
-      setCoordinatorLoading(true)
-      const coord = await enrollmentsApi.getBatchCoordinator(batchId)
-      setCoordinator(coord)
-    } catch {
-      setCoordinator(null)
-    } finally {
-      setCoordinatorLoading(false)
-    }
-  }, [batchId])
-
-  const loadInstructors = useCallback(async () => {
-    try {
-      const response = await apiClient.get<{ content: User[] }>('/idp/users/paginated?role=INSTRUCTOR&size=100')
-      setInstructors(response.data?.content || [])
-    } catch {
-      // Silently fail
-    }
-  }, [])
-
   useEffect(() => {
     if (batchId) {
       loadBatch()
-      loadCoordinator()
-      if (canManageCoordinator) {
-        loadInstructors()
-      }
     }
-  }, [batchId, loadBatch, loadCoordinator, loadInstructors, canManageCoordinator])
+  }, [batchId, loadBatch])
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -140,49 +102,6 @@ export default function BatchDetailPage() {
       })
     } finally {
       setShowDeleteDialog(false)
-    }
-  }
-
-  const handleAssignCoordinator = async () => {
-    if (!selectedInstructorId) return
-    try {
-      setCoordinatorSubmitting(true)
-      const result = await enrollmentsApi.assignBatchCoordinator(batchId, selectedInstructorId)
-      setCoordinator(result)
-      setSelectedInstructorId('')
-      toast({
-        title: 'Coordinator assigned',
-        description: `${result.coordinatorName} has been assigned as faculty coordinator.`,
-      })
-    } catch (err: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Failed to assign coordinator',
-        description: extractErrorMessage(err),
-      })
-    } finally {
-      setCoordinatorSubmitting(false)
-    }
-  }
-
-  const handleRemoveCoordinator = async () => {
-    try {
-      setCoordinatorSubmitting(true)
-      await enrollmentsApi.removeBatchCoordinator(batchId)
-      setCoordinator(null)
-      toast({
-        title: 'Coordinator removed',
-        description: 'Faculty coordinator has been removed from this batch.',
-      })
-    } catch (err: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Failed to remove coordinator',
-        description: extractErrorMessage(err),
-      })
-    } finally {
-      setCoordinatorSubmitting(false)
-      setShowRemoveCoordinatorDialog(false)
     }
   }
 
@@ -295,75 +214,6 @@ export default function BatchDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Faculty Coordinator Section */}
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserCircle className="h-5 w-5" />
-              Faculty Coordinator
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {coordinatorLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              </div>
-            ) : coordinator ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div>
-                    <p className="font-medium text-gray-900">{coordinator.coordinatorName}</p>
-                    <p className="text-sm text-gray-600 flex items-center gap-1">
-                      <Mail className="h-3.5 w-3.5" />
-                      {coordinator.coordinatorEmail}
-                    </p>
-                  </div>
-                  {canManageCoordinator && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowRemoveCoordinatorDialog(true)}
-                      disabled={coordinatorSubmitting}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Remove
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ) : canManageCoordinator ? (
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500">No coordinator assigned to this batch.</p>
-                <div className="flex items-end gap-3">
-                  <div className="flex-1">
-                    <Label className="text-sm mb-1.5 block">Select Instructor</Label>
-                    <SearchableSelect
-                      options={instructors.map(i => ({
-                        value: i.id,
-                        label: `${i.name} (${i.email})`,
-                        searchText: `${i.name} ${i.email}`,
-                      }))}
-                      value={selectedInstructorId}
-                      onValueChange={setSelectedInstructorId}
-                      placeholder="Search instructors..."
-                      emptyMessage="No instructors found"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleAssignCoordinator}
-                    disabled={!selectedInstructorId || coordinatorSubmitting}
-                  >
-                    {coordinatorSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Assign
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">No coordinator assigned to this batch.</p>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       <ConfirmationDialog
@@ -373,16 +223,6 @@ export default function BatchDetailPage() {
         title="Deactivate Batch"
         description="Are you sure you want to deactivate this batch?"
         confirmText="Deactivate"
-        variant="destructive"
-      />
-
-      <ConfirmationDialog
-        isOpen={showRemoveCoordinatorDialog}
-        onClose={() => setShowRemoveCoordinatorDialog(false)}
-        onConfirm={handleRemoveCoordinator}
-        title="Remove Coordinator"
-        description={`Are you sure you want to remove ${coordinator?.coordinatorName || 'the coordinator'} as the faculty coordinator for this batch?`}
-        confirmText="Remove"
         variant="destructive"
       />
     </>

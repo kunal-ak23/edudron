@@ -15,6 +15,7 @@ public class SectionDTO {
     private Integer maxStudents;
     private Boolean isActive;
     private Boolean isBacklog;
+    private String coordinatorUserId;
     private Long studentCount;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
@@ -49,6 +50,9 @@ public class SectionDTO {
 
     public Boolean getIsBacklog() { return isBacklog; }
     public void setIsBacklog(Boolean isBacklog) { this.isBacklog = isBacklog; }
+
+    public String getCoordinatorUserId() { return coordinatorUserId; }
+    public void setCoordinatorUserId(String coordinatorUserId) { this.coordinatorUserId = coordinatorUserId; }
 
     public Long getStudentCount() { return studentCount; }
     public void setStudentCount(Long studentCount) { this.studentCount = studentCount; }
