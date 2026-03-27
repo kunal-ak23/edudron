@@ -9,8 +9,8 @@ import { useSimulationFeature } from '@/hooks/useSimulationFeature'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Gamepad2, Play, Trophy } from 'lucide-react'
-import type { SimulationDTO } from '@kunal-ak23/edudron-shared-utils'
+import { Loader2, Gamepad2, Play, Trophy, RotateCcw } from 'lucide-react'
+import type { SimulationDTO, SimulationPlayDTO } from '@kunal-ak23/edudron-shared-utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,18 +18,34 @@ export default function SimulationsPage() {
   const router = useRouter()
   const { enabled, loading: featureLoading } = useSimulationFeature()
   const [simulations, setSimulations] = useState<SimulationDTO[]>([])
+  const [activePlays, setActivePlays] = useState<Record<string, SimulationPlayDTO>>({})
   const [loading, setLoading] = useState(true)
   const [startingId, setStartingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!enabled) return
-    loadSimulations()
+    loadData()
   }, [enabled])
 
-  async function loadSimulations() {
+  async function loadData() {
     try {
-      const data = await simulationsApi.getAvailableSimulations()
-      setSimulations(data)
+      const [sims, history] = await Promise.all([
+        simulationsApi.getAvailableSimulations(),
+        simulationsApi.getAllPlayHistory().catch(() => [] as SimulationPlayDTO[]),
+      ])
+      setSimulations(sims)
+
+      // Build map of simulationId → most recent IN_PROGRESS play
+      const active: Record<string, SimulationPlayDTO> = {}
+      for (const play of history) {
+        if (play.status === 'IN_PROGRESS' && play.simulationId) {
+          // Keep the most recent one (history is ordered by startedAt desc)
+          if (!active[play.simulationId]) {
+            active[play.simulationId] = play
+          }
+        }
+      }
+      setActivePlays(active)
     } catch (err) {
       console.error('Failed to load simulations', err)
     } finally {
@@ -46,6 +62,10 @@ export default function SimulationsPage() {
       console.error('Failed to start play', err)
       setStartingId(null)
     }
+  }
+
+  function handleResume(simulationId: string, playId: string) {
+    router.push(`/simulations/${simulationId}/play/${playId}`)
   }
 
   if (featureLoading) {
@@ -94,40 +114,67 @@ export default function SimulationsPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {simulations.map((sim) => (
-                <Card key={sim.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-lg">{sim.title}</CardTitle>
-                      <Badge variant="outline" className="shrink-0">{sim.audience}</Badge>
-                    </div>
-                    <Badge className="w-fit">{sim.subject}</Badge>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-500 mb-4 line-clamp-3">
-                      {sim.description || 'An immersive decision-making simulation.'}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-gray-500">
-                        <Trophy className="h-4 w-4" />
-                        <span>{sim.totalPlays} {sim.totalPlays === 1 ? 'play' : 'plays'}</span>
+              {simulations.map((sim) => {
+                const activePlay = activePlays[sim.id]
+                return (
+                  <Card key={sim.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-lg">{sim.title}</CardTitle>
+                        <Badge variant="outline" className="shrink-0">{sim.audience}</Badge>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handlePlay(sim.id)}
-                        disabled={startingId === sim.id}
-                      >
-                        {startingId === sim.id ? (
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        ) : (
-                          <Play className="h-4 w-4 mr-1" />
-                        )}
-                        Play
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                      <Badge className="w-fit">{sim.subject}</Badge>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-gray-500 mb-4 line-clamp-3">
+                        {sim.description || 'An immersive decision-making simulation.'}
+                      </p>
+
+                      {/* Active play progress indicator */}
+                      {activePlay && (
+                        <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                          <p className="text-xs font-medium text-amber-700">
+                            In Progress — Year {activePlay.currentYear}, Decision {activePlay.currentDecision}
+                            {activePlay.cumulativeScore != null && ` · ${activePlay.cumulativeScore} pts`}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <Trophy className="h-4 w-4" />
+                          <span>{sim.totalPlays} {sim.totalPlays === 1 ? 'play' : 'plays'}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          {activePlay && (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleResume(sim.id, activePlay.id)}
+                            >
+                              <RotateCcw className="h-4 w-4 mr-1" />
+                              Resume
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant={activePlay ? 'outline' : 'default'}
+                            onClick={() => handlePlay(sim.id)}
+                            disabled={startingId === sim.id}
+                          >
+                            {startingId === sim.id ? (
+                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            ) : (
+                              <Play className="h-4 w-4 mr-1" />
+                            )}
+                            {activePlay ? 'New Game' : 'Play'}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </div>
