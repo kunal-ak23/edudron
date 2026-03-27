@@ -748,10 +748,16 @@ public class SimulationGenerationService {
             throw new IllegalStateException("Simulation has no years data");
         }
 
+        logger.info("Loaded simulation: concept={}, subject={}, targetYears={}", concept, subject, targetYears);
+
         List<List<Map<String, Object>>> allYearDecisions = new ArrayList<>();
         for (Map<String, Object> yearData : yearsList) {
             List<Map<String, Object>> decisions = (List<Map<String, Object>>) yearData.get("decisions");
             allYearDecisions.add(decisions != null ? decisions : List.of());
+        }
+
+        for (int y = 0; y < allYearDecisions.size(); y++) {
+            logger.info("  Year {} has {} decisions", y + 1, allYearDecisions.get(y).size());
         }
 
         // Step 2: Run AI enrichment OUTSIDE any transaction (no DB connection held)
@@ -816,6 +822,8 @@ public class SimulationGenerationService {
                 }
             }
         }
+
+        logger.info("Phase 5.5 prompt summary length: {} chars", decisionsSummary.length());
 
         String guidanceLevel = guidedYears >= 3
             ? "Years 1-2: FULL guidance (always visible). Year 3: LIGHT guidance (hints available on request — shorter, less specific)."
@@ -905,6 +913,7 @@ public class SimulationGenerationService {
 
         try {
             Map<String, Object> guidance = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            logger.info("Phase 5.5 AI returned guidance for decisions: {}", guidance.keySet());
 
             // Inject mentorGuidance into each decision
             for (int y = 0; y < guidedYears && y < allYearDecisions.size(); y++) {
@@ -915,9 +924,15 @@ public class SimulationGenerationService {
                         Map<String, Object> mg = (Map<String, Object>) guidance.get(decisionId);
                         mg.put("guidanceLevel", isLightYear ? "LIGHT" : "FULL");
                         decision.put("mentorGuidance", mg);
+                        logger.info("  Injecting mentorGuidance into decision {} (guidanceLevel={})", decisionId, isLightYear ? "LIGHT" : "FULL");
                     }
                     // Override AI-generated priorities with deterministic values from mappings
                     fixHintPrioritiesFromMappings(decision);
+                    // Log stakeholderHints after fixup if present
+                    Map<String, Object> mgAfter = (Map<String, Object>) decision.get("mentorGuidance");
+                    if (mgAfter != null && mgAfter.containsKey("stakeholderHints")) {
+                        logger.info("  After fixHintPriorities, stakeholderHints for {}: {}", decisionId, mgAfter.get("stakeholderHints"));
+                    }
                 }
             }
             logger.info("Mentor enrichment applied to {} decisions", guidance.size());
@@ -946,6 +961,8 @@ public class SimulationGenerationService {
         // If mappings are missing, use positional fallback (same as autoGenerateMappings):
         // first stakeholders/candidates = best picks
         boolean hasMappings = mappings != null && !mappings.isEmpty();
+        String decisionType = (String) decision.get("decisionType");
+        logger.info("fixHintPriorities for decision {} (type={}, hasMappings={})", decision.get("id"), decisionType, hasMappings);
 
         // Build choiceId → quality lookup
         Map<String, Integer> choiceQuality = new HashMap<>();
@@ -956,8 +973,6 @@ public class SimulationGenerationService {
                 choiceQuality.put(cid, ((Number) q).intValue());
             }
         }
-
-        String decisionType = (String) decision.get("decisionType");
 
         // For STAKEHOLDER_MEETING: compute which stakeholders appear in high-quality mappings
         if ("STAKEHOLDER_MEETING".equals(decisionType)) {
@@ -994,10 +1009,13 @@ public class SimulationGenerationService {
                     for (int i = 0; i < Math.min(2, stakeholders.size()); i++) {
                         topIds.add((String) stakeholders.get(i).get("id"));
                     }
+                    logger.info("  Positional fallback: topIds={}", topIds);
                     for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
                         Map<String, Object> hint = (Map<String, Object>) entry.getValue();
                         if (hint != null) {
-                            hint.put("priority", topIds.contains(entry.getKey()) ? "high" : "low");
+                            String assignedPriority = topIds.contains(entry.getKey()) ? "high" : "low";
+                            hint.put("priority", assignedPriority);
+                            logger.info("  Stakeholder {} → priority={}", entry.getKey(), assignedPriority);
                         }
                     }
                 }
@@ -1058,7 +1076,9 @@ public class SimulationGenerationService {
                 Map<String, Object> hint = (Map<String, Object>) entry.getValue();
                 if (hint != null) {
                     // quality 3 = best = low risk, quality 1 = worst = high risk
-                    hint.put("risk", quality >= 3 ? "low" : quality >= 2 ? "medium" : "high");
+                    String assignedRisk = quality >= 3 ? "low" : quality >= 2 ? "medium" : "high";
+                    hint.put("risk", assignedRisk);
+                    logger.info("  Choice {} → quality={}, risk={}", cid, quality, assignedRisk);
                 }
             }
         }

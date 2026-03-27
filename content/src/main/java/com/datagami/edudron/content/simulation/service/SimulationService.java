@@ -717,6 +717,10 @@ public class SimulationService {
         Map<String, Object> decision = getDecision(simData, play.getCurrentYear(),
                 play.getCurrentDecision());
         state.setDecision(toStudentDecision(decision));
+        logger.info("getCurrentState: year={}, decisionIndex={}, decisionId={}, decisionType={}",
+                play.getCurrentYear(), play.getCurrentDecision(),
+                state.getDecision() != null ? state.getDecision().getDecisionId() : "null",
+                state.getDecision() != null ? state.getDecision().getDecisionType() : "null");
 
         // v3: Include advisor dialog for this decision
         if (decision.get("advisorDialog") != null) {
@@ -750,6 +754,7 @@ public class SimulationService {
     @Transactional
     @SuppressWarnings("unchecked")
     public SimulationStateDTO submitDecision(String playId, String studentId, DecisionInputDTO input) {
+        logger.info("submitDecision: playId={}, choiceId={}, inputKeys={}", playId, input.getChoiceId(), input.getInput() != null ? input.getInput().keySet() : "null");
         SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Play not found"));
 
@@ -796,6 +801,7 @@ public class SimulationService {
 
         int quality = ((Number) selectedChoice.get("quality")).intValue();
         int points = qualityToPoints(quality);
+        logger.info("submitDecision: resolved choiceId={}, quality={}, points={}", resolvedChoiceId, quality, points);
 
         // v3: If INVESTMENT_PORTFOLIO, save allocations to budget history (one entry per year)
         String decisionType = (String) decision.get("decisionType");
@@ -849,6 +855,7 @@ public class SimulationService {
         String reactionKey = "quality_" + quality;
 
         playRepository.save(play);
+        logger.info("submitDecision: cumulative score now={}", play.getCumulativeScore());
 
         // Return the next state with advisor reaction attached
         SimulationStateDTO nextState = getCurrentState(playId, studentId);
@@ -1157,6 +1164,11 @@ public class SimulationService {
         if (mentorGuidance != null) {
             dto.setMentorGuidance(mentorGuidance);
         }
+        logger.info("toStudentDecision {}: type={}, hasMentorGuidance={}, hasChoiceHints={}, hasStakeholderHints={}",
+                dto.getDecisionId(), dto.getDecisionType(),
+                mentorGuidance != null,
+                mentorGuidance != null && ((Map<String, Object>) mentorGuidance).containsKey("choiceHints"),
+                mentorGuidance != null && ((Map<String, Object>) mentorGuidance).containsKey("stakeholderHints"));
 
         // Convert choices, stripping quality scores
         List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");

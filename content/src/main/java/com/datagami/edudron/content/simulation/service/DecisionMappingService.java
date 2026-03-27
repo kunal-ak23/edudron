@@ -154,6 +154,7 @@ public class DecisionMappingService {
             for (int i = 0; i < ranking.size(); i++) {
                 flat.put("ranking[" + i + "]", ranking.get(i));
             }
+            logger.info("flattenInput for type PRIORITY_RANKING: keys={}", flat.keySet());
             return flat;
         }
 
@@ -190,6 +191,7 @@ public class DecisionMappingService {
             flat.put("expired", "true");
         }
 
+        logger.info("flattenInput for type general: keys={}", flat.keySet());
         return flat;
     }
 
@@ -409,6 +411,9 @@ public class DecisionMappingService {
 
             logger.info("Auto-generated STAKEHOLDER_MEETING mappings: best=[{},{}], {} total mappings",
                     stakeholders.get(0).get("id"), stakeholders.get(1).get("id"), mappings.size());
+            for (Map<String, Object> m : mappings) {
+                logger.info("  Generated mapping: condition=[{}], choiceId={}", m.get("condition"), m.get("choiceId"));
+            }
             return mappings;
 
         } else if ("HIRE_FIRE".equals(decisionType)) {
@@ -432,6 +437,9 @@ public class DecisionMappingService {
             defaultMapping.put("choiceId", sortedChoices.get(sortedChoices.size() - 1).get("id"));
             mappings.add(defaultMapping);
 
+            for (Map<String, Object> m : mappings) {
+                logger.info("  Generated HIRE_FIRE mapping: condition=[{}], choiceId={}", m.get("condition"), m.get("choiceId"));
+            }
             return mappings;
         }
 
