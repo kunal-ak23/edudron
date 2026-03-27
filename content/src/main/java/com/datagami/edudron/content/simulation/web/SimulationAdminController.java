@@ -159,7 +159,8 @@ public class SimulationAdminController {
                description = "Submit AI simulation generation job. Only SYSTEM_ADMIN and TENANT_ADMIN.")
     public ResponseEntity<?> generateSimulation(@Valid @RequestBody GenerateSimulationRequest request) {
         requireAdmin();
-        requireSimulationEnabled();
+        // Feature check removed - frontend gates access via useSimulationsFeature hook
+        // requireSimulationEnabled();
 
         UUID clientId = UUID.fromString(TenantContext.getClientId());
 
@@ -259,7 +260,7 @@ public class SimulationAdminController {
     @Operation(summary = "Publish simulation", description = "Publish a simulation (must be in REVIEW status)")
     public ResponseEntity<SimulationDTO> publish(@PathVariable String id) {
         requireAdmin();
-        requireSimulationEnabled();
+        // requireSimulationEnabled(); // Frontend gates access
         return ResponseEntity.ok(simulationService.publish(id));
     }
 
