@@ -347,8 +347,21 @@ public class SimulationGenerationService {
         String json = extractJsonObject(response);
 
         try {
-            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
+            // Sanitize common LLM JSON issues: trailing commas before } or ]
+            String sanitized = json
+                    .replaceAll(",\\s*}", "}")
+                    .replaceAll(",\\s*]", "]");
+
+            // Use lenient parser that accepts unquoted field names
+            com.fasterxml.jackson.core.JsonFactory factory = new com.fasterxml.jackson.core.JsonFactory();
+            factory.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
+            factory.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
+            ObjectMapper lenientMapper = new ObjectMapper(factory);
+
+            return lenientMapper.readValue(sanitized, new TypeReference<List<Map<String, Object>>>() {});
         } catch (Exception e) {
+            logger.error("Failed to parse Phase 2 JSON for year {}. JSON length: {}. First 500 chars: {}",
+                    year, json != null ? json.length() : 0, json != null ? json.substring(0, Math.min(500, json.length())) : "null");
             throw new RuntimeException("Failed to parse Phase 2 (decisions) response for year " + year, e);
         }
     }
