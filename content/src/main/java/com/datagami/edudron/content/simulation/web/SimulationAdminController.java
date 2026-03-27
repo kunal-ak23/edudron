@@ -150,15 +150,20 @@ public class SimulationAdminController {
                     new ParameterizedTypeReference<Map<String, Object>>() {}
             );
 
+            logger.info("SIMULATION feature check: status={}, body={}", response.getStatusCode(), response.getBody());
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object enabled = response.getBody().get("enabled");
-                logger.debug("SIMULATION feature flag response: enabled={}", enabled);
-                if (Boolean.TRUE.equals(enabled)) {
+                logger.info("SIMULATION feature flag: enabled={} (type={})", enabled, enabled != null ? enabled.getClass().getName() : "null");
+                if (Boolean.TRUE.equals(enabled) || "true".equals(String.valueOf(enabled))) {
                     return;
                 }
+                // Feature explicitly disabled
+                logger.info("SIMULATION feature is explicitly disabled for tenant {}", tenantId);
+            } else {
+                logger.warn("SIMULATION feature check returned non-success: status={}", response.getStatusCode());
             }
         } catch (Exception e) {
-            logger.warn("Failed to check SIMULATION feature flag: {}. Allowing access as fallback.", e.getMessage());
+            logger.error("Failed to check SIMULATION feature flag for tenant {}: {}", tenantId, e.getMessage(), e);
             return; // Allow access if inter-service call fails — requireAdmin() already verified the user
         }
         throw new IllegalStateException("Simulation feature is not enabled for this tenant");

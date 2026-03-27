@@ -174,7 +174,7 @@ public class SimulationStudentController {
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Object enabled = response.getBody().get("enabled");
-                if (Boolean.TRUE.equals(enabled)) {
+                if (Boolean.TRUE.equals(enabled) || "true".equals(String.valueOf(enabled))) {
                     return;
                 }
             }
