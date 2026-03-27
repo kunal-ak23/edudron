@@ -338,3 +338,112 @@ public ResponseEntity<SimulationDTO> importSimulation(
 | Decision, promotion tracking | Task 3 (decision history + promotion) | Planned |
 | Add scoreboard and leaderboard | Task 8 | Planned |
 | Export: map to different course | Task 7 | Planned |
+
+---
+
+## Phase 2: Bug Fixes (After UI Overhaul)
+
+### Task 9: Fix — Budget Not Updating During Gameplay
+
+**Problem:** Budget value in the state doesn't reflect changes after decisions involving budget allocation, investment, or resource assignment.
+
+**Investigation areas:**
+- `content/src/main/java/.../service/SimulationPlayService.java` — the `processDecision()` method and how it updates `currentBudget`
+- Check if `BudgetAllocationInput` and `InvestmentPortfolioInput` submissions actually modify the budget in the state
+- Check `SimulationStateDTO.currentBudget` — is it recalculated from the simulation data or just the initial value?
+- Check `financialReport.endingBudget` — does the year-end budget carry over to the next year's `currentBudget`?
+
+**Steps:**
+1. Trace budget through full lifecycle: initial → decision → year-end → next year
+2. Read the simulation data JSON structure to understand how budget flows
+3. Fix the state builder to properly calculate remaining budget after each decision
+4. Verify the frontend StatusHUD/DashboardPanel shows the updated value
+
+---
+
+### Task 10: Fix — Negotiation Decision Type
+
+**Problem:** Negotiation decision type is broken or has unclear UX. Users don't understand how to negotiate.
+
+**Files:**
+- `frontend/apps/student-portal/src/components/simulation/NegotiationInput.tsx`
+- Backend: how negotiation state is managed across rounds
+
+**Investigation:**
+- How does multi-round negotiation work? (offer → counter-offer → accept/reject/walk-away)
+- Is the negotiation state persisted between rounds or lost?
+- Does the "walk-away" option work correctly?
+- Is the counter-offer from the AI rendered properly?
+- Are the negotiation bounds (min/max acceptable) clear to the user?
+
+**Steps:**
+1. Read NegotiationInput.tsx fully
+2. Test the flow: initial offer → response → counter-offer → resolution
+3. Fix state management issues
+4. Add clearer UX: show negotiation history, current offer vs counter-offer, acceptable range hints
+5. Match the Stitch design language (dark theme, cards, etc.)
+
+---
+
+### Task 11: Audit — All 13 Decision Type Implementations
+
+**Files:** All files in `frontend/apps/student-portal/src/components/simulation/`
+
+**Decision types to audit:**
+
+| # | Type | Component | Check |
+|---|------|-----------|-------|
+| 1 | NARRATIVE_CHOICE | NarrativeChoiceInput.tsx | Renders choices, handles selection |
+| 2 | BUDGET_ALLOCATION | BudgetAllocationInput.tsx | Slider math, total validation, min/max bounds |
+| 3 | PRIORITY_RANKING | PriorityRankingInput.tsx | Drag/reorder, preserves order on submit |
+| 4 | TRADEOFF_SLIDER | TradeoffSliderInput.tsx | Slider range, labels, value submission |
+| 5 | RESOURCE_ASSIGNMENT | ResourceAssignmentInput.tsx | Token counting, increment/decrement, total |
+| 6 | TIMELINE_CHOICE | TimelineChoiceInput.tsx | Milestone selection, rendering |
+| 7 | COMPOUND | CompoundInput.tsx | Multi-step progression, state between steps |
+| 8 | NEGOTIATION | NegotiationInput.tsx | Multi-round flow, counter-offers (see Task 10) |
+| 9 | DASHBOARD_ANALYSIS | DashboardAnalysisInput.tsx | Metrics rendering, choice selection |
+| 10 | HIRE_FIRE | HireFireInput.tsx | Candidate cards, selection, stats display |
+| 11 | CRISIS_RESPONSE | CrisisResponseInput.tsx | Timer countdown, severity, choice under pressure |
+| 12 | INVESTMENT_PORTFOLIO | InvestmentPortfolioInput.tsx | Department sliders, ROI projections, min/max |
+| 13 | STAKEHOLDER_MEETING | StakeholderMeetingInput.tsx | Two-phase (select → reveal), information display |
+
+**For each component, verify:**
+1. Renders correctly with valid config data
+2. Handles edge cases (empty config, missing fields)
+3. Submit payload matches what backend expects
+4. Error states are handled gracefully
+5. Styling matches the new design system (dark theme)
+
+**Steps:**
+1. Read each component
+2. Cross-reference with backend decision processing logic
+3. Fix any rendering, state, or submission bugs
+4. Update styling to match Stitch designs
+
+---
+
+### Task 12: Fix — Year-End Financial Report Flow
+
+**Problem areas to investigate:**
+- Does `financialReport.endingBudget` correctly become next year's `currentBudget`?
+- Are department investments correctly tracked and returned?
+- Is the promotion logic triggered at the right time?
+- Does the "FIRED" state trigger correctly based on bad decision count?
+
+**Steps:**
+1. Trace the full year lifecycle: decisions → year-end review → financial report → promotion/firing → next year
+2. Fix any state transition bugs
+3. Ensure data flows correctly between phases
+
+---
+
+## Execution Order
+
+| Phase | Tasks | Priority |
+|-------|-------|----------|
+| **Phase 1: UI Overhaul** | Tasks 1-6 (3-panel layout, panels, HUD, sliders) | Do first |
+| **Phase 1: Features** | Tasks 7-8 (export mapping, leaderboard) | After UI |
+| **Phase 2: Critical Bugs** | Tasks 9-10 (budget, negotiation) | After UI |
+| **Phase 2: Audit** | Tasks 11-12 (all decision types, year-end flow) | After bugs |
+
+**Design references:** `docs/designs/simulation-gameplay-*.html` (Stitch-generated)
