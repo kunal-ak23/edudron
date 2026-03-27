@@ -392,6 +392,22 @@ export default function SimulationPlayPage() {
             <ArrowLeft className="h-4 w-4 mr-1" />
             Exit
           </Button>
+          {/* Temp: Restart for testing */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              try {
+                const newPlay = await simulationsApi.startPlay(simulationId)
+                router.push(`/simulations/${simulationId}/play/${newPlay.id}`)
+              } catch (e) {
+                console.error('Restart failed', e)
+              }
+            }}
+            className="text-amber-400 hover:text-amber-300 text-xs"
+          >
+            Restart (dev)
+          </Button>
         </div>
 
         {/* Main 3-panel area */}

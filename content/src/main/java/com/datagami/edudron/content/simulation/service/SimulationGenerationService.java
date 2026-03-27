@@ -782,20 +782,32 @@ public class SimulationGenerationService {
                 decisionsSummary.append("  ").append(d.get("id")).append(" (").append(d.get("decisionType")).append("): ");
                 decisionsSummary.append(((String) d.getOrDefault("narrative", "")).substring(0,
                     Math.min(120, ((String) d.getOrDefault("narrative", "")).length()))).append("...\n");
-                decisionsSummary.append("  Choices: ");
+                decisionsSummary.append("  Choices (with quality 1=worst, 3=best): ");
                 List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
                 if (choices != null) {
                     for (Map<String, Object> c : choices) {
-                        decisionsSummary.append("[").append(c.get("id")).append(": ")
+                        decisionsSummary.append("[").append(c.get("id"))
+                            .append(" (quality=").append(c.get("quality")).append("): ")
                             .append(((String) c.getOrDefault("text", "")).substring(0,
                                 Math.min(80, ((String) c.getOrDefault("text", "")).length())))
                             .append("...] ");
                     }
                 }
                 decisionsSummary.append("\n");
-                // Include stakeholders/candidates for STAKEHOLDER_MEETING and HIRE_FIRE
+                // Include config details for interactive types
                 Map<String, Object> config = (Map<String, Object>) d.get("decisionConfig");
                 if (config != null) {
+                    // Mappings: show which conditions map to which choices (critical for hint accuracy)
+                    List<Map<String, Object>> mappings = (List<Map<String, Object>>) config.get("mappings");
+                    if (mappings != null) {
+                        decisionsSummary.append("  Scoring mappings: ");
+                        for (Map<String, Object> m : mappings) {
+                            decisionsSummary.append("[condition: ").append(m.get("condition"))
+                                .append(" → choiceId: ").append(m.get("choiceId")).append("] ");
+                        }
+                        decisionsSummary.append("\n");
+                    }
+                    // Stakeholders
                     List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
                     if (stakeholders != null) {
                         decisionsSummary.append("  Stakeholders: ");
@@ -806,6 +818,7 @@ public class SimulationGenerationService {
                         }
                         decisionsSummary.append("\n");
                     }
+                    // Candidates
                     List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
                     if (candidates != null) {
                         decisionsSummary.append("  Candidates: ");
@@ -866,8 +879,14 @@ public class SimulationGenerationService {
                 7. For HIRE_FIRE decisions: also include "candidateHints" keyed by candidate ID:
                    {"candidate_id": {"hint": "What this person brings to the team", "fit": "strong|moderate|weak"}}
 
-                IMPORTANT: Choice hints should educate, not give away the answer. Frame consequences
-                in terms of trade-offs, not "this is right/wrong". Even the best choice has downsides.
+                IMPORTANT RULES:
+                - Choice hints should educate, not give away the answer. Frame consequences
+                  in terms of trade-offs, not "this is right/wrong". Even the best choice has downsides.
+                - CRITICAL: The "Scoring mappings" show which conditions map to which choiceIds, and each
+                  choice has a quality score (1=worst, 3=best). Your stakeholderHints and candidateHints
+                  MUST be consistent with the actual scoring — if selecting stakeholder X leads to the
+                  quality=3 choice via the mappings, that stakeholder should have priority "high".
+                  Read the mapping conditions carefully to determine the correct priorities.
 
                 Here are the decisions to enrich:
 
