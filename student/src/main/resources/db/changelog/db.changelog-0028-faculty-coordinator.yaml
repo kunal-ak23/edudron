@@ -14,6 +14,44 @@ databaseChangeLog:
                     nullable: true
 
   - changeSet:
+      id: 0028-create-batches-if-not-exists
+      author: edudron
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            - tableExists:
+                tableName: batches
+                schemaName: student
+      changes:
+        - createTable:
+            tableName: batches
+            schemaName: student
+            columns:
+              - column: { name: id, type: varchar(255), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: name, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: course_id, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: start_date, type: date }
+              - column: { name: end_date, type: date }
+              - column: { name: max_students, type: integer }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: now() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: now() }
+        - createIndex:
+            tableName: batches
+            schemaName: student
+            indexName: idx_student_batches_client_id_v2
+            columns:
+              - column: { name: client_id }
+        - createIndex:
+            tableName: batches
+            schemaName: student
+            indexName: idx_student_batches_course_id_v2
+            columns:
+              - column: { name: course_id }
+
+  - changeSet:
       id: 0028-add-coordinator-to-batches
       author: edudron
       changes:
