@@ -723,10 +723,12 @@ public class SimulationGenerationService {
 
     /**
      * Backfill mentor guidance on an existing simulation without regenerating anything else.
-     * Loads the simulation, extracts decisions for years 1-3, runs Phase 5.5, and saves.
+     * Loads simulation in one transaction, runs AI call outside any transaction (to avoid
+     * holding a DB connection during the 60s+ AI call), then saves in a second transaction.
      */
     @SuppressWarnings("unchecked")
     public void regenerateMentorGuidance(String simulationId) {
+        // Step 1: Load simulation data (short transaction, auto-committed by repository)
         Simulation sim = simulationRepository.findById(simulationId)
                 .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
 
@@ -746,18 +748,17 @@ public class SimulationGenerationService {
             throw new IllegalStateException("Simulation has no years data");
         }
 
-        // Extract decisions per year into the same structure Phase 5.5 expects
         List<List<Map<String, Object>>> allYearDecisions = new ArrayList<>();
         for (Map<String, Object> yearData : yearsList) {
             List<Map<String, Object>> decisions = (List<Map<String, Object>>) yearData.get("decisions");
             allYearDecisions.add(decisions != null ? decisions : List.of());
         }
 
+        // Step 2: Run AI enrichment OUTSIDE any transaction (no DB connection held)
         logger.info("Regenerating mentor guidance for simulation {} (years 1-{})", simulationId, guidedYears);
         phaseMentorEnrichment(concept, subject, audience, guidedYears, allYearDecisions);
 
-        // The enrichment mutates the decision maps in place, which are references
-        // into yearsList → simData, so just save
+        // Step 3: Save enriched data (short transaction)
         sim.setSimulationData(simData);
         simulationRepository.save(sim);
         logger.info("Mentor guidance regenerated for simulation {}", simulationId);
