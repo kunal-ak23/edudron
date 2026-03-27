@@ -2,6 +2,8 @@ package com.datagami.edudron.student.web;
 
 import com.datagami.edudron.student.dto.BatchDTO;
 import com.datagami.edudron.student.dto.BatchProgressDTO;
+import com.datagami.edudron.student.dto.CoordinatorAssignmentRequest;
+import com.datagami.edudron.student.dto.CoordinatorResponse;
 import com.datagami.edudron.student.dto.CreateBatchRequest;
 import com.datagami.edudron.student.service.BatchService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -71,6 +73,35 @@ public class BatchController {
     public ResponseEntity<BatchProgressDTO> getBatchProgress(@PathVariable String id) {
         BatchProgressDTO progress = batchService.getBatchProgress(id);
         return ResponseEntity.ok(progress);
+    }
+
+    @PutMapping("/{id}/coordinator")
+    @Operation(summary = "Assign batch coordinator", description = "Assign a faculty coordinator to a batch")
+    public ResponseEntity<CoordinatorResponse> assignBatchCoordinator(
+            @PathVariable String id,
+            @Valid @RequestBody CoordinatorAssignmentRequest request,
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail) {
+        CoordinatorResponse response = batchService.assignBatchCoordinator(id, request.coordinatorUserId(), actorEmail);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/{id}/coordinator")
+    @Operation(summary = "Remove batch coordinator", description = "Remove the faculty coordinator from a batch")
+    public ResponseEntity<Void> removeBatchCoordinator(
+            @PathVariable String id,
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail) {
+        batchService.removeBatchCoordinator(id, actorEmail);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/coordinator")
+    @Operation(summary = "Get batch coordinator", description = "Get the faculty coordinator assigned to a batch")
+    public ResponseEntity<CoordinatorResponse> getBatchCoordinator(@PathVariable String id) {
+        CoordinatorResponse response = batchService.getBatchCoordinator(id);
+        if (response == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(response);
     }
 }
 

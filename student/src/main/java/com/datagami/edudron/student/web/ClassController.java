@@ -112,6 +112,35 @@ public class ClassController {
         classService.deactivateClass(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PutMapping("/classes/{id}/coordinator")
+    @Operation(summary = "Assign class coordinator", description = "Assign a faculty coordinator to a class")
+    public ResponseEntity<CoordinatorResponse> assignClassCoordinator(
+            @PathVariable String id,
+            @Valid @RequestBody CoordinatorAssignmentRequest request,
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail) {
+        CoordinatorResponse response = classService.assignClassCoordinator(id, request.coordinatorUserId(), actorEmail);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/classes/{id}/coordinator")
+    @Operation(summary = "Remove class coordinator", description = "Remove the faculty coordinator from a class")
+    public ResponseEntity<Void> removeClassCoordinator(
+            @PathVariable String id,
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail) {
+        classService.removeClassCoordinator(id, actorEmail);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/classes/{id}/coordinator")
+    @Operation(summary = "Get class coordinator", description = "Get the faculty coordinator assigned to a class")
+    public ResponseEntity<CoordinatorResponse> getClassCoordinator(@PathVariable String id) {
+        CoordinatorResponse response = classService.getClassCoordinator(id);
+        if (response == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(response);
+    }
 }
 
 
