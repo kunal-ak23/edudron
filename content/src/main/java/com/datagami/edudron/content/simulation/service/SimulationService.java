@@ -87,6 +87,17 @@ public class SimulationService {
     }
 
     @Transactional(readOnly = true)
+    public SimulationDTO getSimulationForStudent(String id) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+        SimulationDTO dto = SimulationDTO.fromEntity(sim);
+        dto.setSimulationData(null); // Don't expose full data to students
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
+        return dto;
+    }
+
+    @Transactional(readOnly = true)
     public Page<SimulationDTO> listSimulations(Pageable pageable, String status) {
         UUID clientId = UUID.fromString(TenantContext.getClientId());
         Page<Simulation> page;

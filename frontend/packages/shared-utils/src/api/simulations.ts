@@ -290,6 +290,11 @@ export class SimulationsApi {
 
   // ---- Student ----
 
+  async getSimulationDetails(id: string): Promise<SimulationDTO> {
+    const response = await this.apiClient.get<SimulationDTO>(`/content/api/simulations/${id}/details`)
+    return response.data
+  }
+
   async getAvailableSimulations(): Promise<SimulationDTO[]> {
     const response = await this.apiClient.get<SimulationDTO[]>('/content/api/simulations/available')
     const data = response.data

@@ -185,6 +185,14 @@ public class SimulationStudentController {
         throw new IllegalStateException("Simulation feature is not enabled for this tenant");
     }
 
+    @GetMapping("/{id}/details")
+    @Operation(summary = "Get simulation details",
+               description = "Get simulation metadata (concept, title, subject) for the student view")
+    public ResponseEntity<SimulationDTO> getSimulationDetails(@PathVariable String id) {
+        requireSimulationEnabled(TenantContext.getClientId());
+        return ResponseEntity.ok(simulationService.getSimulationForStudent(id));
+    }
+
     @GetMapping("/available")
     @Operation(summary = "Get available simulations",
                description = "List published simulations available to the current student")

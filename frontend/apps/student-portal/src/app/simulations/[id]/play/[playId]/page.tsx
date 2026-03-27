@@ -63,7 +63,7 @@ export default function SimulationPlayPage() {
 
   // Load simulation metadata (for concept)
   useEffect(() => {
-    simulationsApi.getSimulation(simulationId).then(setSimulation).catch(() => {})
+    simulationsApi.getSimulationDetails(simulationId).then(setSimulation).catch(() => {})
   }, [simulationId])
 
   // Load current state
