@@ -927,6 +927,7 @@ public class SimulationGenerationService {
                         logger.info("  Injecting mentorGuidance into decision {} (guidanceLevel={})", decisionId, isLightYear ? "LIGHT" : "FULL");
                     }
                     // Override AI-generated priorities with deterministic values from mappings
+                    remapHintKeysToIds(decision);
                     fixHintPrioritiesFromMappings(decision);
                     // Log stakeholderHints after fixup if present
                     Map<String, Object> mgAfter = (Map<String, Object>) decision.get("mentorGuidance");
@@ -939,6 +940,75 @@ public class SimulationGenerationService {
         } catch (Exception e) {
             logger.warn("Failed to parse mentor enrichment response, skipping: {}", e.getMessage());
             // Non-fatal — simulation works without mentor guidance
+        }
+    }
+
+    /**
+     * Remap AI-generated stakeholderHints/candidateHints from name-based keys to ID-based keys.
+     * The AI often keys hints as "Name - Role" instead of the stakeholder ID.
+     */
+    @SuppressWarnings("unchecked")
+    private void remapHintKeysToIds(Map<String, Object> decision) {
+        Map<String, Object> mentorGuidance = (Map<String, Object>) decision.get("mentorGuidance");
+        if (mentorGuidance == null) return;
+        Map<String, Object> config = (Map<String, Object>) decision.get("decisionConfig");
+        if (config == null) return;
+
+        // Remap stakeholderHints
+        Map<String, Object> stakeholderHints = (Map<String, Object>) mentorGuidance.get("stakeholderHints");
+        List<Map<String, Object>> stakeholders = config != null ? (List<Map<String, Object>>) config.get("stakeholders") : null;
+        if (stakeholderHints != null && stakeholders != null && !stakeholderHints.isEmpty()) {
+            // Check if keys already match IDs
+            boolean alreadyById = stakeholders.stream().anyMatch(s -> stakeholderHints.containsKey(s.get("id")));
+            if (!alreadyById) {
+                Map<String, Object> remapped = new LinkedHashMap<>();
+                for (Map<String, Object> s : stakeholders) {
+                    String sid = (String) s.get("id");
+                    String name = (String) s.get("name");
+                    String role = (String) s.get("role");
+                    // Try matching by various key patterns the AI might use
+                    Object hint = stakeholderHints.get(sid);
+                    if (hint == null) hint = stakeholderHints.get(name + " - " + role);
+                    if (hint == null) hint = stakeholderHints.get(name);
+                    if (hint == null) {
+                        // Fuzzy: find any key containing the name
+                        for (Map.Entry<String, Object> e : stakeholderHints.entrySet()) {
+                            if (e.getKey().contains(name)) { hint = e.getValue(); break; }
+                        }
+                    }
+                    if (hint != null) remapped.put(sid, hint);
+                }
+                if (!remapped.isEmpty()) {
+                    logger.info("  Remapped stakeholderHints: {} keys → {} ID-based keys", stakeholderHints.size(), remapped.size());
+                    mentorGuidance.put("stakeholderHints", remapped);
+                }
+            }
+        }
+
+        // Remap candidateHints
+        Map<String, Object> candidateHints = (Map<String, Object>) mentorGuidance.get("candidateHints");
+        List<Map<String, Object>> candidates = config != null ? (List<Map<String, Object>>) config.get("candidates") : null;
+        if (candidateHints != null && candidates != null && !candidateHints.isEmpty()) {
+            boolean alreadyById = candidates.stream().anyMatch(c -> candidateHints.containsKey(c.get("id")));
+            if (!alreadyById) {
+                Map<String, Object> remapped = new LinkedHashMap<>();
+                for (Map<String, Object> c : candidates) {
+                    String cid = (String) c.get("id");
+                    String name = (String) c.get("name");
+                    Object hint = candidateHints.get(cid);
+                    if (hint == null) hint = candidateHints.get(name);
+                    if (hint == null) {
+                        for (Map.Entry<String, Object> e : candidateHints.entrySet()) {
+                            if (e.getKey().contains(name)) { hint = e.getValue(); break; }
+                        }
+                    }
+                    if (hint != null) remapped.put(cid, hint);
+                }
+                if (!remapped.isEmpty()) {
+                    logger.info("  Remapped candidateHints: {} keys → {} ID-based keys", candidateHints.size(), remapped.size());
+                    mentorGuidance.put("candidateHints", remapped);
+                }
+            }
         }
     }
 
