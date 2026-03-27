@@ -958,7 +958,11 @@ public class SimulationGenerationService {
 
         List<Map<String, Object>> mappings = (List<Map<String, Object>>) config.get("mappings");
         List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");
-        if (mappings == null || choices == null) return;
+        if (choices == null) return;
+
+        // If mappings are missing, use positional fallback (same as autoGenerateMappings):
+        // first stakeholders/candidates = best picks
+        boolean hasMappings = mappings != null && !mappings.isEmpty();
 
         // Build choiceId → quality lookup
         Map<String, Integer> choiceQuality = new HashMap<>();
@@ -977,30 +981,42 @@ public class SimulationGenerationService {
             Map<String, Object> stakeholderHints = (Map<String, Object>) mentorGuidance.get("stakeholderHints");
             if (stakeholderHints == null) return;
 
-            // Score each stakeholder by how often they appear in conditions leading to high-quality choices
-            Map<String, Integer> stakeholderBestQuality = new HashMap<>();
-            for (Map<String, Object> mapping : mappings) {
-                String condition = (String) mapping.get("condition");
-                String choiceId = (String) mapping.get("choiceId");
-                if (condition == null || "default".equals(condition) || choiceId == null) continue;
-                int quality = choiceQuality.getOrDefault(choiceId, 1);
-
-                // Extract stakeholder IDs from selected_contains('xxx') in the condition
-                java.util.regex.Matcher matcher = java.util.regex.Pattern
-                    .compile("selected_contains\\('([^']+)'\\)").matcher(condition);
-                while (matcher.find()) {
-                    String sid = matcher.group(1);
-                    stakeholderBestQuality.merge(sid, quality, Math::max);
+            if (hasMappings) {
+                // Score from actual mappings
+                Map<String, Integer> stakeholderBestQuality = new HashMap<>();
+                for (Map<String, Object> mapping : mappings) {
+                    String condition = (String) mapping.get("condition");
+                    String choiceId = (String) mapping.get("choiceId");
+                    if (condition == null || "default".equals(condition) || choiceId == null) continue;
+                    int quality = choiceQuality.getOrDefault(choiceId, 1);
+                    java.util.regex.Matcher matcher = java.util.regex.Pattern
+                        .compile("selected_contains\\('([^']+)'\\)").matcher(condition);
+                    while (matcher.find()) {
+                        String sid = matcher.group(1);
+                        stakeholderBestQuality.merge(sid, quality, Math::max);
+                    }
                 }
-            }
-
-            // Update priorities based on best quality score
-            for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
-                String sid = entry.getKey();
-                int bestQ = stakeholderBestQuality.getOrDefault(sid, 1);
-                Map<String, Object> hint = (Map<String, Object>) entry.getValue();
-                if (hint != null) {
-                    hint.put("priority", bestQ >= 3 ? "high" : bestQ >= 2 ? "medium" : "low");
+                for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
+                    int bestQ = stakeholderBestQuality.getOrDefault(entry.getKey(), 1);
+                    Map<String, Object> hint = (Map<String, Object>) entry.getValue();
+                    if (hint != null) {
+                        hint.put("priority", bestQ >= 3 ? "high" : bestQ >= 2 ? "medium" : "low");
+                    }
+                }
+            } else {
+                // No mappings — use positional fallback: first 2 stakeholders = high, rest = low
+                List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
+                if (stakeholders != null) {
+                    java.util.Set<String> topIds = new java.util.HashSet<>();
+                    for (int i = 0; i < Math.min(2, stakeholders.size()); i++) {
+                        topIds.add((String) stakeholders.get(i).get("id"));
+                    }
+                    for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
+                        Map<String, Object> hint = (Map<String, Object>) entry.getValue();
+                        if (hint != null) {
+                            hint.put("priority", topIds.contains(entry.getKey()) ? "high" : "low");
+                        }
+                    }
                 }
             }
         }
@@ -1010,6 +1026,21 @@ public class SimulationGenerationService {
             Map<String, Object> candidateHints = (Map<String, Object>) mentorGuidance.get("candidateHints");
             if (candidateHints == null) return;
 
+            if (!hasMappings) {
+                // Positional fallback: first candidate = strong, second = moderate, rest = weak
+                List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
+                if (candidates != null) {
+                    for (int i = 0; i < candidates.size(); i++) {
+                        String cid = (String) candidates.get(i).get("id");
+                        Map<String, Object> hint = (Map<String, Object>) candidateHints.get(cid);
+                        if (hint != null) {
+                            hint.put("fit", i == 0 ? "strong" : i == 1 ? "moderate" : "weak");
+                        }
+                    }
+                }
+                return;
+            }
+
             Map<String, Integer> candidateBestQuality = new HashMap<>();
             for (Map<String, Object> mapping : mappings) {
                 String condition = (String) mapping.get("condition");
@@ -1017,7 +1048,6 @@ public class SimulationGenerationService {
                 if (condition == null || "default".equals(condition) || choiceId == null) continue;
                 int quality = choiceQuality.getOrDefault(choiceId, 1);
 
-                // Extract candidate IDs from selected == 'xxx' or similar conditions
                 java.util.regex.Matcher matcher = java.util.regex.Pattern
                     .compile("(?:selected\\s*==\\s*'([^']+)'|selected_contains\\('([^']+)'\\))").matcher(condition);
                 while (matcher.find()) {
