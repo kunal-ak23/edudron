@@ -1,4 +1,5 @@
 import { ApiClient } from './ApiClient'
+import type { CoordinatorResponse } from './classes'
 
 export interface Enrollment {
   id: string
@@ -249,6 +250,24 @@ export class EnrollmentsApi {
   async getBatchProgress(id: string): Promise<any> {
     const response = await this.apiClient.get(`/api/batches/${id}/progress`)
     return response.data
+  }
+
+  async assignBatchCoordinator(batchId: string, coordinatorUserId: string): Promise<CoordinatorResponse> {
+    const response = await this.apiClient.put<CoordinatorResponse>(`/api/batches/${batchId}/coordinator`, { coordinatorUserId })
+    return response.data
+  }
+
+  async removeBatchCoordinator(batchId: string): Promise<void> {
+    await this.apiClient.delete(`/api/batches/${batchId}/coordinator`)
+  }
+
+  async getBatchCoordinator(batchId: string): Promise<CoordinatorResponse | null> {
+    try {
+      const response = await this.apiClient.get<CoordinatorResponse>(`/api/batches/${batchId}/coordinator`)
+      return response.data || null
+    } catch {
+      return null
+    }
   }
 
   // Bulk enrollment methods
