@@ -1049,8 +1049,9 @@ public class SimulationGenerationService {
             Map<String, Object> stakeholderHints = (Map<String, Object>) mentorGuidance.get("stakeholderHints");
             if (stakeholderHints == null) return;
 
+            boolean usedMappings = false;
             if (hasMappings) {
-                // Score from actual mappings
+                // Try to score from actual mappings (only works if conditions use selected_contains)
                 Map<String, Integer> stakeholderBestQuality = new HashMap<>();
                 for (Map<String, Object> mapping : mappings) {
                     String condition = (String) mapping.get("condition");
@@ -1064,14 +1065,20 @@ public class SimulationGenerationService {
                         stakeholderBestQuality.merge(sid, quality, Math::max);
                     }
                 }
-                for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
-                    int bestQ = stakeholderBestQuality.getOrDefault(entry.getKey(), 1);
-                    Map<String, Object> hint = (Map<String, Object>) entry.getValue();
-                    if (hint != null) {
-                        hint.put("priority", bestQ >= 3 ? "high" : bestQ >= 2 ? "medium" : "low");
+                if (!stakeholderBestQuality.isEmpty()) {
+                    usedMappings = true;
+                    for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
+                        int bestQ = stakeholderBestQuality.getOrDefault(entry.getKey(), 1);
+                        Map<String, Object> hint = (Map<String, Object>) entry.getValue();
+                        if (hint != null) {
+                            hint.put("priority", bestQ >= 3 ? "high" : bestQ >= 2 ? "medium" : "low");
+                        }
                     }
+                } else {
+                    logger.info("  Mappings exist but no selected_contains() found — using positional fallback");
                 }
-            } else {
+            }
+            if (!usedMappings) {
                 // No mappings — use positional fallback: first 2 stakeholders = high, rest = low
                 List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
                 if (stakeholders != null) {
