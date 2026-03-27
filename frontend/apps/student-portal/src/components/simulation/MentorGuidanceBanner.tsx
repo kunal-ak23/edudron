@@ -65,6 +65,15 @@ export function MentorGuidanceBanner({ guidance }: MentorGuidanceBannerProps) {
             </div>
           )}
 
+          {guidance.mentorTip && (
+            <div className="flex gap-2">
+              <span className="text-[#6cd3f7] flex-shrink-0 mt-0.5">💡</span>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-[#6cd3f7]/70 font-bold mb-0.5">What to Consider</p>
+                <p className="text-sm text-[#dbe2fb] leading-relaxed font-medium">{guidance.mentorTip}</p>
+              </div>
+            </div>
+          )}
           {guidance.courseConnection && (
             <div className="flex gap-2">
               <span className="text-amber-400 flex-shrink-0 mt-0.5">📚</span>

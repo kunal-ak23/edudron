@@ -18,13 +18,20 @@ interface StakeholderConfig {
   stakeholders: Stakeholder[]
 }
 
+const priorityColors: Record<string, string> = {
+  high: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+  medium: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+  low: 'text-slate-400 bg-slate-400/10 border-slate-400/20',
+}
+
 interface StakeholderMeetingInputProps {
   config: StakeholderConfig
   onSubmit: (data: { input: { selectedStakeholders: string[] } }) => void
   disabled?: boolean
+  stakeholderHints?: Record<string, { hint: string; priority: 'high' | 'medium' | 'low' }>
 }
 
-export function StakeholderMeetingInput({ config, onSubmit, disabled }: StakeholderMeetingInputProps) {
+export function StakeholderMeetingInput({ config, onSubmit, disabled, stakeholderHints }: StakeholderMeetingInputProps) {
   const [selected, setSelected] = useState<string[]>([])
   const [phase, setPhase] = useState<'select' | 'reveal'>('select')
   const [revealIndex, setRevealIndex] = useState(0)
@@ -130,10 +137,18 @@ export function StakeholderMeetingInput({ config, onSubmit, disabled }: Stakehol
                 ) : (
                   <Circle className="w-5 h-5 text-slate-500 mt-0.5 shrink-0" />
                 )}
-                <div>
+                <div className="flex-1">
                   <p className="text-sm font-medium text-[#dbe2fb]">{s.name}</p>
                   <p className="text-xs text-slate-400">{s.role}</p>
                   <p className="text-sm text-[#bdc8ce] mt-1">{s.teaser}</p>
+                  {stakeholderHints?.[s.id] && (
+                    <div className="mt-2 flex items-start gap-2">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold border ${priorityColors[stakeholderHints[s.id].priority]}`}>
+                        {stakeholderHints[s.id].priority}
+                      </span>
+                      <p className="text-xs text-slate-400 leading-relaxed">{stakeholderHints[s.id].hint}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

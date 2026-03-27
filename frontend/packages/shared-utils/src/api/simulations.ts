@@ -90,7 +90,10 @@ export interface MentorGuidance {
   courseConnection?: string
   realWorldExample?: string
   mentorNote?: string
+  mentorTip?: string
   choiceHints?: Record<string, { hint: string; risk: 'low' | 'medium' | 'high' }>
+  stakeholderHints?: Record<string, { hint: string; priority: 'high' | 'medium' | 'low' }>
+  candidateHints?: Record<string, { hint: string; fit: 'strong' | 'moderate' | 'weak' }>
   guidanceLevel?: 'FULL' | 'LIGHT'
 }
 

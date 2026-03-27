@@ -751,6 +751,29 @@ public class SimulationGenerationService {
                     }
                 }
                 decisionsSummary.append("\n");
+                // Include stakeholders/candidates for STAKEHOLDER_MEETING and HIRE_FIRE
+                Map<String, Object> config = (Map<String, Object>) d.get("decisionConfig");
+                if (config != null) {
+                    List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
+                    if (stakeholders != null) {
+                        decisionsSummary.append("  Stakeholders: ");
+                        for (Map<String, Object> s : stakeholders) {
+                            decisionsSummary.append("[").append(s.get("id")).append(": ")
+                                .append(s.get("name")).append(" - ").append(s.get("role"))
+                                .append(", teaser: ").append(s.get("teaser")).append("] ");
+                        }
+                        decisionsSummary.append("\n");
+                    }
+                    List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
+                    if (candidates != null) {
+                        decisionsSummary.append("  Candidates: ");
+                        for (Map<String, Object> c : candidates) {
+                            decisionsSummary.append("[").append(c.get("id")).append(": ")
+                                .append(c.get("name")).append(" - ").append(c.get("title")).append("] ");
+                        }
+                        decisionsSummary.append("\n");
+                    }
+                }
             }
         }
 
@@ -792,6 +815,14 @@ public class SimulationGenerationService {
                    For Year 1: warm, educational hints. Year 2: direct, no-nonsense. Year 3: vague pointers.
                 4. "mentorNote": A 1-sentence in-character note from the mentor, written in their voice for that year.
                    Year 1: encouraging teaching. Year 2: urgent wisdom. Year 3: a brief scribbled note.
+                5. "mentorTip": A 1-2 sentence ACTIONABLE tip for what to consider in this specific decision.
+                   Not abstract theory — concrete advice like "Look at who has the most relevant domain expertise"
+                   or "Consider which allocation balances short-term revenue with long-term growth".
+                   This helps the student understand WHAT TO DO, not just the theory behind it.
+                6. For STAKEHOLDER_MEETING decisions: also include "stakeholderHints" keyed by stakeholder ID:
+                   {"stakeholder_id": {"hint": "Why meeting this person could be valuable", "priority": "high|medium|low"}}
+                7. For HIRE_FIRE decisions: also include "candidateHints" keyed by candidate ID:
+                   {"candidate_id": {"hint": "What this person brings to the team", "fit": "strong|moderate|weak"}}
 
                 IMPORTANT: Choice hints should educate, not give away the answer. Frame consequences
                 in terms of trade-offs, not "this is right/wrong". Even the best choice has downsides.
@@ -806,10 +837,17 @@ public class SimulationGenerationService {
                     "courseConnection": "...",
                     "realWorldExample": "...",
                     "mentorNote": "...",
+                    "mentorTip": "...",
                     "choiceHints": {
                       "y1_d1_a": {"hint": "Conservative approach preserves cash but may slow growth", "risk": "low"},
                       "y1_d1_b": {"hint": "Balanced spend, but market timing is uncertain", "risk": "medium"},
                       "y1_d1_c": {"hint": "Aggressive investment could capture market share or drain reserves", "risk": "high"}
+                    },
+                    "stakeholderHints": {
+                      "stakeholder_1": {"hint": "Has deep domain expertise in the area you need", "priority": "high"}
+                    },
+                    "candidateHints": {
+                      "candidate_1": {"hint": "Strong technical skills but limited leadership experience", "fit": "moderate"}
                     }
                   }
                 }

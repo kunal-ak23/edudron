@@ -67,7 +67,7 @@ export function DecisionInput({ decisionType, decisionConfig, choices, onSubmit,
       break
     case 'HIRE_FIRE':
       inputComponent = !config.candidates?.length ? fallback
-        : <HireFireInput config={config} onSubmit={onSubmit} disabled={disabled} />
+        : <HireFireInput config={config} onSubmit={onSubmit} disabled={disabled} candidateHints={mentorGuidance?.candidateHints} />
       break
     case 'CRISIS_RESPONSE':
       inputComponent = <CrisisResponseInput config={config} choices={choices} onSubmit={onSubmit} disabled={disabled} choiceHints={choiceHints} />
@@ -78,7 +78,7 @@ export function DecisionInput({ decisionType, decisionConfig, choices, onSubmit,
       break
     case 'STAKEHOLDER_MEETING':
       inputComponent = !config.stakeholders?.length ? fallback
-        : <StakeholderMeetingInput config={config} onSubmit={onSubmit} disabled={disabled} />
+        : <StakeholderMeetingInput config={config} onSubmit={onSubmit} disabled={disabled} stakeholderHints={mentorGuidance?.stakeholderHints} />
       break
     case 'NARRATIVE_CHOICE':
     default:
