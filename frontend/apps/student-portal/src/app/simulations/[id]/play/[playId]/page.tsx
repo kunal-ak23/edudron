@@ -15,6 +15,7 @@ import { FinancialReport } from '@/components/simulation/FinancialReport'
 import { PromotionCelebration } from '@/components/simulation/PromotionCelebration'
 import ConceptPanel from '@/components/simulation/ConceptPanel'
 import DashboardPanel from '@/components/simulation/DashboardPanel'
+import { HighlightedText, filterMatchingKeywords } from '@/components/simulation/HighlightedText'
 import { Button } from '@/components/ui/button'
 import { Loader2, ArrowLeft } from 'lucide-react'
 import type { SimulationStateDTO, SimulationDTO } from '@kunal-ak23/edudron-shared-utils'
@@ -308,16 +309,25 @@ export default function SimulationPlayPage() {
           {/* Decision narrative */}
           {(playPhase === 'DECISION_NARRATIVE' || playPhase === 'DECISION_ACTIVE') && (
             <div className="mb-8">
-              <TypewriterText
-                key={state.decision.decisionId}
-                as="div"
-                className="text-lg leading-relaxed text-[#E2E8F0] whitespace-pre-line"
-                text={state.decision.narrative}
-                onDone={handleDecisionNarrativeTypingDone}
-                speedMs={16}
-                startDelayMs={80}
-                cursor
-              />
+              {decisionNarrativeDone ? (
+                <div className="text-lg leading-relaxed text-[#E2E8F0] whitespace-pre-line">
+                  <HighlightedText
+                    text={state.decision.narrative}
+                    keywords={((state.decision as any)?.conceptKeywords || []).map((k: any) => k.term)}
+                  />
+                </div>
+              ) : (
+                <TypewriterText
+                  key={state.decision.decisionId}
+                  as="div"
+                  className="text-lg leading-relaxed text-[#E2E8F0] whitespace-pre-line"
+                  text={state.decision.narrative}
+                  onDone={handleDecisionNarrativeTypingDone}
+                  speedMs={16}
+                  startDelayMs={80}
+                  cursor
+                />
+              )}
               {decisionNarrativeDone && playPhase === 'DECISION_NARRATIVE' && (
                 <div className="mt-6 flex justify-center">
                   <Button
@@ -390,7 +400,10 @@ export default function SimulationPlayPage() {
           <aside className="hidden xl:flex flex-col w-[280px] bg-[#131b2d] border-r border-white/5 overflow-y-auto shrink-0">
             <ConceptPanel
               concept={simulation?.concept || ''}
-              keywords={(state?.decision as any)?.conceptKeywords || []}
+              keywords={filterMatchingKeywords(
+                state?.decision?.narrative || '',
+                (state?.decision as any)?.conceptKeywords || []
+              )}
               keyInsights={state?.keyInsights || []}
             />
           </aside>
@@ -402,7 +415,10 @@ export default function SimulationPlayPage() {
               <div className="xl:hidden">
                 <ConceptPanel
                   concept={simulation?.concept || ''}
-                  keywords={(state?.decision as any)?.conceptKeywords || []}
+                  keywords={filterMatchingKeywords(
+                    state?.decision?.narrative || '',
+                    (state?.decision as any)?.conceptKeywords || []
+                  )}
                   keyInsights={state?.keyInsights || []}
                 />
               </div>
