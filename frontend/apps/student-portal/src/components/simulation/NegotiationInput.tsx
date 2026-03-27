@@ -36,6 +36,7 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
     { speaker: npcName, text: `I'm proposing ${unit}${config.initialOffer.toLocaleString()}. What do you think?` }
   ])
   const [lastNpcOffer, setLastNpcOffer] = useState(config.initialOffer)
+  const [lastPlayerOffer, setLastPlayerOffer] = useState<number | null>(null)
   const [resolved, setResolved] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
@@ -44,10 +45,29 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [dialogHistory])
 
+  // Determine negotiation direction from NPC responses
+  const getNegotiationHint = (): string => {
+    if (!config.npcResponses?.length) return 'Make your counter-offer'
+    // Look at round 1 responses to infer if player should go higher or lower
+    const round1 = config.npcResponses.filter(r => r.round === 1)
+    if (round1.length === 0) return 'Make your counter-offer'
+    // If npcCounterOffer is lower than initial, NPC is negotiating down — player should push higher
+    const firstWithCounter = round1.find(r => r.npcCounterOffer !== null)
+    if (firstWithCounter && firstWithCounter.npcCounterOffer !== null) {
+      if (firstWithCounter.npcCounterOffer < config.initialOffer) {
+        return `Try negotiating higher than ${unit}${config.initialOffer.toLocaleString()}`
+      } else if (firstWithCounter.npcCounterOffer > config.initialOffer) {
+        return `Try negotiating lower than ${unit}${config.initialOffer.toLocaleString()}`
+      }
+    }
+    return 'Make your counter-offer'
+  }
+
   const handleCounter = () => {
     const amount = parseInt(offerAmount.replace(/,/g, ''), 10)
     if (isNaN(amount) || amount < 0) return
 
+    setLastPlayerOffer(amount)
     setDialogHistory(prev => [...prev, { speaker: 'You', text: `${unit}${amount.toLocaleString()}` }])
 
     const response = config.npcResponses?.find(
@@ -92,17 +112,28 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
     onSubmit({ input: { finalAmount: 0, acceptedRound: currentRound, walkedAway: true } })
   }
 
+  // Calculate gap between offers for the visual indicator
+  const gap = lastPlayerOffer !== null ? Math.abs(lastPlayerOffer - lastNpcOffer) : null
+  const isLastRound = currentRound === rounds
+
   return (
     <div className="bg-[#222a3d] rounded-xl p-5 space-y-4">
-      {/* Round indicator */}
+      {/* Header with round indicator */}
       <div className="flex items-center justify-between">
         <h3 className="text-xs uppercase tracking-widest text-slate-400 font-bold">
           Negotiation
         </h3>
         {!resolved && (
-          <span className="text-xs uppercase tracking-widest text-[#6cd3f7] font-bold">
-            Round {currentRound} of {rounds}
-          </span>
+          <div className="flex items-center gap-3">
+            {isLastRound && (
+              <span className="text-[10px] uppercase tracking-widest text-[#ffb4ab] font-bold animate-pulse">
+                Final round
+              </span>
+            )}
+            <span className="text-xs uppercase tracking-widest text-[#6cd3f7] font-bold">
+              Round {currentRound} of {rounds}
+            </span>
+          </div>
         )}
         {resolved && (
           <span className="text-xs uppercase tracking-widest text-green-400 font-bold">
@@ -110,6 +141,43 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
           </span>
         )}
       </div>
+
+      {/* Offer comparison bar — shows when there's a gap to close */}
+      {!resolved && (
+        <div className="bg-[#0F1729] rounded-lg p-3 space-y-2">
+          <div className="flex justify-between items-center text-xs">
+            <div>
+              <span className="text-slate-500 uppercase tracking-wider text-[10px]">Their offer</span>
+              <p className="text-[#ffb4ab] font-bold text-sm">{unit}{lastNpcOffer.toLocaleString()}</p>
+            </div>
+            {lastPlayerOffer !== null ? (
+              <div className="text-center">
+                <span className="text-slate-500 uppercase tracking-wider text-[10px]">Gap</span>
+                <p className="text-yellow-400 font-bold text-sm">{unit}{gap?.toLocaleString()}</p>
+              </div>
+            ) : (
+              <div className="text-center">
+                <span className="text-slate-400 text-[10px] italic">{getNegotiationHint()}</span>
+              </div>
+            )}
+            <div className="text-right">
+              <span className="text-slate-500 uppercase tracking-wider text-[10px]">Your offer</span>
+              <p className="text-[#6cd3f7] font-bold text-sm">
+                {lastPlayerOffer !== null ? `${unit}${lastPlayerOffer.toLocaleString()}` : '—'}
+              </p>
+            </div>
+          </div>
+          {/* Visual gap bar */}
+          {lastPlayerOffer !== null && gap !== null && gap > 0 && (
+            <div className="relative h-1.5 bg-[#1E3A5F]/30 rounded-full overflow-hidden">
+              <div
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-[#ffb4ab] to-[#6cd3f7] rounded-full transition-all duration-500"
+                style={{ width: `${Math.max(10, 100 - (gap / Math.max(lastNpcOffer, lastPlayerOffer)) * 100)}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Chat history */}
       <div className="bg-[#1A2744] border border-white/5 rounded-xl p-4 max-h-72 overflow-y-auto space-y-3">
@@ -144,8 +212,9 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
                 type="text"
                 value={offerAmount}
                 onChange={(e) => setOfferAmount(e.target.value.replace(/[^0-9,]/g, ''))}
-                placeholder="Enter your offer"
+                placeholder="Enter your counter-offer"
                 className="w-full pl-7 pr-3 py-2.5 bg-[#0F1729] border border-white/5 rounded-lg text-[#dbe2fb] text-sm focus:outline-none focus:border-[#6cd3f7]/50 placeholder:text-slate-600"
+                onKeyDown={(e) => { if (e.key === 'Enter' && offerAmount) handleCounter() }}
               />
             </div>
             <button
@@ -175,6 +244,13 @@ export function NegotiationInput({ config, onSubmit, disabled }: NegotiationInpu
               Walk Away
             </button>
           </div>
+
+          {/* Rounds remaining hint */}
+          {currentRound < rounds && (
+            <p className="text-[10px] text-slate-500 text-center">
+              {rounds - currentRound} round{rounds - currentRound > 1 ? 's' : ''} remaining to reach a deal
+            </p>
+          )}
         </div>
       )}
     </div>
