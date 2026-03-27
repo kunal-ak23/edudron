@@ -1,8 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import type { ChoiceDTO } from '@kunal-ak23/edudron-shared-utils'
@@ -41,14 +39,18 @@ export function DashboardAnalysisInput({ config, choices = [], onSubmit, disable
   }) : null
 
   return (
-    <div className="space-y-5">
+    <div className="bg-[#222a3d] rounded-xl p-5 space-y-5">
+      <h3 className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+        Dashboard Analysis
+      </h3>
+
       {/* Metrics Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {config.metrics.map((m, i) => (
-          <div key={i} className="bg-[#1A2744] border border-[#1E3A5F]/30 rounded-lg p-3">
-            <p className="text-xs text-[#94A3B8] mb-1">{m.label}</p>
+          <div key={i} className="bg-[#1A2744] border border-white/5 rounded-lg p-3">
+            <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">{m.label}</p>
             <div className="flex items-center gap-2">
-              <span className="text-lg font-mono text-[#E2E8F0]">{m.value}</span>
+              <span className="text-lg font-mono text-[#dbe2fb]">{m.value}</span>
               <TrendIcon trend={m.trend} />
             </div>
             <p className={`text-xs mt-1 ${m.trend === 'up' ? 'text-green-400' : m.trend === 'down' ? 'text-red-400' : 'text-[#94A3B8]'}`}>
@@ -60,7 +62,7 @@ export function DashboardAnalysisInput({ config, choices = [], onSubmit, disable
 
       {/* Chart */}
       {chartData && config.chartData && (
-        <div className="bg-[#1A2744] border border-[#1E3A5F]/30 rounded-lg p-4">
+        <div className="bg-[#1A2744] border border-white/5 rounded-lg p-4">
           <p className="text-sm text-[#94A3B8] mb-3">{config.chartData.title}</p>
           <ResponsiveContainer width="100%" height={200}>
             {config.chartData.type === 'bar' ? (
@@ -91,30 +93,32 @@ export function DashboardAnalysisInput({ config, choices = [], onSubmit, disable
       )}
 
       {/* Question + Choices */}
-      <p className="text-sm text-[#E2E8F0] font-medium">{config.question}</p>
+      <p className="text-sm text-[#dbe2fb] font-medium">{config.question}</p>
       <div className="space-y-3">
         {choices.map((choice) => (
-          <Card
+          <button
             key={choice.id}
-            className={`cursor-pointer transition-all bg-[#1A2744] border-[#1E3A5F]/30 ${
-              selectedId === choice.id ? 'ring-2 ring-[#0891B2] border-[#0891B2]' : 'hover:border-[#0891B2]/50'
-            } ${disabled ? 'opacity-60 pointer-events-none' : ''}`}
+            type="button"
+            className={`w-full text-left rounded-xl p-4 border transition-all duration-200 ${
+              selectedId === choice.id
+                ? 'bg-[#1A2744] border-[#6cd3f7]/50 ring-1 ring-[#6cd3f7]/30'
+                : 'bg-[#1A2744] border-white/5 hover:border-[#6cd3f7]/30'
+            } ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
             onClick={() => !disabled && setSelectedId(choice.id)}
           >
-            <CardContent className="p-4">
-              <p className="text-sm text-[#E2E8F0]">{choice.text}</p>
-            </CardContent>
-          </Card>
+            <p className="text-sm text-[#dbe2fb]">{choice.text}</p>
+          </button>
         ))}
       </div>
 
-      <Button
+      <button
+        type="button"
         onClick={() => selectedId && onSubmit({ choiceId: selectedId })}
         disabled={!selectedId || disabled}
-        className="w-full"
+        className="w-full px-10 py-4 bg-[#6cd3f7] text-[#003543] font-bold uppercase tracking-widest text-sm hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(108,211,247,0.3)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 rounded-lg"
       >
         Confirm Decision
-      </Button>
+      </button>
     </div>
   )
 }

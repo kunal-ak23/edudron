@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { CheckCircle2, Circle, Users } from 'lucide-react'
 import { LottieCharacter } from './LottieCharacter'
 
@@ -52,16 +51,16 @@ export function StakeholderMeetingInput({ config, onSubmit, disabled }: Stakehol
 
   if (phase === 'reveal') {
     return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-2 text-sm text-[#94A3B8]">
-          <Users className="w-4 h-4" />
-          Meeting Notes
+      <div className="bg-[#222a3d] rounded-xl p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-slate-400" />
+          <h3 className="text-xs uppercase tracking-widest text-slate-400 font-bold">Meeting Notes</h3>
         </div>
 
         {selectedStakeholders.map((s, i) => (
           <div
             key={s.id}
-            className={`bg-[#1A2744] border border-[#1E3A5F]/30 rounded-xl p-4 transition-all duration-500 ${
+            className={`bg-[#1A2744] border border-white/5 rounded-xl p-4 transition-all duration-500 ${
               i <= revealIndex ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
             }`}
             style={{ transitionDelay: `${i * 300}ms` }}
@@ -70,36 +69,47 @@ export function StakeholderMeetingInput({ config, onSubmit, disabled }: Stakehol
               {(s as any).characterId ? (
                 <LottieCharacter characterId={(s as any).characterId} mood="neutral" size={40} />
               ) : (
-                <div className="w-8 h-8 rounded-full bg-[#0891B2]/20 flex items-center justify-center text-[#0891B2] text-sm font-medium">
+                <div className="w-8 h-8 rounded-full bg-[#6cd3f7]/10 flex items-center justify-center text-[#6cd3f7] text-sm font-bold">
                   {s.name.charAt(0)}
                 </div>
               )}
               <div>
-                <p className="text-sm font-medium text-[#E2E8F0]">{s.name}</p>
-                <p className="text-xs text-[#94A3B8]">{s.role}</p>
+                <p className="text-sm font-medium text-[#dbe2fb]">{s.name}</p>
+                <p className="text-xs text-slate-400">{s.role}</p>
               </div>
             </div>
-            <p className="text-sm text-[#E2E8F0] leading-relaxed">{s.revealedInfo}</p>
+            <p className="text-sm text-[#dbe2fb] leading-relaxed">{s.revealedInfo}</p>
           </div>
         ))}
 
         {revealIndex < selectedStakeholders.length - 1 ? (
-          <Button onClick={() => setRevealIndex(prev => prev + 1)} className="w-full">
+          <button
+            type="button"
+            onClick={() => setRevealIndex(prev => prev + 1)}
+            className="w-full px-10 py-4 border border-[#6cd3f7]/30 text-[#6cd3f7] font-bold uppercase tracking-widest text-sm hover:bg-[#6cd3f7]/10 transition-colors rounded-lg"
+          >
             Next Meeting
-          </Button>
+          </button>
         ) : (
-          <Button onClick={handleContinue} className="w-full">
+          <button
+            type="button"
+            onClick={handleContinue}
+            className="w-full px-10 py-4 bg-[#6cd3f7] text-[#003543] font-bold uppercase tracking-widest text-sm hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(108,211,247,0.3)] rounded-lg"
+          >
             Continue
-          </Button>
+          </button>
         )}
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-[#94A3B8]">{config.instruction}</p>
-      <div className="text-xs text-[#0891B2]">Selected: {selected.length}/{config.maxSelections}</div>
+    <div className="bg-[#222a3d] rounded-xl p-5 space-y-4">
+      <h3 className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+        Stakeholder Meeting
+      </h3>
+      <p className="text-sm text-[#bdc8ce]">{config.instruction}</p>
+      <div className="text-xs uppercase tracking-widest text-[#6cd3f7] font-bold">Selected: {selected.length}/{config.maxSelections}</div>
 
       <div className="space-y-3">
         {config.stakeholders.map((s) => {
@@ -110,20 +120,20 @@ export function StakeholderMeetingInput({ config, onSubmit, disabled }: Stakehol
             <div
               key={s.id}
               className={`bg-[#1A2744] border rounded-xl p-4 cursor-pointer transition-all ${
-                isSelected ? 'border-[#0891B2] ring-1 ring-[#0891B2]' : isFull ? 'border-[#1E3A5F]/20 opacity-50' : 'border-[#1E3A5F]/30 hover:border-[#1E3A5F]'
+                isSelected ? 'border-[#6cd3f7]/50 ring-1 ring-[#6cd3f7]/30' : isFull ? 'border-white/5 opacity-50' : 'border-white/5 hover:border-[#6cd3f7]/30'
               } ${disabled ? 'opacity-60 pointer-events-none' : ''}`}
               onClick={() => toggleStakeholder(s.id)}
             >
               <div className="flex items-start gap-3">
                 {isSelected ? (
-                  <CheckCircle2 className="w-5 h-5 text-[#0891B2] mt-0.5 shrink-0" />
+                  <CheckCircle2 className="w-5 h-5 text-[#6cd3f7] mt-0.5 shrink-0" />
                 ) : (
-                  <Circle className="w-5 h-5 text-[#1E3A5F] mt-0.5 shrink-0" />
+                  <Circle className="w-5 h-5 text-slate-500 mt-0.5 shrink-0" />
                 )}
                 <div>
-                  <p className="text-sm font-medium text-[#E2E8F0]">{s.name}</p>
-                  <p className="text-xs text-[#94A3B8]">{s.role}</p>
-                  <p className="text-sm text-[#94A3B8] mt-1">{s.teaser}</p>
+                  <p className="text-sm font-medium text-[#dbe2fb]">{s.name}</p>
+                  <p className="text-xs text-slate-400">{s.role}</p>
+                  <p className="text-sm text-[#bdc8ce] mt-1">{s.teaser}</p>
                 </div>
               </div>
             </div>
@@ -131,13 +141,14 @@ export function StakeholderMeetingInput({ config, onSubmit, disabled }: Stakehol
         })}
       </div>
 
-      <Button
+      <button
+        type="button"
         onClick={handleProceed}
         disabled={selected.length === 0 || disabled}
-        className="w-full"
+        className="w-full px-10 py-4 bg-[#6cd3f7] text-[#003543] font-bold uppercase tracking-widest text-sm hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(108,211,247,0.3)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 rounded-lg"
       >
         Proceed to Meetings
-      </Button>
+      </button>
     </div>
   )
 }

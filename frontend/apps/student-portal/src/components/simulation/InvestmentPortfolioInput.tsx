@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Button } from '@/components/ui/button'
 
 interface Department {
   id: string
@@ -49,21 +48,25 @@ export function InvestmentPortfolioInput({ config, onSubmit, disabled }: Investm
   }, [config.departments])
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-[#94A3B8]">Total Budget</span>
-        <span className="font-mono text-[#E2E8F0]">{formatCurrency(config.totalBudget, config.currency)}</span>
+    <div className="bg-[#222a3d] rounded-xl p-5 space-y-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+          Investment Portfolio
+        </h3>
+        <span className="text-xs uppercase tracking-widest text-[#6cd3f7] font-bold">
+          {formatCurrency(config.totalBudget, config.currency)}
+        </span>
       </div>
 
       {config.departments.map((dept) => {
         const value = allocations[dept.id] ?? dept.minAllocation
         return (
-          <div key={dept.id} className="bg-[#1A2744] border border-[#1E3A5F]/30 rounded-lg p-4">
+          <div key={dept.id} className="bg-[#1A2744] border border-white/5 rounded-xl p-4">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-sm font-medium text-[#E2E8F0]">{dept.label}</span>
-              <span className="font-mono text-sm text-[#0891B2]">{formatCurrency(value, config.currency)}</span>
+              <span className="text-sm font-medium text-[#dbe2fb]">{dept.label}</span>
+              <span className="font-mono text-sm text-[#6cd3f7]">{formatCurrency(value, config.currency)}</span>
             </div>
-            <p className="text-xs text-[#94A3B8] mb-2">{dept.description}</p>
+            <p className="text-xs text-slate-400 mb-2">{dept.description}</p>
             <input
               type="range"
               min={dept.minAllocation}
@@ -72,11 +75,12 @@ export function InvestmentPortfolioInput({ config, onSubmit, disabled }: Investm
               value={value}
               onChange={(e) => handleChange(dept.id, parseInt(e.target.value, 10))}
               disabled={disabled}
-              className="w-full h-2 bg-[#0F1729] rounded-lg appearance-none cursor-pointer accent-[#0891B2] disabled:opacity-50"
+              className="w-full h-1 appearance-none cursor-pointer rounded-full bg-[#2d3448] disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ accentColor: '#6cd3f7' }}
             />
-            <div className="flex justify-between text-xs text-[#94A3B8] mt-1">
+            <div className="flex justify-between text-xs text-slate-400 mt-1">
               <span>{formatCurrency(dept.minAllocation, config.currency)}</span>
-              <span className="text-[#0891B2]/70">ROI: {dept.projectedRoiRange}</span>
+              <span className="text-[#6cd3f7]/70">ROI: {dept.projectedRoiRange}</span>
               <span>{formatCurrency(dept.maxAllocation, config.currency)}</span>
             </div>
           </div>
@@ -91,13 +95,14 @@ export function InvestmentPortfolioInput({ config, onSubmit, disabled }: Investm
         {remaining < 0 && <span className="ml-2">(Over budget!)</span>}
       </div>
 
-      <Button
+      <button
+        type="button"
         onClick={() => onSubmit({ input: allocations })}
         disabled={!isValid || disabled}
-        className="w-full"
+        className="w-full px-10 py-4 bg-[#6cd3f7] text-[#003543] font-bold uppercase tracking-widest text-sm hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(108,211,247,0.3)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 rounded-lg"
       >
         Confirm Allocation
-      </Button>
+      </button>
     </div>
   )
 }

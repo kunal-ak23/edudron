@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { LottieCharacter } from './LottieCharacter'
 
@@ -33,12 +32,18 @@ export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm text-[#94A3B8]">
-        <span>Budget: <span className="font-mono text-[#E2E8F0]">${config.budgetLimit.toLocaleString()}</span></span>
-        <span className="text-[#1E3A5F]">|</span>
-        <span>{config.action === 'hire' ? 'Select a candidate to hire' : 'Select a team member to let go'}</span>
+    <div className="bg-[#222a3d] rounded-xl p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+          {config.action === 'hire' ? 'Hire Decision' : 'Termination Decision'}
+        </h3>
+        <span className="text-xs uppercase tracking-widest text-[#6cd3f7] font-bold">
+          Budget: ${config.budgetLimit.toLocaleString()}
+        </span>
       </div>
+      <p className="text-sm text-[#bdc8ce]">
+        {config.action === 'hire' ? 'Select a candidate to hire' : 'Select a team member to let go'}
+      </p>
 
       <div className="space-y-3">
         {config.candidates.map((candidate) => {
@@ -63,12 +68,12 @@ export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps
                       <LottieCharacter characterId={(candidate as any).characterId} mood="neutral" size={40} />
                     )}
                     <div>
-                    <h4 className="text-[#E2E8F0] font-medium">{candidate.name}</h4>
-                    <p className="text-sm text-[#94A3B8]">{candidate.title}</p>
+                    <h4 className="text-[#dbe2fb] font-medium">{candidate.name}</h4>
+                    <p className="text-sm text-slate-400">{candidate.title}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className={`font-mono text-sm ${overBudget ? 'text-amber-400' : 'text-[#E2E8F0]'}`}>
+                    <div className={`font-mono text-sm ${overBudget ? 'text-amber-400' : 'text-[#dbe2fb]'}`}>
                       ${candidate.salary.toLocaleString()}
                     </div>
                     {overBudget && (
@@ -81,8 +86,8 @@ export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps
 
                 <div className="flex flex-wrap gap-2 mt-2">
                   {Object.entries(candidate.stats).map(([k, v]) => (
-                    <span key={k} className="text-xs bg-[#0F1729] text-[#94A3B8] px-2 py-1 rounded">
-                      {k}: <span className="text-[#E2E8F0]">{v}</span>
+                    <span key={k} className="text-xs bg-[#0F1729] text-slate-400 px-2 py-1 rounded">
+                      {k}: <span className="text-[#dbe2fb]">{v}</span>
                     </span>
                   ))}
                 </div>
@@ -90,7 +95,7 @@ export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps
 
               <button
                 onClick={(e) => { e.stopPropagation(); setExpandedId(isExpanded ? null : candidate.id) }}
-                className="w-full px-4 py-2 text-xs text-[#94A3B8] hover:text-[#E2E8F0] flex items-center gap-1 border-t border-[#1E3A5F]/20"
+                className="w-full px-4 py-2 text-xs text-slate-400 hover:text-[#dbe2fb] flex items-center gap-1 border-t border-[#1E3A5F]/20"
               >
                 {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 {isExpanded ? 'Less' : 'More details'}
@@ -98,15 +103,15 @@ export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps
 
               {isExpanded && (
                 <div className="px-4 pb-4 space-y-2 text-sm">
-                  <p className="text-[#94A3B8]">{candidate.bio}</p>
+                  <p className="text-slate-400">{candidate.bio}</p>
                   <div className="flex gap-4">
                     <div>
                       <p className="text-xs text-green-400 mb-1">Strengths</p>
-                      {candidate.strengths.map((s, i) => <p key={i} className="text-xs text-[#94A3B8]">+ {s}</p>)}
+                      {candidate.strengths.map((s, i) => <p key={i} className="text-xs text-slate-400">+ {s}</p>)}
                     </div>
                     <div>
                       <p className="text-xs text-red-400 mb-1">Weaknesses</p>
-                      {candidate.weaknesses.map((w, i) => <p key={i} className="text-xs text-[#94A3B8]">- {w}</p>)}
+                      {candidate.weaknesses.map((w, i) => <p key={i} className="text-xs text-slate-400">- {w}</p>)}
                     </div>
                   </div>
                 </div>
@@ -116,13 +121,14 @@ export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps
         })}
       </div>
 
-      <Button
+      <button
+        type="button"
         onClick={() => selectedId && onSubmit({ input: { selected: selectedId } })}
         disabled={!selectedId || disabled}
-        className="w-full"
+        className="w-full px-10 py-4 bg-[#6cd3f7] text-[#003543] font-bold uppercase tracking-widest text-sm hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(108,211,247,0.3)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 rounded-lg"
       >
         Confirm Selection
-      </Button>
+      </button>
     </div>
   )
 }

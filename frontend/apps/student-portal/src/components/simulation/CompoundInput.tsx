@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { DecisionInput } from './DecisionInput'
 
 interface CompoundConfig {
@@ -15,7 +14,7 @@ interface CompoundConfig {
 
 interface CompoundInputProps {
   config: CompoundConfig
-  onSubmit: (data: { input: { step1: any; step2: any } }) => void
+  onSubmit: (data: { input: Record<string, any> }) => void
   disabled?: boolean
 }
 
@@ -40,28 +39,39 @@ export function CompoundInput({ config, onSubmit, disabled }: CompoundInputProps
   const allStepsComplete = stepResults.length >= steps.length
 
   if (!step && !allStepsComplete) {
-    return <div className="text-sm text-gray-500">No steps configured.</div>
+    return <div className="text-sm text-slate-400">No steps configured.</div>
+  }
+
+  // Build dynamic step keys: step1, step2, step3, ...
+  const buildPayload = () => {
+    const input: Record<string, any> = {}
+    stepResults.forEach((result, i) => {
+      input[`step${i + 1}`] = result
+    })
+    return input
   }
 
   return (
-    <div className="space-y-4">
+    <div className="bg-[#222a3d] rounded-xl p-5 space-y-4">
       {/* Step indicator */}
-      <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+      <div className="flex items-center gap-2 text-sm mb-2">
         {steps.map((s, i) => (
           <div key={i} className="flex items-center gap-1">
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
               i < stepResults.length
-                ? 'bg-green-100 text-green-700'
+                ? 'bg-green-400/20 text-green-400'
                 : i === currentStep
-                  ? 'bg-primary-100 text-primary-700'
-                  : 'bg-gray-100 text-gray-400'
+                  ? 'bg-[#6cd3f7]/20 text-[#6cd3f7]'
+                  : 'bg-white/5 text-slate-500'
             }`}>
               {i + 1}
             </span>
-            <span className={i === currentStep ? 'font-medium text-gray-700' : ''}>
+            <span className={`text-xs uppercase tracking-widest ${
+              i === currentStep ? 'font-bold text-[#dbe2fb]' : 'text-slate-500'
+            }`}>
               {s.label || `Step ${i + 1}`}
             </span>
-            {i < steps.length - 1 && <span className="text-gray-300 mx-1">/</span>}
+            {i < steps.length - 1 && <span className="text-slate-600 mx-1">/</span>}
           </div>
         ))}
       </div>
@@ -77,14 +87,15 @@ export function CompoundInput({ config, onSubmit, disabled }: CompoundInputProps
       )}
 
       {allStepsComplete && (
-        <div className="pt-2">
-          <Button
-            onClick={() => onSubmit({ input: { step1: stepResults[0], step2: stepResults[1] } })}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={() => onSubmit({ input: buildPayload() })}
             disabled={disabled}
-            className="w-full"
+            className="w-full px-10 py-4 bg-[#6cd3f7] text-[#003543] font-bold uppercase tracking-widest text-sm hover:brightness-110 active:scale-95 transition-all shadow-[0_0_20px_rgba(108,211,247,0.3)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100 rounded-lg"
           >
             Submit Final Decision
-          </Button>
+          </button>
         </div>
       )}
     </div>
