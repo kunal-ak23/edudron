@@ -102,24 +102,43 @@ export function NegotiationInput({ config, onSubmit, disabled, negotiationHint }
       setLastNpcOffer(response.npcCounterOffer)
     } else {
       // No NPC response for this round — generate a synthetic response
-      // Move the NPC offer closer to the player's offer (split the difference)
-      const midPoint = Math.round((lastNpcOffer + amount) / 2)
+      const gap = Math.abs(lastNpcOffer - amount)
+      const gapPct = lastNpcOffer > 0 ? gap / lastNpcOffer : 1
+      // NPC only moves 20-30% toward the player's offer (doesn't split evenly)
+      const npcMove = lastNpcOffer > amount
+        ? lastNpcOffer - Math.round(gap * 0.25)
+        : lastNpcOffer + Math.round(gap * 0.25)
+
       if (currentRound >= rounds) {
-        // Final round with no response — NPC accepts the midpoint
-        setDialogHistory(prev => [...prev, {
-          speaker: npcName,
-          text: `Let's meet in the middle at ${unit}${midPoint.toLocaleString()}. Deal.`
-        }])
-        setResolved(true)
-        onSubmit({ input: { finalAmount: midPoint, acceptedRound: currentRound, walkedAway: false } })
-        return
+        // Final round — NPC makes a final offer slightly better than their last
+        const finalOffer = lastNpcOffer > amount
+          ? lastNpcOffer - Math.round(gap * 0.15)
+          : lastNpcOffer + Math.round(gap * 0.15)
+        if (gapPct > 0.5) {
+          // Too far apart — NPC walks away
+          setDialogHistory(prev => [...prev, {
+            speaker: npcName,
+            text: `We're too far apart. I can't go beyond ${unit}${finalOffer.toLocaleString()}. Take it or leave it.`
+          }])
+        } else {
+          setDialogHistory(prev => [...prev, {
+            speaker: npcName,
+            text: `Final offer: ${unit}${finalOffer.toLocaleString()}. I think that's fair for both sides.`
+          }])
+        }
+        setLastNpcOffer(finalOffer)
       } else {
-        // Mid-round — NPC counters with the midpoint
-        setDialogHistory(prev => [...prev, {
-          speaker: npcName,
-          text: `Hmm, that's a stretch. How about ${unit}${midPoint.toLocaleString()}?`
-        }])
-        setLastNpcOffer(midPoint)
+        // Mid-round — respond based on how far off the player is
+        let npcText: string
+        if (gapPct > 0.7) {
+          npcText = `That's not even close. I need at least ${unit}${npcMove.toLocaleString()} to have a conversation.`
+        } else if (gapPct > 0.4) {
+          npcText = `You'll need to do better than that. I could consider ${unit}${npcMove.toLocaleString()}.`
+        } else {
+          npcText = `Getting closer. How about ${unit}${npcMove.toLocaleString()}?`
+        }
+        setDialogHistory(prev => [...prev, { speaker: npcName, text: npcText }])
+        setLastNpcOffer(npcMove)
       }
     }
 
