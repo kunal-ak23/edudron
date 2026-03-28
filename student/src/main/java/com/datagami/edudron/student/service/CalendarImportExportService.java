@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class CalendarImportExportService {
@@ -31,12 +32,12 @@ public class CalendarImportExportService {
 
     private static final String[] IMPORT_HEADERS = {
             "title", "description", "eventType", "startDateTime", "endDateTime",
-            "allDay", "audience", "classCode", "sectionName", "meetingLink", "location"
+            "allDay", "audience", "classCodes", "sectionNames", "meetingLink", "location"
     };
 
     private static final String[] EXPORT_HEADERS = {
             "title", "description", "eventType", "startDateTime", "endDateTime",
-            "allDay", "audience", "classCode", "sectionName", "meetingLink", "location"
+            "allDay", "audience", "classCodes", "sectionNames", "meetingLink", "location"
     };
 
     private final CalendarEventRepository calendarEventRepository;
@@ -126,29 +127,41 @@ public class CalendarImportExportService {
             spec = spec.and((root, query, cb) ->
                     cb.lessThanOrEqualTo(root.get("startDateTime"), endDate));
         }
-        if (classId != null) {
-            spec = spec.and((root, query, cb) ->
-                    cb.equal(root.get("classId"), classId));
-        }
-        if (sectionId != null) {
-            spec = spec.and((root, query, cb) ->
-                    cb.equal(root.get("sectionId"), sectionId));
-        }
 
         List<CalendarEvent> events = calendarEventRepository.findAll(spec);
+
+        // If classId/sectionId filter is provided, filter in-memory (array containment)
+        if (classId != null) {
+            events = events.stream()
+                    .filter(e -> e.getClassIds() != null && e.getClassIds().contains(classId))
+                    .collect(Collectors.toList());
+        }
+        if (sectionId != null) {
+            events = events.stream()
+                    .filter(e -> e.getSectionIds() != null && e.getSectionIds().contains(sectionId))
+                    .collect(Collectors.toList());
+        }
 
         // Build lookup maps for class codes and section names
         Map<String, String> classCodeMap = new HashMap<>();
         Map<String, String> sectionNameMap = new HashMap<>();
 
         for (CalendarEvent event : events) {
-            if (event.getClassId() != null && !classCodeMap.containsKey(event.getClassId())) {
-                classRepository.findByIdAndClientId(event.getClassId(), clientId)
-                        .ifPresent(cls -> classCodeMap.put(event.getClassId(), cls.getCode()));
+            if (event.getClassIds() != null) {
+                for (String cid : event.getClassIds()) {
+                    if (!classCodeMap.containsKey(cid)) {
+                        classRepository.findByIdAndClientId(cid, clientId)
+                                .ifPresent(cls -> classCodeMap.put(cid, cls.getCode()));
+                    }
+                }
             }
-            if (event.getSectionId() != null && !sectionNameMap.containsKey(event.getSectionId())) {
-                sectionRepository.findByIdAndClientId(event.getSectionId(), clientId)
-                        .ifPresent(sec -> sectionNameMap.put(event.getSectionId(), sec.getName()));
+            if (event.getSectionIds() != null) {
+                for (String sid : event.getSectionIds()) {
+                    if (!sectionNameMap.containsKey(sid)) {
+                        sectionRepository.findByIdAndClientId(sid, clientId)
+                                .ifPresent(sec -> sectionNameMap.put(sid, sec.getName()));
+                    }
+                }
             }
         }
 
@@ -158,6 +171,22 @@ public class CalendarImportExportService {
                      CSVFormat.DEFAULT.builder().setHeader(EXPORT_HEADERS).build())) {
 
             for (CalendarEvent event : events) {
+                // Comma-separated class codes and section names
+                String classCodes = "";
+                if (event.getClassIds() != null) {
+                    classCodes = event.getClassIds().stream()
+                            .map(cid -> classCodeMap.getOrDefault(cid, ""))
+                            .filter(s -> !s.isEmpty())
+                            .collect(Collectors.joining(","));
+                }
+                String sectionNames = "";
+                if (event.getSectionIds() != null) {
+                    sectionNames = event.getSectionIds().stream()
+                            .map(sid -> sectionNameMap.getOrDefault(sid, ""))
+                            .filter(s -> !s.isEmpty())
+                            .collect(Collectors.joining(","));
+                }
+
                 printer.printRecord(
                         event.getTitle(),
                         event.getDescription(),
@@ -166,8 +195,8 @@ public class CalendarImportExportService {
                         event.getEndDateTime() != null ? event.getEndDateTime().toString() : "",
                         event.isAllDay(),
                         event.getAudience().name(),
-                        classCodeMap.getOrDefault(event.getClassId(), ""),
-                        sectionNameMap.getOrDefault(event.getSectionId(), ""),
+                        classCodes,
+                        sectionNames,
                         event.getMeetingLink() != null ? event.getMeetingLink() : "",
                         event.getLocation() != null ? event.getLocation() : ""
                 );
@@ -189,7 +218,7 @@ public class CalendarImportExportService {
                      new OutputStreamWriter(out, StandardCharsets.UTF_8),
                      CSVFormat.DEFAULT.builder().setHeader(IMPORT_HEADERS).build())) {
 
-            // Sample row to illustrate format
+            // Sample row to illustrate format (comma-separated class codes and section names)
             printer.printRecord(
                     "Mid-Term Exam",
                     "Mid-term examination for all sections",
@@ -198,7 +227,7 @@ public class CalendarImportExportService {
                     "2026-04-15T12:00:00+05:30",
                     "false",
                     "CLASS",
-                    "CS101",
+                    "CS101,CS102",
                     "",
                     "",
                     "Main Auditorium"
@@ -283,46 +312,56 @@ public class CalendarImportExportService {
         String allDayStr = getField(record, "allDay");
         boolean allDay = "true".equalsIgnoreCase(allDayStr != null ? allDayStr.trim() : "false");
 
-        // Resolve classCode -> classId
-        String classId = null;
-        String classCode = getField(record, "classCode");
-        if (classCode != null && !classCode.isBlank()) {
-            Optional<com.datagami.edudron.student.domain.Class> cls =
-                    classRepository.findByCodeAndClientId(classCode.trim(), clientId);
-            if (cls.isPresent()) {
-                classId = cls.get().getId();
-            } else {
-                errors.add(new ImportError(rowNumber, "Class not found with code: " + classCode));
-                return null;
+        // Resolve classCodes -> classIds (comma-separated)
+        List<String> classIds = new ArrayList<>();
+        String classCodesStr = getField(record, "classCodes");
+        if (classCodesStr != null && !classCodesStr.isBlank()) {
+            String[] classCodes = classCodesStr.split(",");
+            for (String code : classCodes) {
+                String trimmedCode = code.trim();
+                if (trimmedCode.isEmpty()) continue;
+                Optional<com.datagami.edudron.student.domain.Class> cls =
+                        classRepository.findByCodeAndClientId(trimmedCode, clientId);
+                if (cls.isPresent()) {
+                    classIds.add(cls.get().getId());
+                } else {
+                    errors.add(new ImportError(rowNumber, "Class not found with code: " + trimmedCode));
+                    return null;
+                }
             }
         }
 
-        // Resolve sectionName -> sectionId
-        String sectionId = null;
-        String sectionName = getField(record, "sectionName");
-        if (sectionName != null && !sectionName.isBlank()) {
-            Optional<Section> section;
-            if (classId != null) {
-                section = sectionRepository.findByNameAndClientIdAndClassId(sectionName.trim(), clientId, classId);
-            } else {
-                section = sectionRepository.findByNameAndClientId(sectionName.trim(), clientId);
-            }
-            if (section.isPresent()) {
-                sectionId = section.get().getId();
-            } else {
-                errors.add(new ImportError(rowNumber, "Section not found with name: " + sectionName
-                        + (classId != null ? " in class " + classCode : "")));
-                return null;
+        // Resolve sectionNames -> sectionIds (comma-separated)
+        List<String> sectionIds = new ArrayList<>();
+        String sectionNamesStr = getField(record, "sectionNames");
+        if (sectionNamesStr != null && !sectionNamesStr.isBlank()) {
+            String[] sectionNameArr = sectionNamesStr.split(",");
+            for (String name : sectionNameArr) {
+                String trimmedName = name.trim();
+                if (trimmedName.isEmpty()) continue;
+                Optional<Section> section;
+                if (!classIds.isEmpty()) {
+                    // Use first classId for context (best effort)
+                    section = sectionRepository.findByNameAndClientIdAndClassId(trimmedName, clientId, classIds.get(0));
+                } else {
+                    section = sectionRepository.findByNameAndClientId(trimmedName, clientId);
+                }
+                if (section.isPresent()) {
+                    sectionIds.add(section.get().getId());
+                } else {
+                    errors.add(new ImportError(rowNumber, "Section not found with name: " + trimmedName));
+                    return null;
+                }
             }
         }
 
         // Validate audience scoping
-        if (audience == EventAudience.CLASS && classId == null) {
-            errors.add(new ImportError(rowNumber, "classCode is required for CLASS audience events"));
+        if (audience == EventAudience.CLASS && classIds.isEmpty()) {
+            errors.add(new ImportError(rowNumber, "classCodes is required for CLASS audience events"));
             return null;
         }
-        if (audience == EventAudience.SECTION && sectionId == null) {
-            errors.add(new ImportError(rowNumber, "sectionName is required for SECTION audience events"));
+        if (audience == EventAudience.SECTION && sectionIds.isEmpty()) {
+            errors.add(new ImportError(rowNumber, "sectionNames is required for SECTION audience events"));
             return null;
         }
 
@@ -336,8 +375,8 @@ public class CalendarImportExportService {
         event.setEndDateTime(endDateTime);
         event.setAllDay(allDay);
         event.setAudience(audience);
-        event.setClassId(classId);
-        event.setSectionId(sectionId);
+        event.setClassIds(classIds.isEmpty() ? null : classIds);
+        event.setSectionIds(sectionIds.isEmpty() ? null : sectionIds);
         event.setCreatedByUserId(userId);
         event.setMeetingLink(getFieldOrNull(record, "meetingLink"));
         event.setLocation(getFieldOrNull(record, "location"));

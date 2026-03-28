@@ -198,8 +198,9 @@ public class RecurrenceGenerator {
         occurrence.setEndDateTime(duration != null ? start.plus(duration) : null);
         occurrence.setAllDay(parent.isAllDay());
         occurrence.setAudience(parent.getAudience());
-        occurrence.setClassId(parent.getClassId());
-        occurrence.setSectionId(parent.getSectionId());
+        occurrence.setClassIds(parent.getClassIds());
+        occurrence.setSectionIds(parent.getSectionIds());
+        occurrence.setTargetUserIds(parent.getTargetUserIds());
         occurrence.setCreatedByUserId(parent.getCreatedByUserId());
         occurrence.setRecurring(false);
         occurrence.setRecurrenceRule(null);

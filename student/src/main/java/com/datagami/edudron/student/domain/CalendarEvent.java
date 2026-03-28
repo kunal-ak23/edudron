@@ -5,6 +5,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -44,11 +45,17 @@ public class CalendarEvent {
     @Column(name = "audience", nullable = false)
     private EventAudience audience;
 
-    @Column(name = "class_id")
-    private String classId;
+    @Column(name = "class_ids", columnDefinition = "text[]")
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    private List<String> classIds;
 
-    @Column(name = "section_id")
-    private String sectionId;
+    @Column(name = "section_ids", columnDefinition = "text[]")
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    private List<String> sectionIds;
+
+    @Column(name = "target_user_ids", columnDefinition = "text[]")
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    private List<String> targetUserIds;
 
     @Column(name = "created_by_user_id")
     private String createdByUserId;
@@ -132,11 +139,14 @@ public class CalendarEvent {
     public EventAudience getAudience() { return audience; }
     public void setAudience(EventAudience audience) { this.audience = audience; }
 
-    public String getClassId() { return classId; }
-    public void setClassId(String classId) { this.classId = classId; }
+    public List<String> getClassIds() { return classIds; }
+    public void setClassIds(List<String> classIds) { this.classIds = classIds; }
 
-    public String getSectionId() { return sectionId; }
-    public void setSectionId(String sectionId) { this.sectionId = sectionId; }
+    public List<String> getSectionIds() { return sectionIds; }
+    public void setSectionIds(List<String> sectionIds) { this.sectionIds = sectionIds; }
+
+    public List<String> getTargetUserIds() { return targetUserIds; }
+    public void setTargetUserIds(List<String> targetUserIds) { this.targetUserIds = targetUserIds; }
 
     public String getCreatedByUserId() { return createdByUserId; }
     public void setCreatedByUserId(String createdByUserId) { this.createdByUserId = createdByUserId; }

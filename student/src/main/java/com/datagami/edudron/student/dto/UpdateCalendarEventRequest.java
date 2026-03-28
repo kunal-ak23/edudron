@@ -3,6 +3,7 @@ package com.datagami.edudron.student.dto;
 import com.datagami.edudron.student.domain.EventAudience;
 import com.datagami.edudron.student.domain.EventType;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 
 public class UpdateCalendarEventRequest {
@@ -14,8 +15,9 @@ public class UpdateCalendarEventRequest {
     private OffsetDateTime endDateTime;
     private Boolean allDay;
     private EventAudience audience;
-    private String classId;
-    private String sectionId;
+    private List<String> classIds;
+    private List<String> sectionIds;
+    private List<String> targetUserIds;
     private String meetingLink;
     private String location;
     private String color;
@@ -47,11 +49,14 @@ public class UpdateCalendarEventRequest {
     public EventAudience getAudience() { return audience; }
     public void setAudience(EventAudience audience) { this.audience = audience; }
 
-    public String getClassId() { return classId; }
-    public void setClassId(String classId) { this.classId = classId; }
+    public List<String> getClassIds() { return classIds; }
+    public void setClassIds(List<String> classIds) { this.classIds = classIds; }
 
-    public String getSectionId() { return sectionId; }
-    public void setSectionId(String sectionId) { this.sectionId = sectionId; }
+    public List<String> getSectionIds() { return sectionIds; }
+    public void setSectionIds(List<String> sectionIds) { this.sectionIds = sectionIds; }
+
+    public List<String> getTargetUserIds() { return targetUserIds; }
+    public void setTargetUserIds(List<String> targetUserIds) { this.targetUserIds = targetUserIds; }
 
     public String getMeetingLink() { return meetingLink; }
     public void setMeetingLink(String meetingLink) { this.meetingLink = meetingLink; }

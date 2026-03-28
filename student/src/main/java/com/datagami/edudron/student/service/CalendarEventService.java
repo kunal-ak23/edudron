@@ -9,7 +9,6 @@ import com.datagami.edudron.student.util.RecurrenceGenerator;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,8 +52,8 @@ public class CalendarEventService {
                                              String userId, String userEmail, String userRole) {
         UUID clientId = resolveClientId();
 
-        validateAudienceScoping(request.audience(), request.classId(), request.sectionId());
-        validateCreatePermission(userId, userRole, clientId, request.audience(), request.classId(), request.sectionId());
+        validateAudienceScoping(request.audience(), request.classIds(), request.sectionIds());
+        validateCreatePermission(userId, userRole, clientId, request.audience(), request.classIds(), request.sectionIds());
 
         CalendarEvent event = mapRequestToEntity(request, userId, clientId);
         calendarEventRepository.save(event);
@@ -116,29 +115,22 @@ public class CalendarEventService {
 
     @Transactional(readOnly = true)
     public List<CalendarEventResponse> getEvents(OffsetDateTime startDate, OffsetDateTime endDate,
-                                                  String classId, String sectionId,
+                                                  String filterClassId, String filterSectionId,
                                                   EventType eventType, EventAudience audience,
                                                   String userId, String userRole) {
         UUID clientId = resolveClientId();
+        String clientIdStr = clientId.toString();
 
-        Specification<CalendarEvent> spec = buildRoleBasedSpec(clientId, userId, userRole, startDate, endDate);
+        List<CalendarEvent> events = fetchRoleBasedEvents(clientIdStr, userId, userRole, startDate, endDate, clientId);
 
-        // Apply optional filters
-        if (classId != null) {
-            spec = spec.and(CalendarEventSpecification.filterByClassId(classId));
-        }
-        if (sectionId != null) {
-            spec = spec.and(CalendarEventSpecification.filterBySectionId(sectionId));
-        }
-        if (eventType != null) {
-            spec = spec.and(CalendarEventSpecification.filterByEventType(eventType));
-        }
-        if (audience != null) {
-            spec = spec.and(CalendarEventSpecification.filterByAudience(audience));
-        }
-
-        List<CalendarEvent> events = calendarEventRepository.findAll(spec);
-        return events.stream().map(this::toResponse).collect(Collectors.toList());
+        // Apply optional in-memory filters (classId, sectionId, eventType, audience)
+        return events.stream()
+                .filter(e -> filterClassId == null || (e.getClassIds() != null && e.getClassIds().contains(filterClassId)))
+                .filter(e -> filterSectionId == null || (e.getSectionIds() != null && e.getSectionIds().contains(filterSectionId)))
+                .filter(e -> eventType == null || e.getEventType() == eventType)
+                .filter(e -> audience == null || e.getAudience() == audience)
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
@@ -241,20 +233,44 @@ public class CalendarEventService {
     // ---- Helpers ----
 
     private CalendarEventResponse toResponse(CalendarEvent event) {
-        String className = null;
-        String sectionName = null;
+        List<String> classNames = null;
+        List<String> sectionNames = null;
+        List<String> targetUserNames = null;
         String createdByName = null;
 
-        if (event.getClassId() != null) {
-            className = classRepository.findById(event.getClassId())
-                    .map(com.datagami.edudron.student.domain.Class::getName)
-                    .orElse(null);
+        if (event.getClassIds() != null && !event.getClassIds().isEmpty()) {
+            classNames = event.getClassIds().stream()
+                    .map(cid -> classRepository.findById(cid)
+                            .map(com.datagami.edudron.student.domain.Class::getName)
+                            .orElse(null))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
         }
 
-        if (event.getSectionId() != null) {
-            sectionName = sectionRepository.findById(event.getSectionId())
-                    .map(Section::getName)
-                    .orElse(null);
+        if (event.getSectionIds() != null && !event.getSectionIds().isEmpty()) {
+            sectionNames = event.getSectionIds().stream()
+                    .map(sid -> sectionRepository.findById(sid)
+                            .map(Section::getName)
+                            .orElse(null))
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+        }
+
+        if (event.getTargetUserIds() != null && !event.getTargetUserIds().isEmpty()) {
+            targetUserNames = event.getTargetUserIds().stream()
+                    .map(uid -> {
+                        try {
+                            JsonNode user = identityUserClient.getUser(uid);
+                            if (user != null && user.has("name")) {
+                                return user.get("name").asText();
+                            }
+                        } catch (Exception e) {
+                            logger.warn("Failed to resolve user name for userId {}: {}", uid, e.getMessage());
+                        }
+                        return null;
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
         }
 
         if (event.getCreatedByUserId() != null) {
@@ -278,10 +294,12 @@ public class CalendarEventService {
                 event.getEndDateTime(),
                 event.isAllDay(),
                 event.getAudience(),
-                event.getClassId(),
-                className,
-                event.getSectionId(),
-                sectionName,
+                event.getClassIds(),
+                classNames,
+                event.getSectionIds(),
+                sectionNames,
+                event.getTargetUserIds(),
+                targetUserNames,
                 event.getCreatedByUserId(),
                 createdByName,
                 event.isRecurring(),
@@ -326,18 +344,24 @@ public class CalendarEventService {
     }
 
     private void validateCoordinatorPermission(String userId, UUID clientId,
-                                               EventAudience audience, String classId, String sectionId) {
+                                               EventAudience audience, List<String> classIds, List<String> sectionIds) {
         if (audience == EventAudience.CLASS) {
-            com.datagami.edudron.student.domain.Class cls = classRepository.findByIdAndClientId(classId, clientId)
-                    .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
-            if (!userId.equals(cls.getCoordinatorUserId())) {
-                throw new IllegalStateException("Only the class coordinator can create CLASS events for this class");
+            if (classIds == null || classIds.isEmpty()) return;
+            for (String classId : classIds) {
+                com.datagami.edudron.student.domain.Class cls = classRepository.findByIdAndClientId(classId, clientId)
+                        .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
+                if (!userId.equals(cls.getCoordinatorUserId())) {
+                    throw new IllegalStateException("Only the class coordinator can create CLASS events for class: " + classId);
+                }
             }
         } else if (audience == EventAudience.SECTION) {
-            Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
-                    .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
-            if (!userId.equals(section.getCoordinatorUserId())) {
-                throw new IllegalStateException("Only the section coordinator can create SECTION events for this section");
+            if (sectionIds == null || sectionIds.isEmpty()) return;
+            for (String sectionId : sectionIds) {
+                Section section = sectionRepository.findByIdAndClientId(sectionId, clientId)
+                        .orElseThrow(() -> new IllegalArgumentException("Section not found: " + sectionId));
+                if (!userId.equals(section.getCoordinatorUserId())) {
+                    throw new IllegalStateException("Only the section coordinator can create SECTION events for section: " + sectionId);
+                }
             }
         } else if (audience == EventAudience.TENANT_WIDE || audience == EventAudience.FACULTY_ONLY) {
             throw new IllegalStateException("Instructors cannot create TENANT_WIDE or FACULTY_ONLY events");
@@ -352,17 +376,17 @@ public class CalendarEventService {
         return UUID.fromString(clientIdStr);
     }
 
-    private void validateAudienceScoping(EventAudience audience, String classId, String sectionId) {
-        if (audience == EventAudience.CLASS && (classId == null || classId.isBlank())) {
-            throw new IllegalArgumentException("classId is required for CLASS audience events");
+    private void validateAudienceScoping(EventAudience audience, List<String> classIds, List<String> sectionIds) {
+        if (audience == EventAudience.CLASS && (classIds == null || classIds.isEmpty())) {
+            throw new IllegalArgumentException("classIds is required for CLASS audience events");
         }
-        if (audience == EventAudience.SECTION && (sectionId == null || sectionId.isBlank())) {
-            throw new IllegalArgumentException("sectionId is required for SECTION audience events");
+        if (audience == EventAudience.SECTION && (sectionIds == null || sectionIds.isEmpty())) {
+            throw new IllegalArgumentException("sectionIds is required for SECTION audience events");
         }
     }
 
     private void validateCreatePermission(String userId, String userRole, UUID clientId,
-                                          EventAudience audience, String classId, String sectionId) {
+                                          EventAudience audience, List<String> classIds, List<String> sectionIds) {
         if (userRole == null) {
             throw new IllegalStateException("User role not available. Please re-authenticate.");
         }
@@ -375,7 +399,7 @@ public class CalendarEventService {
                 if (audience == EventAudience.PERSONAL) {
                     break; // Instructors can always create personal events
                 }
-                validateCoordinatorPermission(userId, clientId, audience, classId, sectionId);
+                validateCoordinatorPermission(userId, clientId, audience, classIds, sectionIds);
                 break;
             case "STUDENT":
                 if (audience != EventAudience.PERSONAL) {
@@ -398,8 +422,9 @@ public class CalendarEventService {
         event.setEndDateTime(request.endDateTime());
         event.setAllDay(request.allDay());
         event.setAudience(request.audience());
-        event.setClassId(request.classId());
-        event.setSectionId(request.sectionId());
+        event.setClassIds(request.classIds());
+        event.setSectionIds(request.sectionIds());
+        event.setTargetUserIds(request.targetUserIds());
         event.setCreatedByUserId(userId);
         event.setRecurring(request.isRecurring());
         event.setRecurrenceRule(request.recurrenceRule());
@@ -410,27 +435,37 @@ public class CalendarEventService {
         return event;
     }
 
-    private Specification<CalendarEvent> buildRoleBasedSpec(UUID clientId, String userId, String userRole,
-                                                            OffsetDateTime startDate, OffsetDateTime endDate) {
+    private List<CalendarEvent> fetchRoleBasedEvents(String clientIdStr, String userId, String userRole,
+                                                      OffsetDateTime startDate, OffsetDateTime endDate, UUID clientId) {
         if (userRole == null) userRole = "";
         switch (userRole) {
-            case "STUDENT":
+            case "STUDENT": {
                 Set<String> studentClassIds = resolveStudentClassIds(userId, clientId);
                 Set<String> studentSectionIds = resolveStudentSectionIds(userId, clientId);
-                return CalendarEventSpecification.forStudent(clientId, userId, studentClassIds, studentSectionIds,
-                        startDate, endDate);
-            case "INSTRUCTOR":
+                return calendarEventRepository.findEventsForStudent(
+                        clientIdStr, startDate, endDate,
+                        studentClassIds.toArray(new String[0]),
+                        studentSectionIds.toArray(new String[0]),
+                        userId);
+            }
+            case "INSTRUCTOR": {
                 Set<String> instrClassIds = resolveInstructorClassIds(userId, clientId);
                 Set<String> instrSectionIds = resolveInstructorSectionIds(userId, clientId);
-                return CalendarEventSpecification.forInstructor(clientId, userId, instrClassIds, instrSectionIds,
-                        startDate, endDate);
+                return calendarEventRepository.findEventsForInstructor(
+                        clientIdStr, startDate, endDate,
+                        instrClassIds.toArray(new String[0]),
+                        instrSectionIds.toArray(new String[0]),
+                        userId,
+                        new String[]{userId});
+            }
             case "SYSTEM_ADMIN":
             case "TENANT_ADMIN":
-                return CalendarEventSpecification.forAdmin(clientId, userId, startDate, endDate);
+                return calendarEventRepository.findEventsForAdmin(clientIdStr, startDate, endDate, userId);
             default:
-                // Fallback: only personal events
-                return CalendarEventSpecification.forStudent(clientId, userId, Set.of(), Set.of(),
-                        startDate, endDate);
+                // Fallback: only personal events (use student query with empty arrays)
+                return calendarEventRepository.findEventsForStudent(
+                        clientIdStr, startDate, endDate,
+                        new String[0], new String[0], userId);
         }
     }
 
@@ -451,10 +486,14 @@ public class CalendarEventService {
             return;
         }
 
-        // FACULTY_ONLY: only instructors and admins
+        // FACULTY_ONLY: only instructors and admins; if targetUserIds set, must be in list
         if (event.getAudience() == EventAudience.FACULTY_ONLY) {
             if ("STUDENT".equals(userRole)) {
                 throw new IllegalStateException("Students cannot access faculty-only events");
+            }
+            if (event.getTargetUserIds() != null && !event.getTargetUserIds().isEmpty()
+                    && !event.getTargetUserIds().contains(userId)) {
+                throw new IllegalStateException("This faculty event is not targeted to you");
             }
             return;
         }
@@ -468,25 +507,25 @@ public class CalendarEventService {
         if ("STUDENT".equals(userRole)) {
             if (event.getAudience() == EventAudience.CLASS) {
                 Set<String> classIds = resolveStudentClassIds(userId, clientId);
-                if (!classIds.contains(event.getClassId())) {
-                    throw new IllegalStateException("Student is not enrolled in this class");
+                if (event.getClassIds() == null || Collections.disjoint(classIds, event.getClassIds())) {
+                    throw new IllegalStateException("Student is not enrolled in any of the target classes");
                 }
             } else if (event.getAudience() == EventAudience.SECTION) {
                 Set<String> sectionIds = resolveStudentSectionIds(userId, clientId);
-                if (!sectionIds.contains(event.getSectionId())) {
-                    throw new IllegalStateException("Student is not enrolled in this section");
+                if (event.getSectionIds() == null || Collections.disjoint(sectionIds, event.getSectionIds())) {
+                    throw new IllegalStateException("Student is not enrolled in any of the target sections");
                 }
             }
         } else if ("INSTRUCTOR".equals(userRole)) {
             if (event.getAudience() == EventAudience.CLASS) {
                 Set<String> classIds = resolveInstructorClassIds(userId, clientId);
-                if (!classIds.contains(event.getClassId())) {
-                    throw new IllegalStateException("Instructor is not assigned to this class");
+                if (event.getClassIds() == null || Collections.disjoint(classIds, event.getClassIds())) {
+                    throw new IllegalStateException("Instructor is not assigned to any of the target classes");
                 }
             } else if (event.getAudience() == EventAudience.SECTION) {
                 Set<String> sectionIds = resolveInstructorSectionIds(userId, clientId);
-                if (!sectionIds.contains(event.getSectionId())) {
-                    throw new IllegalStateException("Instructor is not assigned to this section");
+                if (event.getSectionIds() == null || Collections.disjoint(sectionIds, event.getSectionIds())) {
+                    throw new IllegalStateException("Instructor is not assigned to any of the target sections");
                 }
             }
         }
@@ -533,13 +572,17 @@ public class CalendarEventService {
             changes.put("audience", request.getAudience().name());
             event.setAudience(request.getAudience());
         }
-        if (request.getClassId() != null) {
-            changes.put("classId", request.getClassId());
-            event.setClassId(request.getClassId());
+        if (request.getClassIds() != null) {
+            changes.put("classIds", request.getClassIds().toString());
+            event.setClassIds(request.getClassIds());
         }
-        if (request.getSectionId() != null) {
-            changes.put("sectionId", request.getSectionId());
-            event.setSectionId(request.getSectionId());
+        if (request.getSectionIds() != null) {
+            changes.put("sectionIds", request.getSectionIds().toString());
+            event.setSectionIds(request.getSectionIds());
+        }
+        if (request.getTargetUserIds() != null) {
+            changes.put("targetUserIds", request.getTargetUserIds().toString());
+            event.setTargetUserIds(request.getTargetUserIds());
         }
         if (request.getMeetingLink() != null) {
             changes.put("meetingLink", request.getMeetingLink());

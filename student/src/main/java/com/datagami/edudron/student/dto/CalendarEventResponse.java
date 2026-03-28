@@ -3,6 +3,7 @@ package com.datagami.edudron.student.dto;
 import com.datagami.edudron.student.domain.EventAudience;
 import com.datagami.edudron.student.domain.EventType;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 
 public record CalendarEventResponse(
@@ -15,10 +16,12 @@ public record CalendarEventResponse(
     OffsetDateTime endDateTime,
     boolean allDay,
     EventAudience audience,
-    String classId,
-    String className,
-    String sectionId,
-    String sectionName,
+    List<String> classIds,
+    List<String> classNames,
+    List<String> sectionIds,
+    List<String> sectionNames,
+    List<String> targetUserIds,
+    List<String> targetUserNames,
     String createdByUserId,
     String createdByName,
     boolean isRecurring,

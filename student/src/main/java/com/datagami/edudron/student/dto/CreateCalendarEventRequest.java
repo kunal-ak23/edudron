@@ -5,6 +5,7 @@ import com.datagami.edudron.student.domain.EventType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Map;
 
 public record CreateCalendarEventRequest(
@@ -16,8 +17,9 @@ public record CreateCalendarEventRequest(
     OffsetDateTime endDateTime,
     boolean allDay,
     @NotNull(message = "Audience is required") EventAudience audience,
-    String classId,
-    String sectionId,
+    List<String> classIds,
+    List<String> sectionIds,
+    List<String> targetUserIds,
     boolean isRecurring,
     String recurrenceRule,
     String meetingLink,

@@ -1,0 +1,48 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0030-calendar-multi-target
+      author: edudron
+      changes:
+        - addColumn:
+            schemaName: calendar
+            tableName: calendar_events
+            columns:
+              - column:
+                  name: class_ids
+                  type: text[]
+              - column:
+                  name: section_ids
+                  type: text[]
+              - column:
+                  name: target_user_ids
+                  type: text[]
+        - sql:
+            sql: |
+              UPDATE calendar.calendar_events SET class_ids = ARRAY[class_id] WHERE class_id IS NOT NULL;
+              UPDATE calendar.calendar_events SET section_ids = ARRAY[section_id] WHERE section_id IS NOT NULL;
+        - dropColumn:
+            schemaName: calendar
+            tableName: calendar_events
+            columnName: class_id
+        - dropColumn:
+            schemaName: calendar
+            tableName: calendar_events
+            columnName: section_id
+        - dropIndex:
+            schemaName: calendar
+            indexName: idx_cal_events_client_class
+        - dropIndex:
+            schemaName: calendar
+            indexName: idx_cal_events_client_section
+        - createIndex:
+            schemaName: calendar
+            tableName: calendar_events
+            indexName: idx_cal_events_client_class_ids
+            columns:
+              - column: { name: class_ids }
+        - createIndex:
+            schemaName: calendar
+            tableName: calendar_events
+            indexName: idx_cal_events_client_section_ids
+            columns:
+              - column: { name: section_ids }
