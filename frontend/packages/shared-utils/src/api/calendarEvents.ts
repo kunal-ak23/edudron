@@ -31,8 +31,14 @@ export interface CalendarEvent {
   audience: EventAudience
   classId?: string
   className?: string
+  classIds?: string[]
+  classNames?: string[]
   sectionId?: string
   sectionName?: string
+  sectionIds?: string[]
+  sectionNames?: string[]
+  targetUserIds?: string[]
+  targetUserNames?: string[]
   createdByUserId: string
   createdByName?: string
   isRecurring: boolean
@@ -57,6 +63,9 @@ export interface CreateCalendarEventInput {
   audience: EventAudience
   classId?: string
   sectionId?: string
+  classIds?: string[]
+  sectionIds?: string[]
+  targetUserIds?: string[]
   isRecurring?: boolean
   recurrenceRule?: string
   meetingLink?: string

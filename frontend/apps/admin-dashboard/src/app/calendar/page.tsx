@@ -40,6 +40,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import {
   CalendarDays,
   Plus,
   Download,
@@ -53,6 +58,7 @@ import {
   Trash2,
   Clock,
   Users,
+  ChevronsUpDown,
 } from 'lucide-react'
 import { calendarEventsApi, apiClient, sectionsApi } from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
@@ -107,6 +113,52 @@ interface SectionItem {
   classId: string
 }
 
+interface InstructorItem {
+  id: string
+  name: string
+  email: string
+}
+
+// -- Reusable MultiSelect dropdown --
+function MultiSelect({ label, options, selected, onChange }: {
+  label: string
+  options: { value: string; label: string }[]
+  selected: string[]
+  onChange: (selected: string[]) => void
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="w-full justify-between text-left font-normal h-10">
+          <span className="truncate">
+            {selected.length === 0 ? `Select ${label}...` : `${selected.length} selected`}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-2 max-h-60 overflow-auto" align="start">
+        {options.length === 0 && (
+          <p className="text-sm text-muted-foreground px-2 py-1.5">No options available</p>
+        )}
+        {options.map(opt => (
+          <label key={opt.value} className="flex items-center gap-2 px-2 py-1.5 hover:bg-accent rounded cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              checked={selected.includes(opt.value)}
+              onChange={e => {
+                if (e.target.checked) onChange([...selected, opt.value])
+                else onChange(selected.filter(v => v !== opt.value))
+              }}
+              className="rounded border-gray-300"
+            />
+            {opt.label}
+          </label>
+        ))}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 // -- Helper: convert CalendarEvent to FullCalendar EventInput --
 function toFcEvent(evt: CalendarEvent): EventInput {
   const colors = EVENT_TYPE_COLORS[evt.eventType] || EVENT_TYPE_COLORS.GENERAL
@@ -140,7 +192,7 @@ function toDatetimeLocal(iso?: string): string {
 }
 
 // -- Default empty form state --
-function emptyForm(): CreateCalendarEventInput & { _allDay: boolean; _recurring: boolean; _frequency: string; _days: string[]; _count: string; _until: string } {
+function emptyForm(): CreateCalendarEventInput & { _allDay: boolean; _recurring: boolean; _frequency: string; _days: string[]; _count: string; _until: string; _classIds: string[]; _sectionIds: string[]; _targetUserIds: string[] } {
   return {
     title: '',
     description: '',
@@ -152,6 +204,9 @@ function emptyForm(): CreateCalendarEventInput & { _allDay: boolean; _recurring:
     audience: EventAudience.TENANT_WIDE,
     classId: '',
     sectionId: '',
+    classIds: [],
+    sectionIds: [],
+    targetUserIds: [],
     isRecurring: false,
     recurrenceRule: '',
     meetingLink: '',
@@ -163,6 +218,9 @@ function emptyForm(): CreateCalendarEventInput & { _allDay: boolean; _recurring:
     _days: [],
     _count: '10',
     _until: '',
+    _classIds: [],
+    _sectionIds: [],
+    _targetUserIds: [],
   }
 }
 
@@ -208,6 +266,7 @@ export default function CalendarPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(emptyForm())
   const [formSections, setFormSections] = useState<SectionItem[]>([])
+  const [instructors, setInstructors] = useState<InstructorItem[]>([])
   const [saving, setSaving] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingEvent, setDeletingEvent] = useState<CalendarEvent | null>(null)
@@ -252,22 +311,40 @@ export default function CalendarPage() {
     load()
   }, [filterClassId])
 
-  // -- Load sections for form when form classId changes --
+  // -- Load sections for form when form classIds change --
   useEffect(() => {
-    if (!form.classId) {
+    const ids = form._classIds
+    if (!ids || ids.length === 0) {
       setFormSections([])
       return
     }
     const load = async () => {
       try {
-        const data = await sectionsApi.listSectionsByClass(form.classId!)
-        setFormSections((data || []).map((s: any) => ({ id: s.id, name: s.name, classId: s.classId })))
+        const results = await Promise.all(
+          ids.map(cid => sectionsApi.listSectionsByClass(cid))
+        )
+        const allSections = results.flat().map((s: any) => ({ id: s.id, name: s.name, classId: s.classId }))
+        setFormSections(allSections)
       } catch {
         setFormSections([])
       }
     }
     load()
-  }, [form.classId])
+  }, [form._classIds])
+
+  // -- Load instructors on mount --
+  useEffect(() => {
+    const loadInstructors = async () => {
+      try {
+        const response = await apiClient.get<{ content: { id: string; name: string; email: string }[] }>('/idp/users/paginated?role=INSTRUCTOR&size=100')
+        const users = response.data?.content || []
+        setInstructors(users.map(u => ({ id: u.id, name: u.name || u.email, email: u.email })))
+      } catch {
+        // ignore
+      }
+    }
+    loadInstructors()
+  }, [])
 
   // -- Fetch events --
   const fetchEvents = useCallback(async (start: string, end: string) => {
@@ -334,6 +411,10 @@ export default function CalendarPage() {
   const openEditForm = (evt: CalendarEvent) => {
     setDetailEvent(null)
     setEditingId(evt.id)
+    // Populate classIds from array field or fall back to single classId
+    const classIds = evt.classIds && evt.classIds.length > 0 ? evt.classIds : (evt.classId ? [evt.classId] : [])
+    const sectionIds = evt.sectionIds && evt.sectionIds.length > 0 ? evt.sectionIds : (evt.sectionId ? [evt.sectionId] : [])
+    const targetUserIds = evt.targetUserIds || []
     setForm({
       title: evt.title,
       description: evt.description || '',
@@ -345,6 +426,9 @@ export default function CalendarPage() {
       audience: evt.audience,
       classId: evt.classId || '',
       sectionId: evt.sectionId || '',
+      classIds: classIds,
+      sectionIds: sectionIds,
+      targetUserIds: targetUserIds,
       isRecurring: evt.isRecurring,
       recurrenceRule: evt.recurrenceRule || '',
       meetingLink: evt.meetingLink || '',
@@ -355,6 +439,9 @@ export default function CalendarPage() {
       _days: [],
       _count: '10',
       _until: '',
+      _classIds: classIds,
+      _sectionIds: sectionIds,
+      _targetUserIds: targetUserIds,
     })
     setFormOpen(true)
   }
@@ -380,8 +467,12 @@ export default function CalendarPage() {
         endDateTime: form.endDateTime ? new Date(form.endDateTime).toISOString() : undefined,
         allDay: form._allDay,
         audience: form.audience as EventAudience,
-        classId: (form.audience === EventAudience.CLASS || form.audience === EventAudience.SECTION) ? form.classId || undefined : undefined,
-        sectionId: form.audience === EventAudience.SECTION ? form.sectionId || undefined : undefined,
+        classIds: (form.audience === EventAudience.CLASS || form.audience === EventAudience.SECTION) && form._classIds.length > 0 ? form._classIds : undefined,
+        sectionIds: form.audience === EventAudience.SECTION && form._sectionIds.length > 0 ? form._sectionIds : undefined,
+        targetUserIds: form.audience === EventAudience.FACULTY_ONLY && form._targetUserIds.length > 0 ? form._targetUserIds : undefined,
+        // Keep legacy single fields for backward compat
+        classId: (form.audience === EventAudience.CLASS || form.audience === EventAudience.SECTION) && form._classIds.length === 1 ? form._classIds[0] : undefined,
+        sectionId: form.audience === EventAudience.SECTION && form._sectionIds.length === 1 ? form._sectionIds[0] : undefined,
         isRecurring: form._recurring,
         recurrenceRule: form._recurring ? buildRRule(form) : undefined,
         meetingLink: form.meetingLink || undefined,
@@ -625,18 +716,47 @@ export default function CalendarPage() {
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap">{detailEvent.description}</p>
                   )}
 
-                  {/* Class / Section */}
-                  {(detailEvent.className || detailEvent.sectionName) && (
-                    <div className="text-sm">
-                      {detailEvent.className && <span className="font-medium">Class: </span>}
-                      {detailEvent.className && <span>{detailEvent.className}</span>}
-                      {detailEvent.sectionName && (
-                        <>
-                          {detailEvent.className && <span className="mx-1">/</span>}
-                          <span className="font-medium">Section: </span>
-                          <span>{detailEvent.sectionName}</span>
-                        </>
+                  {/* Classes / Sections / Target Instructors */}
+                  {(detailEvent.classNames?.length || detailEvent.className || detailEvent.sectionNames?.length || detailEvent.sectionName) && (
+                    <div className="space-y-1.5 text-sm">
+                      {(detailEvent.classNames?.length || detailEvent.className) && (
+                        <div>
+                          <span className="font-medium">Class: </span>
+                          <span className="flex flex-wrap gap-1 mt-0.5 inline">
+                            {(detailEvent.classNames && detailEvent.classNames.length > 0
+                              ? detailEvent.classNames
+                              : detailEvent.className ? [detailEvent.className] : []
+                            ).map((name, i) => (
+                              <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
+                            ))}
+                          </span>
+                        </div>
                       )}
+                      {(detailEvent.sectionNames?.length || detailEvent.sectionName) && (
+                        <div>
+                          <span className="font-medium">Section: </span>
+                          <span className="flex flex-wrap gap-1 mt-0.5 inline">
+                            {(detailEvent.sectionNames && detailEvent.sectionNames.length > 0
+                              ? detailEvent.sectionNames
+                              : detailEvent.sectionName ? [detailEvent.sectionName] : []
+                            ).map((name, i) => (
+                              <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
+                            ))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Target instructors */}
+                  {detailEvent.targetUserNames && detailEvent.targetUserNames.length > 0 && (
+                    <div className="text-sm">
+                      <span className="font-medium">Instructors: </span>
+                      <span className="flex flex-wrap gap-1 mt-0.5 inline">
+                        {detailEvent.targetUserNames.map((name, i) => (
+                          <Badge key={i} variant="secondary" className="text-xs">{name}</Badge>
+                        ))}
+                      </span>
                     </div>
                   )}
 
@@ -837,7 +957,7 @@ export default function CalendarPage() {
             {/* Audience */}
             <div className="space-y-1.5">
               <Label>Audience</Label>
-              <Select value={form.audience} onValueChange={(v: string) => updateForm({ audience: v as EventAudience, classId: '', sectionId: '' })}>
+              <Select value={form.audience} onValueChange={(v: string) => updateForm({ audience: v as EventAudience, classId: '', sectionId: '', _classIds: [], _sectionIds: [], _targetUserIds: [] })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(AUDIENCE_LABELS).map(([val, label]) => (
@@ -847,39 +967,51 @@ export default function CalendarPage() {
               </Select>
             </div>
 
-            {/* Class (when audience is CLASS or SECTION) */}
+            {/* Classes multi-select (when audience is CLASS or SECTION) */}
             {(form.audience === EventAudience.CLASS || form.audience === EventAudience.SECTION) && (
               <div className="space-y-1.5">
-                <Label>Class</Label>
-                <Select value={form.classId || '_none'} onValueChange={(v: string) => updateForm({ classId: v === '_none' ? '' : v, sectionId: '' })}>
-                  <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">-- Select --</SelectItem>
-                    {classes.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Classes</Label>
+                <MultiSelect
+                  label="classes"
+                  options={classes.map(c => ({ value: c.id, label: c.name }))}
+                  selected={form._classIds}
+                  onChange={(ids) => updateForm({ _classIds: ids, _sectionIds: [] })}
+                />
               </div>
             )}
 
-            {/* Section (when audience is SECTION) */}
+            {/* Sections multi-select (when audience is SECTION) */}
             {form.audience === EventAudience.SECTION && (
               <div className="space-y-1.5">
-                <Label>Section</Label>
-                <Select
-                  value={form.sectionId || '_none'}
-                  onValueChange={(v: string) => updateForm({ sectionId: v === '_none' ? '' : v })}
-                  disabled={!form.classId}
-                >
-                  <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="_none">-- Select --</SelectItem>
-                    {formSections.map(s => (
-                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Sections</Label>
+                <MultiSelect
+                  label="sections"
+                  options={formSections.map(s => {
+                    const cls = classes.find(c => c.id === s.classId)
+                    return { value: s.id, label: cls ? `${cls.name} - ${s.name}` : s.name }
+                  })}
+                  selected={form._sectionIds}
+                  onChange={(ids) => updateForm({ _sectionIds: ids })}
+                />
+                {form._classIds.length === 0 && (
+                  <p className="text-xs text-muted-foreground">Select at least one class first</p>
+                )}
+              </div>
+            )}
+
+            {/* Instructor targeting (when audience is FACULTY_ONLY) */}
+            {form.audience === EventAudience.FACULTY_ONLY && (
+              <div className="space-y-1.5">
+                <Label>Target Instructors</Label>
+                <MultiSelect
+                  label="instructors"
+                  options={instructors.map(i => ({ value: i.id, label: `${i.name} (${i.email})` }))}
+                  selected={form._targetUserIds}
+                  onChange={(ids) => updateForm({ _targetUserIds: ids })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {form._targetUserIds.length === 0 ? 'Leave empty for all instructors' : `${form._targetUserIds.length} instructor(s) selected`}
+                </p>
               </div>
             )}
 
