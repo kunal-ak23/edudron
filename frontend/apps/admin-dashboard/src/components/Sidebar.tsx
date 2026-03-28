@@ -33,7 +33,9 @@ import {
   Layers,
   Gamepad2,
   FolderKanban,
-  CalendarDays
+  CalendarDays,
+  FileSpreadsheet,
+  Award
 } from 'lucide-react'
 
 interface MenuItem {
@@ -139,6 +141,18 @@ const menuItems: MenuItem[] = [
       { name: 'All Projects', href: '/projects', icon: FolderKanban },
       { name: 'Problem Statements', href: '/project-questions', icon: FileText },
     ]
+  },
+  {
+    name: 'Results',
+    href: '/results',
+    icon: FileSpreadsheet,
+    requiresTenant: true,
+  },
+  {
+    name: 'Certificates',
+    href: '/certificates',
+    icon: Award,
+    requiresTenant: true,
   },
   {
     name: 'Enrollments',
@@ -320,6 +334,8 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
     if (path.startsWith('/exams') || path.startsWith('/question-bank')) return 'Exams'
     if (path.startsWith('/simulations')) return 'Simulations'
     if (path.startsWith('/projects') || path.startsWith('/project-questions')) return 'Projects'
+    if (path.startsWith('/results')) return 'Results'
+    if (path.startsWith('/certificates')) return 'Certificates'
     if (path.startsWith('/enrollments')) return 'Enrollments'
     if (path.startsWith('/calendar')) return 'Calendar'
     if (path.startsWith('/analytics')) return 'Analytics'
