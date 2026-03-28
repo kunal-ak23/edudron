@@ -841,257 +841,190 @@ export default function CalendarPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ---- Create/Edit Form Dialog ---- */}
+      {/* ---- Create/Edit Form Dialog (Outlook-style) ---- */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit Event' : 'Create Event'}</DialogTitle>
-            <DialogDescription>
-              {editingId ? 'Update the event details below.' : 'Fill in the details to create a new calendar event.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 mt-2">
-            {/* Title */}
-            <div className="space-y-1.5">
-              <Label htmlFor="evt-title">Title *</Label>
-              <Input id="evt-title" value={form.title} onChange={e => updateForm({ title: e.target.value })} placeholder="Event title" />
-            </div>
-
-            {/* Description */}
-            <div className="space-y-1.5">
-              <Label htmlFor="evt-desc">Description</Label>
-              <Textarea id="evt-desc" value={form.description || ''} onChange={e => updateForm({ description: e.target.value })} rows={3} placeholder="Optional description" />
-            </div>
-
-            {/* Event Type */}
-            <div className="space-y-1.5">
-              <Label>Event Type</Label>
-              <Select value={form.eventType} onValueChange={(v: string) => updateForm({ eventType: v as EventType })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(EVENT_TYPE_LABELS).map(([val, label]) => (
-                    <SelectItem key={val} value={val}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Custom label */}
-            {form.eventType === EventType.CUSTOM && (
-              <div className="space-y-1.5">
-                <Label htmlFor="evt-custom-label">Custom Type Label</Label>
-                <Input id="evt-custom-label" value={form.customTypeLabel || ''} onChange={e => updateForm({ customTypeLabel: e.target.value })} placeholder="e.g. Sports Day" />
-              </div>
-            )}
-
-            {/* All Day */}
-            <div className="flex items-center justify-between">
-              <Label htmlFor="evt-allday">All Day</Label>
-              <Switch id="evt-allday" checked={form._allDay} onCheckedChange={(v: boolean) => updateForm({ _allDay: v, allDay: v })} />
-            </div>
-
-            {/* Start */}
-            <div className="space-y-1.5">
-              <Label>Start {form._allDay ? 'Date' : 'Date & Time'} *</Label>
-              {form._allDay ? (
-                <Input
-                  type="date"
-                  value={form.startDateTime?.slice(0, 10) || ''}
-                  onChange={e => updateForm({ startDateTime: e.target.value })}
-                />
-              ) : (
-                <div className="flex gap-2">
-                  <Input
-                    type="date"
-                    className="flex-1"
-                    value={form.startDateTime?.slice(0, 10) || ''}
-                    onChange={e => {
-                      const time = form.startDateTime?.slice(11, 16) || '09:00'
-                      updateForm({ startDateTime: e.target.value + 'T' + time })
-                    }}
-                  />
-                  <Input
-                    type="time"
-                    className="w-32"
-                    value={form.startDateTime?.slice(11, 16) || ''}
-                    onChange={e => {
-                      const date = form.startDateTime?.slice(0, 10) || ''
-                      updateForm({ startDateTime: date + 'T' + e.target.value })
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* End */}
-            <div className="space-y-1.5">
-              <Label>End {form._allDay ? 'Date' : 'Date & Time'}</Label>
-              {form._allDay ? (
-                <Input
-                  type="date"
-                  value={form.endDateTime?.slice(0, 10) || ''}
-                  onChange={e => updateForm({ endDateTime: e.target.value })}
-                />
-              ) : (
-                <div className="flex gap-2">
-                  <Input
-                    type="date"
-                    className="flex-1"
-                    value={form.endDateTime?.slice(0, 10) || ''}
-                    onChange={e => {
-                      const time = form.endDateTime?.slice(11, 16) || '10:00'
-                      updateForm({ endDateTime: e.target.value + 'T' + time })
-                    }}
-                  />
-                  <Input
-                    type="time"
-                    className="w-32"
-                    value={form.endDateTime?.slice(11, 16) || ''}
-                    onChange={e => {
-                      const date = form.endDateTime?.slice(0, 10) || ''
-                      updateForm({ endDateTime: date + 'T' + e.target.value })
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Audience */}
-            <div className="space-y-1.5">
-              <Label>Audience</Label>
-              <Select value={form.audience} onValueChange={(v: string) => updateForm({ audience: v as EventAudience, classId: '', sectionId: '', _classIds: [], _sectionIds: [], _targetUserIds: [] })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(AUDIENCE_LABELS).map(([val, label]) => (
-                    <SelectItem key={val} value={val}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Classes multi-select (when audience is CLASS or SECTION) */}
-            {(form.audience === EventAudience.CLASS || form.audience === EventAudience.SECTION) && (
-              <div className="space-y-1.5">
-                <Label>Classes</Label>
-                <MultiSelect
-                  label="classes"
-                  options={classes.map(c => ({ value: c.id, label: c.name }))}
-                  selected={form._classIds}
-                  onChange={(ids) => updateForm({ _classIds: ids, _sectionIds: [] })}
-                />
-              </div>
-            )}
-
-            {/* Sections multi-select (when audience is SECTION) */}
-            {form.audience === EventAudience.SECTION && (
-              <div className="space-y-1.5">
-                <Label>Sections</Label>
-                <MultiSelect
-                  label="sections"
-                  options={formSections.map(s => {
-                    const cls = classes.find(c => c.id === s.classId)
-                    return { value: s.id, label: cls ? `${cls.name} - ${s.name}` : s.name }
-                  })}
-                  selected={form._sectionIds}
-                  onChange={(ids) => updateForm({ _sectionIds: ids })}
-                />
-                {form._classIds.length === 0 && (
-                  <p className="text-xs text-muted-foreground">Select at least one class first</p>
-                )}
-              </div>
-            )}
-
-            {/* Instructor targeting (when audience is FACULTY_ONLY) */}
-            {form.audience === EventAudience.FACULTY_ONLY && (
-              <div className="space-y-1.5">
-                <Label>Target Instructors</Label>
-                <MultiSelect
-                  label="instructors"
-                  options={instructors.map(i => ({ value: i.id, label: `${i.name} (${i.email})` }))}
-                  selected={form._targetUserIds}
-                  onChange={(ids) => updateForm({ _targetUserIds: ids })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {form._targetUserIds.length === 0 ? 'Leave empty for all instructors' : `${form._targetUserIds.length} instructor(s) selected`}
-                </p>
-              </div>
-            )}
-
-            {/* Recurring */}
-            <div className="flex items-center justify-between">
-              <Label htmlFor="evt-recurring">Recurring</Label>
-              <Switch id="evt-recurring" checked={form._recurring} onCheckedChange={(v: boolean) => updateForm({ _recurring: v, isRecurring: v })} />
-            </div>
-
-            {form._recurring && (
-              <div className="space-y-3 border rounded-lg p-3 bg-muted/30">
-                <div className="space-y-1.5">
-                  <Label>Frequency</Label>
-                  <Select value={form._frequency} onValueChange={(v: string) => updateForm({ _frequency: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="DAILY">Daily</SelectItem>
-                      <SelectItem value="WEEKLY">Weekly</SelectItem>
-                      <SelectItem value="MONTHLY">Monthly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {form._frequency === 'WEEKLY' && (
-                  <div className="space-y-1.5">
-                    <Label>Repeat on</Label>
-                    <div className="flex gap-1 flex-wrap">
-                      {['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'].map(day => {
-                        const active = form._days.includes(day)
-                        return (
-                          <button
-                            key={day}
-                            type="button"
-                            onClick={() => updateForm({ _days: active ? form._days.filter(d => d !== day) : [...form._days, day] })}
-                            className={`w-9 h-8 rounded text-xs font-medium border transition-colors ${active ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-input hover:bg-muted'}`}
-                          >
-                            {day}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="evt-count">Count</Label>
-                    <Input id="evt-count" type="number" min="1" max="365" value={form._count} onChange={e => updateForm({ _count: e.target.value, _until: '' })} placeholder="e.g. 10" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="evt-until">Until</Label>
-                    <Input id="evt-until" type="date" value={form._until} onChange={e => updateForm({ _until: e.target.value, _count: '' })} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Meeting link */}
-            <div className="space-y-1.5">
-              <Label htmlFor="evt-link">Meeting Link</Label>
-              <Input id="evt-link" type="url" value={form.meetingLink || ''} onChange={e => updateForm({ meetingLink: e.target.value })} placeholder="https://..." />
-            </div>
-
-            {/* Location */}
-            <div className="space-y-1.5">
-              <Label htmlFor="evt-location">Location</Label>
-              <Input id="evt-location" value={form.location || ''} onChange={e => updateForm({ location: e.target.value })} placeholder="Room 101, Building A" />
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+          {/* Header bar with save/cancel */}
+          <div className="flex items-center justify-between px-6 py-3 border-b bg-muted/30">
+            <h2 className="font-semibold text-lg">{editingId ? 'Edit Event' : 'New Event'}</h2>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setFormOpen(false)} disabled={saving}>Discard</Button>
+              <Button size="sm" onClick={handleSubmit} disabled={saving}>
+                {saving && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
+                {editingId ? 'Save' : 'Save'}
+              </Button>
             </div>
           </div>
 
-          <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setFormOpen(false)} disabled={saving}>Cancel</Button>
-            <Button onClick={handleSubmit} disabled={saving}>
-              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {editingId ? 'Update Event' : 'Create Event'}
-            </Button>
-          </DialogFooter>
+          <div className="px-6 py-4 space-y-0">
+            {/* Title — large, prominent like Outlook */}
+            <Input
+              value={form.title}
+              onChange={e => updateForm({ title: e.target.value })}
+              placeholder="Add a title"
+              className="text-xl font-semibold border-0 border-b rounded-none px-0 shadow-none focus-visible:ring-0 focus-visible:border-primary h-12"
+            />
+
+            {/* Date/Time row — Outlook-style horizontal layout */}
+            <div className="py-4 space-y-3 border-b">
+              <div className="flex items-center gap-3">
+                <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                <div className="flex-1">
+                  {form._allDay ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Input type="date" className="w-40" value={form.startDateTime?.slice(0, 10) || ''} onChange={e => updateForm({ startDateTime: e.target.value })} />
+                      <span className="text-muted-foreground text-sm">to</span>
+                      <Input type="date" className="w-40" value={form.endDateTime?.slice(0, 10) || ''} onChange={e => updateForm({ endDateTime: e.target.value })} />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Input type="date" className="w-36" value={form.startDateTime?.slice(0, 10) || ''} onChange={e => { const time = form.startDateTime?.slice(11, 16) || '09:00'; updateForm({ startDateTime: e.target.value + 'T' + time }) }} />
+                      <Input type="time" className="w-28" value={form.startDateTime?.slice(11, 16) || ''} onChange={e => { const date = form.startDateTime?.slice(0, 10) || ''; updateForm({ startDateTime: date + 'T' + e.target.value }) }} />
+                      <span className="text-muted-foreground text-sm">—</span>
+                      <Input type="date" className="w-36" value={form.endDateTime?.slice(0, 10) || ''} onChange={e => { const time = form.endDateTime?.slice(11, 16) || '10:00'; updateForm({ endDateTime: e.target.value + 'T' + time }) }} />
+                      <Input type="time" className="w-28" value={form.endDateTime?.slice(11, 16) || ''} onChange={e => { const date = form.endDateTime?.slice(0, 10) || ''; updateForm({ endDateTime: date + 'T' + e.target.value }) }} />
+                    </div>
+                  )}
+                  <div className="flex items-center gap-4 mt-2">
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                      <input type="checkbox" checked={form._allDay} onChange={e => updateForm({ _allDay: e.target.checked, allDay: e.target.checked })} className="rounded border-gray-300" />
+                      All day
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                      <input type="checkbox" checked={form._recurring} onChange={e => updateForm({ _recurring: e.target.checked, isRecurring: e.target.checked })} className="rounded border-gray-300" />
+                      Repeat
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Recurrence options — inline when repeat is checked */}
+              {form._recurring && (
+                <div className="ml-7 space-y-2 p-3 rounded-lg bg-muted/40 border">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Select value={form._frequency} onValueChange={(v: string) => updateForm({ _frequency: v })}>
+                      <SelectTrigger className="w-32 h-8 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="DAILY">Daily</SelectItem>
+                        <SelectItem value="WEEKLY">Weekly</SelectItem>
+                        <SelectItem value="MONTHLY">Monthly</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {form._frequency === 'WEEKLY' && (
+                      <div className="flex gap-1">
+                        {['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'].map(day => {
+                          const active = form._days.includes(day)
+                          return (
+                            <button key={day} type="button"
+                              onClick={() => updateForm({ _days: active ? form._days.filter(d => d !== day) : [...form._days, day] })}
+                              className={`w-8 h-8 rounded-full text-xs font-medium transition-colors ${active ? 'bg-primary text-primary-foreground' : 'bg-background border border-input hover:bg-muted'}`}
+                            >{day}</button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground">Ends after</span>
+                    <Input type="number" min="1" max="365" className="w-20 h-8 text-sm" value={form._count} onChange={e => updateForm({ _count: e.target.value, _until: '' })} placeholder="times" />
+                    <span className="text-muted-foreground">or by</span>
+                    <Input type="date" className="w-36 h-8 text-sm" value={form._until} onChange={e => updateForm({ _until: e.target.value, _count: '' })} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Location row */}
+            <div className="flex items-center gap-3 py-3 border-b">
+              <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+              <Input value={form.location || ''} onChange={e => updateForm({ location: e.target.value })} placeholder="Add a location" className="border-0 shadow-none focus-visible:ring-0 px-0 h-9" />
+            </div>
+
+            {/* Meeting link row */}
+            <div className="flex items-center gap-3 py-3 border-b">
+              <LinkIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+              <Input type="url" value={form.meetingLink || ''} onChange={e => updateForm({ meetingLink: e.target.value })} placeholder="Add online meeting link" className="border-0 shadow-none focus-visible:ring-0 px-0 h-9" />
+            </div>
+
+            {/* Event details row — type + audience side by side */}
+            <div className="py-3 border-b space-y-3">
+              <div className="flex items-start gap-3">
+                <CalendarDays className="w-4 h-4 text-muted-foreground shrink-0 mt-2" />
+                <div className="flex-1 grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Event Type</Label>
+                    <Select value={form.eventType} onValueChange={(v: string) => updateForm({ eventType: v as EventType })}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(EVENT_TYPE_LABELS).map(([val, label]) => (
+                          <SelectItem key={val} value={val}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Audience</Label>
+                    <Select value={form.audience} onValueChange={(v: string) => updateForm({ audience: v as EventAudience, classId: '', sectionId: '', _classIds: [], _sectionIds: [], _targetUserIds: [] })}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(AUDIENCE_LABELS).map(([val, label]) => (
+                          <SelectItem key={val} value={val}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Custom label */}
+              {form.eventType === EventType.CUSTOM && (
+                <div className="ml-7">
+                  <Input value={form.customTypeLabel || ''} onChange={e => updateForm({ customTypeLabel: e.target.value })} placeholder="Custom type label (e.g. Sports Day)" className="h-9" />
+                </div>
+              )}
+
+              {/* Classes multi-select */}
+              {(form.audience === EventAudience.CLASS || form.audience === EventAudience.SECTION) && (
+                <div className="ml-7 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Classes</Label>
+                  <MultiSelect label="classes" options={classes.map(c => ({ value: c.id, label: c.name }))} selected={form._classIds} onChange={(ids) => updateForm({ _classIds: ids, _sectionIds: [] })} />
+                </div>
+              )}
+
+              {/* Sections multi-select */}
+              {form.audience === EventAudience.SECTION && (
+                <div className="ml-7 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Sections</Label>
+                  <MultiSelect
+                    label="sections"
+                    options={formSections.map(s => { const cls = classes.find(c => c.id === s.classId); return { value: s.id, label: cls ? `${cls.name} — ${s.name}` : s.name } })}
+                    selected={form._sectionIds}
+                    onChange={(ids) => updateForm({ _sectionIds: ids })}
+                  />
+                  {form._classIds.length === 0 && <p className="text-xs text-muted-foreground">Select classes first</p>}
+                </div>
+              )}
+
+              {/* Instructor targeting */}
+              {form.audience === EventAudience.FACULTY_ONLY && (
+                <div className="ml-7 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Target Instructors <span className="font-normal">(empty = all)</span></Label>
+                  <MultiSelect label="instructors" options={instructors.map(i => ({ value: i.id, label: `${i.name} (${i.email})` }))} selected={form._targetUserIds} onChange={(ids) => updateForm({ _targetUserIds: ids })} />
+                </div>
+              )}
+            </div>
+
+            {/* Description — expandable text area at the bottom like Outlook body */}
+            <div className="py-3">
+              <Textarea
+                value={form.description || ''}
+                onChange={e => updateForm({ description: e.target.value })}
+                rows={4}
+                placeholder="Add a description or notes..."
+                className="border-0 shadow-none focus-visible:ring-0 px-0 resize-none text-sm"
+              />
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
