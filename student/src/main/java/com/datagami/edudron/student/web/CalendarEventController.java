@@ -40,6 +40,9 @@ public class CalendarEventController {
             @RequestAttribute(value = "userId", required = false) String userId,
             @RequestAttribute(value = "userEmail", required = false) String userEmail,
             @RequestAttribute(value = "userRole", required = false) String userRole) {
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         String actor = userEmail != null ? userEmail : userId;
         CalendarEventResponse response = calendarEventService.createEvent(request, userId, actor, userRole);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -80,6 +83,9 @@ public class CalendarEventController {
             @Valid @RequestBody UpdateCalendarEventRequest request,
             @RequestAttribute(value = "userId", required = false) String userId,
             @RequestAttribute(value = "userEmail", required = false) String userEmail) {
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         String actor = userEmail != null ? userEmail : userId;
         CalendarEventResponse response = calendarEventService.updateEvent(id, request, userId, actor);
         return ResponseEntity.ok(response);
@@ -91,6 +97,9 @@ public class CalendarEventController {
             @PathVariable String id,
             @RequestAttribute(value = "userId", required = false) String userId,
             @RequestAttribute(value = "userEmail", required = false) String userEmail) {
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         String actor = userEmail != null ? userEmail : userId;
         calendarEventService.deleteEvent(id, userId, actor);
         return ResponseEntity.noContent().build();
@@ -103,6 +112,9 @@ public class CalendarEventController {
             @Valid @RequestBody UpdateCalendarEventRequest request,
             @RequestAttribute(value = "userId", required = false) String userId,
             @RequestAttribute(value = "userEmail", required = false) String userEmail) {
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         String actor = userEmail != null ? userEmail : userId;
         calendarEventService.updateSeries(id, request, userId, actor);
         return ResponseEntity.ok().build();
@@ -114,6 +126,9 @@ public class CalendarEventController {
             @PathVariable String id,
             @RequestAttribute(value = "userId", required = false) String userId,
             @RequestAttribute(value = "userEmail", required = false) String userEmail) {
+        if (userId == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
         String actor = userEmail != null ? userEmail : userId;
         calendarEventService.deleteSeries(id, userId, actor);
         return ResponseEntity.noContent().build();
@@ -135,7 +150,11 @@ public class CalendarEventController {
     public ResponseEntity<CalendarEventImportResult> importEvents(
             @RequestParam("file") MultipartFile file,
             @RequestAttribute(value = "userId", required = false) String userId,
-            @RequestAttribute(value = "userEmail", required = false) String userEmail) {
+            @RequestAttribute(value = "userEmail", required = false) String userEmail,
+            @RequestAttribute(value = "userRole", required = false) String userRole) {
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         String actor = userEmail != null ? userEmail : userId;
         CalendarEventImportResult result = importExportService.importEvents(file, userId, actor);
         return ResponseEntity.ok(result);
@@ -147,7 +166,12 @@ public class CalendarEventController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) String classId,
-            @RequestParam(required = false) String sectionId) {
+            @RequestParam(required = false) String sectionId,
+            @RequestAttribute(value = "userId", required = false) String userId,
+            @RequestAttribute(value = "userRole", required = false) String userRole) {
+        if (userRole == null || (!"SYSTEM_ADMIN".equals(userRole) && !"TENANT_ADMIN".equals(userRole))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         OffsetDateTime start = parseDateTime(startDate);
         OffsetDateTime end = parseDateTime(endDate);
         byte[] csvBytes = importExportService.exportEvents(start, end, classId, sectionId);

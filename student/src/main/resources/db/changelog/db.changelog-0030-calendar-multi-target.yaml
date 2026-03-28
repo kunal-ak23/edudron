@@ -20,27 +20,11 @@ databaseChangeLog:
             sql: |
               UPDATE calendar.calendar_events SET class_ids = ARRAY[class_id] WHERE class_id IS NOT NULL;
               UPDATE calendar.calendar_events SET section_ids = ARRAY[section_id] WHERE section_id IS NOT NULL;
-        - dropColumn:
-            schemaName: calendar
-            tableName: calendar_events
-            columnName: class_id
-        - dropColumn:
-            schemaName: calendar
-            tableName: calendar_events
-            columnName: section_id
+  - changeSet:
+      id: 0030-calendar-gin-indexes
+      author: edudron
+      changes:
         - sql:
-            sql: DROP INDEX IF EXISTS calendar.idx_cal_events_client_class
+            sql: CREATE INDEX IF NOT EXISTS idx_cal_events_class_ids_gin ON calendar.calendar_events USING GIN (class_ids)
         - sql:
-            sql: DROP INDEX IF EXISTS calendar.idx_cal_events_client_section
-        - createIndex:
-            schemaName: calendar
-            tableName: calendar_events
-            indexName: idx_cal_events_client_class_ids
-            columns:
-              - column: { name: class_ids }
-        - createIndex:
-            schemaName: calendar
-            tableName: calendar_events
-            indexName: idx_cal_events_client_section_ids
-            columns:
-              - column: { name: section_ids }
+            sql: CREATE INDEX IF NOT EXISTS idx_cal_events_section_ids_gin ON calendar.calendar_events USING GIN (section_ids)

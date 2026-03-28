@@ -18,15 +18,15 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, St
 
     Optional<CalendarEvent> findByIdAndClientId(String id, UUID clientId);
 
-    List<CalendarEvent> findByRecurrenceParentIdAndIsActiveTrue(String parentId);
+    List<CalendarEvent> findByRecurrenceParentIdAndClientIdAndIsActiveTrue(String parentId, UUID clientId);
 
     @Modifying
-    @Query("UPDATE CalendarEvent e SET e.isActive = false WHERE e.recurrenceParentId = :parentId OR e.id = :parentId")
-    int softDeleteSeries(@Param("parentId") String parentId);
+    @Query("UPDATE CalendarEvent e SET e.isActive = false WHERE (e.recurrenceParentId = :parentId OR e.id = :parentId) AND e.clientId = :clientId")
+    int softDeleteSeries(@Param("parentId") String parentId, @Param("clientId") UUID clientId);
 
     @Modifying
-    @Query("UPDATE CalendarEvent e SET e.isActive = false WHERE (e.recurrenceParentId = :parentId OR e.id = :parentId) AND e.startDateTime >= :fromDate")
-    int softDeleteFutureOccurrences(@Param("parentId") String parentId, @Param("fromDate") OffsetDateTime fromDate);
+    @Query("UPDATE CalendarEvent e SET e.isActive = false WHERE (e.recurrenceParentId = :parentId OR e.id = :parentId) AND e.clientId = :clientId AND e.startDateTime >= :fromDate")
+    int softDeleteFutureOccurrences(@Param("parentId") String parentId, @Param("clientId") UUID clientId, @Param("fromDate") OffsetDateTime fromDate);
 
     /**
      * Student visibility: TENANT_WIDE + CLASS (overlapping classIds) + SECTION (overlapping sectionIds) + own PERSONAL.

@@ -136,7 +136,6 @@ public class RecurrenceGenerator {
             OffsetDateTime baseStart = parent.getStartDateTime();
             LocalDate weekStart = baseStart.toLocalDate().with(DayOfWeek.MONDAY);
             int generated = 0;
-            boolean firstWeek = true;
 
             while (generated < MAX_OCCURRENCES) {
                 for (DayOfWeek day : sortedDays(byDays)) {
@@ -157,8 +156,7 @@ public class RecurrenceGenerator {
                     if (generated >= MAX_OCCURRENCES) return;
                 }
 
-                weekStart = weekStart.plusWeeks(firstWeek ? interval : interval);
-                firstWeek = false;
+                weekStart = weekStart.plusWeeks(interval);
             }
         }
     }

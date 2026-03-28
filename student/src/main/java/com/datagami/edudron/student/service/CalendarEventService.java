@@ -160,6 +160,10 @@ public class CalendarEventService {
         validateOwnership(event, userId);
 
         Map<String, Object> changes = applyUpdates(event, request);
+
+        // Re-validate if audience or scope changed
+        validateAudienceScoping(event.getAudience(), event.getClassIds(), event.getSectionIds());
+
         calendarEventRepository.save(event);
 
         auditService.logCrud(clientId, "UPDATE", "CalendarEvent", event.getId(), userId, userEmail, changes);
@@ -188,7 +192,7 @@ public class CalendarEventService {
         calendarEventRepository.save(parent);
 
         // Update all occurrences
-        List<CalendarEvent> occurrences = calendarEventRepository.findByRecurrenceParentIdAndIsActiveTrue(parentId);
+        List<CalendarEvent> occurrences = calendarEventRepository.findByRecurrenceParentIdAndClientIdAndIsActiveTrue(parentId, clientId);
         for (CalendarEvent occurrence : occurrences) {
             applyUpdates(occurrence, request);
         }
@@ -228,7 +232,7 @@ public class CalendarEventService {
 
         validateOwnership(parent, userId);
 
-        int deleted = calendarEventRepository.softDeleteSeries(parentId);
+        int deleted = calendarEventRepository.softDeleteSeries(parentId, clientId);
 
         auditService.logCrud(clientId, "DELETE", "CalendarEvent", parentId, userId, userEmail,
                 Map.of("seriesDelete", true, "eventsDeactivated", deleted));
