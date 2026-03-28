@@ -40,6 +40,13 @@ dependencies {
 
 	// Redis for async proctoring photo upload queue
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+	// PDF generation for certificates
+	implementation 'org.apache.pdfbox:pdfbox:2.0.31'
+
+	// QR code generation for certificates
+	implementation 'com.google.zxing:core:3.5.2'
+	implementation 'com.google.zxing:javase:3.5.2'
 }
 
 def loadEnvFile() {
