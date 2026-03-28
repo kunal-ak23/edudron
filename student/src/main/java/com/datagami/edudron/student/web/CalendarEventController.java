@@ -180,7 +180,17 @@ public class CalendarEventController {
         try {
             return OffsetDateTime.parse(value);
         } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("Invalid date/time format (expected ISO 8601): " + value);
+            // Try date-only format (e.g., "2026-03-01")
+            try {
+                return java.time.LocalDate.parse(value).atStartOfDay().atOffset(java.time.ZoneOffset.UTC);
+            } catch (DateTimeParseException e2) {
+                // Try LocalDateTime without offset (e.g., "2026-03-01T00:00:00")
+                try {
+                    return java.time.LocalDateTime.parse(value).atOffset(java.time.ZoneOffset.UTC);
+                } catch (DateTimeParseException e3) {
+                    throw new IllegalArgumentException("Invalid date/time format (expected ISO 8601): " + value);
+                }
+            }
         }
     }
 }
