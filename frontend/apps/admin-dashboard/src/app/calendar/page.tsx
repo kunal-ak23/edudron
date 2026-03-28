@@ -952,7 +952,7 @@ export default function CalendarPage() {
                 headerToolbar={{
                   left: 'prev,next today',
                   center: 'title',
-                  right: isMobile ? 'listWeek' : 'dayGridMonth,timeGridWeek,listWeek',
+                  right: isMobile ? 'listWeek' : 'dayGridMonth,timeGridWeek,timeGridDay,listWeek',
                 }}
                 events={filteredFcEvents}
                 datesSet={handleDatesSet}

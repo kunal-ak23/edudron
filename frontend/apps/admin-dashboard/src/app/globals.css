@@ -81,15 +81,30 @@
   * {
     @apply border-border;
   }
-  
+
   /* Scale the entire application by adjusting base font size */
   /* This will scale all rem-based units (spacing, font sizes, etc.) */
   html {
     font-size: calc(16px * var(--app-scale));
   }
-  
+
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* FullCalendar: now-indicator line spans full width in week/day views */
+.fc .fc-timegrid-now-indicator-line {
+  border-color: #dc2626;
+  border-width: 2px;
+  position: absolute;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  z-index: 4;
+}
+.fc .fc-timegrid-now-indicator-arrow {
+  border-color: #dc2626;
+  left: 0 !important;
 }
 
