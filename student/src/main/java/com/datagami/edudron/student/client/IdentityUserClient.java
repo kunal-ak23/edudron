@@ -90,4 +90,32 @@ public class IdentityUserClient {
             return null;
         }
     }
+
+    /**
+     * Fetch a user by email from the Identity service.
+     *
+     * @param email the user email
+     * @return user as JsonNode containing id, name, email, role, active, etc., or null if not found
+     */
+    public JsonNode getUserByEmail(String email) {
+        String url = gatewayUrl + "/idp/users/by-email?email=" + email;
+        HttpHeaders headers = new HttpHeaders();
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+
+        try {
+            ResponseEntity<JsonNode> response = getRestTemplate().exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    JsonNode.class
+            );
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                return response.getBody();
+            }
+            return null;
+        } catch (Exception e) {
+            logger.warn("Failed to fetch user by email {} from Identity: {}", email, e.getMessage());
+            return null;
+        }
+    }
 }
