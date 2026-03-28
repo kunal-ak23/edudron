@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import listPlugin from '@fullcalendar/list'
 import interactionPlugin from '@fullcalendar/interaction'
-import type { DateSelectArg, EventClickArg, DatesSetArg, EventInput } from '@fullcalendar/core'
+import type { DateSelectArg, EventClickArg, DatesSetArg, EventInput, EventDropArg } from '@fullcalendar/core'
+import type { EventResizeDoneArg } from '@fullcalendar/interaction'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -59,6 +60,15 @@ import {
   Clock,
   Users,
   ChevronsUpDown,
+  Search,
+  Gift,
+  ClipboardList,
+  FileText,
+  Star,
+  User,
+  ChevronLeft,
+  ChevronRight,
+  Keyboard,
 } from 'lucide-react'
 import { calendarEventsApi, apiClient, sectionsApi } from '@/lib/api'
 import { useToast } from '@/hooks/use-toast'
@@ -92,6 +102,17 @@ const EVENT_TYPE_LABELS: Record<string, string> = {
   GENERAL: 'General',
   CUSTOM: 'Custom',
   PERSONAL: 'Personal',
+}
+
+const EVENT_TYPE_ICONS: Record<string, typeof Gift> = {
+  HOLIDAY: Gift,
+  EXAM: ClipboardList,
+  SUBMISSION_DEADLINE: FileText,
+  FACULTY_MEETING: Users,
+  REVIEW: Star,
+  GENERAL: CalendarDays,
+  CUSTOM: CalendarDays,
+  PERSONAL: User,
 }
 
 const AUDIENCE_LABELS: Record<string, string> = {
@@ -129,7 +150,7 @@ function MultiSelect({ label, options, selected, onChange }: {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="w-full justify-between text-left font-normal h-10">
+        <Button variant="outline" className="w-full justify-between text-left font-normal h-10" aria-label={`Select ${label}`}>
           <span className="truncate">
             {selected.length === 0 ? `Select ${label}...` : `${selected.length} selected`}
           </span>
@@ -156,6 +177,73 @@ function MultiSelect({ label, options, selected, onChange }: {
         ))}
       </PopoverContent>
     </Popover>
+  )
+}
+
+// -- Mini Month Picker (desktop sidebar) --
+function MiniMonthPicker({ currentDate, onDateSelect }: { currentDate: Date; onDateSelect: (d: Date) => void }) {
+  const [viewMonth, setViewMonth] = useState(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
+
+  useEffect(() => {
+    setViewMonth(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1))
+  }, [currentDate])
+
+  const year = viewMonth.getFullYear()
+  const month = viewMonth.getMonth()
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const today = new Date()
+  const todayStr = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`
+  const selectedStr = `${currentDate.getFullYear()}-${currentDate.getMonth()}-${currentDate.getDate()}`
+
+  const prevMonth = () => setViewMonth(new Date(year, month - 1, 1))
+  const nextMonth = () => setViewMonth(new Date(year, month + 1, 1))
+
+  const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+
+  const cells: (number | null)[] = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  return (
+    <div className="p-3 border rounded-lg bg-card">
+      <div className="flex items-center justify-between mb-2">
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={prevMonth} aria-label="Previous month">
+          <ChevronLeft className="w-4 h-4" />
+        </Button>
+        <span className="text-sm font-medium">
+          {viewMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+        </span>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={nextMonth} aria-label="Next month">
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+      </div>
+      <div className="grid grid-cols-7 gap-0">
+        {dayNames.map(d => (
+          <div key={d} className="text-center text-[10px] font-medium text-muted-foreground py-1">{d}</div>
+        ))}
+        {cells.map((day, i) => {
+          if (day === null) return <div key={`empty-${i}`} />
+          const dateStr = `${year}-${month}-${day}`
+          const isToday = dateStr === todayStr
+          const isSelected = dateStr === selectedStr
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => onDateSelect(new Date(year, month, day))}
+              className={`w-7 h-7 text-xs rounded-full mx-auto flex items-center justify-center transition-colors duration-200
+                ${isToday ? 'bg-primary text-primary-foreground font-bold' : ''}
+                ${isSelected && !isToday ? 'bg-primary/20 text-primary font-semibold' : ''}
+                ${!isToday && !isSelected ? 'hover:bg-muted text-foreground' : ''}
+              `}
+            >
+              {day}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -259,6 +347,7 @@ export default function CalendarPage() {
   const [filterClassId, setFilterClassId] = useState<string>('')
   const [filterSectionId, setFilterSectionId] = useState<string>('')
   const [filteredSections, setFilteredSections] = useState<SectionItem[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Modals
   const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null)
@@ -272,6 +361,26 @@ export default function CalendarPage() {
   const [deletingEvent, setDeletingEvent] = useState<CalendarEvent | null>(null)
   const [deleteMode, setDeleteMode] = useState<'single' | 'series'>('single')
   const [importOpen, setImportOpen] = useState(false)
+
+  // Quick event popover
+  const [quickEventOpen, setQuickEventOpen] = useState(false)
+  const [quickEventDate, setQuickEventDate] = useState<DateSelectArg | null>(null)
+  const [quickEventTitle, setQuickEventTitle] = useState('')
+  const [quickEventStartTime, setQuickEventStartTime] = useState('09:00')
+  const [quickEventEndTime, setQuickEventEndTime] = useState('10:00')
+  const [quickEventSaving, setQuickEventSaving] = useState(false)
+
+  // Mini month current date tracking
+  const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date())
+
+  // Responsive view
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // -- Load classes on mount --
   useEffect(() => {
@@ -377,6 +486,8 @@ export default function CalendarPage() {
     const start = arg.startStr.slice(0, 10)
     const end = arg.endStr.slice(0, 10)
     setDateRange({ start, end })
+    // Track the current visible date for mini month
+    setCurrentCalendarDate(arg.view.currentStart)
   }, [])
 
   const handleEventClick = useCallback((arg: EventClickArg) => {
@@ -384,23 +495,96 @@ export default function CalendarPage() {
     setDetailEvent(raw)
   }, [])
 
+  // Date select now opens quick event popover
   const handleDateSelect = useCallback((arg: DateSelectArg) => {
-    const f = emptyForm()
-    // Always default to non-all-day with time inputs
+    setQuickEventDate(arg)
+    setQuickEventTitle('')
     if (arg.allDay) {
-      // Clicked a date cell — set date with default times
-      f.startDateTime = arg.startStr + 'T09:00'
-      f.endDateTime = arg.startStr + 'T10:00'
+      setQuickEventStartTime('09:00')
+      setQuickEventEndTime('10:00')
     } else {
-      f.startDateTime = arg.startStr
-      f.endDateTime = arg.endStr
+      const startH = arg.start.getHours().toString().padStart(2, '0')
+      const startM = arg.start.getMinutes().toString().padStart(2, '0')
+      const endH = arg.end.getHours().toString().padStart(2, '0')
+      const endM = arg.end.getMinutes().toString().padStart(2, '0')
+      setQuickEventStartTime(`${startH}:${startM}`)
+      setQuickEventEndTime(`${endH}:${endM}`)
     }
+    setQuickEventOpen(true)
+  }, [])
+
+  // -- Quick event save --
+  const handleQuickEventSave = async () => {
+    if (!quickEventTitle.trim() || !quickEventDate) return
+    setQuickEventSaving(true)
+    try {
+      const dateStr = quickEventDate.startStr.slice(0, 10)
+      await calendarEventsApi.createEvent({
+        title: quickEventTitle.trim(),
+        eventType: EventType.GENERAL,
+        audience: EventAudience.TENANT_WIDE,
+        startDateTime: new Date(`${dateStr}T${quickEventStartTime}`).toISOString(),
+        endDateTime: new Date(`${dateStr}T${quickEventEndTime}`).toISOString(),
+        allDay: false,
+        isRecurring: false,
+      })
+      toast({ title: 'Event created', description: quickEventTitle.trim() })
+      setQuickEventOpen(false)
+      if (dateRange) fetchEvents(dateRange.start, dateRange.end)
+    } catch {
+      toast({ title: 'Error', description: 'Failed to create event', variant: 'destructive' })
+    } finally {
+      setQuickEventSaving(false)
+    }
+  }
+
+  // Open full form from quick event "More options"
+  const openFullFormFromQuick = () => {
+    setQuickEventOpen(false)
+    if (!quickEventDate) return
+    const f = emptyForm()
+    const dateStr = quickEventDate.startStr.slice(0, 10)
+    f.title = quickEventTitle
+    f.startDateTime = `${dateStr}T${quickEventStartTime}`
+    f.endDateTime = `${dateStr}T${quickEventEndTime}`
     f._allDay = false
     f.allDay = false
     setForm(f)
     setEditingId(null)
     setFormOpen(true)
-  }, [])
+  }
+
+  // -- Drag and drop: event move --
+  const handleEventDrop = useCallback(async (info: EventDropArg) => {
+    try {
+      await calendarEventsApi.updateEvent(info.event.id, {
+        startDateTime: info.event.start?.toISOString(),
+        endDateTime: info.event.end?.toISOString(),
+        allDay: info.event.allDay,
+      })
+      toast({ title: 'Event moved', description: info.event.title })
+      // Update local state
+      if (dateRange) fetchEvents(dateRange.start, dateRange.end)
+    } catch {
+      info.revert()
+      toast({ title: 'Error', description: 'Failed to move event', variant: 'destructive' })
+    }
+  }, [toast, dateRange, fetchEvents])
+
+  // -- Drag and drop: event resize --
+  const handleEventResize = useCallback(async (info: EventResizeDoneArg) => {
+    try {
+      await calendarEventsApi.updateEvent(info.event.id, {
+        startDateTime: info.event.start?.toISOString(),
+        endDateTime: info.event.end?.toISOString(),
+      })
+      toast({ title: 'Event resized', description: info.event.title })
+      if (dateRange) fetchEvents(dateRange.start, dateRange.end)
+    } catch {
+      info.revert()
+      toast({ title: 'Error', description: 'Failed to resize event', variant: 'destructive' })
+    }
+  }, [toast, dateRange, fetchEvents])
 
   // -- Form helpers --
   const updateForm = (patch: Partial<FormState>) => setForm(prev => ({ ...prev, ...patch }))
@@ -514,7 +698,7 @@ export default function CalendarPage() {
       } else {
         await calendarEventsApi.deleteEvent(deletingEvent.id)
       }
-      toast({ title: 'Success', description: deleteMode === 'series' ? 'Entire series deleted' : 'Event deleted' })
+      toast({ title: 'Deleted', description: `"${deletingEvent.title}" has been removed from the calendar.` })
       setDeleteDialogOpen(false)
       setDetailEvent(null)
       if (dateRange) fetchEvents(dateRange.start, dateRange.end)
@@ -550,11 +734,55 @@ export default function CalendarPage() {
     setFilterClassId('')
     setFilterSectionId('')
     setFilteredSections([])
+    setSearchQuery('')
   }
-  const hasFilters = filterType !== 'ALL' || filterClassId !== '' || filterSectionId !== ''
+  const hasFilters = filterType !== 'ALL' || filterClassId !== '' || filterSectionId !== '' || searchQuery !== ''
 
-  // Convert events for FullCalendar
-  const fcEvents: EventInput[] = events.map(toFcEvent)
+  // -- Keyboard shortcuts --
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return
+      if (e.key === 'n' && !formOpen && !detailEvent && !quickEventOpen) {
+        openCreateForm()
+        e.preventDefault()
+      }
+      if (e.key === 't' && !formOpen && !detailEvent && !quickEventOpen) {
+        calendarRef.current?.getApi().today()
+        e.preventDefault()
+      }
+      if (e.key === 'Escape') {
+        if (quickEventOpen) setQuickEventOpen(false)
+        else if (detailEvent) setDetailEvent(null)
+        else if (formOpen) setFormOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [formOpen, detailEvent, quickEventOpen])
+
+  // -- Client-side search filtering --
+  const filteredFcEvents: EventInput[] = useMemo(() => {
+    let filtered = events
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      filtered = filtered.filter(e =>
+        e.title.toLowerCase().includes(q) ||
+        (e.description && e.description.toLowerCase().includes(q)) ||
+        (e.location && e.location.toLowerCase().includes(q))
+      )
+    }
+    return filtered.map(toFcEvent)
+  }, [events, searchQuery])
+
+  // -- Hover tooltip via eventDidMount --
+  const handleEventDidMount = useCallback((info: { event: { id: string }; el: HTMLElement }) => {
+    const evt = events.find(e => e.id === info.event.id)
+    if (evt) {
+      const time = evt.allDay ? 'All day' : new Date(evt.startDateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      info.el.title = `${evt.title}\n${time}${evt.location ? '\n' + evt.location : ''}`
+    }
+  }, [events])
 
   return (
     <div>
@@ -570,15 +798,15 @@ export default function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={handleExport}>
+          <Button variant="outline" size="sm" onClick={handleExport} aria-label="Export events as CSV">
             <Download className="w-4 h-4 mr-1" />
             Export
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+          <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} aria-label="Import events from CSV">
             <Upload className="w-4 h-4 mr-1" />
             Import
           </Button>
-          <Button size="sm" onClick={openCreateForm}>
+          <Button size="sm" onClick={openCreateForm} aria-label="Create a new event">
             <Plus className="w-4 h-4 mr-1" />
             Create Event
           </Button>
@@ -587,15 +815,28 @@ export default function CalendarPage() {
 
       {/* Filter bar */}
       <Card className="mb-4">
-        <CardContent className="py-3 px-4">
+        <CardContent className="py-3 px-4 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
               <Filter className="w-4 h-4" />
+              <span className="sr-only">Event filters</span>
               Filters
             </div>
 
+            {/* Search input */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search events..."
+                className="w-48 h-8 text-sm pl-8"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                aria-label="Search events"
+              />
+            </div>
+
             <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-[170px] h-8 text-sm">
+              <SelectTrigger className="w-[170px] h-8 text-sm" aria-label="Filter by event type">
                 <SelectValue placeholder="Event type" />
               </SelectTrigger>
               <SelectContent>
@@ -607,7 +848,7 @@ export default function CalendarPage() {
             </Select>
 
             <Select value={filterClassId || '_none'} onValueChange={(v: string) => { setFilterClassId(v === '_none' ? '' : v); setFilterSectionId('') }}>
-              <SelectTrigger className="w-[170px] h-8 text-sm">
+              <SelectTrigger className="w-[170px] h-8 text-sm" aria-label="Filter by class">
                 <SelectValue placeholder="Class" />
               </SelectTrigger>
               <SelectContent>
@@ -623,7 +864,7 @@ export default function CalendarPage() {
               onValueChange={(v: string) => setFilterSectionId(v === '_none' ? '' : v)}
               disabled={!filterClassId}
             >
-              <SelectTrigger className="w-[170px] h-8 text-sm">
+              <SelectTrigger className="w-[170px] h-8 text-sm" aria-label="Filter by section">
                 <SelectValue placeholder="Section" />
               </SelectTrigger>
               <SelectContent>
@@ -635,43 +876,217 @@ export default function CalendarPage() {
             </Select>
 
             {hasFilters && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2 text-xs">
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2 text-xs transition-colors duration-200" aria-label="Clear all filters">
                 <X className="w-3 h-3 mr-1" />
                 Clear
               </Button>
             )}
 
             {loading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground ml-auto" />}
+
+            {/* Keyboard shortcut hint */}
+            <div className="hidden sm:flex items-center gap-1 ml-auto text-[10px] text-muted-foreground">
+              <Keyboard className="w-3 h-3" />
+              <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono">N</kbd> new
+              <kbd className="px-1 py-0.5 rounded bg-muted text-[10px] font-mono ml-1">T</kbd> today
+            </div>
+          </div>
+
+          {/* Color legend */}
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            {Object.entries(EVENT_TYPE_COLORS).map(([type, colors]) => {
+              const Icon = EVENT_TYPE_ICONS[type] || CalendarDays
+              return (
+                <span key={type} className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.border }} />
+                  <Icon className="w-3 h-3" />
+                  <span className="sr-only">{EVENT_TYPE_LABELS[type]} event type indicator</span>
+                  {EVENT_TYPE_LABELS[type]}
+                </span>
+              )
+            })}
           </div>
         </CardContent>
       </Card>
 
-      {/* Calendar */}
-      <Card>
-        <CardContent className="p-2 sm:p-4">
-          {/* @ts-ignore FullCalendar React 18 type compatibility */}
-          <FullCalendar
-            ref={calendarRef}
-            plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-            initialView="dayGridMonth"
-            headerToolbar={{
-              left: 'prev,next today',
-              center: 'title',
-              right: 'dayGridMonth,timeGridWeek,listWeek',
-            }}
-            events={fcEvents}
-            datesSet={handleDatesSet}
-            eventClick={handleEventClick}
-            selectable
-            select={handleDateSelect}
-            editable={false}
-            dayMaxEvents={3}
-            height="auto"
-            eventDisplay="block"
-            nowIndicator
+      {/* Calendar with mini month sidebar */}
+      <div className="flex gap-4">
+        {/* Mini month navigator - desktop only */}
+        <div className="hidden lg:block w-64 shrink-0 space-y-3">
+          <MiniMonthPicker
+            currentDate={currentCalendarDate}
+            onDateSelect={(d) => calendarRef.current?.getApi().gotoDate(d)}
           />
-        </CardContent>
-      </Card>
+          {/* Event count summary */}
+          <div className="p-3 border rounded-lg bg-card text-sm space-y-1">
+            <p className="font-medium text-muted-foreground">This view</p>
+            <p className="text-2xl font-bold">{events.length}</p>
+            <p className="text-xs text-muted-foreground">
+              {events.length === 1 ? 'event' : 'events'} in range
+            </p>
+          </div>
+        </div>
+
+        {/* Main calendar area */}
+        <Card className="flex-1 min-w-0">
+          <CardContent className="p-2 sm:p-4">
+            {/* Skeleton loading state */}
+            {loading && events.length === 0 ? (
+              <div className="space-y-4 p-4">
+                {/* Skeleton header */}
+                <div className="flex items-center justify-between animate-pulse">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded bg-muted" />
+                    <div className="h-8 w-8 rounded bg-muted" />
+                    <div className="h-8 w-16 rounded bg-muted" />
+                  </div>
+                  <div className="h-6 w-48 rounded bg-muted" />
+                  <div className="flex gap-1">
+                    <div className="h-8 w-20 rounded bg-muted" />
+                    <div className="h-8 w-20 rounded bg-muted" />
+                    <div className="h-8 w-20 rounded bg-muted" />
+                  </div>
+                </div>
+                {/* Skeleton day headers */}
+                <div className="grid grid-cols-7 gap-1 animate-pulse">
+                  {[...Array(7)].map((_, i) => (
+                    <div key={`header-${i}`} className="h-6 bg-muted rounded" />
+                  ))}
+                </div>
+                {/* Skeleton grid */}
+                {[...Array(5)].map((_, row) => (
+                  <div key={row} className="grid grid-cols-7 gap-1 animate-pulse">
+                    {[...Array(7)].map((_, col) => (
+                      <div key={col} className="h-24 bg-muted/50 rounded border border-muted">
+                        <div className="p-1.5 space-y-1">
+                          <div className="h-4 w-6 rounded bg-muted" />
+                          {(row + col) % 3 === 0 && <div className="h-3 w-full rounded bg-muted/70" />}
+                          {(row + col) % 4 === 0 && <div className="h-3 w-3/4 rounded bg-muted/70" />}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : !loading && events.length === 0 && dateRange ? (
+              /* Empty state */
+              <div>
+                {/* @ts-ignore FullCalendar React 18 type compatibility */}
+                <FullCalendar
+                  ref={calendarRef}
+                  plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+                  initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
+                  headerToolbar={{
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: isMobile ? 'listWeek' : 'dayGridMonth,timeGridWeek,listWeek',
+                  }}
+                  events={[]}
+                  datesSet={handleDatesSet}
+                  selectable
+                  select={handleDateSelect}
+                  editable={false}
+                  dayMaxEvents={3}
+                  moreLinkText={(n) => `+${n} more`}
+                  height="auto"
+                  eventDisplay="block"
+                  nowIndicator
+                />
+                <div className="text-center py-16 text-muted-foreground">
+                  <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-lg font-medium">No events yet</p>
+                  <p className="text-sm mt-1">Create your first event to get started</p>
+                  <Button className="mt-4 transition-colors duration-200" onClick={openCreateForm}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Event
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              /* Normal calendar view */
+              <>
+                {/* @ts-ignore FullCalendar React 18 type compatibility */}
+                <FullCalendar
+                  ref={calendarRef}
+                  plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+                  initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
+                  headerToolbar={{
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: isMobile ? 'listWeek' : 'dayGridMonth,timeGridWeek,listWeek',
+                  }}
+                  events={filteredFcEvents}
+                  datesSet={handleDatesSet}
+                  eventClick={handleEventClick}
+                  selectable
+                  select={handleDateSelect}
+                  editable
+                  eventDrop={handleEventDrop}
+                  eventResize={handleEventResize}
+                  dayMaxEvents={3}
+                  moreLinkText={(n) => `+${n} more`}
+                  height="auto"
+                  eventDisplay="block"
+                  nowIndicator
+                  eventDidMount={handleEventDidMount}
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ---- Quick Event Popover (mini create form) ---- */}
+      <Dialog open={quickEventOpen} onOpenChange={setQuickEventOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-base">Quick Event</DialogTitle>
+            <DialogDescription className="sr-only">Create a quick event</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <Input
+              value={quickEventTitle}
+              onChange={e => setQuickEventTitle(e.target.value)}
+              placeholder="Event title"
+              className="text-sm"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter' && quickEventTitle.trim()) handleQuickEventSave() }}
+              aria-label="Event title"
+            />
+            <div className="flex items-center gap-2">
+              <Input
+                type="time"
+                value={quickEventStartTime}
+                onChange={e => setQuickEventStartTime(e.target.value)}
+                className="w-28 text-sm"
+                aria-label="Start time"
+              />
+              <span className="text-muted-foreground text-sm">to</span>
+              <Input
+                type="time"
+                value={quickEventEndTime}
+                onChange={e => setQuickEventEndTime(e.target.value)}
+                className="w-28 text-sm"
+                aria-label="End time"
+              />
+            </div>
+            {quickEventDate && (
+              <p className="text-xs text-muted-foreground">
+                {new Date(quickEventDate.startStr).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
+              </p>
+            )}
+          </div>
+          <DialogFooter className="mt-2 gap-2">
+            <Button variant="ghost" size="sm" onClick={openFullFormFromQuick} className="transition-colors duration-200">
+              More options...
+            </Button>
+            <Button size="sm" onClick={handleQuickEventSave} disabled={!quickEventTitle.trim() || quickEventSaving} className="transition-colors duration-200">
+              {quickEventSaving && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ---- Event Detail Modal ---- */}
       <Dialog open={!!detailEvent} onOpenChange={(open: boolean) => { if (!open) setDetailEvent(null) }}>
@@ -788,11 +1203,11 @@ export default function CalendarPage() {
                 </div>
 
                 <DialogFooter className="mt-4 gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openEditForm(detailEvent)}>
+                  <Button variant="outline" size="sm" onClick={() => openEditForm(detailEvent)} className="transition-colors duration-200" aria-label="Edit this event">
                     <Pencil className="w-3 h-3 mr-1" />
                     Edit
                   </Button>
-                  <Button variant="destructive" size="sm" onClick={() => { setDetailEvent(null); confirmDelete(detailEvent) }}>
+                  <Button variant="destructive" size="sm" onClick={() => { setDetailEvent(null); confirmDelete(detailEvent) }} className="transition-colors duration-200" aria-label="Delete this event">
                     <Trash2 className="w-3 h-3 mr-1" />
                     Delete
                   </Button>
@@ -820,6 +1235,7 @@ export default function CalendarPage() {
                 variant={deleteMode === 'single' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setDeleteMode('single')}
+                className="transition-colors duration-200"
               >
                 Delete this event only
               </Button>
@@ -827,6 +1243,7 @@ export default function CalendarPage() {
                 variant={deleteMode === 'series' ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setDeleteMode('series')}
+                className="transition-colors duration-200"
               >
                 Delete entire series
               </Button>
@@ -848,8 +1265,8 @@ export default function CalendarPage() {
           <div className="flex items-center justify-between px-6 py-3 border-b bg-muted/30">
             <h2 className="font-semibold text-lg">{editingId ? 'Edit Event' : 'New Event'}</h2>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setFormOpen(false)} disabled={saving}>Discard</Button>
-              <Button size="sm" onClick={handleSubmit} disabled={saving}>
+              <Button variant="ghost" size="sm" onClick={() => setFormOpen(false)} disabled={saving} className="transition-colors duration-200">Discard</Button>
+              <Button size="sm" onClick={handleSubmit} disabled={saving} className="transition-colors duration-200">
                 {saving && <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />}
                 {editingId ? 'Save' : 'Save'}
               </Button>
@@ -863,6 +1280,7 @@ export default function CalendarPage() {
               onChange={e => updateForm({ title: e.target.value })}
               placeholder="Add a title"
               className="text-xl font-semibold border-0 border-b rounded-none px-0 shadow-none focus-visible:ring-0 focus-visible:border-primary h-12"
+              aria-label="Event title"
             />
 
             {/* Date/Time row — Outlook-style horizontal layout */}
@@ -872,17 +1290,17 @@ export default function CalendarPage() {
                 <div className="flex-1">
                   {form._allDay ? (
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Input type="date" className="w-40" value={form.startDateTime?.slice(0, 10) || ''} onChange={e => updateForm({ startDateTime: e.target.value })} />
+                      <Input type="date" className="w-40" value={form.startDateTime?.slice(0, 10) || ''} onChange={e => updateForm({ startDateTime: e.target.value })} aria-label="Start date" />
                       <span className="text-muted-foreground text-sm">to</span>
-                      <Input type="date" className="w-40" value={form.endDateTime?.slice(0, 10) || ''} onChange={e => updateForm({ endDateTime: e.target.value })} />
+                      <Input type="date" className="w-40" value={form.endDateTime?.slice(0, 10) || ''} onChange={e => updateForm({ endDateTime: e.target.value })} aria-label="End date" />
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Input type="date" className="w-36" value={form.startDateTime?.slice(0, 10) || ''} onChange={e => { const time = form.startDateTime?.slice(11, 16) || '09:00'; updateForm({ startDateTime: e.target.value + 'T' + time }) }} />
-                      <Input type="time" className="w-28" value={form.startDateTime?.slice(11, 16) || ''} onChange={e => { const date = form.startDateTime?.slice(0, 10) || ''; updateForm({ startDateTime: date + 'T' + e.target.value }) }} />
-                      <span className="text-muted-foreground text-sm">—</span>
-                      <Input type="date" className="w-36" value={form.endDateTime?.slice(0, 10) || ''} onChange={e => { const time = form.endDateTime?.slice(11, 16) || '10:00'; updateForm({ endDateTime: e.target.value + 'T' + time }) }} />
-                      <Input type="time" className="w-28" value={form.endDateTime?.slice(11, 16) || ''} onChange={e => { const date = form.endDateTime?.slice(0, 10) || ''; updateForm({ endDateTime: date + 'T' + e.target.value }) }} />
+                      <Input type="date" className="w-36" value={form.startDateTime?.slice(0, 10) || ''} onChange={e => { const time = form.startDateTime?.slice(11, 16) || '09:00'; updateForm({ startDateTime: e.target.value + 'T' + time }) }} aria-label="Start date" />
+                      <Input type="time" className="w-28" value={form.startDateTime?.slice(11, 16) || ''} onChange={e => { const date = form.startDateTime?.slice(0, 10) || ''; updateForm({ startDateTime: date + 'T' + e.target.value }) }} aria-label="Start time" />
+                      <span className="text-muted-foreground text-sm">&mdash;</span>
+                      <Input type="date" className="w-36" value={form.endDateTime?.slice(0, 10) || ''} onChange={e => { const time = form.endDateTime?.slice(11, 16) || '10:00'; updateForm({ endDateTime: e.target.value + 'T' + time }) }} aria-label="End date" />
+                      <Input type="time" className="w-28" value={form.endDateTime?.slice(11, 16) || ''} onChange={e => { const date = form.endDateTime?.slice(0, 10) || ''; updateForm({ endDateTime: date + 'T' + e.target.value }) }} aria-label="End time" />
                     </div>
                   )}
                   <div className="flex items-center gap-4 mt-2">
@@ -917,7 +1335,9 @@ export default function CalendarPage() {
                           return (
                             <button key={day} type="button"
                               onClick={() => updateForm({ _days: active ? form._days.filter(d => d !== day) : [...form._days, day] })}
-                              className={`w-8 h-8 rounded-full text-xs font-medium transition-colors ${active ? 'bg-primary text-primary-foreground' : 'bg-background border border-input hover:bg-muted'}`}
+                              className={`w-8 h-8 rounded-full text-xs font-medium transition-colors duration-200 ${active ? 'bg-primary text-primary-foreground' : 'bg-background border border-input hover:bg-muted'}`}
+                              aria-label={`Toggle ${day}`}
+                              aria-pressed={active}
                             >{day}</button>
                           )
                         })}
@@ -926,9 +1346,9 @@ export default function CalendarPage() {
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground">Ends after</span>
-                    <Input type="number" min="1" max="365" className="w-20 h-8 text-sm" value={form._count} onChange={e => updateForm({ _count: e.target.value, _until: '' })} placeholder="times" />
+                    <Input type="number" min="1" max="365" className="w-20 h-8 text-sm" value={form._count} onChange={e => updateForm({ _count: e.target.value, _until: '' })} placeholder="times" aria-label="Repeat count" />
                     <span className="text-muted-foreground">or by</span>
-                    <Input type="date" className="w-36 h-8 text-sm" value={form._until} onChange={e => updateForm({ _until: e.target.value, _count: '' })} />
+                    <Input type="date" className="w-36 h-8 text-sm" value={form._until} onChange={e => updateForm({ _until: e.target.value, _count: '' })} aria-label="Repeat until date" />
                   </div>
                 </div>
               )}
@@ -937,13 +1357,13 @@ export default function CalendarPage() {
             {/* Location row */}
             <div className="flex items-center gap-3 py-3 border-b">
               <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-              <Input value={form.location || ''} onChange={e => updateForm({ location: e.target.value })} placeholder="Add a location" className="border-0 shadow-none focus-visible:ring-0 px-0 h-9" />
+              <Input value={form.location || ''} onChange={e => updateForm({ location: e.target.value })} placeholder="Add a location" className="border-0 shadow-none focus-visible:ring-0 px-0 h-9" aria-label="Event location" />
             </div>
 
             {/* Meeting link row */}
             <div className="flex items-center gap-3 py-3 border-b">
               <LinkIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-              <Input type="url" value={form.meetingLink || ''} onChange={e => updateForm({ meetingLink: e.target.value })} placeholder="Add online meeting link" className="border-0 shadow-none focus-visible:ring-0 px-0 h-9" />
+              <Input type="url" value={form.meetingLink || ''} onChange={e => updateForm({ meetingLink: e.target.value })} placeholder="Add online meeting link" className="border-0 shadow-none focus-visible:ring-0 px-0 h-9" aria-label="Meeting link" />
             </div>
 
             {/* Event details row — type + audience side by side */}
@@ -954,7 +1374,7 @@ export default function CalendarPage() {
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Event Type</Label>
                     <Select value={form.eventType} onValueChange={(v: string) => updateForm({ eventType: v as EventType })}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-9" aria-label="Event type"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {Object.entries(EVENT_TYPE_LABELS).map(([val, label]) => (
                           <SelectItem key={val} value={val}>{label}</SelectItem>
@@ -965,7 +1385,7 @@ export default function CalendarPage() {
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">Audience</Label>
                     <Select value={form.audience} onValueChange={(v: string) => updateForm({ audience: v as EventAudience, classId: '', sectionId: '', _classIds: [], _sectionIds: [], _targetUserIds: [] })}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-9" aria-label="Event audience"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {Object.entries(AUDIENCE_LABELS).map(([val, label]) => (
                           <SelectItem key={val} value={val}>{label}</SelectItem>
@@ -979,7 +1399,7 @@ export default function CalendarPage() {
               {/* Custom label */}
               {form.eventType === EventType.CUSTOM && (
                 <div className="ml-7">
-                  <Input value={form.customTypeLabel || ''} onChange={e => updateForm({ customTypeLabel: e.target.value })} placeholder="Custom type label (e.g. Sports Day)" className="h-9" />
+                  <Input value={form.customTypeLabel || ''} onChange={e => updateForm({ customTypeLabel: e.target.value })} placeholder="Custom type label (e.g. Sports Day)" className="h-9" aria-label="Custom type label" />
                 </div>
               )}
 
@@ -1022,6 +1442,7 @@ export default function CalendarPage() {
                 rows={4}
                 placeholder="Add a description or notes..."
                 className="border-0 shadow-none focus-visible:ring-0 px-0 resize-none text-sm"
+                aria-label="Event description"
               />
             </div>
           </div>
