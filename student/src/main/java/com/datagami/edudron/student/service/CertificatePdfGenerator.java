@@ -162,8 +162,20 @@ public class CertificatePdfGenerator {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private PDRectangle resolvePageSize(Map<String, Object> config) {
-        String pageSize = (String) config.getOrDefault("pageSize", "A4_LANDSCAPE");
+        Object pageSizeObj = config.get("pageSize");
+
+        // Handle Map format from design doc: {"width": 842, "height": 595}
+        if (pageSizeObj instanceof Map) {
+            Map<String, Object> sizeMap = (Map<String, Object>) pageSizeObj;
+            float width = floatVal(sizeMap.get("width"), PDRectangle.A4.getHeight());
+            float height = floatVal(sizeMap.get("height"), PDRectangle.A4.getWidth());
+            return new PDRectangle(width, height);
+        }
+
+        // Handle String preset format
+        String pageSize = pageSizeObj != null ? pageSizeObj.toString() : "A4_LANDSCAPE";
         switch (pageSize) {
             case "A4":
                 return PDRectangle.A4;
@@ -178,6 +190,12 @@ public class CertificatePdfGenerator {
     }
 
     private boolean resolveFontBold(Map<String, Object> field) {
+        // Check "fontWeight": "bold" (design doc format)
+        Object fontWeight = field.get("fontWeight");
+        if (fontWeight instanceof String && "bold".equalsIgnoreCase((String) fontWeight)) {
+            return true;
+        }
+        // Also check legacy "bold": true format
         Object bold = field.get("bold");
         if (bold instanceof Boolean) return (Boolean) bold;
         if (bold instanceof String) return "true".equalsIgnoreCase((String) bold);
