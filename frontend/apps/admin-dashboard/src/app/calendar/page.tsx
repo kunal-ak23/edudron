@@ -386,14 +386,17 @@ export default function CalendarPage() {
 
   const handleDateSelect = useCallback((arg: DateSelectArg) => {
     const f = emptyForm()
-    f.startDateTime = arg.startStr
+    // Always default to non-all-day with time inputs
     if (arg.allDay) {
-      f._allDay = true
-      f.allDay = true
+      // Clicked a date cell — set date with default times
+      f.startDateTime = arg.startStr + 'T09:00'
+      f.endDateTime = arg.startStr + 'T10:00'
     } else {
       f.startDateTime = arg.startStr
       f.endDateTime = arg.endStr
     }
+    f._allDay = false
+    f.allDay = false
     setForm(f)
     setEditingId(null)
     setFormOpen(true)
