@@ -81,6 +81,14 @@ spring:
           uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
             - Path=/api/results/**
+        - id: certificate-service
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/certificates/**
+        - id: certificate-verification
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/verify/**
         - id: student-service-api
           uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
           predicates:
