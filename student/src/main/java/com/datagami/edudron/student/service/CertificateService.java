@@ -300,7 +300,10 @@ public class CertificateService {
         dto.setRevokedAt(cert.getRevokedAt());
         dto.setRevokedReason(cert.getRevokedReason());
         dto.setIssuedAt(cert.getIssuedAt());
-        dto.setPdfUrl(cert.getPdfUrl());
+        // Don't expose raw blob storage URL publicly; only provide download link for valid certs
+        if (cert.isActive() && !cert.isRevoked()) {
+            dto.setPdfUrl("/api/certificates/" + cert.getId() + "/download");
+        }
 
         // Populate names from metadata
         Map<String, Object> meta = cert.getMetadata();
@@ -380,7 +383,7 @@ public class CertificateService {
     // -------------------------------------------------------------------------
 
     @Transactional(readOnly = true)
-    public byte[] downloadPdf(String certId) {
+    public byte[] downloadPdf(String certId, String requestingUserId, String userRole) {
         UUID clientId = getClientId();
 
         Certificate cert = certificateRepository.findById(certId)
@@ -388,6 +391,13 @@ public class CertificateService {
 
         if (!cert.getClientId().equals(clientId)) {
             throw new IllegalArgumentException("Certificate not found: " + certId);
+        }
+
+        // Students can only download their own certificates; admins can download any
+        if (!"TENANT_ADMIN".equals(userRole) && !"SYSTEM_ADMIN".equals(userRole)) {
+            if (!cert.getStudentId().equals(requestingUserId)) {
+                throw new IllegalArgumentException("Certificate not found: " + certId);
+            }
         }
 
         if (cert.getPdfUrl() == null || cert.getPdfUrl().isEmpty()) {

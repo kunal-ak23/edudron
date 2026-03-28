@@ -58,7 +58,9 @@ public class CertificateController {
     @GetMapping("/{id}/download")
     @Operation(summary = "Download certificate PDF", description = "Download the PDF for a specific certificate")
     public ResponseEntity<byte[]> downloadPdf(@PathVariable String id) {
-        byte[] pdfBytes = certificateService.downloadPdf(id);
+        String userId = UserUtil.getCurrentUserId();
+        String userRole = UserUtil.getCurrentUserRole();
+        byte[] pdfBytes = certificateService.downloadPdf(id, userId, userRole);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);
