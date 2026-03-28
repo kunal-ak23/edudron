@@ -4,14 +4,14 @@ export class ResultsApi {
   constructor(private apiClient: ApiClient) {}
 
   async exportBySection(sectionId: string): Promise<Blob> {
-    return this.apiClient.downloadFile(`/api/content/results/export/section/${sectionId}`)
+    return this.apiClient.downloadFile(`/api/results/export?sectionId=${sectionId}`)
   }
 
   async exportByClass(classId: string): Promise<Blob> {
-    return this.apiClient.downloadFile(`/api/content/results/export/class/${classId}`)
+    return this.apiClient.downloadFile(`/api/results/export?classId=${classId}`)
   }
 
   async exportByCourse(courseId: string): Promise<Blob> {
-    return this.apiClient.downloadFile(`/api/content/results/export/course/${courseId}`)
+    return this.apiClient.downloadFile(`/api/results/export?courseId=${courseId}`)
   }
 }

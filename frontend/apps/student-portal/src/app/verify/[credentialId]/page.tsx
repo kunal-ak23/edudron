@@ -31,7 +31,7 @@ export default function VerifyCertificatePage() {
 
     const fetchVerification = async () => {
       try {
-        const res = await fetch(`${GATEWAY_URL}/api/content/certificates/verify/${credentialId}`)
+        const res = await fetch(`${GATEWAY_URL}/api/verify/${credentialId}`)
         if (!res.ok) {
           if (res.status === 404) {
             setError('Certificate not found. Please check the credential ID and try again.')

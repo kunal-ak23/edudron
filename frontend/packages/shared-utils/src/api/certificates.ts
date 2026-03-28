@@ -68,23 +68,23 @@ export class CertificatesApi {
 
   // Templates
   async listTemplates(): Promise<CertificateTemplate[]> {
-    const response = await this.apiClient.get<CertificateTemplate[]>('/api/content/certificates/templates')
+    const response = await this.apiClient.get<CertificateTemplate[]>('/api/certificates/templates')
     return Array.isArray(response.data) ? response.data : []
   }
 
   async createTemplate(template: Partial<CertificateTemplate>): Promise<CertificateTemplate> {
-    const response = await this.apiClient.post<CertificateTemplate>('/api/content/certificates/templates', template)
+    const response = await this.apiClient.post<CertificateTemplate>('/api/certificates/templates', template)
     return response.data
   }
 
   async updateTemplate(id: string, template: Partial<CertificateTemplate>): Promise<CertificateTemplate> {
-    const response = await this.apiClient.put<CertificateTemplate>(`/api/content/certificates/templates/${id}`, template)
+    const response = await this.apiClient.put<CertificateTemplate>(`/api/certificates/templates/${id}`, template)
     return response.data
   }
 
   // Generation
   async generate(request: CertificateGenerateRequest): Promise<Certificate[]> {
-    const response = await this.apiClient.post<Certificate[]>('/api/content/certificates/generate', request)
+    const response = await this.apiClient.post<Certificate[]>('/api/certificates/generate', request)
     return Array.isArray(response.data) ? response.data : []
   }
 
@@ -96,7 +96,7 @@ export class CertificatesApi {
     page?: number
     size?: number
   }): Promise<{ content: Certificate[]; totalElements: number; totalPages: number }> {
-    const response = await this.apiClient.get<any>('/api/content/certificates', { params })
+    const response = await this.apiClient.get<any>('/api/certificates', { params })
 
     if (response.data && response.data.content && Array.isArray(response.data.content)) {
       return {
@@ -113,34 +113,32 @@ export class CertificatesApi {
 
   // Downloads
   async downloadPdf(id: string): Promise<Blob> {
-    return this.apiClient.downloadFile(`/api/content/certificates/${id}/pdf`)
+    return this.apiClient.downloadFile(`/api/certificates/${id}/download`)
   }
 
   async downloadAllAsZip(sectionId: string, courseId: string): Promise<Blob> {
-    return this.apiClient.downloadFile('/api/content/certificates/download-zip', {
-      params: { sectionId, courseId },
-    })
+    return this.apiClient.downloadFile(`/api/certificates/download-all?sectionId=${sectionId}&courseId=${courseId}`)
   }
 
   // Management
   async revoke(id: string, reason: string): Promise<void> {
-    await this.apiClient.post(`/api/content/certificates/${id}/revoke`, { reason })
+    await this.apiClient.post(`/api/certificates/${id}/revoke`, { reason })
   }
 
   // Student
   async myCertificates(): Promise<Certificate[]> {
-    const response = await this.apiClient.get<Certificate[]>('/api/content/certificates/my')
+    const response = await this.apiClient.get<Certificate[]>('/api/certificates/my')
     return Array.isArray(response.data) ? response.data : []
   }
 
   async updateVisibility(id: string, visibility: CertificateVisibility): Promise<Certificate> {
-    const response = await this.apiClient.put<Certificate>(`/api/content/certificates/${id}/visibility`, visibility)
+    const response = await this.apiClient.put<Certificate>(`/api/certificates/${id}/visibility`, visibility)
     return response.data
   }
 
   // Public verification
   async verify(credentialId: string): Promise<CertificateVerification> {
-    const response = await this.apiClient.get<CertificateVerification>(`/api/content/certificates/verify/${credentialId}`)
+    const response = await this.apiClient.get<CertificateVerification>(`/api/verify/${credentialId}`)
     return response.data
   }
 }
