@@ -374,6 +374,29 @@ export default function CalendarPage() {
   // Mini month current date tracking
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date())
 
+  // Stretch now-indicator line across all columns in week/day view
+  useEffect(() => {
+    const stretchNowIndicator = () => {
+      const line = document.querySelector('.fc-timegrid-now-indicator-line') as HTMLElement
+      if (!line) return
+      const col = line.closest('.fc-timegrid-col') as HTMLElement
+      const body = line.closest('.fc-timegrid-body') as HTMLElement
+      if (col && body) {
+        const colRect = col.getBoundingClientRect()
+        const bodyRect = body.getBoundingClientRect()
+        const offsetLeft = colRect.left - bodyRect.left
+        line.style.width = `${bodyRect.width}px`
+        line.style.marginLeft = `-${offsetLeft}px`
+        line.style.zIndex = '4'
+        line.style.pointerEvents = 'none'
+      }
+    }
+    // Run on interval to keep indicator stretched as it moves
+    const interval = setInterval(stretchNowIndicator, 1000)
+    stretchNowIndicator()
+    return () => clearInterval(interval)
+  }, [])
+
   // Responsive view
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {

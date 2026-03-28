@@ -93,18 +93,20 @@
   }
 }
 
-/* FullCalendar: now-indicator line spans full width in week/day views */
+/* FullCalendar: now-indicator styling */
+/* The now-indicator container in the axis (left time labels) spans the full width */
+.fc .fc-timegrid-now-indicator-container {
+  overflow: visible !important;
+}
 .fc .fc-timegrid-now-indicator-line {
-  border-color: #dc2626;
-  border-width: 2px;
-  position: absolute;
-  left: 0 !important;
-  right: 0 !important;
-  width: 100% !important;
-  z-index: 4;
+  border-color: #dc2626 !important;
+  border-width: 2px !important;
 }
 .fc .fc-timegrid-now-indicator-arrow {
-  border-color: #dc2626;
-  left: 0 !important;
+  border-color: #dc2626 !important;
+}
+/* Make all day columns in the timegrid show a subtle current-time border line */
+.fc .fc-timegrid-col.fc-day-today {
+  background: rgba(254, 243, 199, 0.3) !important;
 }
 
