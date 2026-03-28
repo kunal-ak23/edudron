@@ -121,6 +121,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     
                     // Set user information as request attributes for event logging
                     request.setAttribute("userId", username); // Using username as userId for now
+                    if (role != null) {
+                        request.setAttribute("userRole", role);
+                    }
                     // Try to extract email from token if available
                     try {
                         String email = jwtUtil.extractClaim(token, claims -> {

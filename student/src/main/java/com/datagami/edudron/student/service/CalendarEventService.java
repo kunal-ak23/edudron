@@ -363,6 +363,9 @@ public class CalendarEventService {
 
     private void validateCreatePermission(String userId, String userRole, UUID clientId,
                                           EventAudience audience, String classId, String sectionId) {
+        if (userRole == null) {
+            throw new IllegalStateException("User role not available. Please re-authenticate.");
+        }
         switch (userRole) {
             case "SYSTEM_ADMIN":
             case "TENANT_ADMIN":
@@ -409,6 +412,7 @@ public class CalendarEventService {
 
     private Specification<CalendarEvent> buildRoleBasedSpec(UUID clientId, String userId, String userRole,
                                                             OffsetDateTime startDate, OffsetDateTime endDate) {
+        if (userRole == null) userRole = "";
         switch (userRole) {
             case "STUDENT":
                 Set<String> studentClassIds = resolveStudentClassIds(userId, clientId);
