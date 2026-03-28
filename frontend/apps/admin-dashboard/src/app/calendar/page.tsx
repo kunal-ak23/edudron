@@ -243,6 +243,7 @@ function MiniMonthPicker({ currentDate, onDateSelect }: { currentDate: Date; onD
           )
         })}
       </div>
+      <p className="text-[10px] text-muted-foreground mt-2 text-center">Click a date to navigate the calendar</p>
     </div>
   )
 }
