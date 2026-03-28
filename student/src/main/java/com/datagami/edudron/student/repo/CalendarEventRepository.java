@@ -35,8 +35,8 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, St
     @Query(value = """
         SELECT * FROM calendar.calendar_events e
         WHERE e.client_id = CAST(:clientId AS uuid) AND e.is_active = true
-        AND (:startDate IS NULL OR e.start_date_time >= CAST(:startDate AS timestamptz))
-        AND (:endDate IS NULL OR e.start_date_time <= CAST(:endDate AS timestamptz))
+        AND e.start_date_time >= CAST(:startDate AS timestamptz)
+        AND e.start_date_time <= CAST(:endDate AS timestamptz)
         AND (
             e.audience = 'TENANT_WIDE'
             OR (e.audience = 'CLASS' AND e.class_ids && CAST(:classIds AS text[]))
@@ -55,13 +55,12 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, St
 
     /**
      * Instructor visibility: TENANT_WIDE + FACULTY_ONLY (all or targeted) + CLASS (overlapping) + SECTION (overlapping) + own PERSONAL.
-     * For FACULTY_ONLY, if target_user_ids is set, instructor must be in the list; otherwise all instructors see it.
      */
     @Query(value = """
         SELECT * FROM calendar.calendar_events e
         WHERE e.client_id = CAST(:clientId AS uuid) AND e.is_active = true
-        AND (:startDate IS NULL OR e.start_date_time >= CAST(:startDate AS timestamptz))
-        AND (:endDate IS NULL OR e.start_date_time <= CAST(:endDate AS timestamptz))
+        AND e.start_date_time >= CAST(:startDate AS timestamptz)
+        AND e.start_date_time <= CAST(:endDate AS timestamptz)
         AND (
             e.audience = 'TENANT_WIDE'
             OR (e.audience = 'FACULTY_ONLY' AND (e.target_user_ids IS NULL OR e.target_user_ids && CAST(:userIdArray AS text[])))
@@ -81,13 +80,13 @@ public interface CalendarEventRepository extends JpaRepository<CalendarEvent, St
         @Param("userIdArray") String[] userIdArray);
 
     /**
-     * Admin visibility: all institutional events (TENANT_WIDE, CLASS, SECTION, FACULTY_ONLY) + own PERSONAL.
+     * Admin visibility: all institutional events + own PERSONAL.
      */
     @Query(value = """
         SELECT * FROM calendar.calendar_events e
         WHERE e.client_id = CAST(:clientId AS uuid) AND e.is_active = true
-        AND (:startDate IS NULL OR e.start_date_time >= CAST(:startDate AS timestamptz))
-        AND (:endDate IS NULL OR e.start_date_time <= CAST(:endDate AS timestamptz))
+        AND e.start_date_time >= CAST(:startDate AS timestamptz)
+        AND e.start_date_time <= CAST(:endDate AS timestamptz)
         AND (
             e.audience IN ('TENANT_WIDE', 'CLASS', 'SECTION', 'FACULTY_ONLY')
             OR (e.audience = 'PERSONAL' AND e.created_by_user_id = :userId)

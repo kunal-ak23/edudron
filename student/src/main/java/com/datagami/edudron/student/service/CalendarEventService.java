@@ -121,6 +121,10 @@ public class CalendarEventService {
         UUID clientId = resolveClientId();
         String clientIdStr = clientId.toString();
 
+        // Default date range if not provided
+        if (startDate == null) startDate = OffsetDateTime.now().minusYears(1);
+        if (endDate == null) endDate = OffsetDateTime.now().plusYears(1);
+
         List<CalendarEvent> events = fetchRoleBasedEvents(clientIdStr, userId, userRole, startDate, endDate, clientId);
 
         // Apply optional in-memory filters (classId, sectionId, eventType, audience)
