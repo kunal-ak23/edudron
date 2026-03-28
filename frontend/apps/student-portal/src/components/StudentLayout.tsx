@@ -170,6 +170,16 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                 >
                   Calendar
                 </button>
+                <button
+                  onClick={() => router.push('/certificates')}
+                  className={`font-medium transition-colors ${
+                    pathname?.startsWith('/certificates')
+                      ? 'text-primary-600'
+                      : 'text-gray-700 hover:text-primary-600'
+                  }`}
+                >
+                  Certificates
+                </button>
                 {psychometricTestEnabled && (
                   <button
                     onClick={() => router.push('/psych-test')}
