@@ -19,8 +19,11 @@ import {
   Loader2,
   LogOut
 } from 'lucide-react'
-import { apiClient, coursesApi, enrollmentsApi } from '@/lib/api'
+import { apiClient, coursesApi, enrollmentsApi, calendarEventsApi } from '@/lib/api'
 import type { Course, Batch } from '@kunal-ak23/edudron-shared-utils'
+import type { CalendarEvent } from '@kunal-ak23/edudron-shared-utils'
+import Link from 'next/link'
+import { Calendar } from 'lucide-react'
 
 interface InstructorAccess {
   allowedClassIds: string[]
@@ -59,6 +62,30 @@ function timeAgo(dateStr?: string): string {
   return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`
 }
 
+const EVENT_TYPE_DOT_COLORS: Record<string, string> = {
+  HOLIDAY: 'bg-green-500',
+  EXAM: 'bg-red-500',
+  SUBMISSION_DEADLINE: 'bg-orange-500',
+  FACULTY_MEETING: 'bg-purple-500',
+  REVIEW: 'bg-teal-500',
+  GENERAL: 'bg-blue-500',
+  CUSTOM: 'bg-gray-500',
+  PERSONAL: 'bg-sky-400',
+}
+
+function formatRelativeDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const eventDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const diffDays = Math.round((eventDay.getTime() - todayStart.getTime()) / (24 * 60 * 60 * 1000))
+
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Tomorrow'
+  if (diffDays < 7) return `In ${diffDays} days`
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 function computeSeatUtilization(batches: Batch[]): number | null {
   const withCapacity = batches.filter((b) => {
     const cap = b.capacity ?? b.maxStudents ?? 0
@@ -82,6 +109,8 @@ export default function DashboardPage() {
   const [studentCount, setStudentCount] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<any>(null)
+  const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([])
+  const [eventsLoading, setEventsLoading] = useState(true)
 
   // Ensure we're on client side before using router
   useEffect(() => {
@@ -200,6 +229,26 @@ export default function DashboardPage() {
     } catch (error) {
     } finally {
       setLoading(false)
+    }
+
+    // Fetch upcoming calendar events independently
+    try {
+      setEventsLoading(true)
+      const now = new Date()
+      const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+      const events = await calendarEventsApi.getEvents({
+        startDate: now.toISOString().split('T')[0],
+        endDate: in30Days.toISOString().split('T')[0],
+      })
+      // Sort by start date and take first 7
+      const sorted = events
+        .sort((a, b) => new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime())
+        .slice(0, 7)
+      setUpcomingEvents(sorted)
+    } catch {
+      setUpcomingEvents([])
+    } finally {
+      setEventsLoading(false)
     }
   }
 
@@ -538,6 +587,53 @@ export default function DashboardPage() {
                       View All Courses
                     </Button>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Upcoming Events */}
+              <Card className="mt-6">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    Upcoming Events
+                  </CardTitle>
+                  <Link href="/calendar" className="text-sm text-primary hover:underline">
+                    View Calendar
+                  </Link>
+                </CardHeader>
+                <CardContent>
+                  {eventsLoading ? (
+                    <div className="space-y-3 text-sm">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="flex items-start space-x-3 animate-pulse">
+                          <div className="w-2 h-2 bg-gray-200 rounded-full mt-2"></div>
+                          <div className="flex-1">
+                            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                            <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : upcomingEvents.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No upcoming events in the next 30 days.</p>
+                  ) : (
+                    <div className="space-y-3 text-sm">
+                      {upcomingEvents.map((event) => (
+                        <div key={event.id} className="flex items-start space-x-3">
+                          <div
+                            className={`w-2 h-2 rounded-full mt-2 ${EVENT_TYPE_DOT_COLORS[event.eventType] || 'bg-gray-400'}`}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate">{event.title}</p>
+                            <p className="text-muted-foreground text-xs">
+                              {formatRelativeDate(event.startDateTime)}
+                              {event.allDay ? '' : ` at ${new Date(event.startDateTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

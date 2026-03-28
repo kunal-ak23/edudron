@@ -2,6 +2,7 @@ package com.datagami.edudron.student.service;
 
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.common.UlidGenerator;
+import com.datagami.edudron.student.client.IdentityUserClient;
 import com.datagami.edudron.student.domain.Class;
 import com.datagami.edudron.student.domain.Institute;
 import com.datagami.edudron.student.domain.Section;
@@ -10,6 +11,7 @@ import com.datagami.edudron.student.repo.ClassRepository;
 import com.datagami.edudron.student.repo.EnrollmentRepository;
 import com.datagami.edudron.student.repo.InstituteRepository;
 import com.datagami.edudron.student.repo.SectionRepository;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +37,9 @@ public class ClassService {
 
     @Autowired
     private StudentAuditService auditService;
+
+    @Autowired
+    private IdentityUserClient identityUserClient;
     
     public ClassDTO createClass(String instituteId, CreateClassRequest request) {
         String clientIdStr = TenantContext.getClientId();
@@ -396,6 +401,99 @@ public class ClassService {
         );
     }
     
+    public CoordinatorResponse assignClassCoordinator(String classId, String coordinatorUserId, String actorEmail) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
+
+        // Validate the coordinator user exists and has INSTRUCTOR role
+        JsonNode userNode = identityUserClient.getUser(coordinatorUserId);
+        if (userNode == null) {
+            throw new IllegalArgumentException("User not found: " + coordinatorUserId);
+        }
+
+        String role = userNode.has("role") ? userNode.get("role").asText() : null;
+        if (!"INSTRUCTOR".equals(role)) {
+            throw new IllegalArgumentException("User " + coordinatorUserId + " does not have INSTRUCTOR role");
+        }
+
+        Boolean active = userNode.has("active") ? userNode.get("active").asBoolean() : null;
+        if (active == null || !active) {
+            throw new IllegalArgumentException("User " + coordinatorUserId + " is not active");
+        }
+
+        String previousCoordinator = classEntity.getCoordinatorUserId();
+        String operation = (previousCoordinator == null) ? "CREATE" : "UPDATE";
+
+        classEntity.setCoordinatorUserId(coordinatorUserId);
+        classRepository.save(classEntity);
+
+        String coordinatorName = userNode.has("name") ? userNode.get("name").asText() : null;
+        String coordinatorEmail = userNode.has("email") ? userNode.get("email").asText() : null;
+
+        Map<String, Object> meta = new java.util.HashMap<>();
+        meta.put("className", classEntity.getName());
+        meta.put("coordinatorUserId", coordinatorUserId);
+        if (coordinatorName != null) meta.put("coordinatorName", coordinatorName);
+        if (previousCoordinator != null) meta.put("previousCoordinatorUserId", previousCoordinator);
+        auditService.logCrud(clientId, operation, "ClassCoordinator", classId, null, actorEmail, meta);
+
+        return new CoordinatorResponse(coordinatorUserId, coordinatorName, coordinatorEmail);
+    }
+
+    public void removeClassCoordinator(String classId, String actorEmail) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
+
+        if (classEntity.getCoordinatorUserId() == null) {
+            throw new IllegalArgumentException("Class " + classId + " does not have a coordinator assigned");
+        }
+
+        String previousCoordinator = classEntity.getCoordinatorUserId();
+        classEntity.setCoordinatorUserId(null);
+        classRepository.save(classEntity);
+
+        auditService.logCrud(clientId, "DELETE", "ClassCoordinator", classId, null, actorEmail,
+            java.util.Map.of("className", classEntity.getName(), "removedCoordinatorUserId", previousCoordinator));
+    }
+
+    @Transactional(readOnly = true)
+    public CoordinatorResponse getClassCoordinator(String classId) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null) {
+            throw new IllegalStateException("Tenant context is not set");
+        }
+        UUID clientId = UUID.fromString(clientIdStr);
+
+        Class classEntity = classRepository.findByIdAndClientId(classId, clientId)
+            .orElseThrow(() -> new IllegalArgumentException("Class not found: " + classId));
+
+        if (classEntity.getCoordinatorUserId() == null) {
+            return null;
+        }
+
+        JsonNode userNode = identityUserClient.getUser(classEntity.getCoordinatorUserId());
+        String coordinatorName = null;
+        String coordinatorEmail = null;
+        if (userNode != null) {
+            coordinatorName = userNode.has("name") ? userNode.get("name").asText() : null;
+            coordinatorEmail = userNode.has("email") ? userNode.get("email").asText() : null;
+        }
+
+        return new CoordinatorResponse(classEntity.getCoordinatorUserId(), coordinatorName, coordinatorEmail);
+    }
+
     private SectionDTO toSectionDTO(Section section, UUID clientId) {
         SectionDTO dto = new SectionDTO();
         dto.setId(section.getId());
@@ -427,6 +525,7 @@ public class ClassService {
         dto.setLevel(classEntity.getLevel());
         dto.setIsActive(classEntity.getIsActive());
         dto.setIsBacklog(classEntity.getIsBacklog());
+        dto.setCoordinatorUserId(classEntity.getCoordinatorUserId());
         dto.setCreatedAt(classEntity.getCreatedAt());
         dto.setUpdatedAt(classEntity.getUpdatedAt());
         

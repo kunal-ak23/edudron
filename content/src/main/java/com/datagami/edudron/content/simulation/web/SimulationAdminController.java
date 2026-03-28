@@ -13,6 +13,7 @@ import com.datagami.edudron.content.simulation.dto.SimulationExportDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationSuggestionRequest;
 import com.datagami.edudron.content.simulation.dto.SimulationSuggestionResponse;
 import com.datagami.edudron.content.simulation.repo.SimulationRepository;
+import com.datagami.edudron.content.simulation.service.SimulationGenerationService;
 import com.datagami.edudron.content.simulation.service.SimulationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -53,6 +54,9 @@ public class SimulationAdminController {
 
     @Autowired
     private SimulationService simulationService;
+
+    @Autowired
+    private SimulationGenerationService simulationGenerationService;
 
     @Autowired
     private AIJobQueueService aiJobQueueService;
@@ -295,6 +299,37 @@ public class SimulationAdminController {
     public ResponseEntity<SimulationDTO> archive(@PathVariable String id) {
         requireAdmin();
         return ResponseEntity.ok(simulationService.archive(id));
+    }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete simulation", description = "Permanently delete a simulation and all its play data")
+    public ResponseEntity<Void> delete(@PathVariable String id) {
+        requireAdmin();
+        simulationService.deleteSimulation(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/move-to-draft")
+    @Operation(summary = "Move to draft", description = "Move simulation back to review/draft status for editing")
+    public ResponseEntity<SimulationDTO> moveToDraft(@PathVariable String id) {
+        requireAdmin();
+        return ResponseEntity.ok(simulationService.moveToDraft(id));
+    }
+
+    @PostMapping("/{id}/move-to-published")
+    @Operation(summary = "Move to published", description = "Re-publish a simulation (from any non-generating status)")
+    public ResponseEntity<SimulationDTO> moveToPublished(@PathVariable String id) {
+        requireAdmin();
+        requireSimulationEnabled(TenantContext.getClientId());
+        return ResponseEntity.ok(simulationService.moveToPublished(id));
+    }
+
+    @PostMapping("/{id}/regenerate-mentor-guidance")
+    @Operation(summary = "Regenerate mentor guidance", description = "Re-run mentor enrichment (Phase 5.5) on an existing simulation without changing decisions")
+    public ResponseEntity<Map<String, String>> regenerateMentorGuidance(@PathVariable String id) {
+        requireAdmin();
+        simulationGenerationService.regenerateMentorGuidance(id);
+        return ResponseEntity.ok(Map.of("status", "success", "message", "Mentor guidance regenerated"));
     }
 
     @PostMapping("/{id}/export")

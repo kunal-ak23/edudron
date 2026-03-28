@@ -14,6 +14,7 @@ public class ClassDTO {
     private String level;
     private Boolean isActive;
     private Boolean isBacklog;
+    private String coordinatorUserId;
     private Long sectionCount;
     private Long studentCount;
     private OffsetDateTime createdAt;
@@ -49,6 +50,9 @@ public class ClassDTO {
 
     public Boolean getIsBacklog() { return isBacklog; }
     public void setIsBacklog(Boolean isBacklog) { this.isBacklog = isBacklog; }
+
+    public String getCoordinatorUserId() { return coordinatorUserId; }
+    public void setCoordinatorUserId(String coordinatorUserId) { this.coordinatorUserId = coordinatorUserId; }
 
     public Long getSectionCount() { return sectionCount; }
     public void setSectionCount(Long sectionCount) { this.sectionCount = sectionCount; }

@@ -39,6 +39,8 @@ export interface AdvisorDialog {
   text: string
   advisorName?: string
   characterId?: string
+  retirementYear?: number
+  farewellMessage?: string
 }
 
 export interface FinancialReport {
@@ -84,6 +86,17 @@ export interface SimulationStateDTO {
   keyInsights?: string[]
 }
 
+export interface MentorGuidance {
+  courseConnection?: string
+  realWorldExample?: string
+  mentorNote?: string
+  mentorTip?: string
+  choiceHints?: Record<string, { hint: string; risk: 'low' | 'medium' | 'high' }>
+  stakeholderHints?: Record<string, { hint: string; priority: 'high' | 'medium' | 'low' }>
+  candidateHints?: Record<string, { hint: string; fit: 'strong' | 'moderate' | 'weak' }>
+  guidanceLevel?: 'FULL' | 'LIGHT'
+}
+
 export interface SimulationDecisionDTO {
   decisionId: string
   narrative: string
@@ -92,6 +105,7 @@ export interface SimulationDecisionDTO {
   decisionConfig?: any
   choices?: ChoiceDTO[]
   conceptKeywords?: Array<{ term: string; explanation: string }>
+  mentorGuidance?: MentorGuidance
 }
 
 export interface ChoiceDTO {
@@ -233,6 +247,31 @@ export class SimulationsApi {
     return response.data
   }
 
+  async deleteSimulation(id: string): Promise<void> {
+    await this.apiClient.delete(`/content/api/simulations/${id}`)
+  }
+
+  async moveToDraft(id: string): Promise<SimulationDTO> {
+    const response = await this.apiClient.post<SimulationDTO>(`/content/api/simulations/${id}/move-to-draft`, {})
+    return response.data
+  }
+
+  async moveToPublished(id: string): Promise<SimulationDTO> {
+    const response = await this.apiClient.post<SimulationDTO>(`/content/api/simulations/${id}/move-to-published`, {})
+    return response.data
+  }
+
+  async abandonPlay(playId: string): Promise<void> {
+    await this.apiClient.post(`/content/api/simulations/play/${playId}/abandon`, {})
+  }
+
+  async regenerateMentorGuidance(id: string): Promise<{ status: string; message: string }> {
+    const response = await this.apiClient.post<{ status: string; message: string }>(
+      `/content/api/simulations/${id}/regenerate-mentor-guidance`, {}, { timeout: 120000 }
+    )
+    return response.data
+  }
+
   async exportSimulation(id: string): Promise<SimulationExportDTO> {
     const response = await this.apiClient.post<SimulationExportDTO>(`/content/api/simulations/${id}/export`, {})
     return response.data
@@ -250,6 +289,11 @@ export class SimulationsApi {
   }
 
   // ---- Student ----
+
+  async getSimulationDetails(id: string): Promise<SimulationDTO> {
+    const response = await this.apiClient.get<SimulationDTO>(`/content/api/simulations/${id}/details`)
+    return response.data
+  }
 
   async getAvailableSimulations(): Promise<SimulationDTO[]> {
     const response = await this.apiClient.get<SimulationDTO[]>('/content/api/simulations/available')

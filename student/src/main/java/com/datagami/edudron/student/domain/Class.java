@@ -37,6 +37,9 @@ public class Class {
     @Column(name = "is_backlog", nullable = false)
     private Boolean isBacklog = false;
 
+    @Column(name = "coordinator_user_id")
+    private String coordinatorUserId;
+
     @Column(nullable = false)
     private OffsetDateTime createdAt;
 
@@ -79,6 +82,9 @@ public class Class {
 
     public Boolean getIsBacklog() { return isBacklog; }
     public void setIsBacklog(Boolean isBacklog) { this.isBacklog = isBacklog; }
+
+    public String getCoordinatorUserId() { return coordinatorUserId; }
+    public void setCoordinatorUserId(String coordinatorUserId) { this.coordinatorUserId = coordinatorUserId; }
 
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }

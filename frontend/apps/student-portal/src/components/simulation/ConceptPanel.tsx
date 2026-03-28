@@ -9,7 +9,9 @@ interface ConceptPanelProps {
   activeKeywordIndex?: number
 }
 
-export default function ConceptPanel({ concept, keywords = [], keyInsights = [], activeKeywordIndex = 0 }: ConceptPanelProps) {
+export default function ConceptPanel({
+  concept, keywords = [], keyInsights = [], activeKeywordIndex = 0
+}: ConceptPanelProps) {
   return (
     <div className="p-6 space-y-8">
       {/* Concept Header */}

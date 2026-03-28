@@ -12,14 +12,21 @@ interface CrisisConfig {
   defaultOnExpiry: string
 }
 
+const riskColors: Record<string, string> = {
+  low: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+  medium: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+  high: 'text-red-400 bg-red-400/10 border-red-400/20',
+}
+
 interface CrisisResponseInputProps {
   config: CrisisConfig
   choices?: ChoiceDTO[]
   onSubmit: (data: { choiceId?: string; input?: Record<string, any> }) => void
   disabled?: boolean
+  choiceHints?: Record<string, { hint: string; risk: 'low' | 'medium' | 'high' }>
 }
 
-export function CrisisResponseInput({ config, choices = [], onSubmit, disabled }: CrisisResponseInputProps) {
+export function CrisisResponseInput({ config, choices = [], onSubmit, disabled, choiceHints }: CrisisResponseInputProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [timeLeft, setTimeLeft] = useState(config.timeLimit)
   const [expired, setExpired] = useState(false)
@@ -87,20 +94,31 @@ export function CrisisResponseInput({ config, choices = [], onSubmit, disabled }
       {!expired && (
         <>
           <div className="space-y-3">
-            {choices.map((choice) => (
-              <button
-                key={choice.id}
-                type="button"
-                className={`w-full text-left rounded-xl p-4 border transition-all duration-200 ${
-                  selectedId === choice.id
-                    ? 'bg-[#1A2744] border-[#6cd3f7]/50 ring-1 ring-[#6cd3f7]/30'
-                    : 'bg-[#1A2744] border-white/5 hover:border-[#6cd3f7]/30'
-                } ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
-                onClick={() => !disabled && !expired && setSelectedId(choice.id)}
-              >
-                <p className="text-sm text-[#dbe2fb]">{choice.text}</p>
-              </button>
-            ))}
+            {choices.map((choice) => {
+              const hint = choiceHints?.[choice.id]
+              return (
+                <button
+                  key={choice.id}
+                  type="button"
+                  className={`w-full text-left rounded-xl p-4 border transition-all duration-200 ${
+                    selectedId === choice.id
+                      ? 'bg-[#1A2744] border-[#6cd3f7]/50 ring-1 ring-[#6cd3f7]/30'
+                      : 'bg-[#1A2744] border-white/5 hover:border-[#6cd3f7]/30'
+                  } ${disabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}`}
+                  onClick={() => !disabled && !expired && setSelectedId(choice.id)}
+                >
+                  <p className="text-sm text-[#dbe2fb]">{choice.text}</p>
+                  {hint && (
+                    <div className="mt-2 flex items-start gap-2">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold border ${riskColors[hint.risk]}`}>
+                        {hint.risk} risk
+                      </span>
+                      <p className="text-xs text-slate-400 leading-relaxed">{hint.hint}</p>
+                    </div>
+                  )}
+                </button>
+              )
+            })}
           </div>
 
           <button

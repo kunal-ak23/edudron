@@ -9,10 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { useSimulationFeature } from '@/hooks/useSimulationFeature'
 import { useProjectsFeature } from '@/hooks/useProjectsFeature'
-import { 
-  LayoutDashboard, 
-  BookOpen, 
-  Users, 
+import {
+  LayoutDashboard,
+  BookOpen,
+  Users,
   GraduationCap,
   Building2,
   Settings,
@@ -32,7 +32,8 @@ import {
   ScrollText,
   Layers,
   Gamepad2,
-  FolderKanban
+  FolderKanban,
+  CalendarDays
 } from 'lucide-react'
 
 interface MenuItem {
@@ -149,6 +150,12 @@ const menuItems: MenuItem[] = [
     name: 'Instructor Assignments',
     href: '/instructor-assignments',
     icon: UserCog,
+    requiresTenant: true,
+  },
+  {
+    name: 'Calendar',
+    href: '/calendar',
+    icon: CalendarDays,
     requiresTenant: true,
   },
   {
@@ -314,6 +321,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
     if (path.startsWith('/simulations')) return 'Simulations'
     if (path.startsWith('/projects') || path.startsWith('/project-questions')) return 'Projects'
     if (path.startsWith('/enrollments')) return 'Enrollments'
+    if (path.startsWith('/calendar')) return 'Calendar'
     if (path.startsWith('/analytics')) return 'Analytics'
     if (path.startsWith('/payments')) return 'Payments'
     if (path.startsWith('/settings')) return 'Settings'

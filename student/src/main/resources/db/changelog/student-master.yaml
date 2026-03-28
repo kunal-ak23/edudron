@@ -55,3 +55,9 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0026-foreign-keys.yaml
   - include:
       file: db/changelog/db.changelog-0027-project-templates.yaml
+  - include:
+      file: db/changelog/db.changelog-0028-faculty-coordinator.yaml
+  - include:
+      file: db/changelog/db.changelog-0029-calendar-events.yaml
+  - include:
+      file: db/changelog/db.changelog-0030-calendar-multi-target.yaml

@@ -52,12 +52,13 @@ function qualityIcon(quality: string) {
 }
 
 export default function DashboardPanel({
-  score, maxScore = 2000, budget, role, performanceBand,
+  score, maxScore, budget, role, performanceBand,
   currentYear, totalYears, currentDecision, totalDecisions,
   decisionHistory = [], goodDecisionCount = 0, badDecisionCount = 0,
   neutralDecisionCount = 0, keyInsights = []
 }: DashboardPanelProps) {
-  const scorePercent = maxScore > 0 ? Math.min((score / maxScore) * 100, 100) : 0
+  // Year progress: how many decisions completed in current year
+  const yearProgress = totalDecisions > 0 ? Math.min(((currentDecision) / totalDecisions) * 100, 100) : 0
 
   return (
     <div className="p-6 space-y-8">
@@ -70,9 +71,13 @@ export default function DashboardPanel({
               {score.toLocaleString()} <span className="text-xs font-normal text-[#bdc8ce]">PTS</span>
             </span>
           </div>
-          <div className="h-1 w-full bg-[#2d3448] rounded-full overflow-hidden">
-            <div className="h-full bg-[#6cd3f7] transition-all duration-500" style={{ width: `${scorePercent}%` }} />
+          <div className="h-2 w-full bg-[#2d3448] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[#6cd3f7] to-[#0891B2] rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${yearProgress}%`, boxShadow: yearProgress > 0 ? '0 0 8px rgba(108,211,247,0.5)' : 'none' }}
+            />
           </div>
+          <p className="text-[10px] text-[#879298] text-right">Year {currentYear} — {currentDecision}/{totalDecisions} decisions</p>
         </div>
 
         {/* Stats Grid */}
@@ -128,27 +133,37 @@ export default function DashboardPanel({
         </section>
       )}
 
-      {/* Risk Level Warning */}
-      {badDecisionCount > 0 && (
-        <section className="p-4 bg-[#93000a]/20 rounded-xl border border-[#ffb4ab]/20">
-          <div className="flex items-center gap-2 mb-2">
-            <svg className="w-4 h-4 text-[#ffb4ab]" fill="currentColor" viewBox="0 0 20 20">
+      {/* Risk Level — always visible */}
+      <section className={`p-4 rounded-xl border transition-colors duration-500 ${
+        badDecisionCount >= 3 ? 'bg-[#93000a]/30 border-[#ffb4ab]/30' :
+        badDecisionCount >= 1 ? 'bg-[#93000a]/20 border-[#ffb4ab]/20' :
+        'bg-[#0F1729]/50 border-white/5'
+      }`}>
+        <div className="flex items-center gap-2 mb-2">
+          <svg className={`w-4 h-4 ${badDecisionCount > 0 ? 'text-[#ffb4ab]' : 'text-emerald-400'}`} fill="currentColor" viewBox="0 0 20 20">
+            {badDecisionCount > 0 ? (
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            <span className="text-[11px] font-bold text-[#ffb4ab] uppercase tracking-wider">
-              Risk Level: {badDecisionCount >= 3 ? 'Critical' : badDecisionCount >= 2 ? 'Elevated' : 'Moderate'}
-            </span>
-          </div>
-          <div className="flex gap-1 mb-3">
-            {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className={`h-1.5 flex-1 rounded-full ${i < badDecisionCount ? 'bg-[#ffb4ab]' : 'bg-[#2d3448]'}`} />
-            ))}
-          </div>
-          <p className="text-[10px] text-[#ffdad6] leading-tight">
-            {badDecisionCount} bad decision{badDecisionCount !== 1 ? 's' : ''} made. {Math.max(0, 4 - badDecisionCount)} more consecutive bad decisions could lead to termination.
-          </p>
-        </section>
-      )}
+            ) : (
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            )}
+          </svg>
+          <span className={`text-[11px] font-bold uppercase tracking-wider ${
+            badDecisionCount >= 3 ? 'text-[#ffb4ab]' : badDecisionCount >= 1 ? 'text-[#ffb4ab]' : 'text-emerald-400'
+          }`}>
+            Risk Level: {badDecisionCount >= 3 ? 'Critical' : badDecisionCount >= 2 ? 'Elevated' : badDecisionCount >= 1 ? 'Moderate' : 'Safe'}
+          </span>
+        </div>
+        <div className="flex gap-1 mb-3">
+          {Array.from({ length: 5 }, (_, i) => (
+            <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors duration-500 ${i < badDecisionCount ? 'bg-[#ffb4ab]' : 'bg-[#2d3448]'}`} />
+          ))}
+        </div>
+        <p className={`text-[10px] leading-tight ${badDecisionCount > 0 ? 'text-[#ffdad6]' : 'text-slate-400'}`}>
+          {badDecisionCount === 0
+            ? 'No bad decisions yet. Keep making thoughtful choices!'
+            : `${badDecisionCount} bad decision${badDecisionCount !== 1 ? 's' : ''} made. ${Math.max(0, 4 - badDecisionCount)} more consecutive bad decisions could lead to termination.`}
+        </p>
+      </section>
     </div>
   )
 }

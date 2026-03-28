@@ -63,6 +63,12 @@ export interface BatchCreateClassesResponse {
   message: string
 }
 
+export interface CoordinatorResponse {
+  coordinatorUserId: string
+  coordinatorName: string
+  coordinatorEmail: string
+}
+
 export class ClassesApi {
   constructor(private apiClient: ApiClient) {}
 
@@ -127,6 +133,24 @@ export class ClassesApi {
 
   async deleteClass(id: string): Promise<void> {
     await this.apiClient.delete(`/api/classes/${id}`)
+  }
+
+  async assignClassCoordinator(classId: string, coordinatorUserId: string): Promise<CoordinatorResponse> {
+    const response = await this.apiClient.put<CoordinatorResponse>(`/api/classes/${classId}/coordinator`, { coordinatorUserId })
+    return response.data
+  }
+
+  async removeClassCoordinator(classId: string): Promise<void> {
+    await this.apiClient.delete(`/api/classes/${classId}/coordinator`)
+  }
+
+  async getClassCoordinator(classId: string): Promise<CoordinatorResponse | null> {
+    try {
+      const response = await this.apiClient.get<CoordinatorResponse>(`/api/classes/${classId}/coordinator`)
+      return response.data || null
+    } catch {
+      return null
+    }
   }
 }
 

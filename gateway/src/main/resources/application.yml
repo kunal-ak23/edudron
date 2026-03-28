@@ -42,6 +42,12 @@ spring:
           predicates:
             - Path=/content/**, /api/content/**, /content/api/**
 
+        # Calendar routes → Core API
+        - id: calendar-events
+          uri: ${CORE_API_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/calendar/**
+
         # Student routes → Core API
         - id: student-service-projects
           uri: ${CORE_API_SERVICE_URL:http://localhost:8085}

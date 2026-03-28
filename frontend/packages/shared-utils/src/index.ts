@@ -14,7 +14,7 @@ export type { TenantFeatureDto } from './api/tenantFeatures'
 export { InstitutesApi, InstituteType } from './api/institutes'
 export type { Institute, CreateInstituteRequest } from './api/institutes'
 export { ClassesApi } from './api/classes'
-export type { Class, CreateClassRequest, BatchCreateClassesRequest, BatchCreateClassesResponse, CreateClassWithSectionsRequest, ClassWithSections, CreateSectionForClassRequest } from './api/classes'
+export type { Class, CreateClassRequest, BatchCreateClassesRequest, BatchCreateClassesResponse, CreateClassWithSectionsRequest, ClassWithSections, CreateSectionForClassRequest, CoordinatorResponse } from './api/classes'
 export { SectionsApi } from './api/sections'
 export type { Section, CreateSectionRequest, BatchCreateSectionsRequest, BatchCreateSectionsResponse } from './api/sections'
 export { LecturesApi } from './api/lectures'
@@ -32,6 +32,8 @@ export type { BulkEnrollmentResult as EnrollmentBulkEnrollmentResult } from './a
 export { AnalyticsApi } from './api/analytics'
 export { SimulationsApi } from './api/simulations'
 export { ProjectsApi, ProjectQuestionsApi } from './api/projects'
+export { CalendarEventsApi, EventType, EventAudience } from './api/calendarEvents'
+export type { CalendarEvent, CreateCalendarEventInput, CalendarEventImportResult } from './api/calendarEvents'
 export type {
   ProjectDTO, ProjectGroupDTO, ProjectEventDTO, ProjectQuestionDTO, ProjectAttachmentDTO,
   CreateProjectRequest, GenerateGroupsRequest, SubmitProjectRequest, AttachmentInfo,
@@ -43,7 +45,7 @@ export type {
   GenerateSimulationRequest, SimulationDTO, SimulationStateDTO,
   SimulationDecisionDTO, SimulationPlayDTO, DecisionInput,
   ChoiceDTO, DebriefDTO, YearEndReviewDTO,
-  SimulationExportDTO
+  SimulationExportDTO, MentorGuidance
 } from './api/simulations'
 export type {
   LectureViewSession,

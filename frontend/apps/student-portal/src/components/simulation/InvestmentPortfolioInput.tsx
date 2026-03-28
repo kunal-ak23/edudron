@@ -37,7 +37,9 @@ export function InvestmentPortfolioInput({ config, onSubmit, disabled }: Investm
   })
 
   const totalAllocated = Object.values(allocations).reduce((sum, v) => sum + v, 0)
-  const remaining = config.totalBudget - totalAllocated
+  const rawRemaining = config.totalBudget - totalAllocated
+  // Treat tiny remainders (< 0.5% of budget) from slider rounding as zero
+  const remaining = Math.abs(rawRemaining) < config.totalBudget * 0.005 ? 0 : rawRemaining
   const isValid = remaining >= 0 && remaining <= config.totalBudget * 0.05 // Allow 5% unallocated
 
   const handleChange = useCallback((deptId: string, value: number) => {

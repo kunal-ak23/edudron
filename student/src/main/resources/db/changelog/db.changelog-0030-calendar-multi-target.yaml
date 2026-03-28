@@ -1,0 +1,30 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0030-calendar-multi-target
+      author: edudron
+      changes:
+        - addColumn:
+            schemaName: calendar
+            tableName: calendar_events
+            columns:
+              - column:
+                  name: class_ids
+                  type: text[]
+              - column:
+                  name: section_ids
+                  type: text[]
+              - column:
+                  name: target_user_ids
+                  type: text[]
+        - sql:
+            sql: |
+              UPDATE calendar.calendar_events SET class_ids = ARRAY[class_id] WHERE class_id IS NOT NULL;
+              UPDATE calendar.calendar_events SET section_ids = ARRAY[section_id] WHERE section_id IS NOT NULL;
+  - changeSet:
+      id: 0030-calendar-gin-indexes
+      author: edudron
+      changes:
+        - sql:
+            sql: CREATE INDEX IF NOT EXISTS idx_cal_events_class_ids_gin ON calendar.calendar_events USING GIN (class_ids)
+        - sql:
+            sql: CREATE INDEX IF NOT EXISTS idx_cal_events_section_ids_gin ON calendar.calendar_events USING GIN (section_ids)

@@ -87,6 +87,17 @@ public class SimulationService {
     }
 
     @Transactional(readOnly = true)
+    public SimulationDTO getSimulationForStudent(String id) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+        SimulationDTO dto = SimulationDTO.fromEntity(sim);
+        dto.setSimulationData(null); // Don't expose full data to students
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
+        return dto;
+    }
+
+    @Transactional(readOnly = true)
     public Page<SimulationDTO> listSimulations(Pageable pageable, String status) {
         UUID clientId = UUID.fromString(TenantContext.getClientId());
         Page<Simulation> page;
@@ -192,6 +203,69 @@ public class SimulationService {
                 .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
 
         sim.setStatus(Simulation.SimulationStatus.ARCHIVED);
+        simulationRepository.save(sim);
+
+        SimulationDTO dto = SimulationDTO.fromEntity(sim);
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
+        return dto;
+    }
+
+    @Transactional
+    public void abandonPlay(String playId, String studentId) {
+        SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
+                .orElseThrow(() -> new IllegalArgumentException("Play not found"));
+        if (play.getStatus() == SimulationPlay.PlayStatus.IN_PROGRESS) {
+            play.setStatus(SimulationPlay.PlayStatus.ABANDONED);
+            playRepository.save(play);
+        }
+    }
+
+    @Transactional
+    public void deleteSimulation(String id) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+        // Delete all plays for this simulation first
+        playRepository.deleteBySimulationIdAndClientId(id, clientId);
+        simulationRepository.delete(sim);
+    }
+
+    @Transactional
+    public SimulationDTO moveToDraft(String id) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+
+        if (sim.getStatus() == Simulation.SimulationStatus.GENERATING) {
+            throw new IllegalStateException("Cannot move a simulation that is currently generating.");
+        }
+
+        sim.setStatus(Simulation.SimulationStatus.REVIEW);
+        sim.setPublishedAt(null);
+        simulationRepository.save(sim);
+
+        SimulationDTO dto = SimulationDTO.fromEntity(sim);
+        dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
+        return dto;
+    }
+
+    @Transactional
+    public SimulationDTO moveToPublished(String id) {
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
+
+        if (sim.getStatus() == Simulation.SimulationStatus.GENERATING) {
+            throw new IllegalStateException("Cannot publish a simulation that is currently generating.");
+        }
+        if (sim.getSimulationData() == null) {
+            throw new IllegalStateException("Cannot publish a simulation without generated content.");
+        }
+
+        sim.setStatus(Simulation.SimulationStatus.PUBLISHED);
+        if (sim.getPublishedAt() == null) {
+            sim.setPublishedAt(OffsetDateTime.now());
+        }
         simulationRepository.save(sim);
 
         SimulationDTO dto = SimulationDTO.fromEntity(sim);
@@ -414,15 +488,14 @@ public class SimulationService {
         int existingPlays = playRepository.countBySimulationIdAndStudentId(simulationId, studentId);
         boolean isPrimary = (existingPlays == 0);
 
-        // If not primary (replay), verify student has at least one completed/fired play
+        // If not primary (replay), verify no play is currently IN_PROGRESS
         if (!isPrimary) {
             List<SimulationPlay> plays = playRepository
                     .findBySimulationIdAndStudentIdOrderByAttemptNumberDesc(simulationId, studentId);
-            boolean hasFinished = plays.stream()
-                    .anyMatch(p -> p.getStatus() == SimulationPlay.PlayStatus.COMPLETED
-                            || p.getStatus() == SimulationPlay.PlayStatus.FIRED);
-            if (!hasFinished) {
-                throw new IllegalStateException("Must complete simulation before replaying");
+            boolean hasInProgress = plays.stream()
+                    .anyMatch(p -> p.getStatus() == SimulationPlay.PlayStatus.IN_PROGRESS);
+            if (hasInProgress) {
+                throw new IllegalStateException("Must complete or abandon current simulation before replaying");
             }
         }
 
@@ -644,6 +717,10 @@ public class SimulationService {
         Map<String, Object> decision = getDecision(simData, play.getCurrentYear(),
                 play.getCurrentDecision());
         state.setDecision(toStudentDecision(decision));
+        logger.info("getCurrentState: year={}, decisionIndex={}, decisionId={}, decisionType={}",
+                play.getCurrentYear(), play.getCurrentDecision(),
+                state.getDecision() != null ? state.getDecision().getDecisionId() : "null",
+                state.getDecision() != null ? state.getDecision().getDecisionType() : "null");
 
         // v3: Include advisor dialog for this decision
         if (decision.get("advisorDialog") != null) {
@@ -654,6 +731,13 @@ public class SimulationService {
                 dialog.put("advisorName", advisorCharacter.get("name"));
                 if (advisorCharacter.get("characterId") != null) {
                     dialog.put("characterId", advisorCharacter.get("characterId"));
+                }
+                // Mentor retirement story arc metadata
+                if (advisorCharacter.get("retirementYear") != null) {
+                    dialog.put("retirementYear", advisorCharacter.get("retirementYear"));
+                }
+                if (advisorCharacter.get("farewellMessage") != null) {
+                    dialog.put("farewellMessage", advisorCharacter.get("farewellMessage"));
                 }
             }
             state.setAdvisorDialog(dialog);
@@ -670,6 +754,7 @@ public class SimulationService {
     @Transactional
     @SuppressWarnings("unchecked")
     public SimulationStateDTO submitDecision(String playId, String studentId, DecisionInputDTO input) {
+        logger.info("submitDecision: playId={}, choiceId={}, inputKeys={}", playId, input.getChoiceId(), input.getInput() != null ? input.getInput().keySet() : "null");
         SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Play not found"));
 
@@ -716,6 +801,7 @@ public class SimulationService {
 
         int quality = ((Number) selectedChoice.get("quality")).intValue();
         int points = qualityToPoints(quality);
+        logger.info("submitDecision: resolved choiceId={}, quality={}, points={}", resolvedChoiceId, quality, points);
 
         // v3: If INVESTMENT_PORTFOLIO, save allocations to budget history (one entry per year)
         String decisionType = (String) decision.get("decisionType");
@@ -769,6 +855,7 @@ public class SimulationService {
         String reactionKey = "quality_" + quality;
 
         playRepository.save(play);
+        logger.info("submitDecision: cumulative score now={}", play.getCumulativeScore());
 
         // Return the next state with advisor reaction attached
         SimulationStateDTO nextState = getCurrentState(playId, studentId);
@@ -1071,6 +1158,17 @@ public class SimulationService {
         if (conceptKeywords != null) {
             dto.setConceptKeywords(conceptKeywords);
         }
+
+        // Pass through mentor guidance (for guided years 1-3)
+        Map<String, Object> mentorGuidance = (Map<String, Object>) decision.get("mentorGuidance");
+        if (mentorGuidance != null) {
+            dto.setMentorGuidance(mentorGuidance);
+        }
+        logger.info("toStudentDecision {}: type={}, hasMentorGuidance={}, hasChoiceHints={}, hasStakeholderHints={}",
+                dto.getDecisionId(), dto.getDecisionType(),
+                mentorGuidance != null,
+                mentorGuidance != null && ((Map<String, Object>) mentorGuidance).containsKey("choiceHints"),
+                mentorGuidance != null && ((Map<String, Object>) mentorGuidance).containsKey("stakeholderHints"));
 
         // Convert choices, stripping quality scores
         List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");

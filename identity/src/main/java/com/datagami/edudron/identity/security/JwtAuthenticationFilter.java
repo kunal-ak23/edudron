@@ -89,6 +89,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             username, null, new ArrayList<>());
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authToken);
+
+                    // Set user info as request attributes for downstream use
+                    request.setAttribute("userId", username);
+                    try {
+                        String role = jwtUtil.extractRole(jwt);
+                        if (role != null) request.setAttribute("userRole", role);
+                    } catch (Exception ignored) {}
+                    try {
+                        String email = jwtUtil.extractClaim(jwt, claims -> {
+                            Object e = claims.get("email");
+                            return e != null ? e.toString() : null;
+                        });
+                        if (email != null) request.setAttribute("userEmail", email);
+                    } catch (Exception ignored) {}
                 } else {
                     // Token is invalid (not expired, but validation failed)
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

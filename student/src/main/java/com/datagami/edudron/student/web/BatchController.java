@@ -72,6 +72,7 @@ public class BatchController {
         BatchProgressDTO progress = batchService.getBatchProgress(id);
         return ResponseEntity.ok(progress);
     }
+
 }
 
 

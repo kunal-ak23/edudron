@@ -115,6 +115,39 @@ public class SectionController {
         SectionProgressDTO progress = sectionService.getSectionProgress(id);
         return ResponseEntity.ok(progress);
     }
+
+    @PutMapping("/sections/{id}/coordinator")
+    @Operation(summary = "Assign section coordinator", description = "Assign a faculty coordinator to a section")
+    public ResponseEntity<CoordinatorResponse> assignSectionCoordinator(
+            @PathVariable String id,
+            @Valid @RequestBody CoordinatorAssignmentRequest request,
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail,
+            @RequestAttribute(value = "userId", required = false) String userId) {
+        String actor = actorEmail != null ? actorEmail : userId;
+        CoordinatorResponse response = sectionService.assignSectionCoordinator(id, request.coordinatorUserId(), actor);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/sections/{id}/coordinator")
+    @Operation(summary = "Remove section coordinator", description = "Remove the faculty coordinator from a section")
+    public ResponseEntity<Void> removeSectionCoordinator(
+            @PathVariable String id,
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail,
+            @RequestAttribute(value = "userId", required = false) String userId) {
+        String actor = actorEmail != null ? actorEmail : userId;
+        sectionService.removeSectionCoordinator(id, actor);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/sections/{id}/coordinator")
+    @Operation(summary = "Get section coordinator", description = "Get the faculty coordinator assigned to a section")
+    public ResponseEntity<CoordinatorResponse> getSectionCoordinator(@PathVariable String id) {
+        CoordinatorResponse response = sectionService.getSectionCoordinator(id);
+        if (response == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(response);
+    }
 }
 
 

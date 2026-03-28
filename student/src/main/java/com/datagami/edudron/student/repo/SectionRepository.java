@@ -29,6 +29,10 @@ public interface SectionRepository extends JpaRepository<Section, String> {
     @Query("SELECT COUNT(DISTINCT e.studentId) FROM Enrollment e WHERE e.batchId = :sectionId AND e.clientId = :clientId")
     long countStudentsInSection(@Param("clientId") UUID clientId, @Param("sectionId") String sectionId);
 
+    Optional<Section> findByNameAndClientId(String name, UUID clientId);
+
+    Optional<Section> findByNameAndClientIdAndClassId(String name, UUID clientId, String classId);
+
     @Modifying
     @Query("UPDATE Section s SET s.isBacklog = :isBacklog, s.updatedAt = CURRENT_TIMESTAMP WHERE s.classId = :classId AND s.clientId = :clientId")
     int updateIsBacklogByClassId(@Param("classId") String classId, @Param("clientId") UUID clientId, @Param("isBacklog") boolean isBacklog);

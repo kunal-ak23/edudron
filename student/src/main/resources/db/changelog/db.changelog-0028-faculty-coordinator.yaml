@@ -1,0 +1,28 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0028-add-coordinator-to-classes
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: classes
+            schemaName: student
+            columns:
+              - column:
+                  name: coordinator_user_id
+                  type: varchar(255)
+                  constraints:
+                    nullable: true
+
+  - changeSet:
+      id: 0028-add-coordinator-to-sections
+      author: edudron
+      changes:
+        - addColumn:
+            tableName: sections
+            schemaName: student
+            columns:
+              - column:
+                  name: coordinator_user_id
+                  type: varchar(255)
+                  constraints:
+                    nullable: true

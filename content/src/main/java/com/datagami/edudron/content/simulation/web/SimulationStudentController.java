@@ -121,7 +121,7 @@ public class SimulationStudentController {
      */
     private String getStudentSectionId(String studentId) {
         try {
-            String url = gatewayUrl + "/api/enrollments/students/" + studentId + "/class-section";
+            String url = gatewayUrl + "/api/students/" + studentId + "/class-section";
             ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
                     url,
                     HttpMethod.GET,
@@ -185,6 +185,14 @@ public class SimulationStudentController {
         throw new IllegalStateException("Simulation feature is not enabled for this tenant");
     }
 
+    @GetMapping("/{id}/details")
+    @Operation(summary = "Get simulation details",
+               description = "Get simulation metadata (concept, title, subject) for the student view")
+    public ResponseEntity<SimulationDTO> getSimulationDetails(@PathVariable String id) {
+        requireSimulationEnabled(TenantContext.getClientId());
+        return ResponseEntity.ok(simulationService.getSimulationForStudent(id));
+    }
+
     @GetMapping("/available")
     @Operation(summary = "Get available simulations",
                description = "List published simulations available to the current student")
@@ -230,6 +238,14 @@ public class SimulationStudentController {
     public ResponseEntity<SimulationStateDTO> advanceYear(@PathVariable String playId) {
         String studentId = getCurrentUserId();
         return ResponseEntity.ok(simulationService.advanceYear(playId, studentId));
+    }
+
+    @PostMapping("/play/{playId}/abandon")
+    @Operation(summary = "Abandon play", description = "Abandon the current play attempt (for restarting)")
+    public ResponseEntity<Void> abandonPlay(@PathVariable String playId) {
+        String studentId = getCurrentUserId();
+        simulationService.abandonPlay(playId, studentId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/history")

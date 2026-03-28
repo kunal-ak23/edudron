@@ -35,7 +35,7 @@ public class BatchService {
 
     @Autowired
     private StudentAuditService auditService;
-    
+
     public BatchDTO createBatch(CreateBatchRequest request) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {

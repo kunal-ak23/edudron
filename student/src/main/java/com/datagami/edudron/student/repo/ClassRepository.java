@@ -30,6 +30,8 @@ public interface ClassRepository extends JpaRepository<Class, String> {
     
     boolean existsByInstituteIdAndCode(String instituteId, String code);
     
+    Optional<Class> findByCodeAndClientId(String code, UUID clientId);
+
     @Query("SELECT COUNT(c) FROM Class c WHERE c.instituteId = :instituteId")
     long countByInstituteId(@Param("instituteId") String instituteId);
 }

@@ -1,0 +1,86 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0029-create-calendar-schema
+      author: edudron
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS calendar
+
+  - changeSet:
+      id: 0029-create-calendar-events-table
+      author: edudron
+      changes:
+        - createTable:
+            schemaName: calendar
+            tableName: calendar_events
+            columns:
+              - column: { name: id, type: varchar(255), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: title, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: event_type, type: varchar(50), constraints: { nullable: false } }
+              - column: { name: custom_type_label, type: varchar(100) }
+              - column: { name: start_date_time, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: end_date_time, type: timestamptz }
+              - column: { name: all_day, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: audience, type: varchar(30), constraints: { nullable: false } }
+              - column: { name: class_id, type: varchar(255) }
+              - column: { name: section_id, type: varchar(255) }
+              - column: { name: created_by_user_id, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: is_recurring, type: boolean, defaultValueBoolean: false, constraints: { nullable: false } }
+              - column: { name: recurrence_rule, type: varchar(255) }
+              - column: { name: recurrence_parent_id, type: varchar(255) }
+              - column: { name: meeting_link, type: varchar(500) }
+              - column: { name: location, type: varchar(255) }
+              - column: { name: color, type: varchar(7) }
+              - column: { name: metadata, type: jsonb }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true, constraints: { nullable: false } }
+              - column: { name: created_at, type: timestamptz, constraints: { nullable: false } }
+              - column: { name: updated_at, type: timestamptz, constraints: { nullable: false } }
+
+  - changeSet:
+      id: 0029-calendar-events-indexes
+      author: edudron
+      changes:
+        - createIndex:
+            schemaName: calendar
+            tableName: calendar_events
+            indexName: idx_cal_events_client_start
+            columns:
+              - column: { name: client_id }
+              - column: { name: start_date_time }
+        - createIndex:
+            schemaName: calendar
+            tableName: calendar_events
+            indexName: idx_cal_events_client_audience
+            columns:
+              - column: { name: client_id }
+              - column: { name: audience }
+        - createIndex:
+            schemaName: calendar
+            tableName: calendar_events
+            indexName: idx_cal_events_client_class
+            columns:
+              - column: { name: client_id }
+              - column: { name: class_id }
+        - createIndex:
+            schemaName: calendar
+            tableName: calendar_events
+            indexName: idx_cal_events_client_section
+            columns:
+              - column: { name: client_id }
+              - column: { name: section_id }
+        - createIndex:
+            schemaName: calendar
+            tableName: calendar_events
+            indexName: idx_cal_events_personal
+            columns:
+              - column: { name: client_id }
+              - column: { name: created_by_user_id }
+              - column: { name: audience }
+        - createIndex:
+            schemaName: calendar
+            tableName: calendar_events
+            indexName: idx_cal_events_recurrence_parent
+            columns:
+              - column: { name: recurrence_parent_id }

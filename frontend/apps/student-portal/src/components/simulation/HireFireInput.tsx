@@ -21,13 +21,20 @@ interface HireFireConfig {
   candidates: Candidate[]
 }
 
+const fitColors: Record<string, string> = {
+  strong: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+  moderate: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
+  weak: 'text-red-400 bg-red-400/10 border-red-400/20',
+}
+
 interface HireFireInputProps {
   config: HireFireConfig
   onSubmit: (data: { input: { selected: string } }) => void
   disabled?: boolean
+  candidateHints?: Record<string, { hint: string; fit: 'strong' | 'moderate' | 'weak' }>
 }
 
-export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps) {
+export function HireFireInput({ config, onSubmit, disabled, candidateHints }: HireFireInputProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
@@ -83,6 +90,15 @@ export function HireFireInput({ config, onSubmit, disabled }: HireFireInputProps
                     )}
                   </div>
                 </div>
+
+                {candidateHints?.[candidate.id] && (
+                  <div className="flex items-start gap-2 mt-2">
+                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider font-bold border ${fitColors[candidateHints[candidate.id].fit]}`}>
+                      {candidateHints[candidate.id].fit} fit
+                    </span>
+                    <p className="text-xs text-slate-400 leading-relaxed">{candidateHints[candidate.id].hint}</p>
+                  </div>
+                )}
 
                 <div className="flex flex-wrap gap-2 mt-2">
                   {Object.entries(candidate.stats).map(([k, v]) => (

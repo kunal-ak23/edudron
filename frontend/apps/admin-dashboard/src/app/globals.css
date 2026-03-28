@@ -81,15 +81,32 @@
   * {
     @apply border-border;
   }
-  
+
   /* Scale the entire application by adjusting base font size */
   /* This will scale all rem-based units (spacing, font sizes, etc.) */
   html {
     font-size: calc(16px * var(--app-scale));
   }
-  
+
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* FullCalendar: now-indicator styling */
+/* The now-indicator container in the axis (left time labels) spans the full width */
+.fc .fc-timegrid-now-indicator-container {
+  overflow: visible !important;
+}
+.fc .fc-timegrid-now-indicator-line {
+  border-color: #dc2626 !important;
+  border-width: 2px !important;
+}
+.fc .fc-timegrid-now-indicator-arrow {
+  border-color: #dc2626 !important;
+}
+/* Make all day columns in the timegrid show a subtle current-time border line */
+.fc .fc-timegrid-col.fc-day-today {
+  background: rgba(254, 243, 199, 0.3) !important;
 }
 

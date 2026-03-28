@@ -27,6 +27,20 @@ public class BudgetCalculationService {
 
         Random random = new Random((playId + "_" + currentYear).hashCode());
 
+        // Fallback: if allocation keys don't match financialModel department IDs,
+        // map by position (handles legacy simulations with mismatched dept IDs)
+        Map<String, BigDecimal> resolvedAllocations = allocations;
+        boolean hasDirectMatch = departments.stream()
+            .anyMatch(d -> allocations.containsKey(d.get("id")));
+        if (!hasDirectMatch && !allocations.isEmpty()) {
+            resolvedAllocations = new LinkedHashMap<>();
+            List<BigDecimal> allocationValues = new ArrayList<>(allocations.values());
+            for (int i = 0; i < departments.size() && i < allocationValues.size(); i++) {
+                String deptId = (String) departments.get(i).get("id");
+                resolvedAllocations.put(deptId, allocationValues.get(i));
+            }
+        }
+
         Map<String, Object> returns = new LinkedHashMap<>();
         BigDecimal totalReturns = BigDecimal.ZERO;
         BigDecimal totalInvested = BigDecimal.ZERO;
@@ -41,14 +55,23 @@ public class BudgetCalculationService {
             int sourceYear = currentYear - lagYears;
 
             if (lagYears == 0) {
-                allocation = allocations.getOrDefault(deptId, BigDecimal.ZERO);
+                allocation = resolvedAllocations.getOrDefault(deptId, BigDecimal.ZERO);
             } else if (sourceYear >= 1 && budgetHistory != null) {
                 for (Map<String, Object> hist : budgetHistory) {
                     if (((Number) hist.get("year")).intValue() == sourceYear) {
                         Map<String, Object> pastAllocs =
                             (Map<String, Object>) hist.get("allocations");
-                        if (pastAllocs != null && pastAllocs.containsKey(deptId)) {
-                            allocation = new BigDecimal(pastAllocs.get(deptId).toString());
+                        if (pastAllocs != null) {
+                            if (pastAllocs.containsKey(deptId)) {
+                                allocation = new BigDecimal(pastAllocs.get(deptId).toString());
+                            } else {
+                                // Positional fallback for past allocations too
+                                List<Object> pastValues = new ArrayList<>(pastAllocs.values());
+                                int deptIdx = departments.indexOf(dept);
+                                if (deptIdx >= 0 && deptIdx < pastValues.size()) {
+                                    allocation = new BigDecimal(pastValues.get(deptIdx).toString());
+                                }
+                            }
                         }
                         break;
                     }

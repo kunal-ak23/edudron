@@ -11,6 +11,7 @@ public class SimulationDecisionDTO {
     private Map<String, Object> decisionConfig;
     private List<ChoiceDTO> choices;
     private List<Map<String, String>> conceptKeywords;
+    private Map<String, Object> mentorGuidance;  // courseConnection, realWorldExample, choiceHints, guidanceLevel
 
     public static class ChoiceDTO {
         private String id;
@@ -51,4 +52,7 @@ public class SimulationDecisionDTO {
 
     public List<Map<String, String>> getConceptKeywords() { return conceptKeywords; }
     public void setConceptKeywords(List<Map<String, String>> conceptKeywords) { this.conceptKeywords = conceptKeywords; }
+
+    public Map<String, Object> getMentorGuidance() { return mentorGuidance; }
+    public void setMentorGuidance(Map<String, Object> mentorGuidance) { this.mentorGuidance = mentorGuidance; }
 }

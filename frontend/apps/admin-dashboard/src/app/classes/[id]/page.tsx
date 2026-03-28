@@ -8,10 +8,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3, UserCircle, X } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { classesApi, institutesApi, enrollmentsApi, sectionsApi } from '@/lib/api'
-import type { Class, CreateClassRequest, Institute, ClassStudentDTO, Section } from '@kunal-ak23/edudron-shared-utils'
+import { classesApi, institutesApi, enrollmentsApi, sectionsApi, apiClient } from '@/lib/api'
+import type { Class, CreateClassRequest, Institute, ClassStudentDTO, Section, CoordinatorResponse, User } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
 import Link from 'next/link'
@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 
 export default function ClassDetailPage() {
   const router = useRouter()
@@ -52,6 +53,17 @@ export default function ClassDetailPage() {
   const [membersTotalElements, setMembersTotalElements] = useState(0)
   const [membersTotalPages, setMembersTotalPages] = useState(0)
   const [studentSectionsMap, setStudentSectionsMap] = useState<Map<string, string[]>>(new Map())
+  // Coordinator state
+  const [coordinator, setCoordinator] = useState<CoordinatorResponse | null>(null)
+  const [coordinatorLoading, setCoordinatorLoading] = useState(false)
+  const [instructors, setInstructors] = useState<User[]>([])
+  const [selectedInstructorId, setSelectedInstructorId] = useState('')
+  const [coordinatorSubmitting, setCoordinatorSubmitting] = useState(false)
+  const [showRemoveCoordinatorDialog, setShowRemoveCoordinatorDialog] = useState(false)
+
+  const { user } = useAuth()
+  const canManageCoordinator = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
+
   const [formData, setFormData] = useState<CreateClassRequest>({
     name: '',
     code: '',
@@ -157,13 +169,81 @@ export default function ClassDetailPage() {
     }
   }, [classId])
 
+  const loadCoordinator = useCallback(async () => {
+    try {
+      setCoordinatorLoading(true)
+      const coord = await classesApi.getClassCoordinator(classId)
+      setCoordinator(coord)
+    } catch {
+      setCoordinator(null)
+    } finally {
+      setCoordinatorLoading(false)
+    }
+  }, [classId])
+
+  const loadInstructors = useCallback(async () => {
+    try {
+      const response = await apiClient.get<{ content: User[] }>('/idp/users/paginated?role=INSTRUCTOR&size=100')
+      setInstructors(response.data?.content || [])
+    } catch {
+      // Silently fail - instructor list is optional
+    }
+  }, [])
+
+  const handleAssignCoordinator = async () => {
+    if (!selectedInstructorId) return
+    try {
+      setCoordinatorSubmitting(true)
+      const result = await classesApi.assignClassCoordinator(classId, selectedInstructorId)
+      setCoordinator(result)
+      setSelectedInstructorId('')
+      toast({
+        title: 'Coordinator assigned',
+        description: `${result.coordinatorName} has been assigned as faculty coordinator.`,
+      })
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to assign coordinator',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setCoordinatorSubmitting(false)
+    }
+  }
+
+  const handleRemoveCoordinator = async () => {
+    try {
+      setCoordinatorSubmitting(true)
+      await classesApi.removeClassCoordinator(classId)
+      setCoordinator(null)
+      toast({
+        title: 'Coordinator removed',
+        description: 'Faculty coordinator has been removed from this class.',
+      })
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to remove coordinator',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setCoordinatorSubmitting(false)
+      setShowRemoveCoordinatorDialog(false)
+    }
+  }
+
   useEffect(() => {
     if (classId) {
       loadMembers()
       loadSections()
       loadStudentSectionsMap()
+      loadCoordinator()
+      if (canManageCoordinator) {
+        loadInstructors()
+      }
     }
-  }, [classId, loadMembers, loadSections, loadStudentSectionsMap])
+  }, [classId, loadMembers, loadSections, loadStudentSectionsMap, loadCoordinator, loadInstructors, canManageCoordinator])
 
   // Reset to first page when page size changes
   useEffect(() => {
@@ -345,6 +425,76 @@ export default function ClassDetailPage() {
                   </Button>
                 </div>
               </form>
+          </CardContent>
+        </Card>
+
+        {/* Faculty Coordinator Section */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserCircle className="h-5 w-5" />
+              Faculty Coordinator
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {coordinatorLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              </div>
+            ) : coordinator ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div>
+                    <p className="font-medium text-gray-900">{coordinator.coordinatorName}</p>
+                    <p className="text-sm text-gray-600 flex items-center gap-1">
+                      <Mail className="h-3.5 w-3.5" />
+                      {coordinator.coordinatorEmail}
+                    </p>
+                  </div>
+                  {canManageCoordinator && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowRemoveCoordinatorDialog(true)}
+                      disabled={coordinatorSubmitting}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ) : canManageCoordinator ? (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500">No coordinator assigned to this class.</p>
+                <div className="flex items-end gap-3">
+                  <div className="flex-1">
+                    <Label className="text-sm mb-1.5 block">Select Instructor</Label>
+                    <SearchableSelect
+                      options={instructors.map(i => ({
+                        value: i.id,
+                        label: `${i.name} (${i.email})`,
+                        searchText: `${i.name} ${i.email}`,
+                      }))}
+                      value={selectedInstructorId}
+                      onValueChange={setSelectedInstructorId}
+                      placeholder="Search instructors..."
+                      emptyMessage="No instructors found"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleAssignCoordinator}
+                    disabled={!selectedInstructorId || coordinatorSubmitting}
+                  >
+                    {coordinatorSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Assign
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No coordinator assigned to this class.</p>
+            )}
           </CardContent>
         </Card>
 
@@ -541,6 +691,16 @@ export default function ClassDetailPage() {
         title="Deactivate Class"
         description="Are you sure you want to deactivate this class?"
         confirmText="Deactivate"
+        variant="destructive"
+      />
+
+      <ConfirmationDialog
+        isOpen={showRemoveCoordinatorDialog}
+        onClose={() => setShowRemoveCoordinatorDialog(false)}
+        onConfirm={handleRemoveCoordinator}
+        title="Remove Coordinator"
+        description={`Are you sure you want to remove ${coordinator?.coordinatorName || 'the coordinator'} as the faculty coordinator for this class?`}
+        confirmText="Remove"
         variant="destructive"
       />
     </>

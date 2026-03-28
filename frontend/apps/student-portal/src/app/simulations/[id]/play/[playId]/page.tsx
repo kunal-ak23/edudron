@@ -15,6 +15,7 @@ import { FinancialReport } from '@/components/simulation/FinancialReport'
 import { PromotionCelebration } from '@/components/simulation/PromotionCelebration'
 import ConceptPanel from '@/components/simulation/ConceptPanel'
 import DashboardPanel from '@/components/simulation/DashboardPanel'
+import { HighlightedText, filterMatchingKeywords } from '@/components/simulation/HighlightedText'
 import { Button } from '@/components/ui/button'
 import { Loader2, ArrowLeft } from 'lucide-react'
 import type { SimulationStateDTO, SimulationDTO } from '@kunal-ak23/edudron-shared-utils'
@@ -62,7 +63,7 @@ export default function SimulationPlayPage() {
 
   // Load simulation metadata (for concept)
   useEffect(() => {
-    simulationsApi.getSimulation(simulationId).then(setSimulation).catch(() => {})
+    simulationsApi.getSimulationDetails(simulationId).then(setSimulation).catch(() => {})
   }, [simulationId])
 
   // Load current state
@@ -308,16 +309,25 @@ export default function SimulationPlayPage() {
           {/* Decision narrative */}
           {(playPhase === 'DECISION_NARRATIVE' || playPhase === 'DECISION_ACTIVE') && (
             <div className="mb-8">
-              <TypewriterText
-                key={state.decision.decisionId}
-                as="div"
-                className="text-lg leading-relaxed text-[#E2E8F0] whitespace-pre-line"
-                text={state.decision.narrative}
-                onDone={handleDecisionNarrativeTypingDone}
-                speedMs={16}
-                startDelayMs={80}
-                cursor
-              />
+              {decisionNarrativeDone ? (
+                <div className="text-lg leading-relaxed text-[#E2E8F0] whitespace-pre-line">
+                  <HighlightedText
+                    text={state.decision.narrative}
+                    keywords={((state.decision as any)?.conceptKeywords || []).map((k: any) => k.term)}
+                  />
+                </div>
+              ) : (
+                <TypewriterText
+                  key={state.decision.decisionId}
+                  as="div"
+                  className="text-lg leading-relaxed text-[#E2E8F0] whitespace-pre-line"
+                  text={state.decision.narrative}
+                  onDone={handleDecisionNarrativeTypingDone}
+                  speedMs={16}
+                  startDelayMs={80}
+                  cursor
+                />
+              )}
               {decisionNarrativeDone && playPhase === 'DECISION_NARRATIVE' && (
                 <div className="mt-6 flex justify-center">
                   <Button
@@ -345,6 +355,7 @@ export default function SimulationPlayPage() {
                   choices={state.decision.choices}
                   onSubmit={handleSubmit}
                   disabled={submitting}
+                  mentorGuidance={(state.decision as any).mentorGuidance}
                 />
               </div>
             </div>
@@ -381,6 +392,23 @@ export default function SimulationPlayPage() {
             <ArrowLeft className="h-4 w-4 mr-1" />
             Exit
           </Button>
+          {/* Temp: Restart for testing */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={async () => {
+              try {
+                await simulationsApi.abandonPlay(playId)
+                const newPlay = await simulationsApi.startPlay(simulationId)
+                router.push(`/simulations/${simulationId}/play/${newPlay.id}`)
+              } catch (e) {
+                console.error('Restart failed', e)
+              }
+            }}
+            className="text-amber-400 hover:text-amber-300 text-xs"
+          >
+            Restart (dev)
+          </Button>
         </div>
 
         {/* Main 3-panel area */}
@@ -389,7 +417,10 @@ export default function SimulationPlayPage() {
           <aside className="hidden xl:flex flex-col w-[280px] bg-[#131b2d] border-r border-white/5 overflow-y-auto shrink-0">
             <ConceptPanel
               concept={simulation?.concept || ''}
-              keywords={(state?.decision as any)?.conceptKeywords || []}
+              keywords={filterMatchingKeywords(
+                state?.decision?.narrative || '',
+                (state?.decision as any)?.conceptKeywords || []
+              )}
               keyInsights={state?.keyInsights || []}
             />
           </aside>
@@ -401,7 +432,10 @@ export default function SimulationPlayPage() {
               <div className="xl:hidden">
                 <ConceptPanel
                   concept={simulation?.concept || ''}
-                  keywords={(state?.decision as any)?.conceptKeywords || []}
+                  keywords={filterMatchingKeywords(
+                    state?.decision?.narrative || '',
+                    (state?.decision as any)?.conceptKeywords || []
+                  )}
                   keyInsights={state?.keyInsights || []}
                 />
               </div>
@@ -522,12 +556,23 @@ export default function SimulationPlayPage() {
         )}
 
         {/* Overlays */}
-        {playPhase === 'YEAR_TRANSITION' && state && (
-          <YearTransition
-            yearCompleted={state.currentYear}
-            onComplete={handleYearTransitionComplete}
-          />
-        )}
+        {playPhase === 'YEAR_TRANSITION' && state && (() => {
+          const retYear = (state.advisorDialog as any)?.retirementYear
+          const farewell = (state.advisorDialog as any)?.farewellMessage
+          const advisorName = state.advisorDialog?.advisorName || 'Mentor'
+          const isFarewellYear = retYear && state.currentYear === retYear - 1
+          return (
+            <YearTransition
+              yearCompleted={state.currentYear}
+              onComplete={handleYearTransitionComplete}
+              mentorFarewell={isFarewellYear && farewell ? {
+                advisorName,
+                farewellMessage: farewell,
+                characterId: state.advisorDialog?.characterId,
+              } : undefined}
+            />
+          )
+        })()}
 
         {playPhase === 'PROMOTION' && state?.yearEndReview?.promotionTitle && state.currentRole && (
           <PromotionCelebration

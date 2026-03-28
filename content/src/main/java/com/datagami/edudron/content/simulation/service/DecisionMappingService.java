@@ -4,9 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;;
 
 @Service
 public class DecisionMappingService {
@@ -36,8 +34,18 @@ public class DecisionMappingService {
             mappings = (List<Map<String, Object>>) config.get("outcomes");
         }
         if (mappings == null || mappings.isEmpty()) {
-            logger.warn("Mappings missing for type {}. Falling back.", decisionType);
-            return fallbackChoiceId(node, choiceId, decisionType);
+            // Auto-generate mappings for STAKEHOLDER_MEETING and HIRE_FIRE when AI omitted them
+            mappings = autoGenerateMappings(node, config, decisionType);
+            if (mappings == null || mappings.isEmpty()) {
+                logger.warn("Mappings missing for type {} and auto-generation failed. Falling back.", decisionType);
+                return fallbackChoiceId(node, choiceId, decisionType);
+            }
+            logger.info("Auto-generated {} mappings for type {}", mappings.size(), decisionType);
+        }
+
+        // INVESTMENT_PORTFOLIO: score based on allocation balance (no condition-based mappings needed)
+        if ("INVESTMENT_PORTFOLIO".equals(decisionType) && input != null) {
+            return resolveInvestmentPortfolioChoice(node, config, input);
         }
 
         Map<String, Object> flatInput = "COMPOUND".equals(decisionType)
@@ -53,15 +61,19 @@ public class DecisionMappingService {
         }
 
         // Evaluate mappings in order; return first match
+        logger.info("Evaluating mappings for type {}. Flat input keys: {}", decisionType, flatInput.keySet());
         for (Map<String, Object> mapping : mappings) {
             String condition = (String) mapping.get("condition");
             String mappedChoiceId = (String) mapping.get("choiceId");
 
             if ("default".equals(condition)) {
+                logger.info("Matched default mapping → {}", mappedChoiceId);
                 return validateChoiceId(node, mappedChoiceId);
             }
 
-            if (evaluateCondition(condition, flatInput)) {
+            boolean matched = evaluateCondition(condition, flatInput);
+            logger.info("Condition [{}] → {} (choiceId: {})", condition, matched, mappedChoiceId);
+            if (matched) {
                 return validateChoiceId(node, mappedChoiceId);
             }
         }
@@ -147,6 +159,7 @@ public class DecisionMappingService {
             for (int i = 0; i < ranking.size(); i++) {
                 flat.put("ranking[" + i + "]", ranking.get(i));
             }
+            logger.info("flattenInput for type PRIORITY_RANKING: keys={}", flat.keySet());
             return flat;
         }
 
@@ -183,6 +196,7 @@ public class DecisionMappingService {
             flat.put("expired", "true");
         }
 
+        logger.info("flattenInput for type general: keys={}", flat.keySet());
         return flat;
     }
 
@@ -253,6 +267,29 @@ public class DecisionMappingService {
         if (condition.contains("selected_contains")) {
             String id = condition.replaceAll(".*selected_contains\\('([^']+)'\\).*", "$1");
             return "true".equals(context.get("has_" + id));
+        }
+
+        // Handle NEGOTIATION conditions: agreement_above_N, agreement_below_N, walked_away
+        if (condition.startsWith("agreement_above_")) {
+            String threshold = condition.replace("agreement_above_", "");
+            Object finalAmount = context.get("final_amount");
+            if (finalAmount != null && !"true".equals(context.get("walked_away"))) {
+                try { return Double.parseDouble(finalAmount.toString()) >= Double.parseDouble(threshold); }
+                catch (NumberFormatException e) { return false; }
+            }
+            return false;
+        }
+        if (condition.startsWith("agreement_below_")) {
+            String threshold = condition.replace("agreement_below_", "");
+            Object finalAmount = context.get("final_amount");
+            if (finalAmount != null && !"true".equals(context.get("walked_away"))) {
+                try { return Double.parseDouble(finalAmount.toString()) <= Double.parseDouble(threshold); }
+                catch (NumberFormatException e) { return false; }
+            }
+            return false;
+        }
+        if ("walked_away".equals(condition)) {
+            return "true".equals(context.get("walked_away"));
         }
 
         // Try each operator (longer operators first to avoid partial matches)
@@ -337,5 +374,180 @@ public class DecisionMappingService {
         } catch (NumberFormatException e) {
             return null;
         }
+    }
+
+    /**
+     * Auto-generate mappings when the AI omitted them.
+     * For STAKEHOLDER_MEETING: maps stakeholder combinations to quality-ordered choices.
+     * For HIRE_FIRE: maps candidate selection to quality-ordered choices.
+     */
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> autoGenerateMappings(
+            Map<String, Object> node, Map<String, Object> config, String decisionType) {
+
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
+        if (choices == null || choices.isEmpty()) return null;
+
+        // Sort choices by quality descending (best first)
+        List<Map<String, Object>> sortedChoices = new ArrayList<>(choices);
+        sortedChoices.sort((a, b) -> {
+            int qa = a.get("quality") != null ? ((Number) a.get("quality")).intValue() : 1;
+            int qb = b.get("quality") != null ? ((Number) b.get("quality")).intValue() : 1;
+            return qb - qa;
+        });
+
+        if ("STAKEHOLDER_MEETING".equals(decisionType)) {
+            List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
+            if (stakeholders == null || stakeholders.size() < 2) return null;
+
+            int maxSelections = config.get("maxSelections") != null
+                    ? ((Number) config.get("maxSelections")).intValue() : 2;
+
+            List<Map<String, Object>> mappings = new ArrayList<>();
+
+            // Strategy: first stakeholders are "best" picks, last are "worst"
+            // Best combo (quality 3): first two stakeholders
+            // Medium combo (quality 2): first + any other
+            // Default (quality 1): anything else
+            if (stakeholders.size() >= 2 && sortedChoices.size() >= 2) {
+                String bestId1 = (String) stakeholders.get(0).get("id");
+                String bestId2 = (String) stakeholders.get(1).get("id");
+
+                if (maxSelections >= 2) {
+                    // Best: select both top stakeholders
+                    Map<String, Object> bestMapping = new LinkedHashMap<>();
+                    bestMapping.put("condition",
+                        "selected_contains('" + bestId1 + "') && selected_contains('" + bestId2 + "')");
+                    bestMapping.put("choiceId", sortedChoices.get(0).get("id"));
+                    mappings.add(bestMapping);
+
+                    // Medium: select at least the first stakeholder
+                    if (sortedChoices.size() >= 2) {
+                        Map<String, Object> midMapping = new LinkedHashMap<>();
+                        midMapping.put("condition", "selected_contains('" + bestId1 + "')");
+                        midMapping.put("choiceId", sortedChoices.get(1).get("id"));
+                        mappings.add(midMapping);
+                    }
+                }
+
+                // Default: anything else
+                Map<String, Object> defaultMapping = new LinkedHashMap<>();
+                defaultMapping.put("condition", "default");
+                defaultMapping.put("choiceId", sortedChoices.get(sortedChoices.size() - 1).get("id"));
+                mappings.add(defaultMapping);
+            }
+
+            logger.info("Auto-generated STAKEHOLDER_MEETING mappings: best=[{},{}], {} total mappings",
+                    stakeholders.get(0).get("id"), stakeholders.get(1).get("id"), mappings.size());
+            for (Map<String, Object> m : mappings) {
+                logger.info("  Generated mapping: condition=[{}], choiceId={}", m.get("condition"), m.get("choiceId"));
+            }
+            return mappings;
+
+        } else if ("HIRE_FIRE".equals(decisionType)) {
+            List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
+            if (candidates == null || candidates.isEmpty()) return null;
+
+            List<Map<String, Object>> mappings = new ArrayList<>();
+
+            // Map each candidate to a choice in quality order
+            for (int i = 0; i < candidates.size() && i < sortedChoices.size(); i++) {
+                Map<String, Object> mapping = new LinkedHashMap<>();
+                String candidateId = (String) candidates.get(i).get("id");
+                mapping.put("condition", "selected == '" + candidateId + "'");
+                mapping.put("choiceId", sortedChoices.get(i).get("id"));
+                mappings.add(mapping);
+            }
+
+            // Default
+            Map<String, Object> defaultMapping = new LinkedHashMap<>();
+            defaultMapping.put("condition", "default");
+            defaultMapping.put("choiceId", sortedChoices.get(sortedChoices.size() - 1).get("id"));
+            mappings.add(defaultMapping);
+
+            for (Map<String, Object> m : mappings) {
+                logger.info("  Generated HIRE_FIRE mapping: condition=[{}], choiceId={}", m.get("condition"), m.get("choiceId"));
+            }
+            return mappings;
+        }
+
+        return null;
+    }
+
+    /**
+     * Resolve INVESTMENT_PORTFOLIO choice based on allocation balance.
+     * Measures how evenly budget is spread across departments.
+     * Balanced = best quality, concentrated = worst quality.
+     */
+    @SuppressWarnings("unchecked")
+    private String resolveInvestmentPortfolioChoice(
+            Map<String, Object> node, Map<String, Object> config, Map<String, Object> input) {
+
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
+        if (choices == null || choices.isEmpty()) {
+            throw new IllegalStateException("INVESTMENT_PORTFOLIO has no choices");
+        }
+
+        // Sort choices by quality descending
+        List<Map<String, Object>> sortedChoices = new ArrayList<>(choices);
+        sortedChoices.sort((a, b) -> {
+            int qa = a.get("quality") != null ? ((Number) a.get("quality")).intValue() : 1;
+            int qb = b.get("quality") != null ? ((Number) b.get("quality")).intValue() : 1;
+            return qb - qa;
+        });
+
+        // Calculate how balanced the allocation is using coefficient of variation
+        List<Map<String, Object>> departments = (List<Map<String, Object>>) config.get("departments");
+        if (departments == null || departments.isEmpty()) {
+            return (String) sortedChoices.get(sortedChoices.size() - 1).get("id");
+        }
+
+        List<Double> allocations = new ArrayList<>();
+        double total = 0;
+        for (Map<String, Object> dept : departments) {
+            String deptId = (String) dept.get("id");
+            Object val = input.get(deptId);
+            double amount = val != null ? ((Number) val).doubleValue() : 0;
+            allocations.add(amount);
+            total += amount;
+        }
+
+        if (total <= 0 || allocations.isEmpty()) {
+            return (String) sortedChoices.get(sortedChoices.size() - 1).get("id");
+        }
+
+        // Calculate coefficient of variation (lower = more balanced)
+        double mean = total / allocations.size();
+        double variance = 0;
+        for (double a : allocations) {
+            variance += (a - mean) * (a - mean);
+        }
+        double stdDev = Math.sqrt(variance / allocations.size());
+        double cv = stdDev / mean; // 0 = perfectly balanced, higher = more concentrated
+
+        // Also check: does the largest allocation exceed 50% of total?
+        double maxAllocation = allocations.stream().mapToDouble(Double::doubleValue).max().orElse(0);
+        double maxPct = maxAllocation / total;
+
+        // Scoring:
+        // Quality 3 (best): CV < 0.3 and no single dept > 40%  → balanced
+        // Quality 2 (mid):  CV < 0.5 or no single dept > 55%   → moderately balanced
+        // Quality 1 (worst): everything else                     → concentrated
+        String choiceId;
+        if (cv < 0.3 && maxPct <= 0.40) {
+            choiceId = (String) sortedChoices.get(0).get("id"); // quality 3
+        } else if (cv < 0.5 || maxPct <= 0.55) {
+            choiceId = sortedChoices.size() >= 2
+                ? (String) sortedChoices.get(1).get("id")   // quality 2
+                : (String) sortedChoices.get(0).get("id");
+        } else {
+            choiceId = (String) sortedChoices.get(sortedChoices.size() - 1).get("id"); // quality 1
+        }
+
+        logger.info("INVESTMENT_PORTFOLIO scoring: total={}, cv={:.2f}, maxPct={:.1f}%, choiceId={} (quality={})",
+                total, cv, maxPct * 100, choiceId,
+                choices.stream().filter(c -> choiceId.equals(c.get("id"))).findFirst()
+                    .map(c -> c.get("quality")).orElse("?"));
+        return choiceId;
     }
 }
