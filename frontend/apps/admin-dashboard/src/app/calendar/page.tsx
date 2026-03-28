@@ -932,69 +932,45 @@ export default function CalendarPage() {
         {/* Main calendar area */}
         <Card className="flex-1 min-w-0">
           <CardContent className="p-2 sm:p-4">
-            {/* Skeleton loading state */}
-            {loading && events.length === 0 ? (
-              <div className="space-y-4 p-4">
-                {/* Skeleton header */}
-                <div className="flex items-center justify-between animate-pulse">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded bg-muted" />
-                    <div className="h-8 w-8 rounded bg-muted" />
-                    <div className="h-8 w-16 rounded bg-muted" />
-                  </div>
-                  <div className="h-6 w-48 rounded bg-muted" />
-                  <div className="flex gap-1">
-                    <div className="h-8 w-20 rounded bg-muted" />
-                    <div className="h-8 w-20 rounded bg-muted" />
-                    <div className="h-8 w-20 rounded bg-muted" />
+            {/* Single FullCalendar instance — always rendered to preserve view state */}
+            <div className="relative">
+              {/* Loading overlay */}
+              {loading && events.length === 0 && (
+                <div className="absolute inset-0 z-10 bg-card/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading events...</p>
                   </div>
                 </div>
-                {/* Skeleton day headers */}
-                <div className="grid grid-cols-7 gap-1 animate-pulse">
-                  {[...Array(7)].map((_, i) => (
-                    <div key={`header-${i}`} className="h-6 bg-muted rounded" />
-                  ))}
-                </div>
-                {/* Skeleton grid */}
-                {[...Array(5)].map((_, row) => (
-                  <div key={row} className="grid grid-cols-7 gap-1 animate-pulse">
-                    {[...Array(7)].map((_, col) => (
-                      <div key={col} className="h-24 bg-muted/50 rounded border border-muted">
-                        <div className="p-1.5 space-y-1">
-                          <div className="h-4 w-6 rounded bg-muted" />
-                          {(row + col) % 3 === 0 && <div className="h-3 w-full rounded bg-muted/70" />}
-                          {(row + col) % 4 === 0 && <div className="h-3 w-3/4 rounded bg-muted/70" />}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            ) : !loading && events.length === 0 && dateRange ? (
-              /* Empty state */
-              <div>
-                {/* @ts-ignore FullCalendar React 18 type compatibility */}
-                <FullCalendar
-                  ref={calendarRef}
-                  plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-                  initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
-                  headerToolbar={{
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: isMobile ? 'listWeek' : 'dayGridMonth,timeGridWeek,listWeek',
-                  }}
-                  events={[]}
-                  datesSet={handleDatesSet}
-                  selectable
-                  select={handleDateSelect}
-                  editable={false}
-                  dayMaxEvents={3}
-                  moreLinkText={(n) => `+${n} more`}
-                  height="auto"
-                  eventDisplay="block"
-                  nowIndicator
-                />
-                <div className="text-center py-16 text-muted-foreground">
+              )}
+              {/* @ts-ignore FullCalendar React 18 type compatibility */}
+              <FullCalendar
+                ref={calendarRef}
+                plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
+                initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
+                headerToolbar={{
+                  left: 'prev,next today',
+                  center: 'title',
+                  right: isMobile ? 'listWeek' : 'dayGridMonth,timeGridWeek,listWeek',
+                }}
+                events={filteredFcEvents}
+                datesSet={handleDatesSet}
+                eventClick={handleEventClick}
+                selectable
+                select={handleDateSelect}
+                editable
+                eventDrop={handleEventDrop}
+                eventResize={handleEventResize}
+                dayMaxEvents={3}
+                moreLinkText={(n) => `+${n} more`}
+                height="auto"
+                eventDisplay="block"
+                nowIndicator
+                eventDidMount={handleEventDidMount}
+              />
+              {/* Empty state overlay */}
+              {!loading && events.length === 0 && dateRange && (
+                <div className="text-center py-12 text-muted-foreground">
                   <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-30" />
                   <p className="text-lg font-medium">No events yet</p>
                   <p className="text-sm mt-1">Create your first event to get started</p>
@@ -1003,37 +979,8 @@ export default function CalendarPage() {
                     Create Event
                   </Button>
                 </div>
-              </div>
-            ) : (
-              /* Normal calendar view */
-              <>
-                {/* @ts-ignore FullCalendar React 18 type compatibility */}
-                <FullCalendar
-                  ref={calendarRef}
-                  plugins={[dayGridPlugin, timeGridPlugin, listPlugin, interactionPlugin]}
-                  initialView={isMobile ? 'listWeek' : 'dayGridMonth'}
-                  headerToolbar={{
-                    left: 'prev,next today',
-                    center: 'title',
-                    right: isMobile ? 'listWeek' : 'dayGridMonth,timeGridWeek,listWeek',
-                  }}
-                  events={filteredFcEvents}
-                  datesSet={handleDatesSet}
-                  eventClick={handleEventClick}
-                  selectable
-                  select={handleDateSelect}
-                  editable
-                  eventDrop={handleEventDrop}
-                  eventResize={handleEventResize}
-                  dayMaxEvents={3}
-                  moreLinkText={(n) => `+${n} more`}
-                  height="auto"
-                  eventDisplay="block"
-                  nowIndicator
-                  eventDidMount={handleEventDidMount}
-                />
-              </>
-            )}
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>
