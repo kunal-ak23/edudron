@@ -256,14 +256,16 @@ export default function CalendarPage() {
     } finally {
       setLoading(false)
     }
-  }, [filterType, toast])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterType])
 
   // Re-fetch when filters change
   useEffect(() => {
     if (dateRange) {
       fetchEvents(dateRange.start, dateRange.end)
     }
-  }, [dateRange, fetchEvents])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange?.start, dateRange?.end, filterType])
 
   // -- Client-side search filtering --
   const filteredFcEvents: EventInput[] = useMemo(() => {
@@ -292,7 +294,7 @@ export default function CalendarPage() {
   const handleDatesSet = useCallback((arg: DatesSetArg) => {
     const start = arg.startStr.slice(0, 10)
     const end = arg.endStr.slice(0, 10)
-    setDateRange({ start, end })
+    setDateRange(prev => (prev?.start === start && prev?.end === end) ? prev : { start, end })
   }, [])
 
   const handleEventClick = useCallback((arg: EventClickArg) => {

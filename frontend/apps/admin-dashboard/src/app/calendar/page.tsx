@@ -472,20 +472,22 @@ export default function CalendarPage() {
     } finally {
       setLoading(false)
     }
-  }, [filterType, filterClassId, filterSectionId, toast])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterType, filterClassId, filterSectionId])
 
   // Re-fetch when filters change
   useEffect(() => {
     if (dateRange) {
       fetchEvents(dateRange.start, dateRange.end)
     }
-  }, [dateRange, fetchEvents])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange?.start, dateRange?.end, filterType, filterClassId, filterSectionId])
 
   // -- FullCalendar callbacks --
   const handleDatesSet = useCallback((arg: DatesSetArg) => {
     const start = arg.startStr.slice(0, 10)
     const end = arg.endStr.slice(0, 10)
-    setDateRange({ start, end })
+    setDateRange(prev => (prev?.start === start && prev?.end === end) ? prev : { start, end })
     // Track the current visible date for mini month
     setCurrentCalendarDate(arg.view.currentStart)
   }, [])
