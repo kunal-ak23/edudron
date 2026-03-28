@@ -104,8 +104,17 @@ public class CertificateTemplateService {
      */
     @Transactional(readOnly = true)
     public CertificateTemplate getTemplateEntity(String id) {
-        return templateRepository.findById(id)
+        CertificateTemplate template = templateRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Template not found: " + id));
+        // System defaults (null clientId) are accessible to all tenants
+        // Tenant-scoped templates must belong to the current tenant
+        if (template.getClientId() != null) {
+            UUID currentClientId = UUID.fromString(TenantContext.getClientId());
+            if (!template.getClientId().equals(currentClientId)) {
+                throw new IllegalArgumentException("Template not found: " + id);
+            }
+        }
+        return template;
     }
 
     public CertificateTemplateDTO toDTO(CertificateTemplate template) {

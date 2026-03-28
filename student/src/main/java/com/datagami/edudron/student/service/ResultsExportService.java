@@ -52,6 +52,7 @@ public class ResultsExportService {
     private final ProjectEventGradeRepository projectEventGradeRepository;
     private final SectionRepository sectionRepository;
     private final ClassRepository classRepository;
+    private final StudentAuditService auditService;
 
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -66,7 +67,8 @@ public class ResultsExportService {
                                 ProjectEventRepository projectEventRepository,
                                 ProjectEventGradeRepository projectEventGradeRepository,
                                 SectionRepository sectionRepository,
-                                ClassRepository classRepository) {
+                                ClassRepository classRepository,
+                                StudentAuditService auditService) {
         this.contentAssessmentClient = contentAssessmentClient;
         this.enrollmentRepository = enrollmentRepository;
         this.submissionRepository = submissionRepository;
@@ -75,6 +77,7 @@ public class ResultsExportService {
         this.projectEventGradeRepository = projectEventGradeRepository;
         this.sectionRepository = sectionRepository;
         this.classRepository = classRepository;
+        this.auditService = auditService;
     }
 
     private RestTemplate getRestTemplate() {
@@ -130,7 +133,11 @@ public class ResultsExportService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         String title = "Section: " + section.getName();
-        return generateWorkbook(clientId, studentIds, courseIds, sectionId, title);
+        byte[] workbook = generateWorkbook(clientId, studentIds, courseIds, sectionId, title);
+        auditService.logCrud(clientId, "EXPORT", "ResultsExport", sectionId,
+                null, null, Map.of("scope", "section", "studentCount", studentIds.size(),
+                        "courseCount", courseIds.size()));
+        return workbook;
     }
 
     /**
@@ -162,7 +169,11 @@ public class ResultsExportService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         String title = "Class: " + clazz.getName();
-        return generateWorkbook(clientId, studentIds, courseIds, null, title);
+        byte[] workbook = generateWorkbook(clientId, studentIds, courseIds, null, title);
+        auditService.logCrud(clientId, "EXPORT", "ResultsExport", classId,
+                null, null, Map.of("scope", "class", "studentCount", studentIds.size(),
+                        "courseCount", courseIds.size()));
+        return workbook;
     }
 
     /**
@@ -189,7 +200,11 @@ public class ResultsExportService {
                 : courseId;
 
         String title = "Course: " + courseTitle;
-        return generateWorkbook(clientId, studentIds, courseIds, null, title);
+        byte[] workbook = generateWorkbook(clientId, studentIds, courseIds, null, title);
+        auditService.logCrud(clientId, "EXPORT", "ResultsExport", courseId,
+                null, null, Map.of("scope", "course", "studentCount", studentIds.size(),
+                        "courseCount", 1));
+        return workbook;
     }
 
     // -------------------------------------------------------------------------

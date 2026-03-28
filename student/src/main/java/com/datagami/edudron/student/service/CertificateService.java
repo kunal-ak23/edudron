@@ -402,13 +402,20 @@ public class CertificateService {
     // -------------------------------------------------------------------------
 
     private String generateCredentialId() {
-        StringBuilder sb = new StringBuilder("EDU-");
-        sb.append(Year.now().getValue());
-        sb.append("-");
-        for (int i = 0; i < CREDENTIAL_RANDOM_LENGTH; i++) {
-            sb.append(CREDENTIAL_CHARS.charAt(RANDOM.nextInt(CREDENTIAL_CHARS.length())));
+        for (int attempt = 0; attempt < 5; attempt++) {
+            StringBuilder sb = new StringBuilder("EDU-");
+            sb.append(Year.now().getValue());
+            sb.append("-");
+            for (int i = 0; i < CREDENTIAL_RANDOM_LENGTH; i++) {
+                sb.append(CREDENTIAL_CHARS.charAt(RANDOM.nextInt(CREDENTIAL_CHARS.length())));
+            }
+            String id = sb.toString();
+            if (certificateRepository.findByCredentialId(id).isEmpty()) {
+                return id;
+            }
+            log.warn("Credential ID collision on '{}', retrying (attempt {})", id, attempt + 1);
         }
-        return sb.toString();
+        throw new IllegalStateException("Failed to generate unique credential ID after 5 attempts");
     }
 
     private String resolveCourseName(String courseId) {
