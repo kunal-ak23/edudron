@@ -219,7 +219,7 @@ export default function CertificatesPage() {
     try {
       const result = await certificatesApi.generate({
         courseId: genCourseId,
-        sectionId: genSectionId || undefined,
+        sectionId: genSectionId && genSectionId !== '__all__' ? genSectionId : undefined,
         templateId: genTemplateId,
         students,
       })

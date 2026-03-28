@@ -4,6 +4,7 @@ import com.datagami.edudron.student.dto.CertificateTemplateDTO;
 import com.datagami.edudron.student.service.CertificateTemplateService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,7 +30,7 @@ public class CertificateTemplateController {
 
     @PostMapping
     @Operation(summary = "Create template", description = "Create a new tenant-scoped certificate template")
-    public ResponseEntity<CertificateTemplateDTO> createTemplate(@RequestBody CertificateTemplateDTO dto) {
+    public ResponseEntity<CertificateTemplateDTO> createTemplate(@Valid @RequestBody CertificateTemplateDTO dto) {
         CertificateTemplateDTO created = templateService.createTemplate(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
@@ -37,7 +38,7 @@ public class CertificateTemplateController {
     @PutMapping("/{id}")
     @Operation(summary = "Update template", description = "Update an existing certificate template")
     public ResponseEntity<CertificateTemplateDTO> updateTemplate(@PathVariable String id,
-                                                                  @RequestBody CertificateTemplateDTO dto) {
+                                                                  @Valid @RequestBody CertificateTemplateDTO dto) {
         return ResponseEntity.ok(templateService.updateTemplate(id, dto));
     }
 }
