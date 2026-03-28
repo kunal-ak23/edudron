@@ -599,24 +599,68 @@ export default function CalendarPage() {
 
               {/* Start */}
               <div className="space-y-1.5">
-                <Label htmlFor="evt-start">Start {form._allDay ? 'Date' : 'Date & Time'} *</Label>
-                <Input
-                  id="evt-start"
-                  type={form._allDay ? 'date' : 'datetime-local'}
-                  value={form._allDay ? (form.startDateTime?.slice(0, 10) || '') : (form.startDateTime || '')}
-                  onChange={e => updateForm({ startDateTime: e.target.value })}
-                />
+                <Label>Start {form._allDay ? 'Date' : 'Date & Time'} *</Label>
+                {form._allDay ? (
+                  <Input
+                    type="date"
+                    value={form.startDateTime?.slice(0, 10) || ''}
+                    onChange={e => updateForm({ startDateTime: e.target.value })}
+                  />
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      type="date"
+                      className="flex-1"
+                      value={form.startDateTime?.slice(0, 10) || ''}
+                      onChange={e => {
+                        const time = form.startDateTime?.slice(11, 16) || '09:00'
+                        updateForm({ startDateTime: e.target.value + 'T' + time })
+                      }}
+                    />
+                    <Input
+                      type="time"
+                      className="w-32"
+                      value={form.startDateTime?.slice(11, 16) || ''}
+                      onChange={e => {
+                        const date = form.startDateTime?.slice(0, 10) || ''
+                        updateForm({ startDateTime: date + 'T' + e.target.value })
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* End */}
               <div className="space-y-1.5">
-                <Label htmlFor="evt-end">End {form._allDay ? 'Date' : 'Date & Time'}</Label>
-                <Input
-                  id="evt-end"
-                  type={form._allDay ? 'date' : 'datetime-local'}
-                  value={form._allDay ? (form.endDateTime?.slice(0, 10) || '') : (form.endDateTime || '')}
-                  onChange={e => updateForm({ endDateTime: e.target.value })}
-                />
+                <Label>End {form._allDay ? 'Date' : 'Date & Time'}</Label>
+                {form._allDay ? (
+                  <Input
+                    type="date"
+                    value={form.endDateTime?.slice(0, 10) || ''}
+                    onChange={e => updateForm({ endDateTime: e.target.value })}
+                  />
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      type="date"
+                      className="flex-1"
+                      value={form.endDateTime?.slice(0, 10) || ''}
+                      onChange={e => {
+                        const time = form.endDateTime?.slice(11, 16) || '10:00'
+                        updateForm({ endDateTime: e.target.value + 'T' + time })
+                      }}
+                    />
+                    <Input
+                      type="time"
+                      className="w-32"
+                      value={form.endDateTime?.slice(11, 16) || ''}
+                      onChange={e => {
+                        const date = form.endDateTime?.slice(0, 10) || ''
+                        updateForm({ endDateTime: date + 'T' + e.target.value })
+                      }}
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Recurring */}
