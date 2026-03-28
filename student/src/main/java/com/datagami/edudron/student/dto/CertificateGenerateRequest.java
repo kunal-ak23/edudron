@@ -1,6 +1,8 @@
 package com.datagami.edudron.student.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 
 import java.util.List;
 
@@ -16,6 +18,8 @@ public class CertificateGenerateRequest {
     @NotBlank(message = "Template ID is required")
     private String templateId;
 
+    @NotEmpty(message = "At least one student is required")
+    @Valid
     private List<StudentEntry> students;
 
     public CertificateGenerateRequest() {}
@@ -38,6 +42,8 @@ public class CertificateGenerateRequest {
 
     public static class StudentEntry {
         private String name;
+
+        @NotBlank(message = "Student email is required")
         private String email;
 
         public StudentEntry() {}
