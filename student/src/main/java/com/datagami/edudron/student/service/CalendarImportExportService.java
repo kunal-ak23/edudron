@@ -31,12 +31,12 @@ public class CalendarImportExportService {
     private static final Logger logger = LoggerFactory.getLogger(CalendarImportExportService.class);
 
     private static final String[] IMPORT_HEADERS = {
-            "title", "description", "eventType", "startDateTime", "endDateTime",
+            "id", "title", "description", "eventType", "startDateTime", "endDateTime",
             "allDay", "audience", "classCodes", "sectionNames", "meetingLink", "location"
     };
 
     private static final String[] EXPORT_HEADERS = {
-            "title", "description", "eventType", "startDateTime", "endDateTime",
+            "id", "title", "description", "eventType", "startDateTime", "endDateTime",
             "allDay", "audience", "classCodes", "sectionNames", "meetingLink", "location"
     };
 
@@ -63,6 +63,7 @@ public class CalendarImportExportService {
 
         List<ImportError> errors = new ArrayList<>();
         int created = 0;
+        int updated = 0;
         int rowNumber = 1; // 1-based, header is row 0
 
         try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8);
@@ -78,6 +79,18 @@ public class CalendarImportExportService {
             for (CSVRecord record : parser) {
                 rowNumber++;
                 try {
+                    String existingId = getFieldOrNull(record, "id");
+                    if (existingId != null) {
+                        // Upsert: update existing event
+                        Optional<CalendarEvent> existing = calendarEventRepository.findByIdAndClientId(existingId, clientId);
+                        if (existing.isPresent()) {
+                            CalendarEvent event = existing.get();
+                            updateEventFromRow(event, record, clientId, rowNumber, errors);
+                            calendarEventRepository.save(event);
+                            updated++;
+                            continue;
+                        }
+                    }
                     CalendarEvent event = parseRow(record, clientId, userId, rowNumber, errors);
                     if (event != null) {
                         calendarEventRepository.save(event);
@@ -98,10 +111,11 @@ public class CalendarImportExportService {
                 Map.of("fileName", file.getOriginalFilename() != null ? file.getOriginalFilename() : "unknown",
                         "totalRows", rowNumber - 1,
                         "created", created,
+                        "updated", updated,
                         "errors", errors.size()));
 
-        logger.info("Calendar import completed: {} created, {} errors out of {} rows",
-                created, errors.size(), rowNumber - 1);
+        logger.info("Calendar import completed: {} created, {} updated, {} errors out of {} rows",
+                created, updated, errors.size(), rowNumber - 1);
 
         return new CalendarEventImportResult(created, errors.size(), errors);
     }
@@ -188,6 +202,7 @@ public class CalendarImportExportService {
                 }
 
                 printer.printRecord(
+                        event.getId(),
                         event.getTitle(),
                         event.getDescription(),
                         event.getEventType().name(),
@@ -218,8 +233,9 @@ public class CalendarImportExportService {
                      new OutputStreamWriter(out, StandardCharsets.UTF_8),
                      CSVFormat.DEFAULT.builder().setHeader(IMPORT_HEADERS).build())) {
 
-            // Sample row to illustrate format (comma-separated class codes and section names)
+            // Sample row — leave id empty for new events, or include id to update existing
             printer.printRecord(
+                    "",
                     "Mid-Term Exam",
                     "Mid-term examination for all sections",
                     "EXAM",
@@ -382,6 +398,42 @@ public class CalendarImportExportService {
         event.setLocation(getFieldOrNull(record, "location"));
 
         return event;
+    }
+
+    private void updateEventFromRow(CalendarEvent event, CSVRecord record, UUID clientId,
+                                     int rowNumber, List<ImportError> errors) {
+        String title = getField(record, "title");
+        if (title != null && !title.isBlank()) event.setTitle(title.trim());
+
+        String desc = getFieldOrNull(record, "description");
+        if (desc != null) event.setDescription(desc);
+
+        String eventTypeStr = getFieldOrNull(record, "eventType");
+        if (eventTypeStr != null) {
+            try { event.setEventType(EventType.valueOf(eventTypeStr.toUpperCase().trim())); }
+            catch (IllegalArgumentException e) { errors.add(new ImportError(rowNumber, "Invalid eventType: " + eventTypeStr)); }
+        }
+
+        String startStr = getFieldOrNull(record, "startDateTime");
+        if (startStr != null) {
+            try { event.setStartDateTime(OffsetDateTime.parse(startStr.trim())); }
+            catch (DateTimeParseException e) { errors.add(new ImportError(rowNumber, "Invalid startDateTime: " + startStr)); }
+        }
+
+        String endStr = getFieldOrNull(record, "endDateTime");
+        if (endStr != null) {
+            try { event.setEndDateTime(OffsetDateTime.parse(endStr.trim())); }
+            catch (DateTimeParseException e) { errors.add(new ImportError(rowNumber, "Invalid endDateTime: " + endStr)); }
+        }
+
+        String allDayStr = getFieldOrNull(record, "allDay");
+        if (allDayStr != null) event.setAllDay("true".equalsIgnoreCase(allDayStr.trim()));
+
+        String meetingLink = getFieldOrNull(record, "meetingLink");
+        if (meetingLink != null) event.setMeetingLink(meetingLink);
+
+        String location = getFieldOrNull(record, "location");
+        if (location != null) event.setLocation(location);
     }
 
     private String getField(CSVRecord record, String name) {
