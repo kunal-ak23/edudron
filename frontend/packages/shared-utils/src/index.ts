@@ -32,6 +32,8 @@ export type { BulkEnrollmentResult as EnrollmentBulkEnrollmentResult } from './a
 export { AnalyticsApi } from './api/analytics'
 export { SimulationsApi } from './api/simulations'
 export { ProjectsApi, ProjectQuestionsApi } from './api/projects'
+export { CalendarEventsApi, EventType, EventAudience } from './api/calendarEvents'
+export type { CalendarEvent, CreateCalendarEventInput, CalendarEventImportResult } from './api/calendarEvents'
 export type {
   ProjectDTO, ProjectGroupDTO, ProjectEventDTO, ProjectQuestionDTO, ProjectAttachmentDTO,
   CreateProjectRequest, GenerateGroupsRequest, SubmitProjectRequest, AttachmentInfo,
