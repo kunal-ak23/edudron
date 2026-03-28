@@ -69,7 +69,7 @@ public class CalendarImportExportService {
         try (Reader reader = new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8);
              CSVParser parser = CSVFormat.DEFAULT
                      .builder()
-                     .setHeader(IMPORT_HEADERS)
+                     .setHeader()
                      .setSkipHeaderRecord(true)
                      .setTrim(true)
                      .setIgnoreEmptyLines(true)
