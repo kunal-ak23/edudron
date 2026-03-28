@@ -7,6 +7,7 @@ import { getApiClient } from '@/lib/api'
 import { usePsychometricTestFeature } from '@/hooks/usePsychometricTestFeature'
 import { useSimulationFeature } from '@/hooks/useSimulationFeature'
 import { useProjectsFeature } from '@/hooks/useProjectsFeature'
+import { useCertificatesFeature } from '@/hooks/useCertificatesFeature'
 
 interface StudentLayoutProps {
   children: React.ReactNode
@@ -22,6 +23,7 @@ export function StudentLayout({ children }: StudentLayoutProps) {
   const { enabled: psychometricTestEnabled } = usePsychometricTestFeature()
   const { enabled: simulationEnabled } = useSimulationFeature()
   const { enabled: projectsEnabled } = useProjectsFeature()
+  const { enabled: certificatesEnabled } = useCertificatesFeature()
 
   useEffect(() => {
     const loadTenantInfo = async () => {
@@ -170,16 +172,18 @@ export function StudentLayout({ children }: StudentLayoutProps) {
                 >
                   Calendar
                 </button>
-                <button
-                  onClick={() => router.push('/certificates')}
-                  className={`font-medium transition-colors ${
-                    pathname?.startsWith('/certificates')
-                      ? 'text-primary-600'
-                      : 'text-gray-700 hover:text-primary-600'
-                  }`}
-                >
-                  Certificates
-                </button>
+                {certificatesEnabled && (
+                  <button
+                    onClick={() => router.push('/certificates')}
+                    className={`font-medium transition-colors ${
+                      pathname?.startsWith('/certificates')
+                        ? 'text-primary-600'
+                        : 'text-gray-700 hover:text-primary-600'
+                    }`}
+                  >
+                    Certificates
+                  </button>
+                )}
                 {psychometricTestEnabled && (
                   <button
                     onClick={() => router.push('/psych-test')}

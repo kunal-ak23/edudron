@@ -21,13 +21,16 @@ import {
   FileText,
   Calendar,
   Hash,
+  Lock,
 } from 'lucide-react'
+import { useCertificatesFeature } from '@/hooks/useCertificatesFeature'
 
 export const dynamic = 'force-dynamic'
 
 export default function MyCertificatesPage() {
   const { needsTenantSelection } = useAuth()
   const { toast } = useToast()
+  const { enabled: certificatesEnabled, loading: featureLoading } = useCertificatesFeature()
   const [certificates, setCertificates] = useState<Certificate[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
@@ -129,6 +132,42 @@ export default function MyCertificatesPage() {
     } catch {
       return dateStr
     }
+  }
+
+  if (featureLoading) {
+    return (
+      <ProtectedRoute>
+        <StudentLayout>
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+          </div>
+        </StudentLayout>
+      </ProtectedRoute>
+    )
+  }
+
+  if (!certificatesEnabled) {
+    return (
+      <ProtectedRoute>
+        <StudentLayout>
+          <main className="max-w-[1600px] mx-auto px-6 sm:px-8 lg:px-12 py-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Award className="h-8 w-8 text-primary-600" />
+              <h1 className="text-3xl font-bold text-gray-900">Certificates</h1>
+            </div>
+            <div className="text-center py-20">
+              <Lock className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold text-gray-700 mb-2">
+                Feature Not Available
+              </h2>
+              <p className="text-gray-500">
+                Certificates are not available for your institution.
+              </p>
+            </div>
+          </main>
+        </StudentLayout>
+      </ProtectedRoute>
+    )
   }
 
   return (

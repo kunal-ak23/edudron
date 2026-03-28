@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { useSimulationFeature } from '@/hooks/useSimulationFeature'
 import { useProjectsFeature } from '@/hooks/useProjectsFeature'
+import { useCertificatesFeature } from '@/hooks/useCertificatesFeature'
 import {
   LayoutDashboard,
   BookOpen,
@@ -221,6 +222,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
   const { user } = useAuth()
   const { enabled: simulationEnabled } = useSimulationFeature()
   const { enabled: projectsEnabled } = useProjectsFeature()
+  const { enabled: certificatesEnabled } = useCertificatesFeature()
   
   // Filter menu items based on user role and tenant selection
   const filteredMenuItems = menuItems
@@ -308,6 +310,11 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
 
       // Hide Projects when feature flag is disabled
       if (item.href === '/projects' && !projectsEnabled) {
+        return false
+      }
+
+      // Hide Certificates when feature flag is disabled
+      if (item.href === '/certificates' && !certificatesEnabled) {
         return false
       }
 

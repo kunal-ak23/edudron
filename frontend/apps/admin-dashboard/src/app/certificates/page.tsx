@@ -40,6 +40,7 @@ import {
   Upload,
   AlertTriangle,
   X,
+  Lock,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -47,6 +48,7 @@ import {
   coursesApi,
   sectionsApi,
 } from '@/lib/api'
+import { useCertificatesFeature } from '@/hooks/useCertificatesFeature'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +82,7 @@ interface CertificateTemplate {
 
 export default function CertificatesPage() {
   const { toast } = useToast()
+  const { enabled: certificatesEnabled, loading: featureLoading } = useCertificatesFeature()
 
   // Shared data
   const [courses, setCourses] = useState<SelectOption[]>([])
@@ -321,6 +324,36 @@ export default function CertificatesPage() {
       setRevoking(false)
     }
   }, [revokeTarget, revokeReason, toast, loadCertificates])
+
+  if (featureLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (!certificatesEnabled) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center gap-2">
+            <Award className="h-7 w-7 text-primary" />
+            <h1 className="text-3xl font-bold">Certificates</h1>
+          </div>
+        </div>
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16">
+            <Lock className="h-12 w-12 text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold text-gray-700 mb-2">Premium Feature</h2>
+            <p className="text-muted-foreground text-center max-w-md">
+              Certificate generation is a premium feature. Contact your system administrator to enable it.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
