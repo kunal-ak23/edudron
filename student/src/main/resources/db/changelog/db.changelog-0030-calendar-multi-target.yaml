@@ -28,12 +28,10 @@ databaseChangeLog:
             schemaName: calendar
             tableName: calendar_events
             columnName: section_id
-        - dropIndex:
-            schemaName: calendar
-            indexName: idx_cal_events_client_class
-        - dropIndex:
-            schemaName: calendar
-            indexName: idx_cal_events_client_section
+        - sql:
+            sql: DROP INDEX IF EXISTS calendar.idx_cal_events_client_class
+        - sql:
+            sql: DROP INDEX IF EXISTS calendar.idx_cal_events_client_section
         - createIndex:
             schemaName: calendar
             tableName: calendar_events
