@@ -121,8 +121,10 @@ public class SectionController {
     public ResponseEntity<CoordinatorResponse> assignSectionCoordinator(
             @PathVariable String id,
             @Valid @RequestBody CoordinatorAssignmentRequest request,
-            @RequestAttribute(value = "userEmail", required = false) String actorEmail) {
-        CoordinatorResponse response = sectionService.assignSectionCoordinator(id, request.coordinatorUserId(), actorEmail);
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail,
+            @RequestAttribute(value = "userId", required = false) String userId) {
+        String actor = actorEmail != null ? actorEmail : userId;
+        CoordinatorResponse response = sectionService.assignSectionCoordinator(id, request.coordinatorUserId(), actor);
         return ResponseEntity.ok(response);
     }
 
@@ -130,8 +132,10 @@ public class SectionController {
     @Operation(summary = "Remove section coordinator", description = "Remove the faculty coordinator from a section")
     public ResponseEntity<Void> removeSectionCoordinator(
             @PathVariable String id,
-            @RequestAttribute(value = "userEmail", required = false) String actorEmail) {
-        sectionService.removeSectionCoordinator(id, actorEmail);
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail,
+            @RequestAttribute(value = "userId", required = false) String userId) {
+        String actor = actorEmail != null ? actorEmail : userId;
+        sectionService.removeSectionCoordinator(id, actor);
         return ResponseEntity.noContent().build();
     }
 

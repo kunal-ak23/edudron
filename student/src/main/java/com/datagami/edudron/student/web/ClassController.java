@@ -118,8 +118,10 @@ public class ClassController {
     public ResponseEntity<CoordinatorResponse> assignClassCoordinator(
             @PathVariable String id,
             @Valid @RequestBody CoordinatorAssignmentRequest request,
-            @RequestAttribute(value = "userEmail", required = false) String actorEmail) {
-        CoordinatorResponse response = classService.assignClassCoordinator(id, request.coordinatorUserId(), actorEmail);
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail,
+            @RequestAttribute(value = "userId", required = false) String userId) {
+        String actor = actorEmail != null ? actorEmail : userId;
+        CoordinatorResponse response = classService.assignClassCoordinator(id, request.coordinatorUserId(), actor);
         return ResponseEntity.ok(response);
     }
 
@@ -127,8 +129,10 @@ public class ClassController {
     @Operation(summary = "Remove class coordinator", description = "Remove the faculty coordinator from a class")
     public ResponseEntity<Void> removeClassCoordinator(
             @PathVariable String id,
-            @RequestAttribute(value = "userEmail", required = false) String actorEmail) {
-        classService.removeClassCoordinator(id, actorEmail);
+            @RequestAttribute(value = "userEmail", required = false) String actorEmail,
+            @RequestAttribute(value = "userId", required = false) String userId) {
+        String actor = actorEmail != null ? actorEmail : userId;
+        classService.removeClassCoordinator(id, actor);
         return ResponseEntity.noContent().build();
     }
 
