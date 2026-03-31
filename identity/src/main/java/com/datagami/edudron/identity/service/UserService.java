@@ -606,7 +606,10 @@ public class UserService {
         }
         
         user = userRepository.save(user);
-        
+
+        // Invalidate UserUtil cache so stale role/email is not served
+        com.datagami.edudron.common.UserCacheInvalidator.invalidate(user.getEmail());
+
         // Log user update event
         String currentUserId = currentUser != null ? currentUser.getId() : null;
         String currentUserEmail = currentUser != null ? currentUser.getEmail() : null;

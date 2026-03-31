@@ -36,6 +36,8 @@ public class UserUtil {
         if (gatewayUrl == null || gatewayUrl.isEmpty()) {
             gatewayUrl = "http://localhost:8080"; // Default fallback
         }
+        // Register for cache invalidation events from identity service
+        com.datagami.edudron.common.UserCacheInvalidator.onInvalidate(UserUtil::invalidateCache);
     }
 
     private static RestTemplate getRestTemplate() {
@@ -67,6 +69,16 @@ public class UserUtil {
             }
         }
         return restTemplate;
+    }
+
+    /**
+     * Invalidate cached user data for a specific email.
+     * Call this when a user's role, email, or other profile data changes.
+     */
+    public static void invalidateCache(String email) {
+        if (email != null) {
+            userCache.remove(email);
+        }
     }
 
     /**
