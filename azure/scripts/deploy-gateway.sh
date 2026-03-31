@@ -182,6 +182,11 @@ else
         --name "$APP_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --image "$IMAGE" \
+        --min-replicas "$MIN_REPLICAS" \
+        --max-replicas "$MAX_REPLICAS" \
+        --scale-rule-name http-scaler \
+        --scale-rule-type http \
+        --scale-rule-http-concurrency 30 \
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
             "GATEWAY_CONNECT_TIMEOUT=30000" \
@@ -189,7 +194,7 @@ else
             "CORE_API_SERVICE_URL=$CORE_API_URL" \
             "CONTENT_SERVICE_URL=$CONTENT_URL" \
         --output none
-    
+
     print_success "Container app updated successfully"
 fi
 

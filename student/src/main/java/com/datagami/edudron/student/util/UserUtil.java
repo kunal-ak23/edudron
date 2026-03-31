@@ -28,7 +28,7 @@ public class UserUtil {
     private static final Object restTemplateLock = new Object();
     private static String gatewayUrl = System.getenv("GATEWAY_URL");
 
-    // Cache user responses by email for 10 minutes to avoid repeated HTTP calls
+    // Cache user responses by email for 5 minutes to avoid repeated HTTP calls
     private static final ConcurrentHashMap<String, CachedUser> userCache = new ConcurrentHashMap<>();
     private static final long CACHE_TTL_MS = TimeUnit.MINUTES.toMillis(5);
 
@@ -103,8 +103,14 @@ public class UserUtil {
                 return user;
             }
         } catch (Exception e) {
-            log.warn("Failed to resolve user from identity service for email {}. Using email as fallback: {}",
+            log.warn("Failed to resolve user from identity service for email {}. {}",
                     email, e.getMessage());
+            // Return stale cached data on failure rather than falling back to email
+            if (cached != null) {
+                log.info("Returning stale cached user for {} (expired {}ms ago)",
+                        email, System.currentTimeMillis() - cached.timestamp - CACHE_TTL_MS);
+                return cached.user;
+            }
         }
 
         return null;
