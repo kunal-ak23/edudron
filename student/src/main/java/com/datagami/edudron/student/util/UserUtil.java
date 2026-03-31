@@ -17,6 +17,8 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public class UserUtil {
 
@@ -25,6 +27,10 @@ public class UserUtil {
     private static volatile RestTemplate restTemplate;
     private static final Object restTemplateLock = new Object();
     private static String gatewayUrl = System.getenv("GATEWAY_URL");
+
+    // Cache user responses by email for 10 minutes to avoid repeated HTTP calls
+    private static final ConcurrentHashMap<String, CachedUser> userCache = new ConcurrentHashMap<>();
+    private static final long CACHE_TTL_MS = TimeUnit.MINUTES.toMillis(5);
 
     static {
         if (gatewayUrl == null || gatewayUrl.isEmpty()) {
@@ -64,6 +70,47 @@ public class UserUtil {
     }
 
     /**
+     * Get cached user response, or fetch from identity service if not cached/expired.
+     */
+    private static UserResponse getCachedUserResponse(String email) {
+        CachedUser cached = userCache.get(email);
+        if (cached != null && !cached.isExpired()) {
+            return cached.user;
+        }
+
+        // Fetch from identity service
+        try {
+            String meUrl = gatewayUrl + "/idp/users/me";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<UserResponse> response = getRestTemplate().exchange(
+                    meUrl,
+                    HttpMethod.GET,
+                    entity,
+                    UserResponse.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                UserResponse user = response.getBody();
+                userCache.put(email, new CachedUser(user));
+
+                // Evict old entries periodically (keep cache bounded)
+                if (userCache.size() > 5000) {
+                    userCache.entrySet().removeIf(e -> e.getValue().isExpired());
+                }
+
+                return user;
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve user from identity service for email {}. Using email as fallback: {}",
+                    email, e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
      * Get the current user ID from SecurityContext.
      * The JWT subject contains the email, so we need to look up the user ID from
      * identity service.
@@ -79,32 +126,13 @@ public class UserUtil {
         String email = authentication.getName(); // This is the email from JWT subject
         log.debug("Getting user ID for email: {}", email);
 
-        // Try to get user ID from identity service using /me endpoint
-        try {
-            String meUrl = gatewayUrl + "/idp/users/me";
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<?> entity = new HttpEntity<>(headers);
-
-            ResponseEntity<UserResponse> response = getRestTemplate().exchange(
-                    meUrl,
-                    HttpMethod.GET,
-                    entity,
-                    UserResponse.class);
-
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                String userId = response.getBody().getId();
-                log.debug("Resolved user ID {} for email {} via /me endpoint", userId, email);
-                return userId;
-            }
-        } catch (Exception e) {
-            log.warn("Failed to resolve user ID from identity service for email {}. Using email as fallback: {}",
-                    email, e.getMessage());
+        UserResponse user = getCachedUserResponse(email);
+        if (user != null && user.getId() != null) {
+            log.debug("Resolved user ID {} for email {}", user.getId(), email);
+            return user.getId();
         }
 
         // Fallback: use email as identifier (for backward compatibility)
-        // This might cause issues if enrollments use user ID, but it's better than
-        // failing
         log.warn(
                 "Using email as user ID (fallback). This may cause enrollment lookup issues if enrollments use user ID instead of email.");
         return email;
@@ -120,26 +148,13 @@ public class UserUtil {
             return null;
         }
 
-        try {
-            String meUrl = gatewayUrl + "/idp/users/me";
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<?> entity = new HttpEntity<>(headers);
-
-            ResponseEntity<UserResponse> response = getRestTemplate().exchange(
-                    meUrl,
-                    HttpMethod.GET,
-                    entity,
-                    UserResponse.class);
-
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody().getEmail();
-            }
-        } catch (Exception e) {
-            log.debug("Could not determine user email: {}", e.getMessage());
+        String email = authentication.getName();
+        UserResponse user = getCachedUserResponse(email);
+        if (user != null && user.getEmail() != null) {
+            return user.getEmail();
         }
 
-        return authentication.getName();
+        return email;
     }
 
     /**
@@ -153,25 +168,27 @@ public class UserUtil {
             return null;
         }
 
-        try {
-            String meUrl = gatewayUrl + "/idp/users/me";
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<?> entity = new HttpEntity<>(headers);
-
-            ResponseEntity<UserResponse> response = getRestTemplate().exchange(
-                    meUrl,
-                    HttpMethod.GET,
-                    entity,
-                    UserResponse.class);
-
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody().getRole();
-            }
-        } catch (Exception e) {
-            log.debug("Could not determine user role: {}", e.getMessage());
+        String email = authentication.getName();
+        UserResponse user = getCachedUserResponse(email);
+        if (user != null) {
+            return user.getRole();
         }
         return null;
+    }
+
+    // Cached user entry with TTL
+    private static class CachedUser {
+        final UserResponse user;
+        final long timestamp;
+
+        CachedUser(UserResponse user) {
+            this.user = user;
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() - timestamp > CACHE_TTL_MS;
+        }
     }
 
     // Helper class for user response

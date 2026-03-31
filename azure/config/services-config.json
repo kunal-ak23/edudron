@@ -8,6 +8,12 @@
       "maxReplicas": 10,
       "ingressExternal": true,
       "healthProbePath": "/actuator/health",
+      "scaleRules": {
+        "http": {
+          "name": "http-scaler",
+          "concurrentRequests": 30
+        }
+      },
       "environmentVariables": [
         {
           "name": "SPRING_PROFILES_ACTIVE",
@@ -27,6 +33,12 @@
       "maxReplicas": 5,
       "ingressExternal": false,
       "healthProbePath": "/actuator/health",
+      "scaleRules": {
+        "http": {
+          "name": "http-scaler",
+          "concurrentRequests": 30
+        }
+      },
       "environmentVariables": [
         {
           "name": "SPRING_PROFILES_ACTIVE",
@@ -54,6 +66,12 @@
       "maxReplicas": 5,
       "ingressExternal": false,
       "healthProbePath": "/actuator/health",
+      "scaleRules": {
+        "http": {
+          "name": "http-scaler",
+          "concurrentRequests": 30
+        }
+      },
       "environmentVariables": [
         {
           "name": "SPRING_PROFILES_ACTIVE",
