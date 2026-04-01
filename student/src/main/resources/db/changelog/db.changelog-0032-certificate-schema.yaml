@@ -1,0 +1,125 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0032-01-create-certificate-schema
+      author: edudron
+      changes:
+        - sql:
+            sql: CREATE SCHEMA IF NOT EXISTS certificate
+
+  - changeSet:
+      id: 0032-02-create-certificate-templates
+      author: edudron
+      changes:
+        - createTable:
+            schemaName: certificate
+            tableName: certificate_templates
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid }
+              - column: { name: name, type: varchar(255), constraints: { nullable: false } }
+              - column: { name: description, type: text }
+              - column: { name: config, type: jsonb, constraints: { nullable: false } }
+              - column: { name: background_image_url, type: varchar(500) }
+              - column: { name: is_default, type: boolean, defaultValueBoolean: false }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: NOW() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: NOW() }
+        - createIndex:
+            schemaName: certificate
+            tableName: certificate_templates
+            indexName: idx_cert_templates_client_id
+            columns:
+              - column: { name: client_id }
+
+  - changeSet:
+      id: 0032-03-create-certificates
+      author: edudron
+      changes:
+        - createTable:
+            schemaName: certificate
+            tableName: certificates
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: course_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: section_id, type: varchar(26) }
+              - column: { name: class_id, type: varchar(26) }
+              - column: { name: template_id, type: varchar(26), constraints: { nullable: false, foreignKeyName: fk_cert_template, references: certificate.certificate_templates(id) } }
+              - column: { name: credential_id, type: varchar(20), constraints: { nullable: false, unique: true } }
+              - column: { name: qr_code_url, type: varchar(500) }
+              - column: { name: pdf_url, type: varchar(500) }
+              - column: { name: issued_at, type: timestamptz, defaultValueComputed: NOW() }
+              - column: { name: issued_by, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: revoked_at, type: timestamptz }
+              - column: { name: revoked_reason, type: text }
+              - column: { name: metadata, type: jsonb }
+              - column: { name: is_active, type: boolean, defaultValueBoolean: true }
+              - column: { name: created_at, type: timestamptz, defaultValueComputed: NOW() }
+              - column: { name: updated_at, type: timestamptz, defaultValueComputed: NOW() }
+        - createIndex:
+            schemaName: certificate
+            tableName: certificates
+            indexName: idx_cert_client_student
+            columns:
+              - column: { name: client_id }
+              - column: { name: student_id }
+        - createIndex:
+            schemaName: certificate
+            tableName: certificates
+            indexName: idx_cert_client_course
+            columns:
+              - column: { name: client_id }
+              - column: { name: course_id }
+
+  - changeSet:
+      id: 0032-04-create-certificate-visibility
+      author: edudron
+      changes:
+        - createTable:
+            schemaName: certificate
+            tableName: certificate_visibility
+            columns:
+              - column: { name: id, type: varchar(26), constraints: { primaryKey: true, nullable: false } }
+              - column: { name: client_id, type: uuid, constraints: { nullable: false } }
+              - column: { name: student_id, type: varchar(26), constraints: { nullable: false } }
+              - column: { name: certificate_id, type: varchar(26), constraints: { nullable: false, foreignKeyName: fk_visibility_cert, references: certificate.certificates(id) } }
+              - column: { name: show_scores, type: boolean, defaultValueBoolean: true }
+              - column: { name: show_project_details, type: boolean, defaultValueBoolean: true }
+              - column: { name: show_overall_percentage, type: boolean, defaultValueBoolean: true }
+              - column: { name: show_course_name, type: boolean, defaultValueBoolean: true }
+        - addUniqueConstraint:
+            schemaName: certificate
+            tableName: certificate_visibility
+            columnNames: certificate_id
+            constraintName: uq_visibility_certificate_id
+
+  - changeSet:
+      id: 0032-05-seed-default-templates
+      author: edudron
+      changes:
+        - sql:
+            sql: |
+              INSERT INTO certificate.certificate_templates (id, client_id, name, description, config, is_default, is_active, created_at, updated_at)
+              VALUES (
+                'DEFAULT_CLASSIC_001',
+                NULL,
+                'Classic Certificate',
+                'A traditional certificate design with navy blue accents and clean typography.',
+                '{"fields":[{"type":"customText","x":421,"y":120,"text":"Certificate of Completion","fontSize":32,"fontWeight":"bold","color":"#1E3A5F"},{"type":"studentName","x":421,"y":260,"fontSize":36,"fontWeight":"bold","color":"#1E3A5F"},{"type":"customText","x":421,"y":320,"text":"has successfully completed the course","fontSize":16,"color":"#333333"},{"type":"courseName","x":421,"y":370,"fontSize":22,"fontWeight":"bold","color":"#0891B2"},{"type":"date","x":421,"y":430,"fontSize":14,"format":"MMMM dd, yyyy","color":"#666666"},{"type":"credentialId","x":60,"y":550,"fontSize":10,"color":"#999999"},{"type":"qrCode","x":700,"y":460,"size":100}],"pageSize":{"width":842,"height":595},"orientation":"landscape"}'::jsonb,
+                true,
+                true,
+                NOW(),
+                NOW()
+              ),
+              (
+                'DEFAULT_MODERN_002',
+                NULL,
+                'Modern Certificate',
+                'A contemporary certificate design with teal highlights and modern layout.',
+                '{"fields":[{"type":"customText","x":421,"y":80,"text":"CERTIFICATE OF COMPLETION","fontSize":28,"fontWeight":"bold","color":"#0891B2","letterSpacing":4},{"type":"customText","x":421,"y":140,"text":"This is to certify that","fontSize":14,"color":"#666666"},{"type":"studentName","x":421,"y":200,"fontSize":40,"fontWeight":"bold","color":"#1E3A5F"},{"type":"customText","x":421,"y":270,"text":"has successfully completed","fontSize":14,"color":"#666666"},{"type":"courseName","x":421,"y":320,"fontSize":24,"fontWeight":"bold","color":"#0891B2"},{"type":"date","x":200,"y":470,"fontSize":12,"format":"dd MMMM yyyy","color":"#666666","label":"Date Issued"},{"type":"credentialId","x":600,"y":470,"fontSize":12,"color":"#666666","label":"Credential ID"},{"type":"qrCode","x":721,"y":480,"size":80}],"pageSize":{"width":842,"height":595},"orientation":"landscape"}'::jsonb,
+                true,
+                true,
+                NOW(),
+                NOW()
+              );

@@ -13,4 +13,6 @@ public interface ProjectEventGradeRepository extends JpaRepository<ProjectEventG
     List<ProjectEventGrade> findByEventIdAndClientId(String eventId, UUID clientId);
 
     List<ProjectEventGrade> findByStudentIdAndEventIdIn(String studentId, List<String> eventIds);
+
+    List<ProjectEventGrade> findByClientIdAndEventIdIn(UUID clientId, List<String> eventIds);
 }

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@kunal-ak23/edudron-shared-utils'
 import { useSimulationFeature } from '@/hooks/useSimulationFeature'
 import { useProjectsFeature } from '@/hooks/useProjectsFeature'
+import { useCertificatesFeature } from '@/hooks/useCertificatesFeature'
 import {
   LayoutDashboard,
   BookOpen,
@@ -33,7 +34,9 @@ import {
   Layers,
   Gamepad2,
   FolderKanban,
-  CalendarDays
+  CalendarDays,
+  FileSpreadsheet,
+  Award
 } from 'lucide-react'
 
 interface MenuItem {
@@ -141,6 +144,18 @@ const menuItems: MenuItem[] = [
     ]
   },
   {
+    name: 'Results',
+    href: '/results',
+    icon: FileSpreadsheet,
+    requiresTenant: true,
+  },
+  {
+    name: 'Certificates',
+    href: '/certificates',
+    icon: Award,
+    requiresTenant: true,
+  },
+  {
     name: 'Enrollments',
     href: '/enrollments',
     icon: Users,
@@ -207,6 +222,7 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
   const { user } = useAuth()
   const { enabled: simulationEnabled } = useSimulationFeature()
   const { enabled: projectsEnabled } = useProjectsFeature()
+  const { enabled: certificatesEnabled } = useCertificatesFeature()
   
   // Filter menu items based on user role and tenant selection
   const filteredMenuItems = menuItems
@@ -297,6 +313,11 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
         return false
       }
 
+      // Hide Certificates when feature flag is disabled
+      if (item.href === '/certificates' && !certificatesEnabled) {
+        return false
+      }
+
       // Show tenant-specific items only if user has a tenant selected
       if (item.requiresTenant) {
         const tenantId = localStorage.getItem('tenant_id') || 
@@ -320,6 +341,8 @@ export function Sidebar({ isOpen, onToggle, collapsed = false, onCollapseToggle 
     if (path.startsWith('/exams') || path.startsWith('/question-bank')) return 'Exams'
     if (path.startsWith('/simulations')) return 'Simulations'
     if (path.startsWith('/projects') || path.startsWith('/project-questions')) return 'Projects'
+    if (path.startsWith('/results')) return 'Results'
+    if (path.startsWith('/certificates')) return 'Certificates'
     if (path.startsWith('/enrollments')) return 'Enrollments'
     if (path.startsWith('/calendar')) return 'Calendar'
     if (path.startsWith('/analytics')) return 'Analytics'

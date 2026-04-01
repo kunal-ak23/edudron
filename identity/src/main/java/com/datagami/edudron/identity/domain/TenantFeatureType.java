@@ -39,7 +39,13 @@ public enum TenantFeatureType {
      * Controls whether group-based project management is available.
      * Default: false (premium feature, must be explicitly enabled per tenant)
      */
-    PROJECTS(false, "Enable group-based project management");
+    PROJECTS(false, "Enable group-based project management"),
+
+    /**
+     * Controls whether certificate generation and management is available.
+     * Default: false (premium feature, must be explicitly enabled per tenant)
+     */
+    CERTIFICATES(false, "Certificate generation and management");
 
     private final boolean defaultValue;
     private final String description;

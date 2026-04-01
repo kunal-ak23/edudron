@@ -18,16 +18,17 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
- * Client for looking up user details from the Identity service (via gateway).
- * Used to validate coordinator assignments — checks that a user exists and has the INSTRUCTOR role.
+ * Client for fetching assessment and course data from Content service.
+ * Used by ResultsExportService to build Excel exports with assessment metadata.
  */
 @Component
-public class IdentityUserClient {
+public class ContentAssessmentClient {
 
-    private static final Logger logger = LoggerFactory.getLogger(IdentityUserClient.class);
+    private static final Logger logger = LoggerFactory.getLogger(ContentAssessmentClient.class);
 
     @Value("${GATEWAY_URL:http://localhost:8080}")
     private String gatewayUrl;
@@ -64,13 +65,14 @@ public class IdentityUserClient {
     }
 
     /**
-     * Fetch a user by ID from the Identity service.
+     * Fetch all assessments (exams) for a given course from Content service.
+     * Parses the Spring Data Page response to extract the content array.
      *
-     * @param userId the user ID
-     * @return user as JsonNode containing id, name, email, role, active, etc., or null if not found
+     * @param courseId course ID
+     * @return list of assessment JsonNodes, each with id, title, assessmentType, maxScore, etc.
      */
-    public JsonNode getUser(String userId) {
-        String url = gatewayUrl + "/idp/users/" + userId;
+    public List<JsonNode> getAssessmentsForCourse(String courseId) {
+        String url = gatewayUrl + "/api/exams?courseId=" + courseId + "&size=200";
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
 
@@ -82,23 +84,34 @@ public class IdentityUserClient {
                     JsonNode.class
             );
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                return response.getBody();
+                JsonNode body = response.getBody();
+                // Handle Spring Data Page response format
+                JsonNode content = body.has("content") ? body.get("content") : body;
+                if (content.isArray()) {
+                    List<JsonNode> assessments = new ArrayList<>();
+                    for (JsonNode node : content) {
+                        assessments.add(node);
+                    }
+                    logger.debug("Fetched {} assessments for course {}", assessments.size(), courseId);
+                    return assessments;
+                }
+                return Collections.emptyList();
             }
-            return null;
+            return Collections.emptyList();
         } catch (Exception e) {
-            logger.warn("Failed to fetch user {} from Identity: {}", userId, e.getMessage());
-            return null;
+            logger.warn("Failed to fetch assessments for course {} from Content: {}", courseId, e.getMessage());
+            return Collections.emptyList();
         }
     }
 
     /**
-     * Fetch a user by email from the Identity service.
+     * Fetch course details from Content service.
      *
-     * @param email the user email
-     * @return user as JsonNode containing id, name, email, role, active, etc., or null if not found
+     * @param courseId course ID
+     * @return course as JsonNode (with title, etc.), or null if not found
      */
-    public JsonNode getUserByEmail(String email) {
-        String url = gatewayUrl + "/idp/users/by-email?email=" + email;
+    public JsonNode getCourse(String courseId) {
+        String url = gatewayUrl + "/content/courses/" + courseId;
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
 
@@ -114,7 +127,7 @@ public class IdentityUserClient {
             }
             return null;
         } catch (Exception e) {
-            logger.warn("Failed to fetch user by email {} from Identity: {}", email, e.getMessage());
+            logger.warn("Failed to fetch course {} from Content: {}", courseId, e.getMessage());
             return null;
         }
     }

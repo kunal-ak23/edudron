@@ -18,4 +18,8 @@ public interface ProjectRepository extends JpaRepository<Project, String> {
     List<Project> findByClientIdAndStatus(UUID clientId, Project.ProjectStatus status);
 
     List<Project> findByClientIdOrderByCreatedAtDesc(UUID clientId);
+
+    List<Project> findByClientIdAndCourseId(UUID clientId, String courseId);
+
+    List<Project> findByClientIdAndCourseIdAndSectionId(UUID clientId, String courseId, String sectionId);
 }

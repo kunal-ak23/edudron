@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3, X, UserCircle } from 'lucide-react'
+import { Loader2, ArrowLeft, Save, Plus, Users, Mail, Phone, ChevronLeft, ChevronRight, BarChart3, X, UserCircle, FileSpreadsheet } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
-import { sectionsApi, classesApi, institutesApi, enrollmentsApi, apiClient } from '@/lib/api'
+import { sectionsApi, classesApi, institutesApi, enrollmentsApi, apiClient, resultsApi } from '@/lib/api'
 import type { Section, CreateSectionRequest, Class, Institute, SectionStudentDTO, CoordinatorResponse, User } from '@kunal-ak23/edudron-shared-utils'
 import { useToast } from '@/hooks/use-toast'
 import { extractErrorMessage } from '@/lib/error-utils'
@@ -61,6 +61,7 @@ export default function SectionDetailPage() {
   const [selectedInstructorId, setSelectedInstructorId] = useState('')
   const [coordinatorSubmitting, setCoordinatorSubmitting] = useState(false)
   const [showRemoveCoordinatorDialog, setShowRemoveCoordinatorDialog] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const canManageCoordinator = user?.role === 'SYSTEM_ADMIN' || user?.role === 'TENANT_ADMIN'
 
   const [formData, setFormData] = useState<CreateSectionRequest>({
@@ -286,6 +287,33 @@ export default function SectionDetailPage() {
     }
   }
 
+  const handleExportResults = async () => {
+    try {
+      setExporting(true)
+      const blob = await resultsApi.exportBySection(sectionId)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `results-section-${section?.name || sectionId}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      toast({
+        title: 'Export complete',
+        description: 'Results have been downloaded successfully.',
+      })
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Export failed',
+        description: extractErrorMessage(err),
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -319,13 +347,28 @@ export default function SectionDetailPage() {
                 Back to Sections
               </Button>
             </Link>
-            <Button 
-              variant="outline"
-              onClick={() => router.push(`/analytics/sections/${sectionId}`)}
-            >
-              <BarChart3 className="h-4 w-4 mr-2" />
-              View Analytics
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleExportResults}
+                disabled={exporting}
+                className="cursor-pointer"
+              >
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                )}
+                Export Results
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/analytics/sections/${sectionId}`)}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                View Analytics
+              </Button>
+            </div>
           </div>
 
 

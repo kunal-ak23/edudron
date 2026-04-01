@@ -63,3 +63,5 @@ databaseChangeLog:
       file: db/changelog/db.changelog-0030-calendar-multi-target.yaml
   - include:
       file: db/changelog/db.changelog-0031-exam-performance-indexes.yaml
+  - include:
+      file: db/changelog/db.changelog-0032-certificate-schema.yaml

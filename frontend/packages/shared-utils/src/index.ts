@@ -34,6 +34,15 @@ export { SimulationsApi } from './api/simulations'
 export { ProjectsApi, ProjectQuestionsApi } from './api/projects'
 export { CalendarEventsApi, EventType, EventAudience } from './api/calendarEvents'
 export type { CalendarEvent, CreateCalendarEventInput, CalendarEventImportResult } from './api/calendarEvents'
+export { ResultsApi } from './api/results'
+export { CertificatesApi } from './api/certificates'
+export type {
+  CertificateTemplate,
+  Certificate,
+  CertificateVisibility,
+  CertificateGenerateRequest,
+  CertificateVerification
+} from './api/certificates'
 export type {
   ProjectDTO, ProjectGroupDTO, ProjectEventDTO, ProjectQuestionDTO, ProjectAttachmentDTO,
   CreateProjectRequest, GenerateGroupsRequest, SubmitProjectRequest, AttachmentInfo,
