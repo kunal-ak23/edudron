@@ -117,11 +117,11 @@ export default function CertificatesPage() {
   const loadOptions = useCallback(async () => {
     setLoadingOptions(true)
     try {
-      const [coursesRes, sectionsRes, templatesRes] = await Promise.all([
-        coursesApi.list().catch(() => []),
-        sectionsApi.list().catch(() => []),
+      const [coursesRes, templatesRes] = await Promise.all([
+        coursesApi.listCourses().catch(() => []),
         certificatesApi.listTemplates().catch(() => []),
       ])
+      const sectionsRes: any[] = [] // Sections loaded dynamically when class is selected
 
       const normalize = (data: any): SelectOption[] => {
         const arr = Array.isArray(data)

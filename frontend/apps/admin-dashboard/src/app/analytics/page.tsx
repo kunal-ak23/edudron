@@ -128,7 +128,7 @@ export default function AnalyticsPage() {
               {sections.length} active section{sections.length !== 1 ? 's' : ''} available
             </p>
             {sections.length > 0 ? (
-              <Select onValueChange={(id) => router.push(`/analytics/sections/${id}`)}>
+              <Select onValueChange={(id: string) => router.push(`/analytics/sections/${id}`)}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Select a section" />
                 </SelectTrigger>
