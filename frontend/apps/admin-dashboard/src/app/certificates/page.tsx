@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -82,6 +83,7 @@ interface CertificateTemplate {
 
 export default function CertificatesPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const { enabled: certificatesEnabled, loading: featureLoading } = useCertificatesFeature()
 
   // Shared data
@@ -430,7 +432,13 @@ export default function CertificatesPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="gen-template">Template</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="gen-template">Template</Label>
+                    <Button variant="link" size="sm" className="text-xs h-auto p-0"
+                      onClick={() => router.push('/certificates/designer')}>
+                      + Design New
+                    </Button>
+                  </div>
                   <Select value={genTemplateId} onValueChange={setGenTemplateId}>
                     <SelectTrigger id="gen-template" className="mt-1 cursor-pointer">
                       <SelectValue placeholder="Select template..." />
