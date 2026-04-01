@@ -169,6 +169,7 @@ public class AssessmentSubmissionService {
         return toDTO(saved);
     }
 
+    @Transactional(readOnly = true)
     public List<AssessmentSubmissionDTO> getStudentSubmissions(String studentId, String courseId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -181,6 +182,7 @@ public class AssessmentSubmissionService {
         return submissions.stream().map(this::toDTO).collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public Page<AssessmentSubmissionDTO> getStudentSubmissions(String studentId, String courseId, Pageable pageable) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -193,6 +195,7 @@ public class AssessmentSubmissionService {
         return submissions.map(this::toDTO);
     }
 
+    @Transactional(readOnly = true)
     public AssessmentSubmissionDTO getLatestSubmission(String studentId, String assessmentId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -207,6 +210,7 @@ public class AssessmentSubmissionService {
         return toDTO(submission);
     }
 
+    @Transactional(readOnly = true)
     public List<AssessmentSubmissionDTO> getSubmissionsByAssessmentId(String assessmentId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -304,6 +308,7 @@ public class AssessmentSubmissionService {
     /**
      * Get all assessment/exam submissions for a student (admin/instructor view).
      */
+    @Transactional(readOnly = true)
     public List<AssessmentSubmissionDTO> getSubmissionsByStudentId(String studentId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -315,6 +320,7 @@ public class AssessmentSubmissionService {
         return submissions.stream().map(this::toDTO).collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public Page<AssessmentSubmissionDTO> getSubmissionsByAssessmentId(String assessmentId, Pageable pageable) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {

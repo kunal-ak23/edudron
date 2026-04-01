@@ -482,6 +482,7 @@ public class ExamSubmissionService {
     /**
      * Get submission status
      */
+    @Transactional(readOnly = true)
     public AssessmentSubmission getSubmissionStatus(String submissionId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
@@ -502,6 +503,7 @@ public class ExamSubmissionService {
     /**
      * Get submission by exam ID for current student
      */
+    @Transactional(readOnly = true)
     public AssessmentSubmission getSubmissionByExamId(String studentId, String examId) {
         String clientIdStr = TenantContext.getClientId();
         if (clientIdStr == null) {
