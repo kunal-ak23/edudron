@@ -5,7 +5,9 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.datagami.edudron.student.util.UserUtil;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +35,12 @@ public class ResultsExportController {
             @RequestParam(required = false) String sectionId,
             @RequestParam(required = false) String classId,
             @RequestParam(required = false) String courseId) {
+
+        String userRole = UserUtil.getCurrentUserRole();
+        if (userRole == null || (!userRole.equals("SYSTEM_ADMIN") && !userRole.equals("TENANT_ADMIN")
+                && !userRole.equals("CONTENT_MANAGER") && !userRole.equals("INSTRUCTOR"))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
 
         if ((sectionId == null || sectionId.isBlank())
                 && (classId == null || classId.isBlank())

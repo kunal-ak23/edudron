@@ -40,6 +40,9 @@ public class CertificateController {
             @Valid @RequestBody CertificateGenerateRequest request) {
         String userId = UserUtil.getCurrentUserId();
         String userRole = UserUtil.getCurrentUserRole();
+        if (!isAdminRole(userRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
 
         log.info("Generating certificates for course {} by user {}", request.getCourseId(), userId);
         List<CertificateDTO> results = certificateService.generateCertificates(request, userId, userRole);
@@ -52,6 +55,10 @@ public class CertificateController {
             @RequestParam(required = false) String sectionId,
             @RequestParam(required = false) String courseId,
             Pageable pageable) {
+        String userRole = UserUtil.getCurrentUserRole();
+        if (!isAdminRole(userRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         return ResponseEntity.ok(certificateService.listCertificates(sectionId, courseId, pageable));
     }
 
@@ -75,6 +82,10 @@ public class CertificateController {
     public ResponseEntity<byte[]> downloadAll(
             @RequestParam String sectionId,
             @RequestParam String courseId) {
+        String userRole = UserUtil.getCurrentUserRole();
+        if (!isAdminRole(userRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         byte[] zipBytes = certificateService.downloadAllAsZip(sectionId, courseId);
 
         HttpHeaders headers = new HttpHeaders();
@@ -89,6 +100,10 @@ public class CertificateController {
     @Operation(summary = "Revoke certificate", description = "Revoke a certificate with a reason")
     public ResponseEntity<Void> revokeCertificate(@PathVariable String id,
                                                    @RequestBody Map<String, String> body) {
+        String userRole = UserUtil.getCurrentUserRole();
+        if (!isAdminRole(userRole)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
         String reason = body.getOrDefault("reason", "No reason provided");
         String userId = UserUtil.getCurrentUserId();
 
@@ -110,5 +125,10 @@ public class CertificateController {
             @RequestBody CertificateVisibilityDTO request) {
         String studentId = UserUtil.getCurrentUserId();
         return ResponseEntity.ok(certificateService.updateVisibility(id, studentId, request));
+    }
+
+    private boolean isAdminRole(String role) {
+        return role != null && (role.equals("SYSTEM_ADMIN") || role.equals("TENANT_ADMIN")
+                || role.equals("CONTENT_MANAGER") || role.equals("INSTRUCTOR"));
     }
 }

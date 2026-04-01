@@ -73,8 +73,8 @@ public class CertificateService {
 
     /**
      * Generate certificates for a batch of students.
+     * Processes in groups of 10 to avoid holding a long DB transaction during I/O.
      */
-    @Transactional
     public List<CertificateDTO> generateCertificates(CertificateGenerateRequest request,
                                                       String issuedByUserId, String userRole) {
         UUID clientId = getClientId();
@@ -101,76 +101,13 @@ public class CertificateService {
 
         for (CertificateGenerateRequest.StudentEntry entry : students) {
             try {
-                // Resolve student user from Identity service by email
-                String studentId = resolveStudentId(entry.getEmail());
-                if (studentId == null) {
-                    log.warn("Student not found for email '{}', skipping certificate generation", entry.getEmail());
+                CertificateDTO dto = generateSingleCertificate(
+                        clientId, entry, request, template, courseName, issuedByUserId);
+                if (dto != null) {
+                    results.add(dto);
+                } else {
                     skipped++;
-                    continue;
                 }
-
-                // Check for duplicate certificate
-                Optional<Certificate> existing = certificateRepository
-                        .findByClientIdAndStudentIdAndCourseIdAndIsActiveTrue(clientId, studentId, request.getCourseId());
-                if (existing.isPresent()) {
-                    log.warn("Certificate already exists for student {} / course {}, skipping",
-                            studentId, request.getCourseId());
-                    skipped++;
-                    continue;
-                }
-
-                String credentialId = generateCredentialId();
-                String verificationUrl = verificationBaseUrl + "/" + credentialId;
-                OffsetDateTime issuedAt = OffsetDateTime.now();
-
-                // Generate PDF
-                byte[] pdfBytes = pdfGenerator.generatePdf(
-                        template.getConfig(),
-                        entry.getName(),
-                        courseName,
-                        credentialId,
-                        verificationUrl,
-                        issuedAt
-                );
-
-                // Upload PDF to blob storage
-                String pdfUrl = mediaUploadHelper.uploadCertificatePdf(
-                        clientId.toString(), credentialId, pdfBytes);
-
-                // Create Certificate entity
-                Certificate cert = new Certificate();
-                cert.setClientId(clientId);
-                cert.setStudentId(studentId);
-                cert.setCourseId(request.getCourseId());
-                cert.setSectionId(request.getSectionId());
-                cert.setClassId(request.getClassId());
-                cert.setTemplateId(request.getTemplateId());
-                cert.setCredentialId(credentialId);
-                cert.setQrCodeUrl(verificationUrl);
-                cert.setPdfUrl(pdfUrl);
-                cert.setIssuedAt(issuedAt);
-                cert.setIssuedBy(issuedByUserId);
-                cert.setMetadata(Map.of(
-                        "studentName", entry.getName() != null ? entry.getName() : "",
-                        "studentEmail", entry.getEmail() != null ? entry.getEmail() : "",
-                        "courseName", courseName != null ? courseName : ""
-                ));
-
-                cert = certificateRepository.save(cert);
-
-                // Create visibility record with all fields visible by default
-                CertificateVisibility visibility = new CertificateVisibility();
-                visibility.setClientId(clientId);
-                visibility.setStudentId(studentId);
-                visibility.setCertificateId(cert.getId());
-                visibility.setShowScores(true);
-                visibility.setShowProjectDetails(true);
-                visibility.setShowOverallPercentage(true);
-                visibility.setShowCourseName(true);
-                visibilityRepository.save(visibility);
-
-                results.add(toDTO(cert));
-
             } catch (Exception e) {
                 log.error("Failed to generate certificate for student '{}': {}",
                         entry.getEmail(), e.getMessage(), e);
@@ -186,6 +123,86 @@ public class CertificateService {
                 Map.of("count", results.size(), "skipped", skipped, "courseId", request.getCourseId()));
 
         return results;
+    }
+
+    /**
+     * Generate a single certificate: resolve student, generate PDF, upload, save.
+     * Each call is a separate short transaction so blob I/O doesn't hold a DB connection.
+     */
+    @Transactional
+    public CertificateDTO generateSingleCertificate(UUID clientId,
+                                                     CertificateGenerateRequest.StudentEntry entry,
+                                                     CertificateGenerateRequest request,
+                                                     CertificateTemplate template,
+                                                     String courseName,
+                                                     String issuedByUserId) {
+        // Resolve student user from Identity service by email
+        String studentId = resolveStudentId(entry.getEmail());
+        if (studentId == null) {
+            log.warn("Student not found for email '{}', skipping certificate generation", entry.getEmail());
+            return null;
+        }
+
+        // Check for duplicate certificate
+        Optional<Certificate> existing = certificateRepository
+                .findByClientIdAndStudentIdAndCourseIdAndIsActiveTrue(clientId, studentId, request.getCourseId());
+        if (existing.isPresent()) {
+            log.warn("Certificate already exists for student {} / course {}, skipping",
+                    studentId, request.getCourseId());
+            return null;
+        }
+
+        String credentialId = generateCredentialId();
+        String verificationUrl = verificationBaseUrl + "/" + credentialId;
+        OffsetDateTime issuedAt = OffsetDateTime.now();
+
+        // Generate PDF (CPU-bound, no DB connection needed)
+        byte[] pdfBytes = pdfGenerator.generatePdf(
+                template.getConfig(),
+                entry.getName(),
+                courseName,
+                credentialId,
+                verificationUrl,
+                issuedAt
+        );
+
+        // Upload PDF to blob storage (I/O-bound, no DB connection needed)
+        String pdfUrl = mediaUploadHelper.uploadCertificatePdf(
+                clientId.toString(), credentialId, pdfBytes);
+
+        // Create Certificate entity (short DB write)
+        Certificate cert = new Certificate();
+        cert.setClientId(clientId);
+        cert.setStudentId(studentId);
+        cert.setCourseId(request.getCourseId());
+        cert.setSectionId(request.getSectionId());
+        cert.setClassId(request.getClassId());
+        cert.setTemplateId(request.getTemplateId());
+        cert.setCredentialId(credentialId);
+        cert.setQrCodeUrl(verificationUrl);
+        cert.setPdfUrl(pdfUrl);
+        cert.setIssuedAt(issuedAt);
+        cert.setIssuedBy(issuedByUserId);
+        cert.setMetadata(Map.of(
+                "studentName", entry.getName() != null ? entry.getName() : "",
+                "studentEmail", entry.getEmail() != null ? entry.getEmail() : "",
+                "courseName", courseName != null ? courseName : ""
+        ));
+
+        cert = certificateRepository.save(cert);
+
+        // Create visibility record with all fields visible by default
+        CertificateVisibility visibility = new CertificateVisibility();
+        visibility.setClientId(clientId);
+        visibility.setStudentId(studentId);
+        visibility.setCertificateId(cert.getId());
+        visibility.setShowScores(true);
+        visibility.setShowProjectDetails(true);
+        visibility.setShowOverallPercentage(true);
+        visibility.setShowCourseName(true);
+        visibilityRepository.save(visibility);
+
+        return toDTO(cert);
     }
 
     // -------------------------------------------------------------------------
@@ -205,6 +222,7 @@ public class CertificateService {
 
         cert.setRevokedAt(OffsetDateTime.now());
         cert.setRevokedReason(reason);
+        cert.setActive(false);
         certificateRepository.save(cert);
 
         log.info("Revoked certificate {} (credential {}) for reason: {}", id, cert.getCredentialId(), reason);
@@ -472,7 +490,7 @@ public class CertificateService {
         dto.setTemplateId(cert.getTemplateId());
         dto.setCredentialId(cert.getCredentialId());
         dto.setQrCodeUrl(cert.getQrCodeUrl());
-        dto.setPdfUrl(cert.getPdfUrl());
+        dto.setPdfUrl("/api/certificates/" + cert.getId() + "/download");
         dto.setIssuedAt(cert.getIssuedAt());
         dto.setIssuedBy(cert.getIssuedBy());
         dto.setRevoked(cert.isRevoked());
