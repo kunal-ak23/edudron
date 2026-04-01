@@ -729,9 +729,10 @@ export default function TakeExamPage() {
       clearInterval(autoSaveIntervalRef.current)
     }
 
-    // Auto-save every 15 seconds (more frequent)
+    // Auto-save every 15-20 seconds with jitter to avoid thundering herd
+    const autoSaveInterval = 15000 + Math.floor(Math.random() * 5000)
     autoSaveIntervalRef.current = setInterval(() => {
-      // Check if exam has ended (real-time check every 15s)
+      // Check if exam has ended (real-time check)
       if (exam && (exam as any).endTime) {
         const endTime = new Date((exam as any).endTime)
         const now = new Date()
@@ -745,7 +746,7 @@ export default function TakeExamPage() {
       if (hasUnsavedChangesRef.current && submissionId) {
         saveProgress()
       }
-    }, 15000) // Auto-save every 15 seconds
+    }, autoSaveInterval)
   }
 
   const saveProgress = useCallback(async (silent = false) => {

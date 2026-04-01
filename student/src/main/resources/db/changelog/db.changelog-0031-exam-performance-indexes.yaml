@@ -1,0 +1,50 @@
+databaseChangeLog:
+  - changeSet:
+      id: 0031-1-idx-submissions-client-student-course
+      author: system
+      comment: "Index for getStudentSubmissions(clientId, studentId, courseId) queries during exams"
+      changes:
+        - createIndex:
+            tableName: assessment_submissions
+            schemaName: student
+            indexName: idx_assessment_submissions_client_student_course
+            columns:
+              - column:
+                  name: client_id
+              - column:
+                  name: student_id
+              - column:
+                  name: course_id
+
+  - changeSet:
+      id: 0031-2-idx-submissions-client-assessment
+      author: system
+      comment: "Index for getSubmissionsByAssessmentId(clientId, assessmentId) queries"
+      changes:
+        - createIndex:
+            tableName: assessment_submissions
+            schemaName: student
+            indexName: idx_assessment_submissions_client_assessment
+            columns:
+              - column:
+                  name: client_id
+              - column:
+                  name: assessment_id
+
+  - changeSet:
+      id: 0031-3-idx-submissions-client-student-submitted
+      author: system
+      comment: "Index for getSubmissionsByStudentId ordered by submittedAt queries"
+      changes:
+        - createIndex:
+            tableName: assessment_submissions
+            schemaName: student
+            indexName: idx_assessment_submissions_client_student_submitted
+            columns:
+              - column:
+                  name: client_id
+              - column:
+                  name: student_id
+              - column:
+                  name: submitted_at
+                  descending: true

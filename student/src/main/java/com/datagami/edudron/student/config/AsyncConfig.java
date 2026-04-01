@@ -14,9 +14,9 @@ public class AsyncConfig {
     @Bean(name = "eventTaskExecutor")
     public Executor eventTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2);
-        executor.setMaxPoolSize(5);
-        executor.setQueueCapacity(100);
+        executor.setCorePoolSize(20);
+        executor.setMaxPoolSize(50);
+        executor.setQueueCapacity(2000);
         executor.setThreadNamePrefix("event-logging-");
         executor.initialize();
         return executor;
