@@ -6,18 +6,20 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadPoolExecutor;
 
 @Configuration
 @EnableAsync
 public class AsyncConfig {
-    
+
     @Bean(name = "eventTaskExecutor")
     public Executor eventTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(20);
-        executor.setMaxPoolSize(50);
-        executor.setQueueCapacity(2000);
+        executor.setCorePoolSize(5);
+        executor.setMaxPoolSize(12);
+        executor.setQueueCapacity(500);
         executor.setThreadNamePrefix("event-logging-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.initialize();
         return executor;
     }
