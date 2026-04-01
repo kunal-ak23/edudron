@@ -19,6 +19,8 @@ public class CacheConfig {
             // From identity
             "tenantBranding",
             "tenantFeature",
+            "tenantFeatures",
+            "tenantAllFeatures",
             // From student
             "courseAnalytics",
             "lectureAnalytics",
