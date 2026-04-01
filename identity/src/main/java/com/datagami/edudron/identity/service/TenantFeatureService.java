@@ -10,6 +10,7 @@ import com.datagami.edudron.identity.repo.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -52,7 +53,11 @@ public class TenantFeatureService {
      * Set a feature override for a tenant.
      * Creates a new override or updates existing one.
      */
-    @CacheEvict(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()")
+    @Caching(evict = {
+        @CacheEvict(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()"),
+        @CacheEvict(value = "tenantFeatures", key = "#clientId"),
+        @CacheEvict(value = "tenantAllFeatures", key = "#clientId")
+    })
     public TenantFeature setFeatureEnabled(UUID clientId, TenantFeatureType feature, Boolean enabled) {
         Optional<TenantFeature> existing = repository.findByClientIdAndFeature(clientId, feature);
         
@@ -78,7 +83,11 @@ public class TenantFeatureService {
     /**
      * Reset a feature to its default value by deleting the override.
      */
-    @CacheEvict(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()")
+    @Caching(evict = {
+        @CacheEvict(value = "tenantFeature", key = "#clientId.toString() + '::' + #feature.name()"),
+        @CacheEvict(value = "tenantFeatures", key = "#clientId"),
+        @CacheEvict(value = "tenantAllFeatures", key = "#clientId")
+    })
     public void resetFeatureToDefault(UUID clientId, TenantFeatureType feature) {
         repository.deleteByClientIdAndFeature(clientId, feature);
         auditService.logCrud(clientId, "DELETE", "TenantFeature", clientId + "::" + feature.name(),
@@ -114,6 +123,7 @@ public class TenantFeatureService {
     /**
      * Get all features with their effective values for a tenant.
      */
+    @Cacheable(value = "tenantAllFeatures", key = "#clientId")
     public Map<TenantFeatureType, Boolean> getAllFeatures(UUID clientId) {
         List<TenantFeature> overrides = repository.findByClientId(clientId);
         Map<TenantFeatureType, Boolean> overrideMap = overrides.stream()
@@ -132,6 +142,7 @@ public class TenantFeatureService {
     /**
      * Get all features as DTOs with metadata (effective value, isOverridden, defaultValue).
      */
+    @Cacheable(value = "tenantFeatures", key = "#clientId")
     public List<TenantFeatureDto> getAllFeaturesAsDto(UUID clientId) {
         List<TenantFeature> overrides = repository.findByClientId(clientId);
         Map<TenantFeatureType, TenantFeature> overrideMap = overrides.stream()

@@ -141,6 +141,9 @@ if [ -z "$APP_EXISTS" ]; then
         --memory "$MEMORY" \
         --min-replicas "$MIN_REPLICAS" \
         --max-replicas "$MAX_REPLICAS" \
+        --scale-rule-name http-scaler \
+        --scale-rule-type http \
+        --scale-rule-http-concurrency 30 \
         --registry-server docker.io \
         --registry-username "$CONTAINER_REGISTRY_USERNAME" \
         --registry-password "$CONTAINER_REGISTRY_PASSWORD" \
@@ -298,6 +301,11 @@ else
         --image "$IMAGE" \
         --cpu "$CPU" \
         --memory "$MEMORY" \
+        --min-replicas "$MIN_REPLICAS" \
+        --max-replicas "$MAX_REPLICAS" \
+        --scale-rule-name http-scaler \
+        --scale-rule-type http \
+        --scale-rule-http-concurrency 30 \
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
             "CONTENT_SERVICE_PORT=${PORT}" \

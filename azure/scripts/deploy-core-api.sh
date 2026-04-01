@@ -141,6 +141,9 @@ if [ -z "$APP_EXISTS" ]; then
         --memory "$MEMORY" \
         --min-replicas "$MIN_REPLICAS" \
         --max-replicas "$MAX_REPLICAS" \
+        --scale-rule-name http-scaler \
+        --scale-rule-type http \
+        --scale-rule-http-concurrency 30 \
         --registry-server docker.io \
         --registry-username "$CONTAINER_REGISTRY_USERNAME" \
         --registry-password "$CONTAINER_REGISTRY_PASSWORD" \
@@ -274,11 +277,16 @@ else
             "azure-storage-account-name=keyvaultref:${KEY_VAULT_URL}/secrets/AZURE-STORAGE-ACCOUNT-NAME,identityref:system" \
         --output none 2>/dev/null || print_warning "Some secrets may already be registered"
 
-    # Update image and environment variables
+    # Update image, scaling rules, and environment variables
     az containerapp update \
         --name "$APP_NAME" \
         --resource-group "$RESOURCE_GROUP" \
         --image "$IMAGE" \
+        --min-replicas "$MIN_REPLICAS" \
+        --max-replicas "$MAX_REPLICAS" \
+        --scale-rule-name http-scaler \
+        --scale-rule-type http \
+        --scale-rule-http-concurrency 30 \
         --set-env-vars \
             "SPRING_PROFILES_ACTIVE=production" \
             "CORE_API_SERVICE_PORT=${PORT}" \

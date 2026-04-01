@@ -17,7 +17,9 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager(
             "tenantBranding",
-            "tenantFeature"
+            "tenantFeature",
+            "tenantFeatures",
+            "tenantAllFeatures"
         );
         cacheManager.setCaffeine(
             Caffeine.newBuilder()
