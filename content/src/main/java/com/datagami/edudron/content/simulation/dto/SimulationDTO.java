@@ -14,6 +14,7 @@ public class SimulationDTO {
     private String audience;
     private String description;
     private String courseId;
+    private String courseName;
     private String lectureId;
     private Map<String, Object> simulationData;
     private Integer targetYears;
@@ -70,6 +71,9 @@ public class SimulationDTO {
 
     public String getCourseId() { return courseId; }
     public void setCourseId(String courseId) { this.courseId = courseId; }
+
+    public String getCourseName() { return courseName; }
+    public void setCourseName(String courseName) { this.courseName = courseName; }
 
     public String getLectureId() { return lectureId; }
     public void setLectureId(String lectureId) { this.lectureId = lectureId; }

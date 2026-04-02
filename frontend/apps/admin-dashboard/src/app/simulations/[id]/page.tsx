@@ -550,6 +550,13 @@ export default function SimulationEditorPage() {
       {/* Metadata Section */}
       <Card>
         <CardContent className="pt-4 space-y-4">
+          {/* Course info */}
+          {simulation.courseName && (
+            <div className="flex items-center gap-2 text-sm px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+              <span className="text-blue-600 font-medium">Course:</span>
+              <span className="text-blue-800">{simulation.courseName}</span>
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2 space-y-1.5">
               <Label htmlFor="sim-title">Title</Label>
