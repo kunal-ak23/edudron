@@ -48,6 +48,11 @@ public class DecisionMappingService {
             return resolveInvestmentPortfolioChoice(node, config, input);
         }
 
+        // STAKEHOLDER_MEETING: score based on stakeholder priority (deterministic, bypasses fragile mappings)
+        if ("STAKEHOLDER_MEETING".equals(decisionType) && input != null) {
+            return resolveStakeholderMeetingChoice(node, config, input);
+        }
+
         Map<String, Object> flatInput = "COMPOUND".equals(decisionType)
                 ? flattenCompoundInput(input)
                 : flattenInput(input);
@@ -548,6 +553,104 @@ public class DecisionMappingService {
                 total, cv, maxPct * 100, choiceId,
                 choices.stream().filter(c -> choiceId.equals(c.get("id"))).findFirst()
                     .map(c -> c.get("quality")).orElse("?"));
+        return choiceId;
+    }
+
+    /**
+     * Resolve STAKEHOLDER_MEETING choice based on selected stakeholder priorities.
+     * Uses mentor guidance stakeholderHints priorities (high/medium/low) or positional
+     * ordering to score the selection deterministically, bypassing fragile AI-generated mappings.
+     */
+    @SuppressWarnings("unchecked")
+    private String resolveStakeholderMeetingChoice(
+            Map<String, Object> node, Map<String, Object> config, Map<String, Object> input) {
+
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
+        if (choices == null || choices.isEmpty()) {
+            throw new IllegalStateException("STAKEHOLDER_MEETING has no choices");
+        }
+
+        // Sort choices by quality descending
+        List<Map<String, Object>> sortedChoices = new ArrayList<>(choices);
+        sortedChoices.sort((a, b) -> {
+            int qa = a.get("quality") != null ? ((Number) a.get("quality")).intValue() : 1;
+            int qb = b.get("quality") != null ? ((Number) b.get("quality")).intValue() : 1;
+            return qb - qa;
+        });
+
+        // Get selected stakeholders from input
+        List<String> selectedIds;
+        Object selectedObj = input.get("selectedStakeholders");
+        if (selectedObj instanceof List<?>) {
+            selectedIds = ((List<?>) selectedObj).stream()
+                .map(Object::toString).toList();
+        } else {
+            // Fallback: no selection → worst choice
+            logger.warn("STAKEHOLDER_MEETING: no selectedStakeholders in input");
+            return (String) sortedChoices.get(sortedChoices.size() - 1).get("id");
+        }
+
+        // Build priority map: stakeholder ID → priority score (high=3, medium=2, low=1)
+        Map<String, Integer> priorityScores = new HashMap<>();
+        List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
+
+        // Try mentor guidance hints first
+        Map<String, Object> mentorGuidance = (Map<String, Object>) node.get("mentorGuidance");
+        Map<String, Object> stakeholderHints = null;
+        if (mentorGuidance != null) {
+            stakeholderHints = (Map<String, Object>) mentorGuidance.get("stakeholderHints");
+        }
+
+        if (stakeholderHints != null && !stakeholderHints.isEmpty()) {
+            // Use hint priorities
+            for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
+                Map<String, Object> hint = (Map<String, Object>) entry.getValue();
+                if (hint != null) {
+                    String priority = (String) hint.get("priority");
+                    int score = "high".equals(priority) ? 3 : "medium".equals(priority) ? 2 : 1;
+                    priorityScores.put(entry.getKey(), score);
+                }
+            }
+        } else if (stakeholders != null) {
+            // Positional fallback: first stakeholders = best (same as autoGenerateMappings)
+            for (int i = 0; i < stakeholders.size(); i++) {
+                String sid = (String) stakeholders.get(i).get("id");
+                priorityScores.put(sid, stakeholders.size() - i); // higher index = lower priority
+            }
+        }
+
+        // Score the selection: sum of priority scores for selected stakeholders
+        int totalScore = 0;
+        int maxPossible = 0;
+        List<Integer> allScores = new ArrayList<>(priorityScores.values());
+        allScores.sort(Collections.reverseOrder());
+        int maxSelections = config.get("maxSelections") != null
+                ? ((Number) config.get("maxSelections")).intValue() : 2;
+        for (int i = 0; i < Math.min(maxSelections, allScores.size()); i++) {
+            maxPossible += allScores.get(i);
+        }
+        for (String sid : selectedIds) {
+            totalScore += priorityScores.getOrDefault(sid, 1);
+        }
+
+        // Map score to quality:
+        // >= 80% of max possible → quality 3 (best)
+        // >= 50% of max possible → quality 2 (mid)
+        // < 50% → quality 1 (worst)
+        double scorePct = maxPossible > 0 ? (double) totalScore / maxPossible : 0;
+        String choiceId;
+        if (scorePct >= 0.80) {
+            choiceId = (String) sortedChoices.get(0).get("id"); // quality 3
+        } else if (scorePct >= 0.50) {
+            choiceId = sortedChoices.size() >= 2
+                ? (String) sortedChoices.get(1).get("id")   // quality 2
+                : (String) sortedChoices.get(0).get("id");
+        } else {
+            choiceId = (String) sortedChoices.get(sortedChoices.size() - 1).get("id"); // quality 1
+        }
+
+        logger.info("STAKEHOLDER_MEETING scoring: selected={}, totalScore={}, maxPossible={}, scorePct={:.1f}%, choiceId={}",
+                selectedIds, totalScore, maxPossible, scorePct * 100, choiceId);
         return choiceId;
     }
 }
