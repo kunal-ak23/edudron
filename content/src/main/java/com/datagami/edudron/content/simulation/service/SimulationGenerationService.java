@@ -79,7 +79,7 @@ public class SimulationGenerationService {
             List<List<Map<String, Object>>> allYearDecisions = new ArrayList<>();
             for (int year = 1; year <= targetYears; year++) {
                 String currentTitle = roleProgression.get(year - 1);
-                String previousContext = buildPreviousContext(allYearDecisions, year);
+                String previousContext = buildPreviousContext(allYearDecisions, year, targetYears);
 
                 List<Map<String, Object>> yearDecisions = null;
                 int maxRetries = 2;
@@ -320,7 +320,10 @@ public class SimulationGenerationService {
                   dynamics. Choices have long-term consequences that aren't immediately visible. High stakes.
                 - Year 5+ (EXPERT): Ambiguous, high-stakes strategic decisions. Every option has significant downsides.
                   Requires weighing ethical considerations, long-term vision, and organizational survival.
-                If targetYears < 5, compress the progression proportionally (e.g., 3-year sim: intro → intermediate → expert).
+                If targetYears < 5, compress the progression proportionally:
+                  * 2 years: INTRODUCTORY → EXPERT
+                  * 3 years: INTRODUCTORY → INTERMEDIATE → EXPERT
+                  * 4 years: INTRODUCTORY → FOUNDATIONAL → ADVANCED → EXPERT
 
                 REAL-WORLD SCENARIO GROUNDING — CRITICAL:
                 Every scenario MUST feel like something that actually happens in real workplaces. Follow these rules:
@@ -508,18 +511,28 @@ public class SimulationGenerationService {
         return lenientMapper.readValue(sanitized, new TypeReference<List<Map<String, Object>>>() {});
     }
 
-    private String buildPreviousContext(List<List<Map<String, Object>>> allYearDecisions, int currentYear) {
+    private String buildPreviousContext(List<List<Map<String, Object>>> allYearDecisions, int currentYear, int targetYears) {
+        String[] difficultyLabels = {"INTRODUCTORY", "FOUNDATIONAL", "INTERMEDIATE", "ADVANCED", "EXPERT"};
+        // Compute difficulty label: spread 5 levels proportionally across targetYears
+        int diffIdx;
+        if (targetYears <= 1) {
+            diffIdx = 0;
+        } else if (targetYears >= 5) {
+            diffIdx = Math.min(currentYear - 1, 4);
+        } else {
+            // Compress: e.g., 3-year sim → year1=0(INTRO), year2=2(INTERMEDIATE), year3=4(EXPERT)
+            diffIdx = Math.min(Math.round((currentYear - 1) * 4.0f / (targetYears - 1)), 4);
+        }
+        String currentDifficulty = difficultyLabels[diffIdx];
+
         if (currentYear == 1) {
-            return "First year — no previous context. This is the INTRODUCTORY year: keep decisions simple and approachable.";
+            return "First year — no previous context. This is the " + currentDifficulty + " year: keep decisions simple and approachable.";
         }
         StringBuilder sb = new StringBuilder();
-        // Remind AI of difficulty progression for this year
-        String[] difficultyLabels = {"INTRODUCTORY", "FOUNDATIONAL", "INTERMEDIATE", "ADVANCED", "EXPERT"};
-        int diffIdx = Math.min(currentYear - 1, difficultyLabels.length - 1);
         sb.append("REMINDER: This is Year ").append(currentYear)
-          .append(" (").append(difficultyLabels[diffIdx]).append(" difficulty). ")
+          .append(" (").append(currentDifficulty).append(" difficulty). ")
           .append("Decisions must be noticeably harder than Year ").append(currentYear - 1)
-          .append(" but appropriate for the ").append(difficultyLabels[diffIdx]).append(" level.\n");
+          .append(" but appropriate for the ").append(currentDifficulty).append(" level.\n");
 
         for (int y = 0; y < allYearDecisions.size(); y++) {
             List<Map<String, Object>> yearDecisions = allYearDecisions.get(y);
