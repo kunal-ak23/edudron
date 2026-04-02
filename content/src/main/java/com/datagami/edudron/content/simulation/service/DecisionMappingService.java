@@ -53,6 +53,11 @@ public class DecisionMappingService {
             return resolveStakeholderMeetingChoice(node, config, input);
         }
 
+        // HIRE_FIRE: score based on candidate fit from mentor guidance (deterministic)
+        if ("HIRE_FIRE".equals(decisionType) && input != null) {
+            return resolveHireFireChoice(node, config, input);
+        }
+
         Map<String, Object> flatInput = "COMPOUND".equals(decisionType)
                 ? flattenCompoundInput(input)
                 : flattenInput(input);
@@ -89,12 +94,13 @@ public class DecisionMappingService {
             return validateChoiceId(node, choiceId);
         }
 
-        // Last resort: pick the first choice
+        // Last resort: pick the middle choice (not worst) to avoid unfair zero-point penalties
         List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
         if (choices != null && !choices.isEmpty()) {
-            String firstChoiceId = (String) choices.get(0).get("id");
-            logger.warn("No mapping matched and no choiceId provided for type {}. Defaulting to first choice.", decisionType);
-            return firstChoiceId;
+            int midIdx = choices.size() / 2;
+            String midChoiceId = (String) choices.get(midIdx).get("id");
+            logger.warn("No mapping matched and no choiceId provided for type {}. Defaulting to middle choice (index {}).", decisionType, midIdx);
+            return midChoiceId;
         }
 
         throw new IllegalStateException("No mapping matched and no choices available");
@@ -651,6 +657,84 @@ public class DecisionMappingService {
 
         logger.info("STAKEHOLDER_MEETING scoring: selected={}, totalScore={}, maxPossible={}, scorePct={:.1f}%, choiceId={}",
                 selectedIds, totalScore, maxPossible, scorePct * 100, choiceId);
+        return choiceId;
+    }
+
+    /**
+     * Resolve HIRE_FIRE choice based on candidate fit from mentor guidance.
+     * Uses candidateHints fit ratings (strong/moderate/weak) to score deterministically,
+     * bypassing fragile AI-generated mapping conditions.
+     */
+    @SuppressWarnings("unchecked")
+    private String resolveHireFireChoice(
+            Map<String, Object> node, Map<String, Object> config, Map<String, Object> input) {
+
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
+        if (choices == null || choices.isEmpty()) {
+            throw new IllegalStateException("HIRE_FIRE has no choices");
+        }
+
+        // Sort choices by quality descending
+        List<Map<String, Object>> sortedChoices = new ArrayList<>(choices);
+        sortedChoices.sort((a, b) -> {
+            int qa = a.get("quality") != null ? ((Number) a.get("quality")).intValue() : 1;
+            int qb = b.get("quality") != null ? ((Number) b.get("quality")).intValue() : 1;
+            return qb - qa;
+        });
+
+        // Get selected candidate from input
+        Object selectedObj = input.get("selected");
+        if (selectedObj == null) {
+            logger.warn("HIRE_FIRE: no selected candidate in input");
+            return (String) sortedChoices.get(sortedChoices.size() - 1).get("id");
+        }
+        String selectedId = selectedObj.toString();
+
+        // Build fit map: candidate ID → fit score (strong=3, moderate=2, weak=1)
+        Map<String, Integer> fitScores = new HashMap<>();
+        List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
+
+        // Try mentor guidance hints first
+        Map<String, Object> mentorGuidance = (Map<String, Object>) node.get("mentorGuidance");
+        Map<String, Object> candidateHints = null;
+        if (mentorGuidance != null) {
+            candidateHints = (Map<String, Object>) mentorGuidance.get("candidateHints");
+        }
+
+        if (candidateHints != null && !candidateHints.isEmpty()) {
+            for (Map.Entry<String, Object> entry : candidateHints.entrySet()) {
+                Map<String, Object> hint = (Map<String, Object>) entry.getValue();
+                if (hint != null) {
+                    String fit = (String) hint.get("fit");
+                    int score = "strong".equals(fit) ? 3 : "moderate".equals(fit) ? 2 : 1;
+                    fitScores.put(entry.getKey(), score);
+                }
+            }
+        } else if (candidates != null) {
+            // Positional fallback: first candidate = best
+            for (int i = 0; i < candidates.size(); i++) {
+                String cid = (String) candidates.get(i).get("id");
+                fitScores.put(cid, candidates.size() - i);
+            }
+        }
+
+        // Score: selected candidate's fit → directly maps to quality
+        int fitScore = fitScores.getOrDefault(selectedId, 1);
+        int maxFit = fitScores.values().stream().mapToInt(Integer::intValue).max().orElse(3);
+
+        String choiceId;
+        if (fitScore >= maxFit) {
+            choiceId = (String) sortedChoices.get(0).get("id"); // quality 3 (best)
+        } else if (fitScore >= 2) {
+            choiceId = sortedChoices.size() >= 2
+                ? (String) sortedChoices.get(1).get("id")   // quality 2
+                : (String) sortedChoices.get(0).get("id");
+        } else {
+            choiceId = (String) sortedChoices.get(sortedChoices.size() - 1).get("id"); // quality 1
+        }
+
+        logger.info("HIRE_FIRE scoring: selected={}, fitScore={}, maxFit={}, choiceId={}",
+                selectedId, fitScore, maxFit, choiceId);
         return choiceId;
     }
 }
