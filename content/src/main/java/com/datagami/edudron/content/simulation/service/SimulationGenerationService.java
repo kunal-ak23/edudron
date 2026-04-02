@@ -307,6 +307,35 @@ public class SimulationGenerationService {
                 - Have 2-3 choices ordered by quality (1=worst, 2=mid, 3=best)
                 - For interactive types (not NARRATIVE_CHOICE), include decisionConfig with appropriate structure and mappings
 
+                INCREMENTAL DIFFICULTY — THIS IS CRITICAL:
+                Difficulty MUST scale gradually across years. Do NOT make early years hard.
+                - Year 1 (INTRODUCTORY): Simple, clear-cut decisions. One choice is obviously better. Scenarios are
+                  everyday operational situations (e.g., choosing a vendor, scheduling a team meeting, basic budget split).
+                  Stakes are low and localized. Wrong answers have minor, recoverable consequences.
+                - Year 2 (FOUNDATIONAL): Slightly more nuance. Choices have clearer trade-offs but the best path is still
+                  identifiable with basic reasoning. Introduce one or two competing priorities.
+                - Year 3 (INTERMEDIATE): Real trade-offs with no obviously right answer. Multiple stakeholders with
+                  conflicting needs. Medium stakes — decisions affect a department or product line.
+                - Year 4 (ADVANCED): Complex, multi-layered decisions. Incomplete information, time pressure, political
+                  dynamics. Choices have long-term consequences that aren't immediately visible. High stakes.
+                - Year 5+ (EXPERT): Ambiguous, high-stakes strategic decisions. Every option has significant downsides.
+                  Requires weighing ethical considerations, long-term vision, and organizational survival.
+                If targetYears < 5, compress the progression proportionally (e.g., 3-year sim: intro → intermediate → expert).
+
+                REAL-WORLD SCENARIO GROUNDING — CRITICAL:
+                Every scenario MUST feel like something that actually happens in real workplaces. Follow these rules:
+                - Base scenarios on common, recognizable workplace situations: budget reviews, hiring decisions, client
+                  complaints, product delays, team conflicts, vendor negotiations, regulatory changes, market shifts.
+                - Use specific, plausible details: real-sounding company names, realistic dollar amounts, believable timelines,
+                  named team members with relatable personalities.
+                - AVOID scenarios that feel contrived, overly dramatic, or artificially constructed for teaching purposes.
+                  Bad example: "A mysterious competitor suddenly offers your entire team double salary on the same day."
+                  Good example: "Two of your senior engineers have received offers from a competitor. They haven't decided yet
+                  but want to discuss their career growth with you."
+                - Draw from common industry patterns: seasonal demand changes, technology migrations, team restructuring,
+                  budget cuts, expansion into new markets, customer feedback driving product changes.
+                - Narratives should read like a Monday morning briefing, not a movie plot twist.
+
                 CRITICAL - ADAPT ALL LANGUAGE TO THE SUBJECT AND AUDIENCE:
                 - Do NOT use generic corporate jargon if the simulation is about farming, healthcare, sports, etc.
                 - Use terminology natural to the domain. Examples:
@@ -358,26 +387,56 @@ public class SimulationGenerationService {
                 NEGOTIATION: {"rounds": 3, "unit": "$", "npcName": "...", "npcCharacterId": "exec_male_1", "initialOffer": N,
                   "npcResponses": [{"round": 1, "playerRange": {"min": N, "max": N}, "response": "...", "npcCounterOffer": N}],
                   "outcomes": [{"condition": "...", "choiceId": "..."}]}
+                  ** "response" must be 2-3 sentences showing the NPC's personality, reasoning, and body language.
+                  ** Each outcome "condition" should clearly explain what happens and why (2 sentences min).
 
                 DASHBOARD_ANALYSIS: {"metrics": [{"label": "...", "value": "...", "trend": "up|down|flat", "change": "..."}],
                   "chartData": {"type": "line|bar", "title": "...", "labels": [...], "datasets": [{"label": "...", "data": [...], "color": "#hex"}]},
                   "question": "..."}
+                  ** "question" must be 2-3 sentences explaining what the student should analyze and why it matters.
+                  ** "change" should include context (e.g., "+12%% vs last quarter, driven by new client onboarding").
 
                 HIRE_FIRE: {"action": "hire|fire", "budgetLimit": N,
                   "candidates": [{"id": "...", "name": "...", "title": "...", "characterId": "tech_young_1", "stats": {...}, "salary": N, "bio": "...", "strengths": [...], "weaknesses": [...]}],
                   "mappings": [...]}
+                  ** "bio" MUST be 3-4 sentences covering: background, relevant experience, personality/work style, and
+                     what they would bring to the team (or why they're being considered for removal).
+                  ** "strengths" and "weaknesses" should each have 2-3 items, each being a specific sentence
+                     (e.g., "Led a 15-person team through a product relaunch that increased retention by 22%%")
+                     NOT vague one-worders like "leadership" or "communication".
 
                 CRISIS_RESPONSE: {"timeLimit": 30, "crisisTitle": "...", "crisisDescription": "...",
                   "severity": "critical|high|medium", "defaultOnExpiry": "choiceId"}
+                  ** "crisisDescription" must be 3-4 sentences: what happened, who is affected, what's at stake,
+                     and what information is available so far. Give enough context for the student to reason about options.
 
                 INVESTMENT_PORTFOLIO: {"totalBudget": N, "currency": "$",
                   "departments": [{"id": "...", "label": "...", "description": "...", "minAllocation": N, "maxAllocation": N, "projectedRoiRange": "..."}],
                   "mappings": [...]}
+                  ** Each department "description" must be 2-3 sentences explaining: what this department does,
+                     its current state (understaffed? thriving? needs modernization?), and why investing here
+                     matters. NOT a generic one-liner like "Handles marketing".
                 %s
 
                 STAKEHOLDER_MEETING: {"maxSelections": 2, "instruction": "...",
                   "stakeholders": [{"id": "...", "name": "...", "role": "...", "characterId": "medical_female_1", "teaser": "...", "revealedInfo": "..."}],
                   "mappings": [...]}
+                  ** "instruction" must be 2-3 sentences explaining the context: why the student is meeting people,
+                     what they're trying to learn, and what constraints they face (time, political dynamics, etc.).
+                  ** "teaser" MUST be 2-3 sentences giving the student enough context to decide if this person is
+                     worth meeting. Include: their perspective/agenda, what kind of information they might have,
+                     and any known biases or allegiances. NOT a vague one-liner like "Has insights on operations."
+                     Good example: "Priya has been vocal about the need for better data infrastructure. She recently
+                     presented a cost analysis showing the ops team spends 30%% of their time on manual reporting.
+                     She may push for tech investment over hiring."
+                  ** "revealedInfo" must be 3-4 sentences of substantive information that the student gains from
+                     the meeting — specific data points, insider perspectives, or warnings that genuinely help
+                     inform the decision at hand.
+
+                RICH CONTEXT RULE (applies to ALL decision types):
+                Every description, teaser, bio, narrative, and instruction field must give the student enough
+                context to reason about the decision. One-liners are NEVER acceptable for any description field.
+                The student is making consequential decisions — they need details, not summaries.
 
                 For NPC characterIds (npcCharacterId, candidate characterId, stakeholder characterId),
                 pick from: "mentor_female_1", "exec_male_1", "tech_young_1", "medical_female_1".
@@ -396,9 +455,9 @@ public class SimulationGenerationService {
                     "advisorReaction": {"quality_3": {"mood": "excited", "text": "..."}, "quality_2": {"mood": "neutral", "text": "..."}, "quality_1": {"mood": "disappointed", "text": "..."}},
                     "decisionConfig": { ... },
                     "choices": [
-                      {"id": "y{YEAR}_d1_a", "text": "...", "quality": 1},
-                      {"id": "y{YEAR}_d1_b", "text": "...", "quality": 2},
-                      {"id": "y{YEAR}_d1_c", "text": "...", "quality": 3}
+                      {"id": "y{YEAR}_d1_a", "text": "2-3 sentence choice describing what the student would do and its immediate implications", "quality": 1},
+                      {"id": "y{YEAR}_d1_b", "text": "2-3 sentence choice — NOT one-liners. Each choice must explain the action AND hint at trade-offs", "quality": 2},
+                      {"id": "y{YEAR}_d1_c", "text": "2-3 sentence choice with enough detail that the student understands what they're committing to", "quality": 3}
                     ]
                   }
                 ]
@@ -451,9 +510,17 @@ public class SimulationGenerationService {
 
     private String buildPreviousContext(List<List<Map<String, Object>>> allYearDecisions, int currentYear) {
         if (currentYear == 1) {
-            return "First year — no previous context.";
+            return "First year — no previous context. This is the INTRODUCTORY year: keep decisions simple and approachable.";
         }
         StringBuilder sb = new StringBuilder();
+        // Remind AI of difficulty progression for this year
+        String[] difficultyLabels = {"INTRODUCTORY", "FOUNDATIONAL", "INTERMEDIATE", "ADVANCED", "EXPERT"};
+        int diffIdx = Math.min(currentYear - 1, difficultyLabels.length - 1);
+        sb.append("REMINDER: This is Year ").append(currentYear)
+          .append(" (").append(difficultyLabels[diffIdx]).append(" difficulty). ")
+          .append("Decisions must be noticeably harder than Year ").append(currentYear - 1)
+          .append(" but appropriate for the ").append(difficultyLabels[diffIdx]).append(" level.\n");
+
         for (int y = 0; y < allYearDecisions.size(); y++) {
             List<Map<String, Object>> yearDecisions = allYearDecisions.get(y);
             sb.append("Year ").append(y + 1).append(": ");
