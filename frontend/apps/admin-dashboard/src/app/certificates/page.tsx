@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -41,6 +42,9 @@ import {
   AlertTriangle,
   X,
   Lock,
+  Pencil,
+  Trash2,
+  Plus,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -82,6 +86,7 @@ interface CertificateTemplate {
 
 export default function CertificatesPage() {
   const { toast } = useToast()
+  const router = useRouter()
   const { enabled: certificatesEnabled, loading: featureLoading } = useCertificatesFeature()
 
   // Shared data
@@ -112,6 +117,11 @@ export default function CertificatesPage() {
   const [revokeTarget, setRevokeTarget] = useState<Certificate | null>(null)
   const [revokeReason, setRevokeReason] = useState('')
   const [revoking, setRevoking] = useState(false)
+
+  // Template management
+  const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null)
+  const [confirmDeleteTemplateId, setConfirmDeleteTemplateId] = useState<string | null>(null)
+  const [exportingTemplateId, setExportingTemplateId] = useState<string | null>(null)
 
   // Load shared options
   const loadOptions = useCallback(async () => {
@@ -325,6 +335,59 @@ export default function CertificatesPage() {
     }
   }, [revokeTarget, revokeReason, toast, loadCertificates])
 
+  // Delete template (requires confirmation)
+  const handleDeleteTemplate = useCallback(async (id: string) => {
+    if (confirmDeleteTemplateId !== id) {
+      setConfirmDeleteTemplateId(id)
+      return
+    }
+    setDeletingTemplateId(id)
+    setConfirmDeleteTemplateId(null)
+    try {
+      await certificatesApi.deleteTemplate(id)
+      setTemplates(prev => prev.filter(t => t.id !== id))
+      toast({ title: 'Template deleted' })
+    } catch {
+      toast({ title: 'Delete failed', description: 'Could not delete the template.', variant: 'destructive' })
+    } finally {
+      setDeletingTemplateId(null)
+    }
+  }, [confirmDeleteTemplateId, toast])
+
+  // Export template
+  const handleExportTemplate = useCallback(async (tmpl: CertificateTemplate) => {
+    setExportingTemplateId(tmpl.id)
+    try {
+      const blob = await certificatesApi.exportTemplate(tmpl.id)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `template-${tmpl.name.replace(/\s+/g, '-').toLowerCase()}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch {
+      toast({ title: 'Export failed', description: 'Could not export the template.', variant: 'destructive' })
+    } finally {
+      setExportingTemplateId(null)
+    }
+  }, [toast])
+
+  // Import template
+  const handleImportTemplate = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const created = await certificatesApi.importTemplate(file)
+      setTemplates(prev => [...prev, created])
+      toast({ title: 'Template imported', description: `"${created.name}" was imported successfully.` })
+    } catch {
+      toast({ title: 'Import failed', description: 'Could not import the template.', variant: 'destructive' })
+    }
+    e.target.value = ''
+  }, [toast])
+
   if (featureLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -375,6 +438,9 @@ export default function CertificatesPage() {
           </TabsTrigger>
           <TabsTrigger value="issued" className="cursor-pointer">
             Issued Certificates
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="cursor-pointer">
+            Templates
           </TabsTrigger>
         </TabsList>
 
@@ -430,7 +496,13 @@ export default function CertificatesPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="gen-template">Template</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="gen-template">Template</Label>
+                    <Button variant="link" size="sm" className="text-xs h-auto p-0"
+                      onClick={() => router.push('/certificates/designer')}>
+                      + Design New
+                    </Button>
+                  </div>
                   <Select value={genTemplateId} onValueChange={setGenTemplateId}>
                     <SelectTrigger id="gen-template" className="mt-1 cursor-pointer">
                       <SelectValue placeholder="Select template..." />
@@ -746,6 +818,120 @@ export default function CertificatesPage() {
                     </div>
                   )}
                 </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== Templates Tab ===== */}
+        <TabsContent value="templates">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <CardTitle>Certificate Templates</CardTitle>
+                <div className="flex gap-2">
+                  <label className="cursor-pointer">
+                    <Button variant="outline" size="sm" asChild>
+                      <span>
+                        <Upload className="h-4 w-4 mr-1" />
+                        Import
+                      </span>
+                    </Button>
+                    <input type="file" accept=".zip" className="hidden" onChange={handleImportTemplate} />
+                  </label>
+                  <Button size="sm" onClick={() => router.push('/certificates/designer')}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    New Template
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingOptions ? (
+                <div className="flex items-center justify-center h-32">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>No templates yet.</p>
+                  <Button variant="link" onClick={() => router.push('/certificates/designer')}>
+                    Create your first template
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {templates.map(tmpl => (
+                    <div key={tmpl.id} className="border rounded-lg p-4 space-y-3 hover:border-primary/30 transition-colors">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="font-medium text-sm">{tmpl.name}</h3>
+                          {tmpl.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{tmpl.description}</p>
+                          )}
+                        </div>
+                        {tmpl.isDefault && <Badge variant="secondary">Default</Badge>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => router.push(`/certificates/designer?id=${tmpl.id}`)}
+                          className="cursor-pointer"
+                        >
+                          <Pencil className="h-3.5 w-3.5 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleExportTemplate(tmpl)}
+                          disabled={exportingTemplateId === tmpl.id}
+                          className="cursor-pointer"
+                        >
+                          {exportingTemplateId === tmpl.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                        {!tmpl.isDefault && (
+                          confirmDeleteTemplateId === tmpl.id ? (
+                            <div className="flex gap-1">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDeleteTemplate(tmpl.id)}
+                                disabled={deletingTemplateId === tmpl.id}
+                                className="cursor-pointer text-xs"
+                              >
+                                {deletingTemplateId === tmpl.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : 'Confirm'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setConfirmDeleteTemplateId(null)}
+                                className="cursor-pointer text-xs"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteTemplate(tmpl.id)}
+                              className="cursor-pointer"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>
