@@ -23,7 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.ParameterizedTypeReference;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpEntity;
@@ -130,14 +130,12 @@ public class SimulationAdminController {
                 return;
             }
 
-            String url = gatewayUrl + "/api/tenant/features/SIMULATION";
+            String url = gatewayUrl + "/api/tenant/features/SIMULATION/enabled";
             logger.debug("Checking SIMULATION feature flag at {} for tenant {}", url, tenantId);
 
-            // Build headers explicitly to ensure they're forwarded
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-Client-Id", tenantId);
 
-            // Forward auth header from current request
             ServletRequestAttributes attributes =
                     (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             if (attributes != null) {
@@ -147,24 +145,16 @@ public class SimulationAdminController {
                 }
             }
 
-            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+            ResponseEntity<Boolean> response = getRestTemplate().exchange(
                     url,
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                    Boolean.class
             );
 
-            logger.info("SIMULATION feature check: status={}, body={}", response.getStatusCode(), response.getBody());
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                Object enabled = response.getBody().get("enabled");
-                logger.info("SIMULATION feature flag: enabled={} (type={})", enabled, enabled != null ? enabled.getClass().getName() : "null");
-                if (Boolean.TRUE.equals(enabled) || "true".equals(String.valueOf(enabled))) {
-                    return;
-                }
-                // Feature explicitly disabled
-                logger.info("SIMULATION feature is explicitly disabled for tenant {}", tenantId);
-            } else {
-                logger.warn("SIMULATION feature check returned non-success: status={}", response.getStatusCode());
+            logger.info("SIMULATION feature check: status={}, enabled={}", response.getStatusCode(), response.getBody());
+            if (response.getStatusCode().is2xxSuccessful() && Boolean.TRUE.equals(response.getBody())) {
+                return;
             }
         } catch (Exception e) {
             logger.error("Failed to check SIMULATION feature flag for tenant {}: {}", tenantId, e.getMessage(), e);

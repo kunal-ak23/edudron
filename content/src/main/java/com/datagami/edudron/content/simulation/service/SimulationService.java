@@ -76,6 +76,16 @@ public class SimulationService {
 
     // ============ ADMIN OPERATIONS ============
 
+    /**
+     * Enrich a SimulationDTO with the course name looked up from the courseId.
+     */
+    private void enrichWithCourseName(SimulationDTO dto, UUID clientId) {
+        if (dto.getCourseId() != null && !dto.getCourseId().isBlank()) {
+            courseRepository.findByIdAndClientId(dto.getCourseId(), clientId)
+                    .ifPresent(course -> dto.setCourseName(course.getTitle()));
+        }
+    }
+
     @Transactional(readOnly = true)
     public SimulationDTO getSimulation(String id) {
         UUID clientId = UUID.fromString(TenantContext.getClientId());
@@ -83,6 +93,7 @@ public class SimulationService {
                 .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
         SimulationDTO dto = SimulationDTO.fromEntity(sim);
         dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(id, clientId));
+        enrichWithCourseName(dto, clientId);
         return dto;
     }
 
@@ -110,6 +121,7 @@ public class SimulationService {
         return page.map(sim -> {
             SimulationDTO dto = SimulationDTO.fromEntity(sim);
             dto.setTotalPlays((int) playRepository.countBySimulationIdAndClientId(sim.getId(), clientId));
+            enrichWithCourseName(dto, clientId);
             return dto;
         });
     }

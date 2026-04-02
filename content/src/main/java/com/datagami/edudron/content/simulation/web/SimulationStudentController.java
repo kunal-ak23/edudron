@@ -152,7 +152,7 @@ public class SimulationStudentController {
                 return;
             }
 
-            String url = gatewayUrl + "/api/tenant/features/SIMULATION";
+            String url = gatewayUrl + "/api/tenant/features/SIMULATION/enabled";
 
             HttpHeaders headers = new HttpHeaders();
             headers.set("X-Client-Id", tenantId);
@@ -165,18 +165,15 @@ public class SimulationStudentController {
                 }
             }
 
-            ResponseEntity<Map<String, Object>> response = getRestTemplate().exchange(
+            ResponseEntity<Boolean> response = getRestTemplate().exchange(
                     url,
                     HttpMethod.GET,
                     new HttpEntity<>(headers),
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                    Boolean.class
             );
 
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                Object enabled = response.getBody().get("enabled");
-                if (Boolean.TRUE.equals(enabled) || "true".equals(String.valueOf(enabled))) {
-                    return;
-                }
+            if (response.getStatusCode().is2xxSuccessful() && Boolean.TRUE.equals(response.getBody())) {
+                return;
             }
         } catch (Exception e) {
             logger.warn("Failed to check SIMULATION feature flag: {}. Allowing access as fallback.", e.getMessage());

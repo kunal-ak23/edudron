@@ -114,6 +114,27 @@ public class TenantFeatureController {
         }
     }
     
+    @GetMapping("/{feature}/enabled")
+    @Operation(summary = "Check if feature is enabled", description = "Returns true/false for whether a feature is enabled for the current tenant")
+    public ResponseEntity<Boolean> isFeatureEnabled(@PathVariable String feature) {
+        String clientIdStr = TenantContext.getClientId();
+        if (clientIdStr == null || "SYSTEM".equals(clientIdStr) || "PENDING_TENANT_SELECTION".equals(clientIdStr)) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        try {
+            TenantFeatureType featureType = TenantFeatureType.valueOf(feature);
+            UUID clientId = UUID.fromString(clientIdStr);
+            log.info("Checking if feature {} is enabled for client: {}", feature, clientId);
+
+            boolean enabled = tenantFeatureService.isFeatureEnabled(clientId, featureType);
+            return ResponseEntity.ok(enabled);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid feature type: {}", feature);
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
     @GetMapping("/student-self-enrollment")
     @Operation(summary = "Get student self-enrollment feature", description = "Convenience endpoint for student self-enrollment feature")
     public ResponseEntity<Boolean> getStudentSelfEnrollment() {
@@ -121,7 +142,7 @@ public class TenantFeatureController {
         if (clientIdStr == null || "SYSTEM".equals(clientIdStr) || "PENDING_TENANT_SELECTION".equals(clientIdStr)) {
             return ResponseEntity.badRequest().build();
         }
-        
+
         UUID clientId = UUID.fromString(clientIdStr);
         boolean enabled = tenantFeatureService.isStudentSelfEnrollmentEnabled(clientId);
         return ResponseEntity.ok(enabled);

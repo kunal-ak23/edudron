@@ -203,6 +203,7 @@ export default function SimulationsPage() {
                   <TableHead>Title</TableHead>
                   <TableHead>Concept</TableHead>
                   <TableHead>Subject</TableHead>
+                  <TableHead>Course</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-center">Format</TableHead>
                   <TableHead className="text-center">Total Plays</TableHead>
@@ -223,6 +224,9 @@ export default function SimulationsPage() {
                       {sim.concept}
                     </TableCell>
                     <TableCell>{sim.subject}</TableCell>
+                    <TableCell className="max-w-[180px] truncate text-sm text-muted-foreground">
+                      {sim.courseName || '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"

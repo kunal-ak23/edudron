@@ -21,6 +21,7 @@ export interface SimulationDTO {
   audience: string
   description?: string
   courseId?: string
+  courseName?: string
   lectureId?: string
   simulationData?: any  // full structure (admin only)
   targetYears: number
