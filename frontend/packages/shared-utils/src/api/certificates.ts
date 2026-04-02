@@ -82,6 +82,21 @@ export class CertificatesApi {
     return response.data
   }
 
+  async deleteTemplate(id: string): Promise<void> {
+    await this.apiClient.delete(`/api/certificates/templates/${id}`)
+  }
+
+  async exportTemplate(id: string): Promise<Blob> {
+    return this.apiClient.downloadFile(`/api/certificates/templates/${id}/export`)
+  }
+
+  async importTemplate(file: File): Promise<CertificateTemplate> {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await this.apiClient.postForm<CertificateTemplate>('/api/certificates/templates/import', formData)
+    return response.data
+  }
+
   // Generation
   async generate(request: CertificateGenerateRequest): Promise<Certificate[]> {
     const response = await this.apiClient.post<Certificate[]>('/api/certificates/generate', request)

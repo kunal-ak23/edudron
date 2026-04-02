@@ -1,7 +1,8 @@
 'use client'
 
+import { useRef } from 'react'
 import { Button } from '@/components/ui/button'
-import { Undo2, Redo2, Save, ArrowLeft, Download, Upload, Copy } from 'lucide-react'
+import { Undo2, Redo2, Save, ArrowLeft, Download, Upload, Copy, Loader2 } from 'lucide-react'
 
 interface DesignerToolbarProps {
   templateName: string
@@ -22,6 +23,10 @@ interface DesignerToolbarProps {
   onSave: () => void
   onSaveAsNew?: () => void
   isEditing: boolean
+  onExport?: () => void
+  onImport?: (file: File) => void
+  exporting?: boolean
+  importing?: boolean
   onBack: () => void
 }
 
@@ -44,8 +49,29 @@ export default function DesignerToolbar({
   onSave,
   onSaveAsNew,
   isEditing,
+  onExport,
+  onImport,
+  exporting,
+  importing,
   onBack,
 }: DesignerToolbarProps) {
+  const importInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImportClick = () => {
+    importInputRef.current?.click()
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file && onImport) {
+      onImport(file)
+    }
+    // Reset so same file can be re-selected
+    if (importInputRef.current) {
+      importInputRef.current.value = ''
+    }
+  }
+
   return (
     <div className="h-14 border-b bg-white flex items-center px-4 gap-3 shrink-0">
       <Button variant="ghost" size="sm" onClick={onBack}>
@@ -129,13 +155,34 @@ export default function DesignerToolbar({
 
       <div className="w-px h-6 bg-gray-200" />
 
-      {/* Export / Import — wired in Tasks 7-8 */}
-      <Button variant="outline" size="sm" disabled title="Export (coming soon)">
-        <Download className="h-4 w-4" />
+      {/* Export */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onExport}
+        disabled={!isEditing || exporting}
+        title={isEditing ? 'Export as ZIP' : 'Save first to export'}
+      >
+        {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
       </Button>
-      <Button variant="outline" size="sm" disabled title="Import (coming soon)">
-        <Upload className="h-4 w-4" />
+
+      {/* Import */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleImportClick}
+        disabled={importing}
+        title="Import template ZIP"
+      >
+        {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
       </Button>
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".zip"
+        className="hidden"
+        onChange={handleFileChange}
+      />
     </div>
   )
 }

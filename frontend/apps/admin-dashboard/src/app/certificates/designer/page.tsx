@@ -34,6 +34,8 @@ export default function CertificateDesignerPage() {
   const [templateName, setTemplateName] = useState('Untitled Template')
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(!!templateId)
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   const designer = useDesignerState()
 
@@ -89,6 +91,38 @@ export default function CertificateDesignerPage() {
     }
   }
 
+  const handleExport = async () => {
+    if (!templateId) return
+    setExporting(true)
+    try {
+      const blob = await certificatesApi.exportTemplate(templateId)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `template-${templateName.replace(/\s+/g, '-').toLowerCase()}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to export template:', err)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleImport = async (file: File) => {
+    setImporting(true)
+    try {
+      const created = await certificatesApi.importTemplate(file)
+      router.replace(`/certificates/designer?id=${created.id}`)
+    } catch (err) {
+      console.error('Failed to import template:', err)
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const selectedField = designer.fields.find(f => f.id === designer.selectedFieldId) || null
 
   if (loading) {
@@ -116,6 +150,10 @@ export default function CertificateDesignerPage() {
         onSave={handleSave}
         onSaveAsNew={handleSaveAsNew}
         isEditing={!!templateId}
+        onExport={handleExport}
+        onImport={handleImport}
+        exporting={exporting}
+        importing={importing}
         onBack={() => router.push('/certificates')}
       />
 

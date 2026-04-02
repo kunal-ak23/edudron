@@ -86,6 +86,38 @@ public class MediaUploadHelper {
     }
 
     /**
+     * Upload a template asset (image) to Azure Blob Storage.
+     *
+     * @param tenantId  tenant UUID string
+     * @param fileName  original file name
+     * @param data      file bytes
+     * @param contentType MIME type
+     * @return blob URL of the uploaded file
+     */
+    public String uploadTemplateAsset(String tenantId, String fileName, byte[] data, String contentType) {
+        if (blobServiceClient == null) {
+            log.warn("BlobServiceClient is not configured. Skipping asset upload for {}", fileName);
+            return null;
+        }
+
+        String blobName = tenantId + "/certificate-templates/assets/" + System.currentTimeMillis() + "-" + fileName;
+
+        try {
+            BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
+            BlobClient blobClient = containerClient.getBlobClient(blobName);
+
+            blobClient.upload(new ByteArrayInputStream(data), data.length, true);
+
+            String url = blobClient.getBlobUrl();
+            log.info("Uploaded template asset: {} ({} bytes)", blobName, data.length);
+            return url;
+        } catch (Exception e) {
+            log.error("Failed to upload template asset {}: {}", fileName, e.getMessage(), e);
+            throw new RuntimeException("Failed to upload template asset", e);
+        }
+    }
+
+    /**
      * Extract blob name from a full blob URL.
      * URL format: https://account.blob.core.windows.net/container/path/to/blob
      */
