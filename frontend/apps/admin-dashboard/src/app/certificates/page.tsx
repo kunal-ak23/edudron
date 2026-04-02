@@ -120,6 +120,7 @@ export default function CertificatesPage() {
 
   // Template management
   const [deletingTemplateId, setDeletingTemplateId] = useState<string | null>(null)
+  const [confirmDeleteTemplateId, setConfirmDeleteTemplateId] = useState<string | null>(null)
   const [exportingTemplateId, setExportingTemplateId] = useState<string | null>(null)
 
   // Load shared options
@@ -334,9 +335,14 @@ export default function CertificatesPage() {
     }
   }, [revokeTarget, revokeReason, toast, loadCertificates])
 
-  // Delete template
+  // Delete template (requires confirmation)
   const handleDeleteTemplate = useCallback(async (id: string) => {
+    if (confirmDeleteTemplateId !== id) {
+      setConfirmDeleteTemplateId(id)
+      return
+    }
     setDeletingTemplateId(id)
+    setConfirmDeleteTemplateId(null)
     try {
       await certificatesApi.deleteTemplate(id)
       setTemplates(prev => prev.filter(t => t.id !== id))
@@ -346,7 +352,7 @@ export default function CertificatesPage() {
     } finally {
       setDeletingTemplateId(null)
     }
-  }, [toast])
+  }, [confirmDeleteTemplateId, toast])
 
   // Export template
   const handleExportTemplate = useCallback(async (tmpl: CertificateTemplate) => {
@@ -889,19 +895,38 @@ export default function CertificatesPage() {
                           )}
                         </Button>
                         {!tmpl.isDefault && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDeleteTemplate(tmpl.id)}
-                            disabled={deletingTemplateId === tmpl.id}
-                            className="cursor-pointer"
-                          >
-                            {deletingTemplateId === tmpl.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
+                          confirmDeleteTemplateId === tmpl.id ? (
+                            <div className="flex gap-1">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDeleteTemplate(tmpl.id)}
+                                disabled={deletingTemplateId === tmpl.id}
+                                className="cursor-pointer text-xs"
+                              >
+                                {deletingTemplateId === tmpl.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : 'Confirm'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setConfirmDeleteTemplateId(null)}
+                                className="cursor-pointer text-xs"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteTemplate(tmpl.id)}
+                              className="cursor-pointer"
+                            >
                               <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
+                            </Button>
+                          )
                         )}
                       </div>
                     </div>

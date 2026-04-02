@@ -212,25 +212,53 @@ public class CertificateTemplateService {
     /**
      * Import a template from a ZIP file.
      */
+    private static final long MAX_ZIP_SIZE = 50L * 1024 * 1024; // 50MB decompressed limit
+    private static final int MAX_ZIP_ENTRIES = 50;
+
     @Transactional
     public CertificateTemplateDTO importTemplate(MultipartFile file) {
         UUID clientId = getClientId();
 
+        // Validate upload size (10MB compressed max)
+        if (file.getSize() > 10L * 1024 * 1024) {
+            throw new IllegalArgumentException("ZIP file too large. Maximum allowed size is 10MB.");
+        }
+
         try {
             Map<String, byte[]> assets = new HashMap<>();
             byte[] templateJsonBytes = null;
+            long totalDecompressed = 0;
+            int entryCount = 0;
 
-            // Extract ZIP
+            // Extract ZIP with security checks
             try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(file.getBytes()))) {
                 ZipEntry entry;
                 while ((entry = zis.getNextEntry()) != null) {
                     if (entry.isDirectory()) continue;
+
+                    // Zip-slip protection: reject path traversal
+                    String entryName = entry.getName();
+                    if (entryName.contains("..") || entryName.startsWith("/")) {
+                        log.warn("Rejected ZIP entry with suspicious path: {}", entryName);
+                        continue;
+                    }
+
+                    // Zip bomb protection
+                    if (++entryCount > MAX_ZIP_ENTRIES) {
+                        throw new IllegalArgumentException("ZIP file contains too many entries (max " + MAX_ZIP_ENTRIES + ")");
+                    }
+
                     byte[] data = zis.readAllBytes();
-                    if ("template.json".equals(entry.getName())) {
+                    totalDecompressed += data.length;
+                    if (totalDecompressed > MAX_ZIP_SIZE) {
+                        throw new IllegalArgumentException("ZIP decompressed content exceeds maximum allowed size (50MB)");
+                    }
+
+                    if ("template.json".equals(entryName)) {
                         templateJsonBytes = data;
-                    } else if (entry.getName().startsWith("assets/")) {
-                        String assetName = entry.getName().substring("assets/".length());
-                        if (!assetName.isBlank()) {
+                    } else if (entryName.startsWith("assets/")) {
+                        String assetName = entryName.substring("assets/".length());
+                        if (!assetName.isBlank() && !assetName.contains("/")) {
                             assets.put(assetName, data);
                         }
                     }
