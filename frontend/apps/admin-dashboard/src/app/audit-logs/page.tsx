@@ -338,7 +338,7 @@ export default function AuditLogsPage() {
                 <div className="flex items-center gap-2">
                   <Select
                     value={pageSize.toString()}
-                    onValueChange={(v) => {
+                    onValueChange={(v: string) => {
                       setPageSize(Number(v))
                       setCurrentPage(0)
                     }}
