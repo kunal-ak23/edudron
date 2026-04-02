@@ -38,8 +38,10 @@ function FieldNode({
   const snapPosition = (val: number) =>
     snapToGrid ? Math.round(val / GRID_SIZE) * GRID_SIZE : val
 
-  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
-    onDragEnd(snapPosition(e.target.x()), snapPosition(e.target.y()))
+  const handleDragEnd = () => {
+    const node = shapeRef.current
+    if (!node) return
+    onDragEnd(snapPosition(node.x()), snapPosition(node.y()))
   }
 
   const handleTransformEnd = () => {
@@ -115,6 +117,7 @@ function FieldNode({
             strokeWidth={isSelected ? 2 : 1}
             dash={field.imageUrl ? undefined : [6, 3]}
             opacity={field.opacity ?? 1}
+            listening={false}
           />
           {!field.imageUrl && (
             <Text
@@ -150,11 +153,12 @@ function FieldNode({
             fill="#f8fafc"
             stroke={isSelected ? '#3b82f6' : '#cbd5e1'}
             strokeWidth={isSelected ? 2 : 1}
+            listening={false}
           />
           {/* Simple QR placeholder pattern */}
-          <Rect x={8} y={8} width={20} height={20} fill="#1e293b" />
-          <Rect x={w - 28} y={8} width={20} height={20} fill="#1e293b" />
-          <Rect x={8} y={h - 28} width={20} height={20} fill="#1e293b" />
+          <Rect x={8} y={8} width={20} height={20} fill="#1e293b" listening={false} />
+          <Rect x={w - 28} y={8} width={20} height={20} fill="#1e293b" listening={false} />
+          <Rect x={8} y={h - 28} width={20} height={20} fill="#1e293b" listening={false} />
           <Text
             text="QR"
             width={w}
