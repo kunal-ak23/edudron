@@ -109,7 +109,7 @@ public class DecisionMappingService {
     /**
      * Fallback when config or mappings are missing.
      * If choiceId is provided (narrative-style), validate it.
-     * Otherwise pick the first choice (interactive types submit input, not choiceId).
+     * Otherwise pick the middle choice to avoid unfair zero-point penalties.
      */
     @SuppressWarnings("unchecked")
     private String fallbackChoiceId(Map<String, Object> node, String choiceId, String decisionType) {
@@ -118,9 +118,10 @@ public class DecisionMappingService {
         }
         List<Map<String, Object>> choices = (List<Map<String, Object>>) node.get("choices");
         if (choices != null && !choices.isEmpty()) {
-            String firstId = (String) choices.get(0).get("id");
-            logger.warn("No choiceId for type {}. Defaulting to first choice.", decisionType);
-            return firstId;
+            int midIdx = choices.size() / 2;
+            String midId = (String) choices.get(midIdx).get("id");
+            logger.warn("No choiceId for type {}. Defaulting to middle choice (index {}).", decisionType, midIdx);
+            return midId;
         }
         throw new IllegalStateException("No choices available for fallback");
     }
@@ -655,8 +656,8 @@ public class DecisionMappingService {
             choiceId = (String) sortedChoices.get(sortedChoices.size() - 1).get("id"); // quality 1
         }
 
-        logger.info("STAKEHOLDER_MEETING scoring: selected={}, totalScore={}, maxPossible={}, scorePct={:.1f}%, choiceId={}",
-                selectedIds, totalScore, maxPossible, scorePct * 100, choiceId);
+        logger.info("STAKEHOLDER_MEETING scoring: selected={}, totalScore={}, maxPossible={}, scorePct={}%, choiceId={}",
+                selectedIds, totalScore, maxPossible, String.format("%.1f", scorePct * 100), choiceId);
         return choiceId;
     }
 
@@ -718,14 +719,15 @@ public class DecisionMappingService {
             }
         }
 
-        // Score: selected candidate's fit → directly maps to quality
+        // Score: selected candidate's fit as percentage of max → maps to quality
         int fitScore = fitScores.getOrDefault(selectedId, 1);
         int maxFit = fitScores.values().stream().mapToInt(Integer::intValue).max().orElse(3);
+        double fitPct = maxFit > 0 ? (double) fitScore / maxFit : 0;
 
         String choiceId;
-        if (fitScore >= maxFit) {
+        if (fitPct >= 0.80) {
             choiceId = (String) sortedChoices.get(0).get("id"); // quality 3 (best)
-        } else if (fitScore >= 2) {
+        } else if (fitPct >= 0.50) {
             choiceId = sortedChoices.size() >= 2
                 ? (String) sortedChoices.get(1).get("id")   // quality 2
                 : (String) sortedChoices.get(0).get("id");
@@ -733,8 +735,8 @@ public class DecisionMappingService {
             choiceId = (String) sortedChoices.get(sortedChoices.size() - 1).get("id"); // quality 1
         }
 
-        logger.info("HIRE_FIRE scoring: selected={}, fitScore={}, maxFit={}, choiceId={}",
-                selectedId, fitScore, maxFit, choiceId);
+        logger.info("HIRE_FIRE scoring: selected={}, fitScore={}, maxFit={}, fitPct={}%, choiceId={}",
+                selectedId, fitScore, maxFit, String.format("%.1f", fitPct * 100), choiceId);
         return choiceId;
     }
 }
