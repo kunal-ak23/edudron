@@ -1,7 +1,7 @@
 {
   "gateway": "0.1.25",
   "identity": "0.1.25",
-  "content": "0.3.4",
+  "content": "0.3.5",
   "student": "0.2.0",
   "payment": "0.1.13",
   "core-api": "0.2.4"
