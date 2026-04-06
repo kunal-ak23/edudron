@@ -40,6 +40,30 @@ public class SimulationStateDTO {
     private Integer neutralDecisionCount;
     private List<String> keyInsights;
 
+    // Post-decision feedback fields (returned after submitDecision)
+    private Integer scoreDelta;
+    private String impactDescription;
+    private List<MetricImpactDTO> metricImpacts;
+
+    public static class MetricImpactDTO {
+        private String metric;
+        private String direction; // "up", "down", "neutral"
+        private String magnitude; // "strong", "moderate", "slight"
+
+        public MetricImpactDTO() {}
+        public MetricImpactDTO(String metric, String direction, String magnitude) {
+            this.metric = metric;
+            this.direction = direction;
+            this.magnitude = magnitude;
+        }
+        public String getMetric() { return metric; }
+        public void setMetric(String metric) { this.metric = metric; }
+        public String getDirection() { return direction; }
+        public void setDirection(String direction) { this.direction = direction; }
+        public String getMagnitude() { return magnitude; }
+        public void setMagnitude(String magnitude) { this.magnitude = magnitude; }
+    }
+
     // Getters and Setters
     public String getPhase() { return phase; }
     public void setPhase(String phase) { this.phase = phase; }
@@ -106,4 +130,13 @@ public class SimulationStateDTO {
 
     public List<String> getKeyInsights() { return keyInsights; }
     public void setKeyInsights(List<String> keyInsights) { this.keyInsights = keyInsights; }
+
+    public Integer getScoreDelta() { return scoreDelta; }
+    public void setScoreDelta(Integer scoreDelta) { this.scoreDelta = scoreDelta; }
+
+    public String getImpactDescription() { return impactDescription; }
+    public void setImpactDescription(String impactDescription) { this.impactDescription = impactDescription; }
+
+    public List<MetricImpactDTO> getMetricImpacts() { return metricImpacts; }
+    public void setMetricImpacts(List<MetricImpactDTO> metricImpacts) { this.metricImpacts = metricImpacts; }
 }
