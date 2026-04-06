@@ -1519,7 +1519,7 @@ export default function LearnPage() {
                             <div className="flex items-center space-x-3">
                               <Switch
                                 checked={completedLectures.has(selectedLecture.id)}
-                                onCheckedChange={(checked) => handleMarkComplete(selectedLecture.id, checked)}
+                                onCheckedChange={(checked: boolean) => handleMarkComplete(selectedLecture.id, checked)}
                               />
                               <span
                                 className="text-sm font-medium text-gray-700 cursor-pointer select-none"
@@ -1810,7 +1810,7 @@ export default function LearnPage() {
                           <div className="flex items-center space-x-3">
                             <Switch
                               checked={completedLectures.has(selectedLecture.id)}
-                              onCheckedChange={(checked) => handleMarkComplete(selectedLecture.id, checked)}
+                              onCheckedChange={(checked: boolean) => handleMarkComplete(selectedLecture.id, checked)}
                             />
                             <span
                               className="text-sm font-medium text-gray-700 cursor-pointer select-none"
