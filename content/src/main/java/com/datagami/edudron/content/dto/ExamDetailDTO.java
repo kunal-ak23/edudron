@@ -6,6 +6,7 @@ import com.datagami.edudron.content.domain.QuestionBank;
 import com.datagami.edudron.content.domain.QuestionBankOption;
 import com.datagami.edudron.content.domain.QuizQuestion;
 import com.datagami.edudron.content.domain.QuizOption;
+import org.hibernate.Hibernate;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -110,8 +111,8 @@ public class ExamDetailDTO {
         // Build unified questions list from both sources
         dto.questions = new ArrayList<>();
         
-        // Add questions from ExamQuestion (from question bank)
-        if (exam.getExamQuestions() != null) {
+        // Add questions from ExamQuestion (from question bank) — only if initialized
+        if (Hibernate.isInitialized(exam.getExamQuestions()) && exam.getExamQuestions() != null) {
             for (ExamQuestion eq : exam.getExamQuestions()) {
                 QuestionDTO qDto = QuestionDTO.fromExamQuestion(eq);
                 if (qDto != null) {
@@ -119,9 +120,9 @@ public class ExamDetailDTO {
                 }
             }
         }
-        
-        // Add questions from QuizQuestion (inline questions) - for backward compatibility
-        if (exam.getQuestions() != null) {
+
+        // Add questions from QuizQuestion (inline questions) — only if initialized
+        if (Hibernate.isInitialized(exam.getQuestions()) && exam.getQuestions() != null) {
             for (QuizQuestion qq : exam.getQuestions()) {
                 QuestionDTO qDto = QuestionDTO.fromQuizQuestion(qq);
                 if (qDto != null) {

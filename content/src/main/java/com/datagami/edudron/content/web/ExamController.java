@@ -891,8 +891,10 @@ public class ExamController {
             Assessment exam = examService.getExamById(id);
             List<QuizQuestion> quizQuestions = quizQuestionRepository.findByAssessmentIdAndClientIdWithOptions(id,
                     clientId);
+            List<com.datagami.edudron.content.domain.ExamQuestion> examQuestions = examQuestionRepository
+                    .findByExamIdAndClientIdWithQuestions(id, clientId);
 
-            if (!isExamMcqOnly(exam, quizQuestions)) {
+            if (!isExamMcqOnly(exam, quizQuestions, examQuestions)) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("error",
                                 "Exam is not MCQ-only. Bulk grade is only available when all questions are MULTIPLE_CHOICE or TRUE_FALSE."));
@@ -915,9 +917,6 @@ public class ExamController {
                     .filter(s -> s.get("completedAt") != null)
                     .collect(Collectors.toList());
             int skippedCount = allSubmissions.size() - completed.size();
-
-            List<com.datagami.edudron.content.domain.ExamQuestion> examQuestions = examQuestionRepository
-                    .findByExamIdAndClientIdWithQuestions(id, clientId);
 
             List<Map<String, Object>> gradesPayload = new ArrayList<>();
             List<Map<String, Object>> errorsList = new ArrayList<>();
@@ -1010,9 +1009,10 @@ public class ExamController {
         }
     }
 
-    private boolean isExamMcqOnly(Assessment exam, List<QuizQuestion> quizQuestions) {
-        if (exam.getExamQuestions() != null) {
-            for (com.datagami.edudron.content.domain.ExamQuestion eq : exam.getExamQuestions()) {
+    private boolean isExamMcqOnly(Assessment exam, List<QuizQuestion> quizQuestions,
+            List<com.datagami.edudron.content.domain.ExamQuestion> examQuestionsList) {
+        if (examQuestionsList != null) {
+            for (com.datagami.edudron.content.domain.ExamQuestion eq : examQuestionsList) {
                 QuestionBank qb = eq.getQuestion();
                 if (qb == null)
                     return false;
@@ -1028,7 +1028,7 @@ public class ExamController {
                 return false;
             }
         }
-        boolean hasQuestions = (exam.getExamQuestions() != null && !exam.getExamQuestions().isEmpty())
+        boolean hasQuestions = (examQuestionsList != null && !examQuestionsList.isEmpty())
                 || !quizQuestions.isEmpty();
         return hasQuestions;
     }
