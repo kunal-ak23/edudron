@@ -56,6 +56,12 @@ export interface FinancialReport {
   endingBudget: number
 }
 
+export interface MetricImpact {
+  metric: string
+  direction: 'up' | 'down' | 'neutral'
+  magnitude: 'strong' | 'moderate' | 'slight'
+}
+
 export interface SimulationStateDTO {
   phase: 'DECISION' | 'YEAR_END_REVIEW' | 'DEBRIEF' | 'FIRED'
   currentYear: number
@@ -80,11 +86,16 @@ export interface SimulationStateDTO {
     label: string
     quality: 'GOOD' | 'MEDIUM' | 'BAD'
     points: number
+    consequenceTag?: string
   }>
   goodDecisionCount?: number
   badDecisionCount?: number
   neutralDecisionCount?: number
   keyInsights?: string[]
+  // Post-decision feedback fields
+  scoreDelta?: number
+  impactDescription?: string
+  metricImpacts?: MetricImpact[]
 }
 
 export interface MentorGuidance {
@@ -114,6 +125,13 @@ export interface ChoiceDTO {
   text: string
 }
 
+export interface DecisionHighlight {
+  decisionId: string
+  label: string
+  impact: 'positive' | 'negative' | 'neutral'
+  summary: string
+}
+
 export interface YearEndReviewDTO {
   year: number
   band: string
@@ -121,6 +139,17 @@ export interface YearEndReviewDTO {
   feedback: Record<string, string>
   promotionTitle?: string
   fired: boolean
+  decisionHighlights?: DecisionHighlight[]
+  crossDecisionInsight?: string
+  warningSignal?: string
+}
+
+export interface DecisionBreakdownEntry {
+  decisionId: string
+  label: string
+  quality: number
+  whatHappened: string
+  conceptLesson: string
 }
 
 export interface DebriefDTO {
@@ -128,6 +157,8 @@ export interface DebriefDTO {
   conceptAtWork: string
   theGap: string
   playAgain: string
+  decisionBreakdown?: DecisionBreakdownEntry[]
+  patternAnalysis?: string
 }
 
 export interface DecisionInput {
