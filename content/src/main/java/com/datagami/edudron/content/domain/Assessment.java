@@ -78,6 +78,7 @@ public class Assessment {
     @JoinColumn(name = "lecture_id", insertable = false, updatable = false)
     private Lecture lecture;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "assessment", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequence ASC")
     private List<QuizQuestion> questions = new ArrayList<>();
@@ -166,6 +167,7 @@ public class Assessment {
     private Boolean archived = false;
     
     // Relationship to exam questions (from question bank)
+    @JsonIgnore
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("sequence ASC")
     private List<ExamQuestion> examQuestions = new ArrayList<>();
