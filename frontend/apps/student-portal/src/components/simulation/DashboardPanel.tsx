@@ -18,11 +18,14 @@ interface DashboardPanelProps {
     label: string
     quality: 'GOOD' | 'MEDIUM' | 'BAD'
     points: number
+    consequenceTag?: string
   }>
   goodDecisionCount?: number
   badDecisionCount?: number
   neutralDecisionCount?: number
   keyInsights?: string[]
+  consecutiveStruggling?: number
+  budgetHistory?: number[]
 }
 
 function formatBudget(amount: number): string {
@@ -51,11 +54,36 @@ function qualityIcon(quality: string) {
   }
 }
 
+function BudgetSparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const w = 80
+  const h = 24
+  const pad = 2
+  const points = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - pad * 2)
+    const y = h - pad - ((v - min) / range) * (h - pad * 2)
+    return `${x},${y}`
+  }).join(' ')
+  const lastVal = values[values.length - 1]
+  const prevVal = values[values.length - 2]
+  const lineColor = lastVal >= prevVal ? '#6cd3f7' : '#ffb4ab'
+  return (
+    <svg width={w} height={h} className="overflow-visible">
+      <polyline points={points} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={points.split(' ').pop()?.split(',')[0]} cy={points.split(' ').pop()?.split(',')[1]} r="2" fill={lineColor} />
+    </svg>
+  )
+}
+
 export default function DashboardPanel({
   score, maxScore, budget, role, performanceBand,
   currentYear, totalYears, currentDecision, totalDecisions,
   decisionHistory = [], goodDecisionCount = 0, badDecisionCount = 0,
-  neutralDecisionCount = 0, keyInsights = []
+  neutralDecisionCount = 0, keyInsights = [],
+  consecutiveStruggling = 0, budgetHistory = []
 }: DashboardPanelProps) {
   // Year progress: how many decisions completed in current year
   const yearProgress = totalDecisions > 0 ? Math.min(((currentDecision) / totalDecisions) * 100, 100) : 0
@@ -87,6 +115,11 @@ export default function DashboardPanel({
             <div className="text-lg font-bold text-[#6cd3f7] tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
               {formatBudget(budget)}
             </div>
+            {budgetHistory.length >= 2 && (
+              <div className="mt-1.5">
+                <BudgetSparkline values={budgetHistory} />
+              </div>
+            )}
           </div>
           <div className="p-3 bg-[#060e1f] rounded-lg">
             <div className="text-[10px] uppercase font-bold text-[#879298] mb-1">Status</div>
@@ -119,6 +152,11 @@ export default function DashboardPanel({
                 <div className="text-[10px] text-[#bdc8ce] uppercase">
                   {d.quality === 'GOOD' ? 'Success' : d.quality === 'BAD' ? 'Poor Choice' : 'Neutral Impact'} {d.points > 0 ? `+${d.points} PTS` : ''}
                 </div>
+                {d.consequenceTag && (
+                  <div className="text-[9px] text-[#879298] mt-0.5 truncate max-w-[200px]">
+                    #{d.consequenceTag}
+                  </div>
+                )}
               </div>
             ))}
             {/* Current decision indicator */}
@@ -135,6 +173,7 @@ export default function DashboardPanel({
 
       {/* Risk Level — always visible */}
       <section className={`p-4 rounded-xl border transition-colors duration-500 ${
+        consecutiveStruggling >= 1 ? 'bg-amber-900/20 border-amber-500/30' :
         badDecisionCount >= 3 ? 'bg-[#93000a]/30 border-[#ffb4ab]/30' :
         badDecisionCount >= 1 ? 'bg-[#93000a]/20 border-[#ffb4ab]/20' :
         'bg-[#0F1729]/50 border-white/5'
@@ -158,10 +197,12 @@ export default function DashboardPanel({
             <div key={i} className={`h-1.5 flex-1 rounded-full transition-colors duration-500 ${i < badDecisionCount ? 'bg-[#ffb4ab]' : 'bg-[#2d3448]'}`} />
           ))}
         </div>
-        <p className={`text-[10px] leading-tight ${badDecisionCount > 0 ? 'text-[#ffdad6]' : 'text-slate-400'}`}>
-          {badDecisionCount === 0
-            ? 'No bad decisions yet. Keep making thoughtful choices!'
-            : `${badDecisionCount} bad decision${badDecisionCount !== 1 ? 's' : ''} made. ${Math.max(0, 4 - badDecisionCount)} more consecutive bad decisions could lead to termination.`}
+        <p className={`text-[10px] leading-tight ${consecutiveStruggling >= 1 ? 'text-amber-300' : badDecisionCount > 0 ? 'text-[#ffdad6]' : 'text-slate-400'}`}>
+          {consecutiveStruggling >= 1
+            ? '1 more struggling year = career over'
+            : badDecisionCount === 0
+              ? 'No bad decisions yet. Keep making thoughtful choices!'
+              : `${badDecisionCount} bad decision${badDecisionCount !== 1 ? 's' : ''} made. ${Math.max(0, 4 - badDecisionCount)} more consecutive bad decisions could lead to termination.`}
         </p>
       </section>
     </div>

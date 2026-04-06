@@ -1,6 +1,6 @@
 'use client'
 
-import { Building2, Users, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Building2, Users, TrendingUp, ArrowUpRight, ArrowDownRight, Link2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { YearEndReviewDTO } from '@kunal-ak23/edudron-shared-utils'
 
@@ -21,6 +21,12 @@ const STAKEHOLDER_CONFIG: Record<string, { icon: typeof Building2; label: string
   board: { icon: Building2, label: 'Board', color: 'text-[#0891B2]' },
   customers: { icon: Users, label: 'Customers', color: 'text-amber-400' },
   investors: { icon: TrendingUp, label: 'Investors', color: 'text-[#F97316]' },
+}
+
+const IMPACT_STYLES: Record<string, string> = {
+  positive: 'bg-green-900/20 border-green-500/30 text-green-400',
+  negative: 'bg-red-900/20 border-red-500/30 text-red-400',
+  neutral: 'bg-slate-800/50 border-slate-600/30 text-slate-400',
 }
 
 export function YearEndReview({ review, currentYear, onContinue, continuing }: YearEndReviewProps) {
@@ -106,6 +112,47 @@ export function YearEndReview({ review, currentYear, onContinue, continuing }: Y
               )
             })}
           </div>
+        </div>
+      )}
+
+      {/* Warning banner — STRUGGLING band */}
+      {review.warningSignal && (
+        <div className="flex items-start gap-3 p-4 bg-amber-900/20 border border-amber-500/30 rounded-xl animate-pulse-subtle">
+          <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-300 leading-relaxed">{review.warningSignal}</p>
+        </div>
+      )}
+
+      {/* Decision Highlights */}
+      {review.decisionHighlights && review.decisionHighlights.length > 0 && (
+        <div>
+          <h2 className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wide mb-3">
+            Your Key Decisions This Year
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {review.decisionHighlights.map((h) => (
+              <div
+                key={h.decisionId}
+                className="p-3 bg-[#1A2744] border border-[#1E3A5F]/30 rounded-xl"
+              >
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span className="text-sm font-semibold text-[#E2E8F0] truncate">{h.label}</span>
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border shrink-0 ${IMPACT_STYLES[h.impact] || IMPACT_STYLES.neutral}`}>
+                    {h.impact}
+                  </span>
+                </div>
+                <p className="text-xs text-[#94A3B8] leading-relaxed">{h.summary}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cross-Decision Insight */}
+      {review.crossDecisionInsight && (
+        <div className="flex items-start gap-3 p-4 border-l-2 border-[#0891B2] bg-[#0891B2]/5 rounded-r-xl">
+          <Link2 className="h-4 w-4 text-[#0891B2] shrink-0 mt-0.5" />
+          <p className="text-sm text-[#94A3B8] leading-relaxed italic">{review.crossDecisionInsight}</p>
         </div>
       )}
 

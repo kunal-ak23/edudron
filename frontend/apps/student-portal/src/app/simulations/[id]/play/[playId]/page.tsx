@@ -15,6 +15,7 @@ import { FinancialReport } from '@/components/simulation/FinancialReport'
 import { PromotionCelebration } from '@/components/simulation/PromotionCelebration'
 import ConceptPanel from '@/components/simulation/ConceptPanel'
 import DashboardPanel from '@/components/simulation/DashboardPanel'
+import { PostDecisionFeedback } from '@/components/simulation/PostDecisionFeedback'
 import { HighlightedText, filterMatchingKeywords } from '@/components/simulation/HighlightedText'
 import { Button } from '@/components/ui/button'
 import { Loader2, ArrowLeft } from 'lucide-react'
@@ -56,9 +57,12 @@ export default function SimulationPlayPage() {
   const [error, setError] = useState<string | null>(null)
   const [showDecisionInput, setShowDecisionInput] = useState(false)
   const [lastReaction, setLastReaction] = useState<{ mood: string; text: string } | null>(null)
+  const [mobileScoreToast, setMobileScoreToast] = useState<{ delta: number; visible: boolean } | null>(null)
   const [openingNarrativeDone, setOpeningNarrativeDone] = useState(false)
   const [decisionNarrativeDone, setDecisionNarrativeDone] = useState(false)
   const [mobileTab, setMobileTab] = useState<MobileTab>('game')
+  const [budgetHistory, setBudgetHistory] = useState<number[]>([])
+  const [consecutiveStruggling, setConsecutiveStruggling] = useState(0)
   const revealTimerRef = useRef<number | null>(null)
 
   // Load simulation metadata (for concept)
@@ -107,6 +111,16 @@ export default function SimulationPlayPage() {
       return
     }
     if (data.phase === 'YEAR_END_REVIEW') {
+      // Record budget at year end for sparkline
+      if (data.currentBudget !== undefined && data.currentBudget !== null) {
+        setBudgetHistory((prev) => [...prev, data.currentBudget!])
+      }
+      // Track consecutive struggling years
+      if (data.performanceBand === 'STRUGGLING') {
+        setConsecutiveStruggling((prev) => prev + 1)
+      } else {
+        setConsecutiveStruggling(0)
+      }
       setPlayPhase('YEAR_TRANSITION')
       return
     }
@@ -178,6 +192,12 @@ export default function SimulationPlayPage() {
       }
 
       const newState = await simulationsApi.submitDecision(playId, input)
+
+      // Show mobile score toast
+      if (newState.scoreDelta !== undefined) {
+        setMobileScoreToast({ delta: newState.scoreDelta, visible: true })
+        setTimeout(() => setMobileScoreToast(null), 2000)
+      }
 
       // Show advisor reaction if returned from backend
       if (newState.advisorReaction) {
@@ -459,6 +479,8 @@ export default function SimulationPlayPage() {
                     badDecisionCount={state.badDecisionCount || 0}
                     neutralDecisionCount={state.neutralDecisionCount || 0}
                     keyInsights={state.keyInsights || []}
+                    consecutiveStruggling={consecutiveStruggling}
+                    budgetHistory={budgetHistory}
                   />
                 )}
               </div>
@@ -527,7 +549,15 @@ export default function SimulationPlayPage() {
 
         {playPhase === 'ADVISOR_REACTION' && lastReaction && state && (
           <div className="fixed bottom-16 left-0 right-0 px-4 z-40">
-            <div className="max-w-2xl mx-auto">
+            <div className="max-w-2xl mx-auto space-y-2">
+              {/* Post-decision feedback card (desktop) */}
+              <div className="hidden xl:block">
+                <PostDecisionFeedback
+                  scoreDelta={state.scoreDelta}
+                  impactDescription={state.impactDescription}
+                  metricImpacts={state.metricImpacts}
+                />
+              </div>
               <AdvisorDialog
                 mood={lastReaction.mood}
                 text={lastReaction.text}
@@ -535,6 +565,19 @@ export default function SimulationPlayPage() {
                 characterId={state.advisorDialog?.characterId}
                 onDismiss={() => transitionToPhase(state)}
               />
+            </div>
+          </div>
+        )}
+
+        {/* Mobile score toast — shown briefly after decision submission */}
+        {mobileScoreToast && (
+          <div className="xl:hidden fixed top-0 left-0 right-0 z-50 flex justify-center pt-2 px-4">
+            <div className={`w-full max-w-sm text-center py-2.5 px-4 rounded-full text-sm font-bold shadow-lg transition-opacity duration-300 ${
+              mobileScoreToast.delta >= 10 ? 'bg-green-700 text-white' :
+              mobileScoreToast.delta >= 5 ? 'bg-amber-600 text-white' :
+              'bg-slate-700 text-slate-300'
+            }`}>
+              {mobileScoreToast.delta > 0 ? `+${mobileScoreToast.delta}` : mobileScoreToast.delta} pts
             </div>
           </div>
         )}
