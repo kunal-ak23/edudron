@@ -123,10 +123,18 @@ public class SimulationGenerationService {
             // Throttle between phases
             try { Thread.sleep(5000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
 
+            // ── Phase 3.5: Consequence Weaving (1 AI call per year) ──
+            logger.info("Phase 3.5: Generating consequence weaving for {} years for {}", targetYears, simulationId);
+            Map<String, Object> consequenceWeaving = phaseConsequenceWeaving(
+                    concept, subject, targetYears, allYearDecisions, metrics);
+            logger.info("Phase 3.5 complete for {}", simulationId);
+
+            try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+
             // ── Phase 3: Year-End Reviews ──
             logger.info("Phase 3: Generating year-end reviews for {}", simulationId);
             Map<String, Object> yearEndReviews = phaseThreeYearEndReviews(
-                    concept, subject, targetYears, metrics);
+                    concept, subject, targetYears, metrics, consequenceWeaving, allYearDecisions);
             logger.info("Phase 3 complete for {}", simulationId);
 
             try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
@@ -141,13 +149,13 @@ public class SimulationGenerationService {
 
             // ── Phase 5: Debriefs ──
             logger.info("Phase 5: Generating final debriefs for {}", simulationId);
-            Map<String, Object> debriefs = phaseFiveDebriefs(concept, subject, audience, targetYears);
+            Map<String, Object> debriefs = phaseFiveDebriefs(concept, subject, audience, targetYears, allYearDecisions);
             logger.info("Phase 5 complete for {}", simulationId);
 
             // ── Phase 6: Validation ──
             logger.info("Phase 6: Validating structure for {}", simulationId);
             phaseSixValidate(targetYears, decisionsPerYear, roleProgression,
-                    allYearDecisions, yearEndReviews, openingNarratives, debriefs);
+                    allYearDecisions, yearEndReviews, openingNarratives, debriefs, consequenceWeaving);
             logger.info("Phase 6 complete for {}", simulationId);
 
             // ── Assembly ──
@@ -165,6 +173,7 @@ public class SimulationGenerationService {
                 simulationData.put("advisorCharacter", advisorCharacter);
             }
             simulationData.put("years", yearsList);
+            simulationData.put("consequenceWeaving", consequenceWeaving);
             simulationData.put("finalDebrief", debriefs);
 
             sim.setSimulationData(simulationData);
@@ -576,12 +585,129 @@ public class SimulationGenerationService {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Phase 3.5 — Consequence Weaving (1 AI call per year)
+    // ════════════════════════════════════════════════════════════════════
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> phaseConsequenceWeaving(
+            String concept, String subject,
+            int targetYears,
+            List<List<Map<String, Object>>> allYearDecisions,
+            Map<String, Object> metrics) {
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        List<Map<String, Object>> metricDefinitions = (List<Map<String, Object>>) metrics.get("definitions");
+
+        for (int year = 1; year <= targetYears; year++) {
+            List<Map<String, Object>> yearDecisions = year <= allYearDecisions.size()
+                    ? allYearDecisions.get(year - 1) : List.of();
+
+            // Build decisions JSON summary for prompt
+            StringBuilder decisionsJson = new StringBuilder("[");
+            for (int i = 0; i < yearDecisions.size(); i++) {
+                Map<String, Object> d = yearDecisions.get(i);
+                if (i > 0) decisionsJson.append(",");
+                decisionsJson.append("{\"decisionId\":\"").append(d.get("id")).append("\"")
+                        .append(",\"displayLabel\":\"").append(d.get("displayLabel")).append("\"")
+                        .append(",\"decisionType\":\"").append(d.get("decisionType")).append("\"")
+                        .append(",\"choices\":[");
+                List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
+                if (choices != null) {
+                    for (int j = 0; j < choices.size(); j++) {
+                        Map<String, Object> c = choices.get(j);
+                        if (j > 0) decisionsJson.append(",");
+                        decisionsJson.append("{\"id\":\"").append(c.get("id")).append("\"")
+                                .append(",\"quality\":").append(c.get("quality"))
+                                .append(",\"consequenceTag\":\"").append(c.getOrDefault("consequenceTag", "")).append("\"")
+                                .append(",\"impactDescription\":\"").append(
+                                        ((String) c.getOrDefault("impactDescription", "")).replace("\"", "'")).append("\"}");
+                    }
+                }
+                decisionsJson.append("]}");
+            }
+            decisionsJson.append("]");
+
+            StringBuilder metricIds = new StringBuilder();
+            if (metricDefinitions != null) {
+                for (Map<String, Object> def : metricDefinitions) {
+                    if (metricIds.length() > 0) metricIds.append(", ");
+                    metricIds.append(def.get("id"));
+                }
+            }
+
+            String systemPrompt = """
+                    You are creating consequence mappings for Year %d of a career simulation about %s in %s.
+
+                    Here are the decisions for this year:
+                    %s
+
+                    KPI metric IDs: %s
+
+                    For each decision, generate a "choiceQualities" object with quality_3, quality_2, quality_1 variants. Each variant has:
+                    - "boardImpact": 1 sentence — how the board reacts to this quality of decision
+                    - "teamImpact": 1 sentence — how the team is affected
+                    - "customerImpact": 1 sentence — how customers are affected
+
+                    Then generate "crossDecisionNarratives" showing how decisions INTERACT across the year:
+                    - "quality_high": 1-2 sentences for when most decisions were quality 3 (compound positive effect)
+                    - "quality_mixed": 1-2 sentences for mixed quality decisions (trade-offs and tensions)
+                    - "quality_low": 1-2 sentences for mostly quality 1 decisions (cumulative damage)
+
+                    Finally, generate "warningSignals":
+                    - "STRUGGLING": 1 sentence warning for when the student is performing poorly. Should feel like office gossip or a subtle hint from a colleague, not a game notification.
+
+                    Output strict JSON (no comments, no trailing commas):
+                    {
+                      "decisionConsequenceMap": [
+                        {
+                          "decisionId": "y1_d1",
+                          "choiceQualities": {
+                            "quality_3": {"boardImpact": "...", "teamImpact": "...", "customerImpact": "..."},
+                            "quality_2": {"boardImpact": "...", "teamImpact": "...", "customerImpact": "..."},
+                            "quality_1": {"boardImpact": "...", "teamImpact": "...", "customerImpact": "..."}
+                          }
+                        }
+                      ],
+                      "crossDecisionNarratives": {
+                        "quality_high": "...",
+                        "quality_mixed": "...",
+                        "quality_low": "..."
+                      },
+                      "warningSignals": {
+                        "STRUGGLING": "..."
+                      }
+                    }
+                    """.formatted(year, concept, subject, decisionsJson, metricIds);
+
+            String userPrompt = "Generate consequence mappings for Year " + year + ". Return ONLY the JSON object.";
+
+            try {
+                String response = foundryAIService.callOpenAI(systemPrompt, userPrompt);
+                String json = extractJsonObject(response);
+                Map<String, Object> yearResult = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+                result.put("year" + year, yearResult);
+                logger.info("Phase 3.5: Year {} consequence weaving generated OK", year);
+            } catch (Exception e) {
+                logger.warn("Phase 3.5: Year {} consequence weaving failed, skipping: {}", year, e.getMessage());
+                result.put("year" + year, Map.of());
+            }
+
+            if (year < targetYears) {
+                try { Thread.sleep(3000); } catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
+            }
+        }
+
+        return result;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Phase 3 — Year-End Reviews (1-2 AI calls)
     // ════════════════════════════════════════════════════════════════════
 
     @SuppressWarnings("unchecked")
     private Map<String, Object> phaseThreeYearEndReviews(
-            String concept, String subject, int targetYears, Map<String, Object> metrics) {
+            String concept, String subject, int targetYears, Map<String, Object> metrics,
+            Map<String, Object> consequenceWeaving, List<List<Map<String, Object>>> allYearDecisions) {
 
         List<Map<String, Object>> definitions = (List<Map<String, Object>>) metrics.get("definitions");
         StringBuilder metricIds = new StringBuilder();
@@ -598,14 +724,14 @@ public class SimulationGenerationService {
         if (targetYears <= 4) {
             // Single AI call for all years
             return generateYearEndReviewsBatch(concept, subject, 1, targetYears,
-                    metricIds.toString(), startValues.toString());
+                    metricIds.toString(), startValues.toString(), consequenceWeaving, allYearDecisions);
         } else {
             // Split into 2 calls
             int splitAt = targetYears / 2;
             Map<String, Object> firstHalf = generateYearEndReviewsBatch(concept, subject,
-                    1, splitAt, metricIds.toString(), startValues.toString());
+                    1, splitAt, metricIds.toString(), startValues.toString(), consequenceWeaving, allYearDecisions);
             Map<String, Object> secondHalf = generateYearEndReviewsBatch(concept, subject,
-                    splitAt + 1, targetYears, metricIds.toString(), startValues.toString());
+                    splitAt + 1, targetYears, metricIds.toString(), startValues.toString(), consequenceWeaving, allYearDecisions);
 
             // Merge
             Map<String, Object> merged = new LinkedHashMap<>(firstHalf);
@@ -614,14 +740,39 @@ public class SimulationGenerationService {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private Map<String, Object> generateYearEndReviewsBatch(
             String concept, String subject,
             int fromYear, int toYear,
-            String metricIds, String startValues) {
+            String metricIds, String startValues,
+            Map<String, Object> consequenceWeaving,
+            List<List<Map<String, Object>>> allYearDecisions) {
 
         String yearRange = fromYear == toYear
                 ? "year " + fromYear
                 : "years " + fromYear + " to " + toYear;
+
+        // Build consequence context for each year in this batch
+        StringBuilder consequenceContext = new StringBuilder();
+        for (int y = fromYear; y <= toYear; y++) {
+            Map<String, Object> yearWeaving = consequenceWeaving != null
+                    ? (Map<String, Object>) consequenceWeaving.get("year" + y) : null;
+            List<Map<String, Object>> yearDecisions = (y <= allYearDecisions.size())
+                    ? allYearDecisions.get(y - 1) : List.of();
+
+            consequenceContext.append("\nYear ").append(y).append(" Decision Decisions:\n");
+            for (Map<String, Object> d : yearDecisions) {
+                consequenceContext.append("  - ").append(d.get("displayLabel"))
+                        .append(" (id: ").append(d.get("id")).append(")\n");
+            }
+            if (yearWeaving != null && !yearWeaving.isEmpty()) {
+                consequenceContext.append("Year ").append(y).append(" Consequence Weaving:\n");
+                consequenceContext.append("  crossDecisionNarratives: ")
+                        .append(yearWeaving.get("crossDecisionNarratives")).append("\n");
+                consequenceContext.append("  warningSignals: ")
+                        .append(yearWeaving.get("warningSignals")).append("\n");
+            }
+        }
 
         String systemPrompt = """
                 Generate year-end reviews for a career simulation about %s in %s.
@@ -634,22 +785,30 @@ public class SimulationGenerationService {
                 Metric IDs: %s
                 Starting values: %s
 
+                CONSEQUENCE CONTEXT (use this to make feedback specific to individual decisions):
+                %s
+
+                For each variant, you MUST also include:
+                1. "decisionHighlights": array — one entry per decision showing its impact:
+                   [{"decisionId": "y1_d1", "label": "displayLabel", "impact": "positive|negative|neutral", "summary": "1 sentence"}]
+                   Reference at least 2 specific decisions in the feedback text.
+                2. "crossDecisionInsight": 1-2 sentences showing how decisions interacted (compound effects).
+                3. For the POOR variant only: "warningSignal" — use the STRUGGLING warning signal from consequence weaving data if available.
+
                 Output JSON:
                 {
                   "year1": {
                     "STRONG": {
                       "metrics": {"revenue": 52, "margin": 23},
-                      "feedback": {
-                        "board": "...",
-                        "customers": "...",
-                        "investors": "..."
-                      }
+                      "feedback": {"board": "...", "customers": "...", "investors": "..."},
+                      "decisionHighlights": [{"decisionId": "y1_d1", "label": "Budget Planning", "impact": "positive", "summary": "..."}],
+                      "crossDecisionInsight": "..."
                     },
-                    "MID": { ... },
-                    "POOR": { ... }
+                    "MID": { "metrics": {...}, "feedback": {...}, "decisionHighlights": [...], "crossDecisionInsight": "..." },
+                    "POOR": { "metrics": {...}, "feedback": {...}, "decisionHighlights": [...], "crossDecisionInsight": "...", "warningSignal": "..." }
                   }
                 }
-                """.formatted(concept, subject, yearRange, metricIds, startValues);
+                """.formatted(concept, subject, yearRange, metricIds, startValues, consequenceContext);
 
         String userPrompt = "Generate the year-end reviews for " + yearRange +
                 ". Return ONLY the JSON object, no additional text.";
@@ -709,11 +868,43 @@ public class SimulationGenerationService {
     // Phase 5 — Debriefs (1 AI call)
     // ════════════════════════════════════════════════════════════════════
 
+    @SuppressWarnings("unchecked")
     private Map<String, Object> phaseFiveDebriefs(
-            String concept, String subject, String audience, int targetYears) {
+            String concept, String subject, String audience, int targetYears,
+            List<List<Map<String, Object>>> allYearDecisions) {
+
+        // Build a summary of all decisions with consequence data for the prompt
+        StringBuilder allDecisionsJson = new StringBuilder("[");
+        boolean firstDecision = true;
+        for (int y = 0; y < allYearDecisions.size(); y++) {
+            for (Map<String, Object> d : allYearDecisions.get(y)) {
+                if (!firstDecision) allDecisionsJson.append(",");
+                firstDecision = false;
+                allDecisionsJson.append("{\"decisionId\":\"").append(d.get("id")).append("\"")
+                        .append(",\"displayLabel\":\"").append(d.getOrDefault("displayLabel", "")).append("\"")
+                        .append(",\"choices\":[");
+                List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
+                if (choices != null) {
+                    for (int j = 0; j < choices.size(); j++) {
+                        Map<String, Object> c = choices.get(j);
+                        if (j > 0) allDecisionsJson.append(",");
+                        allDecisionsJson.append("{\"id\":\"").append(c.get("id")).append("\"")
+                                .append(",\"quality\":").append(c.get("quality"))
+                                .append(",\"consequenceTag\":\"").append(c.getOrDefault("consequenceTag", "")).append("\"")
+                                .append(",\"impactDescription\":\"")
+                                .append(((String) c.getOrDefault("impactDescription", "")).replace("\"", "'")).append("\"}");
+                    }
+                }
+                allDecisionsJson.append("]}");
+            }
+        }
+        allDecisionsJson.append("]");
 
         String systemPrompt = """
                 Generate final debriefs for a %d-year career simulation about %s in %s for %s students.
+
+                ALL DECISIONS WITH CONSEQUENCES:
+                %s
 
                 Create 4 variants:
                 1. THRIVING — student did excellently across their career
@@ -724,17 +915,26 @@ public class SimulationGenerationService {
                 Each debrief has:
                 - yourPath: Neutral summary of their journey (2-3 sentences)
                 - conceptAtWork: NOW name the concept (%s) for the first time. Explain how it was embedded in every decision they made. This is the reveal moment.
-                - theGap: Observation about the distance between their intuitive reasoning and the formal concept
+                - theGap: Observation about the distance between their intuitive reasoning and the formal concept. MUST reference 2-3 specific decisions by displayLabel where behavior diverged from the concept.
                 - playAgain: Invitation to replay with a different strategy
+
+                NEW FIELDS — generate these for each variant:
+                - "decisionBreakdown": array — one entry per decision:
+                  {"decisionId": "y1_d2", "label": "displayLabel", "quality": 3, "whatHappened": "1-2 sentences describing the consequence of the assumed choice", "conceptLesson": "1 sentence linking this decision to %s using course-specific terminology"}
+                  For THRIVING: assume mostly quality 3 with 1-2 quality 2 decisions
+                  For STEADY: assume mix of quality 2 and 3
+                  For STRUGGLING: assume mostly quality 1-2
+                  For FIRED: assume mostly quality 1
+                - "patternAnalysis": 2-3 sentences identifying the decision-making pattern across years. Name the pattern using course terminology (e.g., "success trap", "risk aversion cascade"). Show how it evolved across years and connect to a specific course concept.
 
                 Output JSON:
                 {
-                  "THRIVING": {"yourPath": "...", "conceptAtWork": "...", "theGap": "...", "playAgain": "..."},
+                  "THRIVING": {"yourPath": "...", "conceptAtWork": "...", "theGap": "...", "playAgain": "...", "decisionBreakdown": [...], "patternAnalysis": "..."},
                   "STEADY": { ... },
                   "STRUGGLING": { ... },
                   "FIRED": { ... }
                 }
-                """.formatted(targetYears, concept, subject, audience, concept);
+                """.formatted(targetYears, concept, subject, audience, allDecisionsJson, concept, concept);
 
         String userPrompt = "Generate the 4 debrief variants. Return ONLY the JSON object, no additional text.";
 
@@ -759,7 +959,8 @@ public class SimulationGenerationService {
             List<List<Map<String, Object>>> allYearDecisions,
             Map<String, Object> yearEndReviews,
             Map<String, Object> openingNarratives,
-            Map<String, Object> debriefs) {
+            Map<String, Object> debriefs,
+            Map<String, Object> consequenceWeaving) {
 
         List<String> errors = new ArrayList<>();
 
@@ -774,29 +975,83 @@ public class SimulationGenerationService {
             errors.add("Expected " + targetYears + " years of decisions but got " + allYearDecisions.size());
         }
         for (int y = 0; y < allYearDecisions.size(); y++) {
+            int yearNum = y + 1;
             List<Map<String, Object>> decisions = allYearDecisions.get(y);
             if (decisions.size() != decisionsPerYear) {
-                errors.add("Year " + (y + 1) + " has " + decisions.size() +
+                errors.add("Year " + yearNum + " has " + decisions.size() +
                         " decisions but expected " + decisionsPerYear);
             }
-            // Every decision has choices with quality scores
+            // Every decision has choices with quality scores and new consequence fields
             for (int d = 0; d < decisions.size(); d++) {
                 Map<String, Object> decision = decisions.get(d);
+                String did = (String) decision.getOrDefault("id", "y" + yearNum + "_d" + (d+1));
                 List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");
                 if (choices == null || choices.isEmpty()) {
-                    errors.add("Year " + (y + 1) + " decision " + (d + 1) + " has no choices");
+                    errors.add("Year " + yearNum + " decision " + (d + 1) + " has no choices");
                 } else {
                     for (Map<String, Object> choice : choices) {
                         if (choice.get("quality") == null) {
-                            errors.add("Year " + (y + 1) + " decision " + (d + 1) +
-                                    " choice " + choice.get("id") + " missing quality score");
+                            errors.add(did + " choice " + choice.get("id") + " missing quality score");
                         }
+                        if (choice.get("consequenceTag") == null) {
+                            errors.add(did + " choice " + choice.get("id") + " missing consequenceTag");
+                        }
+                        if (choice.get("impactDescription") == null) {
+                            errors.add(did + " choice " + choice.get("id") + " missing impactDescription");
+                        }
+                        List<?> metricImpacts = (List<?>) choice.get("metricImpacts");
+                        if (metricImpacts == null || metricImpacts.isEmpty()) {
+                            errors.add(did + " choice " + choice.get("id") + " missing metricImpacts");
+                        }
+                    }
+                }
+                // Mentor guidance validation for years 1-3
+                if (yearNum <= 3) {
+                    Map<String, Object> mg = (Map<String, Object>) decision.get("mentorGuidance");
+                    if (mg == null) {
+                        errors.add(did + ": missing mentorGuidance (required for years 1-3)");
+                    } else {
+                        for (String field : new String[]{"courseConnection", "realWorldExample", "mentorNote", "mentorTip"}) {
+                            if (mg.get(field) == null) {
+                                errors.add(did + ": mentorGuidance missing field: " + field);
+                            }
+                        }
+                        if (mg.get("choiceHints") == null) {
+                            errors.add(did + ": mentorGuidance missing choiceHints");
+                        }
+                    }
+                }
+            }
+
+            // Consequence weaving validation
+            String yearKey = "year" + yearNum;
+            if (consequenceWeaving != null) {
+                Map<String, Object> yearWeaving = (Map<String, Object>) consequenceWeaving.get(yearKey);
+                if (yearWeaving == null || yearWeaving.isEmpty()) {
+                    errors.add(yearKey + ": missing consequenceWeaving data");
+                } else {
+                    if (yearWeaving.get("decisionConsequenceMap") == null) {
+                        errors.add(yearKey + ": consequenceWeaving missing decisionConsequenceMap");
+                    }
+                    Map<String, Object> crossNarratives = (Map<String, Object>) yearWeaving.get("crossDecisionNarratives");
+                    if (crossNarratives == null) {
+                        errors.add(yearKey + ": consequenceWeaving missing crossDecisionNarratives");
+                    } else {
+                        for (String variant : new String[]{"quality_high", "quality_mixed", "quality_low"}) {
+                            if (crossNarratives.get(variant) == null) {
+                                errors.add(yearKey + ": crossDecisionNarratives missing variant: " + variant);
+                            }
+                        }
+                    }
+                    Map<String, Object> warningSignals = (Map<String, Object>) yearWeaving.get("warningSignals");
+                    if (warningSignals == null || warningSignals.get("STRUGGLING") == null) {
+                        errors.add(yearKey + ": consequenceWeaving missing warningSignals.STRUGGLING");
                     }
                 }
             }
         }
 
-        // Every year has yearEndReview with 3 variants
+        // Every year has yearEndReview with 3 variants and new fields
         for (int y = 1; y <= targetYears; y++) {
             String key = "year" + y;
             Object review = yearEndReviews.get(key);
@@ -807,6 +1062,16 @@ public class SimulationGenerationService {
                 for (String variant : new String[]{"STRONG", "MID", "POOR"}) {
                     if (!reviewMap.containsKey(variant)) {
                         errors.add(key + " year-end review missing variant: " + variant);
+                    } else {
+                        Map<String, Object> variantMap = (Map<String, Object>) reviewMap.get(variant);
+                        if (variantMap != null) {
+                            if (variantMap.get("decisionHighlights") == null) {
+                                errors.add(key + " " + variant + ": missing decisionHighlights");
+                            }
+                            if (variantMap.get("crossDecisionInsight") == null) {
+                                errors.add(key + " " + variant + ": missing crossDecisionInsight");
+                            }
+                        }
                     }
                 }
             }
@@ -828,10 +1093,20 @@ public class SimulationGenerationService {
             }
         }
 
-        // All 4 debrief variants exist
+        // All 4 debrief variants exist with new fields
         for (String variant : new String[]{"THRIVING", "STEADY", "STRUGGLING", "FIRED"}) {
             if (!debriefs.containsKey(variant)) {
                 errors.add("Missing debrief variant: " + variant);
+            } else {
+                Map<String, Object> debriefVariant = (Map<String, Object>) debriefs.get(variant);
+                if (debriefVariant != null) {
+                    if (debriefVariant.get("decisionBreakdown") == null) {
+                        errors.add("Debrief " + variant + ": missing decisionBreakdown");
+                    }
+                    if (debriefVariant.get("patternAnalysis") == null) {
+                        errors.add("Debrief " + variant + ": missing patternAnalysis");
+                    }
+                }
             }
         }
 
