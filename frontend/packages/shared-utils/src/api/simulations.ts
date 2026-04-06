@@ -266,13 +266,6 @@ export class SimulationsApi {
     await this.apiClient.post(`/content/api/simulations/play/${playId}/abandon`, {})
   }
 
-  async regenerateMentorGuidance(id: string): Promise<{ status: string; message: string }> {
-    const response = await this.apiClient.post<{ status: string; message: string }>(
-      `/content/api/simulations/${id}/regenerate-mentor-guidance`, {}, { timeout: 120000 }
-    )
-    return response.data
-  }
-
   async exportSimulation(id: string): Promise<SimulationExportDTO> {
     const response = await this.apiClient.post<SimulationExportDTO>(`/content/api/simulations/${id}/export`, {})
     return response.data

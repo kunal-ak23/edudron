@@ -13,7 +13,6 @@ import com.datagami.edudron.content.simulation.dto.SimulationExportDTO;
 import com.datagami.edudron.content.simulation.dto.SimulationSuggestionRequest;
 import com.datagami.edudron.content.simulation.dto.SimulationSuggestionResponse;
 import com.datagami.edudron.content.simulation.repo.SimulationRepository;
-import com.datagami.edudron.content.simulation.service.SimulationGenerationService;
 import com.datagami.edudron.content.simulation.service.SimulationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -54,9 +53,6 @@ public class SimulationAdminController {
 
     @Autowired
     private SimulationService simulationService;
-
-    @Autowired
-    private SimulationGenerationService simulationGenerationService;
 
     @Autowired
     private AIJobQueueService aiJobQueueService;
@@ -312,14 +308,6 @@ public class SimulationAdminController {
         requireAdmin();
         requireSimulationEnabled(TenantContext.getClientId());
         return ResponseEntity.ok(simulationService.moveToPublished(id));
-    }
-
-    @PostMapping("/{id}/regenerate-mentor-guidance")
-    @Operation(summary = "Regenerate mentor guidance", description = "Re-run mentor enrichment (Phase 5.5) on an existing simulation without changing decisions")
-    public ResponseEntity<Map<String, String>> regenerateMentorGuidance(@PathVariable String id) {
-        requireAdmin();
-        simulationGenerationService.regenerateMentorGuidance(id);
-        return ResponseEntity.ok(Map.of("status", "success", "message", "Mentor guidance regenerated"));
     }
 
     @PostMapping("/{id}/export")

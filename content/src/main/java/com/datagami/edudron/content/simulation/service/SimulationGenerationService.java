@@ -144,13 +144,6 @@ public class SimulationGenerationService {
             Map<String, Object> debriefs = phaseFiveDebriefs(concept, subject, audience, targetYears);
             logger.info("Phase 5 complete for {}", simulationId);
 
-            // ── Phase 5.5: Mentor Enrichment (guided years 1-2, fading year 3) ──
-            int guidedYears = Math.min(3, targetYears);
-            logger.info("Phase 5.5: Generating mentor guidance for years 1-{} for {}", guidedYears, simulationId);
-            try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-            phaseMentorEnrichment(concept, subject, audience, guidedYears, allYearDecisions);
-            logger.info("Phase 5.5 complete for {}", simulationId);
-
             // ── Phase 6: Validation ──
             logger.info("Phase 6: Validating structure for {}", simulationId);
             phaseSixValidate(targetYears, decisionsPerYear, roleProgression,
@@ -293,6 +286,27 @@ public class SimulationGenerationService {
                 sb.append("                You may adapt the department labels and descriptions to the domain, but the \"id\" field MUST match exactly.");
                 deptInstruction = sb.toString();
             }
+        }
+
+        // Mentor guidance instruction — only for years 1-3
+        String mentorGuidanceInstruction = "";
+        if (year <= 3) {
+            String guidanceLevel = year <= 2 ? "FULL" : "LIGHT";
+            mentorGuidanceInstruction = """
+                    MENTOR GUIDANCE (Years 1-3 only — do NOT include for year 4+):
+                    For each decision in this year, ALSO generate a "mentorGuidance" object alongside the other decision fields:
+                    {
+                      "courseConnection": "One sentence linking this decision to a specific course concept/theory from [subject]",
+                      "realWorldExample": "1-2 sentences about a real company that faced this exact type of decision. Name the company, year, and outcome.",
+                      "mentorNote": "1-sentence in-character note from the mentor. Year 1: warm/patient. Year 2: urgent. Year 3: written note left behind.",
+                      "mentorTip": "1-2 sentence ACTIONABLE tip. Not theory — specific to THIS decision's config. Reference actual values, departments, or candidates from the decisionConfig.",
+                      "choiceHints": { for EACH choice ID: {"hint": "what this choice likely leads to (1 sentence)", "risk": "low|medium|high"} },
+                      "stakeholderHints": (STAKEHOLDER_MEETING only) { for each stakeholder ID: {"hint": "why meeting this person is valuable", "priority": "high|medium|low"} },
+                      "candidateHints": (HIRE_FIRE only) { for each candidate ID: {"hint": "what this person brings to the team", "fit": "strong|moderate|weak"} },
+                      "guidanceLevel": "%s"
+                    }
+                    For years 4+: do NOT include mentorGuidance on any decision.
+                    """.formatted(guidanceLevel);
         }
 
         String systemPrompt = """
@@ -441,9 +455,17 @@ public class SimulationGenerationService {
                 context to reason about the decision. One-liners are NEVER acceptable for any description field.
                 The student is making consequential decisions — they need details, not summaries.
 
+                CHOICE CONSEQUENCE FIELDS — REQUIRED ON EVERY CHOICE:
+                Each choice MUST also include:
+                - "consequenceTag": a unique camelCase label describing this choice's effect (e.g., "aggressiveRdSpend", "conservativeHiring"). Must be unique across ALL choices in this year's simulation.
+                - "impactDescription": 1-2 sentences describing what happens AFTER the player picks this choice. Written in second person ("Your R&D team delivers..."). Vivid and specific to this scenario, not generic.
+                - "metricImpacts": array of {metric: string (matching a KPI id from Phase 1), direction: "up"|"down"|"neutral", magnitude: "strong"|"moderate"|"slight"}. At least 2 metrics impacted per choice.
+
                 For NPC characterIds (npcCharacterId, candidate characterId, stakeholder characterId),
                 pick from: "mentor_female_1", "exec_male_1", "tech_young_1", "medical_female_1".
                 Try to use different characters for different NPCs within the same year.
+
+                %s
 
                 Output a JSON array of decisions. Use "yYEAR_dN" as the ID pattern (e.g., "y{YEAR}_d1", "y{YEAR}_d2"):
                 [
@@ -458,14 +480,14 @@ public class SimulationGenerationService {
                     "advisorReaction": {"quality_3": {"mood": "excited", "text": "..."}, "quality_2": {"mood": "neutral", "text": "..."}, "quality_1": {"mood": "disappointed", "text": "..."}},
                     "decisionConfig": { ... },
                     "choices": [
-                      {"id": "y{YEAR}_d1_a", "text": "2-3 sentence choice describing what the student would do and its immediate implications", "quality": 1},
-                      {"id": "y{YEAR}_d1_b", "text": "2-3 sentence choice — NOT one-liners. Each choice must explain the action AND hint at trade-offs", "quality": 2},
-                      {"id": "y{YEAR}_d1_c", "text": "2-3 sentence choice with enough detail that the student understands what they're committing to", "quality": 3}
+                      {"id": "y{YEAR}_d1_a", "text": "2-3 sentence choice describing what the student would do and its immediate implications", "quality": 1, "consequenceTag": "exampleConservativeApproach", "impactDescription": "Your team executes cautiously, preserving cash but missing the market window.", "metricImpacts": [{"metric": "revenue", "direction": "down", "magnitude": "slight"}, {"metric": "margin", "direction": "up", "magnitude": "moderate"}]},
+                      {"id": "y{YEAR}_d1_b", "text": "2-3 sentence choice — NOT one-liners. Each choice must explain the action AND hint at trade-offs", "quality": 2, "consequenceTag": "exampleBalancedApproach", "impactDescription": "Your team delivers on time, but growth is slower than the board hoped.", "metricImpacts": [{"metric": "revenue", "direction": "up", "magnitude": "slight"}, {"metric": "margin", "direction": "neutral", "magnitude": "slight"}]},
+                      {"id": "y{YEAR}_d1_c", "text": "2-3 sentence choice with enough detail that the student understands what they're committing to", "quality": 3, "consequenceTag": "exampleAggressiveInvestment", "impactDescription": "Your bold investment pays off — the product launches ahead of schedule and captures key market share.", "metricImpacts": [{"metric": "revenue", "direction": "up", "magnitude": "strong"}, {"metric": "margin", "direction": "down", "magnitude": "moderate"}]}
                     ]
                   }
                 ]
                 """.formatted(year, targetYears, concept, subject,
-                currentTitle, previousContext, decisionsPerYear, deptInstruction)
+                currentTitle, previousContext, decisionsPerYear, deptInstruction, mentorGuidanceInstruction)
                 .replace("{YEAR}", String.valueOf(year));
 
         String userPrompt = "Generate the " + decisionsPerYear + " decisions for Year " + year +
@@ -848,10 +870,28 @@ public class SimulationGenerationService {
                 continue;
             }
 
-            // All choices must have quality scores
+            // All choices must have quality scores and new consequence fields
+            java.util.Set<String> seenConsequenceTags = new java.util.HashSet<>();
             for (Map<String, Object> c : choices) {
+                String cid = (String) c.getOrDefault("id", "unknown");
                 if (c.get("quality") == null) {
-                    issues.add(did + ": choice " + c.get("id") + " missing quality");
+                    issues.add(did + ": choice " + cid + " missing quality");
+                }
+                if (c.get("consequenceTag") == null || ((String) c.get("consequenceTag")).isBlank()) {
+                    issues.add(did + ": choice " + cid + " missing consequenceTag");
+                } else {
+                    String tag = (String) c.get("consequenceTag");
+                    if (!seenConsequenceTags.add(tag)) {
+                        issues.add(did + ": duplicate consequenceTag '" + tag + "'");
+                    }
+                }
+                if (c.get("impactDescription") == null || ((String) c.get("impactDescription")).isBlank()) {
+                    issues.add(did + ": choice " + cid + " missing impactDescription");
+                }
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> metricImpacts = (List<Map<String, Object>>) c.get("metricImpacts");
+                if (metricImpacts == null || metricImpacts.isEmpty()) {
+                    issues.add(did + ": choice " + cid + " missing metricImpacts");
                 }
             }
 
@@ -885,445 +925,6 @@ public class SimulationGenerationService {
         return issues;
     }
 
-    /**
-     * Backfill mentor guidance on an existing simulation without regenerating anything else.
-     * Loads simulation in one transaction, runs AI call outside any transaction (to avoid
-     * holding a DB connection during the 60s+ AI call), then saves in a second transaction.
-     */
-    @SuppressWarnings("unchecked")
-    public void regenerateMentorGuidance(String simulationId) {
-        // Step 1: Load simulation data (short transaction, auto-committed by repository)
-        Simulation sim = simulationRepository.findById(simulationId)
-                .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));
-
-        Map<String, Object> simData = sim.getSimulationData();
-        if (simData == null) {
-            throw new IllegalStateException("Simulation has no generated data");
-        }
-
-        String concept = sim.getConcept();
-        String subject = sim.getSubject();
-        String audience = sim.getAudience();
-        int targetYears = sim.getTargetYears();
-        int guidedYears = Math.min(3, targetYears);
-
-        List<Map<String, Object>> yearsList = (List<Map<String, Object>>) simData.get("years");
-        if (yearsList == null || yearsList.isEmpty()) {
-            throw new IllegalStateException("Simulation has no years data");
-        }
-
-        logger.info("Loaded simulation: concept={}, subject={}, targetYears={}", concept, subject, targetYears);
-
-        List<List<Map<String, Object>>> allYearDecisions = new ArrayList<>();
-        for (Map<String, Object> yearData : yearsList) {
-            List<Map<String, Object>> decisions = (List<Map<String, Object>>) yearData.get("decisions");
-            allYearDecisions.add(decisions != null ? decisions : List.of());
-        }
-
-        for (int y = 0; y < allYearDecisions.size(); y++) {
-            logger.info("  Year {} has {} decisions", y + 1, allYearDecisions.get(y).size());
-        }
-
-        // Step 2: Run AI enrichment OUTSIDE any transaction (no DB connection held)
-        logger.info("Regenerating mentor guidance for simulation {} (years 1-{})", simulationId, guidedYears);
-        phaseMentorEnrichment(concept, subject, audience, guidedYears, allYearDecisions);
-
-        // Step 3: Save enriched data (short transaction)
-        sim.setSimulationData(simData);
-        simulationRepository.save(sim);
-        logger.info("Mentor guidance regenerated for simulation {}", simulationId);
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    // Phase 5.5 — Mentor Enrichment for guided years
-    // ════════════════════════════════════════════════════════════════════
-
-    @SuppressWarnings("unchecked")
-    private void phaseMentorEnrichment(
-            String concept, String subject, String audience,
-            int guidedYears,
-            List<List<Map<String, Object>>> allYearDecisions) {
-
-        // Build a compact summary of all decisions for the guided years
-        StringBuilder decisionsSummary = new StringBuilder();
-        for (int y = 0; y < guidedYears && y < allYearDecisions.size(); y++) {
-            List<Map<String, Object>> yearDecisions = allYearDecisions.get(y);
-            decisionsSummary.append("Year ").append(y + 1).append(":\n");
-            for (Map<String, Object> d : yearDecisions) {
-                decisionsSummary.append("  ").append(d.get("id")).append(" (").append(d.get("decisionType")).append("): ");
-                decisionsSummary.append(((String) d.getOrDefault("narrative", "")).substring(0,
-                    Math.min(120, ((String) d.getOrDefault("narrative", "")).length()))).append("...\n");
-                decisionsSummary.append("  Choices: ");
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
-                if (choices != null) {
-                    for (Map<String, Object> c : choices) {
-                        decisionsSummary.append("[").append(c.get("id")).append(": ")
-                            .append(((String) c.getOrDefault("text", "")).substring(0,
-                                Math.min(60, ((String) c.getOrDefault("text", "")).length())))
-                            .append("...] ");
-                    }
-                }
-                decisionsSummary.append("\n");
-                // Include stakeholder/candidate names for context (priorities computed deterministically)
-                Map<String, Object> config = (Map<String, Object>) d.get("decisionConfig");
-                if (config != null) {
-                    List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
-                    if (stakeholders != null) {
-                        decisionsSummary.append("  Stakeholders: ");
-                        for (Map<String, Object> s : stakeholders) {
-                            decisionsSummary.append("[").append(s.get("name")).append(" - ").append(s.get("role")).append("] ");
-                        }
-                        decisionsSummary.append("\n");
-                    }
-                    List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
-                    if (candidates != null) {
-                        decisionsSummary.append("  Candidates: ");
-                        for (Map<String, Object> c : candidates) {
-                            decisionsSummary.append("[").append(c.get("name")).append(" - ").append(c.get("title")).append("] ");
-                        }
-                        decisionsSummary.append("\n");
-                    }
-                }
-            }
-        }
-
-        logger.info("Phase 5.5 prompt summary length: {} chars", decisionsSummary.length());
-
-        String guidanceLevel = guidedYears >= 3
-            ? "Years 1-2: FULL guidance (always visible). Year 3: LIGHT guidance (hints available on request — shorter, less specific)."
-            : "All years: FULL guidance (always visible).";
-
-        String systemPrompt = """
-                You are a course mentor creating learning guidance for a career simulation about %s in %s for %s students.
-
-                The simulation teaches the concept through experiential decisions. For the first %d years,
-                students receive mentor guidance to reinforce course learnings.
-
-                %s
-
-                MENTOR RETIREMENT STORY ARC:
-                The mentor is a seasoned veteran who has announced retirement in 2 years. This shapes the tone:
-                - Year 1: The mentor is actively present. Guidance is warm, patient, and detailed.
-                  Voice: "Let me walk you through this..." / "In my 30 years, I've seen this play out..."
-                  Include rich real-world examples and thorough explanations.
-                - Year 2: The mentor is still present but departure looms. Tone becomes more urgent and focused.
-                  Voice: "Pay close attention here — I won't be around next year to explain this..."
-                  / "This is one of the most important lessons I can give you before I go..."
-                  Guidance is still detailed but emphasizes what matters most.
-                - Year 3 (if included): The mentor has retired. Guidance feels like written notes left behind.
-                  Voice: "Before I left, I jotted down some thoughts on situations like this..."
-                  / "You'll find my notes on this topic in the margin..."
-                  Hints are shorter, vaguer — enough to point direction but not hold hands.
-
-                For each decision, generate:
-                1. "courseConnection": One sentence linking this decision to a specific course concept or theory
-                   (e.g., "This tests your understanding of Porter's Five Forces from Chapter 3.")
-                2. "realWorldExample": 1-2 sentences describing a real company/scenario that faced this exact type of decision
-                   (e.g., "When Spotify expanded to India in 2019, they faced a similar market entry budget question...")
-                   For Year 1-2: detailed and specific. For Year 3: briefer, just a pointer.
-                3. "choiceHints": For EACH choice ID, provide:
-                   - "hint": What this choice likely leads to (1 sentence, practical consequence)
-                   - "risk": "low", "medium", or "high"
-                   For Year 1: warm, educational hints. Year 2: direct, no-nonsense. Year 3: vague pointers.
-                4. "mentorNote": A 1-sentence in-character note from the mentor, written in their voice for that year.
-                   Year 1: encouraging teaching. Year 2: urgent wisdom. Year 3: a brief scribbled note.
-                5. "mentorTip": A 1-2 sentence ACTIONABLE tip for what to consider in this specific decision.
-                   Not abstract theory — concrete advice like "Look at who has the most relevant domain expertise"
-                   or "Consider which allocation balances short-term revenue with long-term growth".
-                   This helps the student understand WHAT TO DO, not just the theory behind it.
-                6. For STAKEHOLDER_MEETING decisions: also include "stakeholderHints" keyed by stakeholder ID:
-                   {"stakeholder_id": {"hint": "Why meeting this person could be valuable", "priority": "high|medium|low"}}
-                7. For HIRE_FIRE decisions: also include "candidateHints" keyed by candidate ID:
-                   {"candidate_id": {"hint": "What this person brings to the team", "fit": "strong|moderate|weak"}}
-
-                IMPORTANT RULES:
-                - Choice hints should educate, not give away the answer. Frame consequences
-                  in terms of trade-offs, not "this is right/wrong". Even the best choice has downsides.
-                - For stakeholderHints and candidateHints: focus on educational value of the hint text.
-                  The priority/fit labels will be computed separately — just provide useful "hint" text
-                  explaining what each person brings to the table.
-
-                Here are the decisions to enrich:
-
-                %s
-
-                Output JSON keyed by decision ID:
-                {
-                  "y1_d1": {
-                    "courseConnection": "...",
-                    "realWorldExample": "...",
-                    "mentorNote": "...",
-                    "mentorTip": "...",
-                    "choiceHints": {
-                      "y1_d1_a": {"hint": "Conservative approach preserves cash but may slow growth", "risk": "low"},
-                      "y1_d1_b": {"hint": "Balanced spend, but market timing is uncertain", "risk": "medium"},
-                      "y1_d1_c": {"hint": "Aggressive investment could capture market share or drain reserves", "risk": "high"}
-                    },
-                    "stakeholderHints": {
-                      "stakeholder_1": {"hint": "Has deep domain expertise in the area you need", "priority": "high"}
-                    },
-                    "candidateHints": {
-                      "candidate_1": {"hint": "Strong technical skills but limited leadership experience", "fit": "moderate"}
-                    }
-                  }
-                }
-                """.formatted(concept, subject, audience, guidedYears, guidanceLevel, decisionsSummary);
-
-        String userPrompt = "Generate mentor guidance for all decisions in years 1-" + guidedYears +
-                ". Return ONLY valid JSON object. No markdown, no comments.";
-
-        String response = foundryAIService.callOpenAI(systemPrompt, userPrompt);
-        String json = extractJsonObject(response);
-
-        try {
-            Map<String, Object> guidance = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
-            logger.info("Phase 5.5 AI returned guidance for decisions: {}", guidance.keySet());
-
-            // Inject mentorGuidance into each decision
-            for (int y = 0; y < guidedYears && y < allYearDecisions.size(); y++) {
-                boolean isLightYear = (y == 2); // Year 3 = index 2
-                for (Map<String, Object> decision : allYearDecisions.get(y)) {
-                    String decisionId = (String) decision.get("id");
-                    if (guidance.containsKey(decisionId)) {
-                        Map<String, Object> mg = (Map<String, Object>) guidance.get(decisionId);
-                        mg.put("guidanceLevel", isLightYear ? "LIGHT" : "FULL");
-                        decision.put("mentorGuidance", mg);
-                        logger.info("  Injecting mentorGuidance into decision {} (guidanceLevel={})", decisionId, isLightYear ? "LIGHT" : "FULL");
-                    }
-                    // Override AI-generated priorities with deterministic values from mappings
-                    remapHintKeysToIds(decision);
-                    fixHintPrioritiesFromMappings(decision);
-                    // Log stakeholderHints after fixup if present
-                    Map<String, Object> mgAfter = (Map<String, Object>) decision.get("mentorGuidance");
-                    if (mgAfter != null && mgAfter.containsKey("stakeholderHints")) {
-                        logger.info("  After fixHintPriorities, stakeholderHints for {}: {}", decisionId, mgAfter.get("stakeholderHints"));
-                    }
-                }
-            }
-            logger.info("Mentor enrichment applied to {} decisions", guidance.size());
-        } catch (Exception e) {
-            logger.warn("Failed to parse mentor enrichment response, skipping: {}", e.getMessage());
-            // Non-fatal — simulation works without mentor guidance
-        }
-    }
-
-    /**
-     * Remap AI-generated stakeholderHints/candidateHints from name-based keys to ID-based keys.
-     * The AI often keys hints as "Name - Role" instead of the stakeholder ID.
-     */
-    @SuppressWarnings("unchecked")
-    private void remapHintKeysToIds(Map<String, Object> decision) {
-        Map<String, Object> mentorGuidance = (Map<String, Object>) decision.get("mentorGuidance");
-        if (mentorGuidance == null) return;
-        Map<String, Object> config = (Map<String, Object>) decision.get("decisionConfig");
-        if (config == null) return;
-
-        // Remap stakeholderHints
-        Map<String, Object> stakeholderHints = (Map<String, Object>) mentorGuidance.get("stakeholderHints");
-        List<Map<String, Object>> stakeholders = config != null ? (List<Map<String, Object>>) config.get("stakeholders") : null;
-        if (stakeholderHints != null && stakeholders != null && !stakeholderHints.isEmpty()) {
-            // Check if keys already match IDs
-            boolean alreadyById = stakeholders.stream().anyMatch(s -> stakeholderHints.containsKey(s.get("id")));
-            if (!alreadyById) {
-                Map<String, Object> remapped = new LinkedHashMap<>();
-                for (Map<String, Object> s : stakeholders) {
-                    String sid = (String) s.get("id");
-                    String name = (String) s.get("name");
-                    String role = (String) s.get("role");
-                    // Try matching by various key patterns the AI might use
-                    Object hint = stakeholderHints.get(sid);
-                    if (hint == null) hint = stakeholderHints.get(name + " - " + role);
-                    if (hint == null) hint = stakeholderHints.get(name);
-                    if (hint == null) {
-                        // Fuzzy: find any key containing the name
-                        for (Map.Entry<String, Object> e : stakeholderHints.entrySet()) {
-                            if (e.getKey().contains(name)) { hint = e.getValue(); break; }
-                        }
-                    }
-                    if (hint != null) remapped.put(sid, hint);
-                }
-                if (!remapped.isEmpty()) {
-                    logger.info("  Remapped stakeholderHints: {} keys → {} ID-based keys", stakeholderHints.size(), remapped.size());
-                    mentorGuidance.put("stakeholderHints", remapped);
-                }
-            }
-        }
-
-        // Remap candidateHints
-        Map<String, Object> candidateHints = (Map<String, Object>) mentorGuidance.get("candidateHints");
-        List<Map<String, Object>> candidates = config != null ? (List<Map<String, Object>>) config.get("candidates") : null;
-        if (candidateHints != null && candidates != null && !candidateHints.isEmpty()) {
-            boolean alreadyById = candidates.stream().anyMatch(c -> candidateHints.containsKey(c.get("id")));
-            if (!alreadyById) {
-                Map<String, Object> remapped = new LinkedHashMap<>();
-                for (Map<String, Object> c : candidates) {
-                    String cid = (String) c.get("id");
-                    String name = (String) c.get("name");
-                    Object hint = candidateHints.get(cid);
-                    if (hint == null) hint = candidateHints.get(name);
-                    if (hint == null) {
-                        for (Map.Entry<String, Object> e : candidateHints.entrySet()) {
-                            if (e.getKey().contains(name)) { hint = e.getValue(); break; }
-                        }
-                    }
-                    if (hint != null) remapped.put(cid, hint);
-                }
-                if (!remapped.isEmpty()) {
-                    logger.info("  Remapped candidateHints: {} keys → {} ID-based keys", candidateHints.size(), remapped.size());
-                    mentorGuidance.put("candidateHints", remapped);
-                }
-            }
-        }
-    }
-
-    /**
-     * Override AI-generated stakeholder/candidate priorities with deterministic values
-     * computed from the actual mapping conditions and choice quality scores.
-     */
-    @SuppressWarnings("unchecked")
-    private void fixHintPrioritiesFromMappings(Map<String, Object> decision) {
-        Map<String, Object> mentorGuidance = (Map<String, Object>) decision.get("mentorGuidance");
-        if (mentorGuidance == null) return;
-
-        Map<String, Object> config = (Map<String, Object>) decision.get("decisionConfig");
-        if (config == null) return;
-
-        List<Map<String, Object>> mappings = (List<Map<String, Object>>) config.get("mappings");
-        List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");
-        if (choices == null) return;
-
-        // If mappings are missing, use positional fallback (same as autoGenerateMappings):
-        // first stakeholders/candidates = best picks
-        boolean hasMappings = mappings != null && !mappings.isEmpty();
-        String decisionType = (String) decision.get("decisionType");
-        logger.info("fixHintPriorities for decision {} (type={}, hasMappings={})", decision.get("id"), decisionType, hasMappings);
-
-        // Build choiceId → quality lookup
-        Map<String, Integer> choiceQuality = new HashMap<>();
-        for (Map<String, Object> c : choices) {
-            String cid = (String) c.get("id");
-            Object q = c.get("quality");
-            if (cid != null && q != null) {
-                choiceQuality.put(cid, ((Number) q).intValue());
-            }
-        }
-
-        // For STAKEHOLDER_MEETING: compute which stakeholders appear in high-quality mappings
-        if ("STAKEHOLDER_MEETING".equals(decisionType)) {
-            Map<String, Object> stakeholderHints = (Map<String, Object>) mentorGuidance.get("stakeholderHints");
-            if (stakeholderHints == null) return;
-
-            boolean usedMappings = false;
-            if (hasMappings) {
-                // Try to score from actual mappings (only works if conditions use selected_contains)
-                Map<String, Integer> stakeholderBestQuality = new HashMap<>();
-                for (Map<String, Object> mapping : mappings) {
-                    String condition = (String) mapping.get("condition");
-                    String choiceId = (String) mapping.get("choiceId");
-                    if (condition == null || "default".equals(condition) || choiceId == null) continue;
-                    int quality = choiceQuality.getOrDefault(choiceId, 1);
-                    java.util.regex.Matcher matcher = java.util.regex.Pattern
-                        .compile("selected_contains\\('([^']+)'\\)").matcher(condition);
-                    while (matcher.find()) {
-                        String sid = matcher.group(1);
-                        stakeholderBestQuality.merge(sid, quality, Math::max);
-                    }
-                }
-                if (!stakeholderBestQuality.isEmpty()) {
-                    usedMappings = true;
-                    for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
-                        int bestQ = stakeholderBestQuality.getOrDefault(entry.getKey(), 1);
-                        Map<String, Object> hint = (Map<String, Object>) entry.getValue();
-                        if (hint != null) {
-                            hint.put("priority", bestQ >= 3 ? "high" : bestQ >= 2 ? "medium" : "low");
-                        }
-                    }
-                } else {
-                    logger.info("  Mappings exist but no selected_contains() found — using positional fallback");
-                }
-            }
-            if (!usedMappings) {
-                // No mappings — use positional fallback: first 2 stakeholders = high, rest = low
-                List<Map<String, Object>> stakeholders = (List<Map<String, Object>>) config.get("stakeholders");
-                if (stakeholders != null) {
-                    java.util.Set<String> topIds = new java.util.HashSet<>();
-                    for (int i = 0; i < Math.min(2, stakeholders.size()); i++) {
-                        topIds.add((String) stakeholders.get(i).get("id"));
-                    }
-                    logger.info("  Positional fallback: topIds={}", topIds);
-                    for (Map.Entry<String, Object> entry : stakeholderHints.entrySet()) {
-                        Map<String, Object> hint = (Map<String, Object>) entry.getValue();
-                        if (hint != null) {
-                            String assignedPriority = topIds.contains(entry.getKey()) ? "high" : "low";
-                            hint.put("priority", assignedPriority);
-                            logger.info("  Stakeholder {} → priority={}", entry.getKey(), assignedPriority);
-                        }
-                    }
-                }
-            }
-        }
-
-        // For HIRE_FIRE: compute which candidates map to high-quality choices
-        if ("HIRE_FIRE".equals(decisionType)) {
-            Map<String, Object> candidateHints = (Map<String, Object>) mentorGuidance.get("candidateHints");
-            if (candidateHints == null) return;
-
-            if (!hasMappings) {
-                // Positional fallback: first candidate = strong, second = moderate, rest = weak
-                List<Map<String, Object>> candidates = (List<Map<String, Object>>) config.get("candidates");
-                if (candidates != null) {
-                    for (int i = 0; i < candidates.size(); i++) {
-                        String cid = (String) candidates.get(i).get("id");
-                        Map<String, Object> hint = (Map<String, Object>) candidateHints.get(cid);
-                        if (hint != null) {
-                            hint.put("fit", i == 0 ? "strong" : i == 1 ? "moderate" : "weak");
-                        }
-                    }
-                }
-                return;
-            }
-
-            Map<String, Integer> candidateBestQuality = new HashMap<>();
-            for (Map<String, Object> mapping : mappings) {
-                String condition = (String) mapping.get("condition");
-                String choiceId = (String) mapping.get("choiceId");
-                if (condition == null || "default".equals(condition) || choiceId == null) continue;
-                int quality = choiceQuality.getOrDefault(choiceId, 1);
-
-                java.util.regex.Matcher matcher = java.util.regex.Pattern
-                    .compile("(?:selected\\s*==\\s*'([^']+)'|selected_contains\\('([^']+)'\\))").matcher(condition);
-                while (matcher.find()) {
-                    String cid = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
-                    candidateBestQuality.merge(cid, quality, Math::max);
-                }
-            }
-
-            for (Map.Entry<String, Object> entry : candidateHints.entrySet()) {
-                String cid = entry.getKey();
-                int bestQ = candidateBestQuality.getOrDefault(cid, 1);
-                Map<String, Object> hint = (Map<String, Object>) entry.getValue();
-                if (hint != null) {
-                    hint.put("fit", bestQ >= 3 ? "strong" : bestQ >= 2 ? "moderate" : "weak");
-                }
-            }
-        }
-
-        // For all choice-based types: fix choiceHints risk levels
-        Map<String, Object> choiceHints = (Map<String, Object>) mentorGuidance.get("choiceHints");
-        if (choiceHints != null) {
-            for (Map.Entry<String, Object> entry : choiceHints.entrySet()) {
-                String cid = entry.getKey();
-                int quality = choiceQuality.getOrDefault(cid, 1);
-                Map<String, Object> hint = (Map<String, Object>) entry.getValue();
-                if (hint != null) {
-                    // quality 3 = best = low risk, quality 1 = worst = high risk
-                    String assignedRisk = quality >= 3 ? "low" : quality >= 2 ? "medium" : "high";
-                    hint.put("risk", assignedRisk);
-                    logger.info("  Choice {} → quality={}, risk={}", cid, quality, assignedRisk);
-                }
-            }
-        }
-    }
 
     // ════════════════════════════════════════════════════════════════════
     // Assembly
