@@ -883,18 +883,23 @@ public class SimulationService {
         if (impactDesc != null) {
             nextState.setImpactDescription(impactDesc);
         }
-        List<Map<String, Object>> rawMetricImpacts = (List<Map<String, Object>>) selectedChoice.get("metricImpacts");
-        if (rawMetricImpacts != null && !rawMetricImpacts.isEmpty()) {
+        Object rawMetricImpactsObj = selectedChoice.get("metricImpacts");
+        if (rawMetricImpactsObj instanceof List<?> rawMetricImpacts && !rawMetricImpacts.isEmpty()) {
             List<SimulationStateDTO.MetricImpactDTO> metricImpacts = new ArrayList<>();
-            for (Map<String, Object> raw : rawMetricImpacts) {
-                SimulationStateDTO.MetricImpactDTO dto = new SimulationStateDTO.MetricImpactDTO(
+            for (Object elem : rawMetricImpacts) {
+                if (!(elem instanceof Map<?, ?> raw)) {
+                    logger.warn("submitDecision: skipping non-map metricImpact element: {}", elem);
+                    continue;
+                }
+                metricImpacts.add(new SimulationStateDTO.MetricImpactDTO(
                         (String) raw.get("metric"),
                         (String) raw.get("direction"),
                         (String) raw.get("magnitude")
-                );
-                metricImpacts.add(dto);
+                ));
             }
-            nextState.setMetricImpacts(metricImpacts);
+            if (!metricImpacts.isEmpty()) {
+                nextState.setMetricImpacts(metricImpacts);
+            }
         }
         return nextState;
     }
@@ -1230,10 +1235,14 @@ public class SimulationService {
         review.setFeedback((Map<String, String>) reviewData.get("feedback"));
 
         // New fields: decisionHighlights and crossDecisionInsight from the variant data
-        List<Map<String, Object>> rawHighlights = (List<Map<String, Object>>) reviewData.get("decisionHighlights");
-        if (rawHighlights != null && !rawHighlights.isEmpty()) {
+        Object rawHighlightsObj = reviewData.get("decisionHighlights");
+        if (rawHighlightsObj instanceof List<?> rawHighlights && !rawHighlights.isEmpty()) {
             List<YearEndReviewDTO.DecisionHighlightDTO> highlights = new ArrayList<>();
-            for (Map<String, Object> raw : rawHighlights) {
+            for (Object elem : rawHighlights) {
+                if (!(elem instanceof Map<?, ?> raw)) {
+                    logger.warn("buildYearEndReview: skipping non-map decisionHighlight element: {}", elem);
+                    continue;
+                }
                 YearEndReviewDTO.DecisionHighlightDTO h = new YearEndReviewDTO.DecisionHighlightDTO();
                 h.setDecisionId((String) raw.get("decisionId"));
                 h.setLabel((String) raw.get("label"));
@@ -1241,22 +1250,42 @@ public class SimulationService {
                 h.setSummary((String) raw.get("summary"));
                 highlights.add(h);
             }
-            review.setDecisionHighlights(highlights);
+            if (!highlights.isEmpty()) {
+                review.setDecisionHighlights(highlights);
+            }
         }
-        review.setCrossDecisionInsight((String) reviewData.get("crossDecisionInsight"));
+
+        // Fix #2: Select crossDecisionInsight based on actual quality mix — per plan Task 7,
+        // choose quality_high / quality_mixed / quality_low from consequenceWeaving based on
+        // average quality for the year. Fall back to the variant's pre-baked insight.
+        String crossDecisionInsight = (String) reviewData.get("crossDecisionInsight");
+        Map<String, Object> consequenceWeaving = (Map<String, Object>) simData.get("consequenceWeaving");
+        Map<String, Object> yearWeaving = null;
+        if (consequenceWeaving != null) {
+            yearWeaving = (Map<String, Object>) consequenceWeaving.get("year" + yearNum);
+        }
+        if (yearWeaving != null) {
+            Map<String, Object> narratives = (Map<String, Object>) yearWeaving.get("crossDecisionNarratives");
+            if (narratives != null) {
+                double avgQuality = averageQualityForYear(play, yearNum);
+                String variantKey;
+                if (avgQuality >= 2.5) variantKey = "quality_high";
+                else if (avgQuality >= 1.5) variantKey = "quality_mixed";
+                else variantKey = "quality_low";
+                Object selected = narratives.get(variantKey);
+                if (selected instanceof String s && !s.isBlank()) {
+                    crossDecisionInsight = s;
+                }
+            }
+        }
+        review.setCrossDecisionInsight(crossDecisionInsight);
 
         // Warning signal: from reviewData (POOR variant) or from consequence weaving for STRUGGLING
         String warningSignal = (String) reviewData.get("warningSignal");
-        if (warningSignal == null && "STRUGGLING".equals(band)) {
-            Map<String, Object> consequenceWeaving = (Map<String, Object>) simData.get("consequenceWeaving");
-            if (consequenceWeaving != null) {
-                Map<String, Object> yearWeaving = (Map<String, Object>) consequenceWeaving.get("year" + yearNum);
-                if (yearWeaving != null) {
-                    Map<String, Object> warningSignals = (Map<String, Object>) yearWeaving.get("warningSignals");
-                    if (warningSignals != null) {
-                        warningSignal = (String) warningSignals.get("STRUGGLING");
-                    }
-                }
+        if (warningSignal == null && "STRUGGLING".equals(band) && yearWeaving != null) {
+            Map<String, Object> warningSignals = (Map<String, Object>) yearWeaving.get("warningSignals");
+            if (warningSignals != null) {
+                warningSignal = (String) warningSignals.get("STRUGGLING");
             }
         }
         review.setWarningSignal(warningSignal);
@@ -1306,25 +1335,56 @@ public class SimulationService {
                 (String) bandDebrief.get("theGap"),
                 (String) bandDebrief.get("playAgain"));
 
-        // New fields: decisionBreakdown and patternAnalysis
-        List<Map<String, Object>> rawBreakdown = (List<Map<String, Object>>) bandDebrief.get("decisionBreakdown");
-        if (rawBreakdown != null && !rawBreakdown.isEmpty()) {
-            List<DebriefDTO.DecisionBreakdownDTO> breakdown = new ArrayList<>();
-            for (Map<String, Object> raw : rawBreakdown) {
-                DebriefDTO.DecisionBreakdownDTO entry = new DebriefDTO.DecisionBreakdownDTO();
-                entry.setDecisionId((String) raw.get("decisionId"));
-                entry.setLabel((String) raw.get("label"));
-                Object quality = raw.get("quality");
-                if (quality != null) entry.setQuality(((Number) quality).intValue());
-                entry.setWhatHappened((String) raw.get("whatHappened"));
-                entry.setConceptLesson((String) raw.get("conceptLesson"));
-                breakdown.add(entry);
-            }
-            debrief.setDecisionBreakdown(breakdown);
-        }
+        debrief.setDecisionBreakdown(parseDecisionBreakdown(bandDebrief.get("decisionBreakdown")));
         debrief.setPatternAnalysis((String) bandDebrief.get("patternAnalysis"));
 
         return debrief;
+    }
+
+    /**
+     * Parse a raw decisionBreakdown list from simulation JSON defensively, skipping
+     * any elements that aren't shaped like maps. Returns null for empty/missing input.
+     */
+    private List<DebriefDTO.DecisionBreakdownDTO> parseDecisionBreakdown(Object rawObj) {
+        if (!(rawObj instanceof List<?> rawList) || rawList.isEmpty()) {
+            return null;
+        }
+        List<DebriefDTO.DecisionBreakdownDTO> breakdown = new ArrayList<>();
+        for (Object elem : rawList) {
+            if (!(elem instanceof Map<?, ?> raw)) {
+                logger.warn("parseDecisionBreakdown: skipping non-map element: {}", elem);
+                continue;
+            }
+            DebriefDTO.DecisionBreakdownDTO entry = new DebriefDTO.DecisionBreakdownDTO();
+            entry.setDecisionId((String) raw.get("decisionId"));
+            entry.setLabel((String) raw.get("label"));
+            Object quality = raw.get("quality");
+            if (quality instanceof Number n) entry.setQuality(n.intValue());
+            entry.setWhatHappened((String) raw.get("whatHappened"));
+            entry.setConceptLesson((String) raw.get("conceptLesson"));
+            breakdown.add(entry);
+        }
+        return breakdown.isEmpty() ? null : breakdown;
+    }
+
+    /**
+     * Compute the average decision quality (1-3) for a given year from the play's
+     * decision history. Returns 2.0 (neutral) if no decisions are found.
+     */
+    private double averageQualityForYear(SimulationPlay play, int yearNum) {
+        List<Map<String, Object>> decisions = play.getDecisionsJson();
+        if (decisions == null || decisions.isEmpty()) return 2.0;
+        int sum = 0;
+        int count = 0;
+        for (Map<String, Object> d : decisions) {
+            Object y = d.get("year");
+            Object q = d.get("quality");
+            if (y instanceof Number yn && yn.intValue() == yearNum && q instanceof Number qn) {
+                sum += qn.intValue();
+                count++;
+            }
+        }
+        return count == 0 ? 2.0 : (double) sum / count;
     }
 
     /**
@@ -1349,21 +1409,7 @@ public class SimulationService {
                 (String) firedDebrief.get("theGap"),
                 (String) firedDebrief.get("playAgain"));
 
-        List<Map<String, Object>> rawBreakdown = (List<Map<String, Object>>) firedDebrief.get("decisionBreakdown");
-        if (rawBreakdown != null && !rawBreakdown.isEmpty()) {
-            List<DebriefDTO.DecisionBreakdownDTO> breakdown = new ArrayList<>();
-            for (Map<String, Object> raw : rawBreakdown) {
-                DebriefDTO.DecisionBreakdownDTO entry = new DebriefDTO.DecisionBreakdownDTO();
-                entry.setDecisionId((String) raw.get("decisionId"));
-                entry.setLabel((String) raw.get("label"));
-                Object quality = raw.get("quality");
-                if (quality != null) entry.setQuality(((Number) quality).intValue());
-                entry.setWhatHappened((String) raw.get("whatHappened"));
-                entry.setConceptLesson((String) raw.get("conceptLesson"));
-                breakdown.add(entry);
-            }
-            debrief.setDecisionBreakdown(breakdown);
-        }
+        debrief.setDecisionBreakdown(parseDecisionBreakdown(firedDebrief.get("decisionBreakdown")));
         debrief.setPatternAnalysis((String) firedDebrief.get("patternAnalysis"));
 
         return debrief;

@@ -27,21 +27,21 @@ const metricPillStyle = (direction: string) => {
 }
 
 const scoreBadgeStyle = (delta?: number) => {
-  if (!delta) return 'bg-slate-800 border border-slate-600 text-slate-400'
+  if (delta == null) return 'bg-slate-800 border border-slate-600 text-slate-400'
   if (delta >= 10) return 'bg-green-900/40 border border-green-500/50 text-green-400'
   if (delta >= 5) return 'bg-amber-900/40 border border-amber-500/50 text-amber-400'
   return 'bg-slate-800/50 border border-slate-600/40 text-slate-400'
 }
 
 export function PostDecisionFeedback({ scoreDelta, impactDescription, metricImpacts }: PostDecisionFeedbackProps) {
-  if (!scoreDelta && !impactDescription && (!metricImpacts || metricImpacts.length === 0)) {
+  if (scoreDelta == null && !impactDescription && (!metricImpacts || metricImpacts.length === 0)) {
     return null
   }
 
   return (
     <div className="space-y-3 p-4 bg-[#0d1526] border border-[#1E3A5F]/40 rounded-xl">
       {/* Score delta badge */}
-      {scoreDelta !== undefined && (
+      {scoreDelta != null && (
         <div className="flex items-center gap-2">
           <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold ${scoreBadgeStyle(scoreDelta)}`}>
             {scoreDelta > 0 ? `+${scoreDelta}` : scoreDelta} pts
