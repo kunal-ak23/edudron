@@ -226,6 +226,12 @@ public class SimulationService {
     public void abandonPlay(String playId, String studentId) {
         SimulationPlay play = playRepository.findByIdAndStudentId(playId, studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Play not found"));
+
+        UUID clientId = UUID.fromString(TenantContext.getClientId());
+        if (!play.getClientId().equals(clientId)) {
+            throw new IllegalArgumentException("Play not found");
+        }
+
         if (play.getStatus() == SimulationPlay.PlayStatus.IN_PROGRESS) {
             play.setStatus(SimulationPlay.PlayStatus.ABANDONED);
             playRepository.save(play);
@@ -243,7 +249,7 @@ public class SimulationService {
     }
 
     @Transactional
-    public SimulationDTO moveToDraft(String id) {
+    public SimulationDTO moveToReview(String id) {
         UUID clientId = UUID.fromString(TenantContext.getClientId());
         Simulation sim = simulationRepository.findByIdAndClientId(id, clientId)
                 .orElseThrow(() -> new IllegalArgumentException("Simulation not found"));

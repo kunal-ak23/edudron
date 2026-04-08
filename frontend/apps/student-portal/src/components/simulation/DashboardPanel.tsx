@@ -43,6 +43,15 @@ function bandColor(band: string): string {
   }
 }
 
+function humanizeTag(tag: string): string {
+  // camelCase or snake_case → Title Case words
+  return tag
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim()
+}
+
 function qualityIcon(quality: string) {
   switch (quality) {
     case 'GOOD':
@@ -154,7 +163,7 @@ export default function DashboardPanel({
                 </div>
                 {d.consequenceTag && (
                   <div className="text-[9px] text-[#879298] mt-0.5 truncate max-w-[200px]">
-                    #{d.consequenceTag}
+                    {humanizeTag(d.consequenceTag)}
                   </div>
                 )}
               </div>

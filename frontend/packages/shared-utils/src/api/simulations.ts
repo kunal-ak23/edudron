@@ -132,10 +132,15 @@ export interface DecisionHighlight {
   summary: string
 }
 
+export interface MetricValue {
+  value: number | string
+  trend?: 'up' | 'down' | 'positive' | 'negative' | 'neutral'
+}
+
 export interface YearEndReviewDTO {
   year: number
   band: string
-  metrics: Record<string, any>
+  metrics: Record<string, MetricValue | number | string>
   feedback: Record<string, string>
   promotionTitle?: string
   fired: boolean
@@ -283,8 +288,8 @@ export class SimulationsApi {
     await this.apiClient.delete(`/content/api/simulations/${id}`)
   }
 
-  async moveToDraft(id: string): Promise<SimulationDTO> {
-    const response = await this.apiClient.post<SimulationDTO>(`/content/api/simulations/${id}/move-to-draft`, {})
+  async moveToReview(id: string): Promise<SimulationDTO> {
+    const response = await this.apiClient.post<SimulationDTO>(`/content/api/simulations/${id}/move-to-review`, {})
     return response.data
   }
 
