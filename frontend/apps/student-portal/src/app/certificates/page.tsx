@@ -308,7 +308,7 @@ export default function MyCertificatesPage() {
                                 <Switch
                                   id={`${cert.id}-${key}`}
                                   checked={visibility[key]}
-                                  onCheckedChange={(checked) =>
+                                  onCheckedChange={(checked: boolean) =>
                                     handleVisibilityToggle(cert, key, checked)
                                   }
                                   disabled={updatingVisibility === cert.id}

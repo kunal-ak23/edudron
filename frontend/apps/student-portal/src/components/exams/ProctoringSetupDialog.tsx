@@ -201,7 +201,7 @@ export function ProctoringSetupDialog({
   }, [stream])
 
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog open={open} onOpenChange={(open: boolean) => !open && onCancel()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Proctored Exam Setup</DialogTitle>

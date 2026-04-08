@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ProtectedRoute } from '@kunal-ak23/edudron-ui-components'
 import { simulationsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Loader2, RotateCcw, History, ArrowLeft } from 'lucide-react'
+import { Loader2, RotateCcw, History, ArrowLeft, Brain, ChevronDown, ChevronRight } from 'lucide-react'
 import type { SimulationStateDTO } from '@kunal-ak23/edudron-shared-utils'
 
 export const dynamic = 'force-dynamic'
@@ -37,17 +37,18 @@ export default function DebriefPage() {
 
   // Sequential reveal state
   const [visibleSections, setVisibleSections] = useState(0)
+  const [expandedDecisions, setExpandedDecisions] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     loadDebrief()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playId])
 
-  // Sequentially reveal debrief sections
+  // Sequentially reveal debrief sections (6 total: 4 original + breakdown + pattern)
   useEffect(() => {
     if (!state?.debrief) return
 
-    const totalSections = 4
+    const totalSections = 6
     if (visibleSections >= totalSections) return
 
     const timer = setTimeout(() => {
@@ -56,6 +57,15 @@ export default function DebriefPage() {
 
     return () => clearTimeout(timer)
   }, [state, visibleSections])
+
+  function toggleDecision(id: string) {
+    setExpandedDecisions((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function loadDebrief() {
     try {
@@ -230,6 +240,75 @@ export default function DebriefPage() {
                     </Button>
                   </div>
                 </div>
+
+                {/* Section 5: Decision Breakdown */}
+                {debrief.decisionBreakdown && debrief.decisionBreakdown.length > 0 && (
+                  <div
+                    className={`transition-all duration-500 ${
+                      visibleSections >= 5
+                        ? 'opacity-100 translate-y-0'
+                        : 'opacity-0 translate-y-4'
+                    }`}
+                  >
+                    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden">
+                      <div className="px-6 py-4 border-b border-gray-100">
+                        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                          Your Decision-by-Decision Breakdown
+                        </h2>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {debrief.decisionBreakdown.map((entry) => {
+                          const isOpen = expandedDecisions.has(entry.decisionId)
+                          const qualityColor = entry.quality >= 3 ? 'text-green-600' : entry.quality >= 2 ? 'text-amber-600' : 'text-red-600'
+                          const stars = '★'.repeat(entry.quality ?? 0) + '☆'.repeat(Math.max(0, 3 - (entry.quality ?? 0)))
+                          return (
+                            <div key={entry.decisionId}>
+                              <button
+                                className="w-full flex items-center justify-between px-6 py-3 text-left hover:bg-gray-50 transition-colors"
+                                onClick={() => toggleDecision(entry.decisionId)}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <span className={`text-sm font-medium ${qualityColor} tracking-wide`}>{stars}</span>
+                                  <span className="text-sm font-medium text-gray-800">{entry.label}</span>
+                                </div>
+                                {isOpen ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
+                              </button>
+                              {isOpen && (
+                                <div className="px-6 pb-4 space-y-2">
+                                  <p className="text-sm text-gray-700 leading-relaxed">{entry.whatHappened}</p>
+                                  <p className="text-sm text-blue-700 leading-relaxed italic bg-blue-50 px-3 py-2 rounded-lg">
+                                    {entry.conceptLesson}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Section 6: Pattern Analysis */}
+                {debrief.patternAnalysis && (
+                  <div
+                    className={`transition-all duration-500 ${
+                      visibleSections >= 6
+                        ? 'opacity-100 translate-y-0'
+                        : 'opacity-0 translate-y-4'
+                    }`}
+                  >
+                    <div className="border border-purple-200 rounded-xl p-6 bg-gradient-to-br from-purple-50 to-indigo-50">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Brain className="h-4 w-4 text-purple-600" />
+                        <h2 className="text-sm font-semibold text-purple-600 uppercase tracking-wide">
+                          Your Decision-Making Pattern
+                        </h2>
+                      </div>
+                      <p className="text-gray-800 leading-relaxed">{debrief.patternAnalysis}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Navigation links */}
                 <div

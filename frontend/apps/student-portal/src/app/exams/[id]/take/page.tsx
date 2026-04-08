@@ -1451,7 +1451,7 @@ export default function TakeExamPage() {
                       {currentQuestion.questionType === 'MULTIPLE_CHOICE' && currentQuestion.options && (
                         <RadioGroup
                           value={answers[currentQuestion.id] || ''}
-                          onValueChange={(value) => handleAnswerChange(currentQuestion.id, value)}
+                          onValueChange={(value: string) => handleAnswerChange(currentQuestion.id, value)}
                         >
                           {currentQuestion.options.map((option, optIndex) => (
                             <div key={option.id} className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
@@ -1484,7 +1484,7 @@ export default function TakeExamPage() {
                                 ? 'true'
                                 : 'false'
                           }
-                          onValueChange={(value) => handleAnswerChange(currentQuestion.id, value === 'true')}
+                          onValueChange={(value: string) => handleAnswerChange(currentQuestion.id, value === 'true')}
                         >
                           <div className="flex items-center space-x-3 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                             <RadioGroupItem value="true" id={`true-${currentQuestion.id}`} />
@@ -1583,7 +1583,7 @@ export default function TakeExamPage() {
         </div>
 
         {/* Submit Confirmation Dialog */}
-        <Dialog open={showSubmitDialog} onOpenChange={(open) => {
+        <Dialog open={showSubmitDialog} onOpenChange={(open: boolean) => {
           if (!submitting) {
             setShowSubmitDialog(open)
           }
@@ -1646,7 +1646,7 @@ export default function TakeExamPage() {
         </Dialog>
 
         {/* Tab Switch Warning Dialog */}
-        <Dialog open={showTabSwitchWarning} onOpenChange={(open) => {
+        <Dialog open={showTabSwitchWarning} onOpenChange={(open: boolean) => {
           // Only allow closing if not auto-submitting (or in preview mode)
           if (!open && (isPreviewMode || (tabSwitchWarningData && tabSwitchWarningData.remaining > 0))) {
             setShowTabSwitchWarning(false)
@@ -1727,7 +1727,7 @@ export default function TakeExamPage() {
         <Dialog open={showFullscreenWarning} onOpenChange={() => {
           // Don't allow closing by clicking outside - user must click the button
         }}>
-          <DialogContent className="border-primary-500 border-2" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogContent className="border-primary-500 border-2" onPointerDownOutside={(e: Event) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-primary-600" />
