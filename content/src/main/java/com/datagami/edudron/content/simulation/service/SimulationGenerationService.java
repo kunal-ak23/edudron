@@ -22,6 +22,15 @@ public class SimulationGenerationService {
 
     private static final Logger logger = LoggerFactory.getLogger(SimulationGenerationService.class);
 
+    /**
+     * Lenient ObjectMapper used by parseJsonLenient. Configured once and reused
+     * because ObjectMapper is heavy to instantiate and is thread-safe after configuration.
+     */
+    private static final ObjectMapper LENIENT_MAPPER = new ObjectMapper()
+            .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true)
+            .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES, true)
+            .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_COMMENTS, true);
+
     @Autowired
     private FoundryAIService foundryAIService;
 
@@ -533,13 +542,7 @@ public class SimulationGenerationService {
                 .replaceAll("//[^\n]*", "")           // remove JS-style line comments
                 .replaceAll("/\\*.*?\\*/", "");        // remove block comments
 
-        // Use lenient parser
-        ObjectMapper lenientMapper = new ObjectMapper();
-        lenientMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_UNQUOTED_FIELD_NAMES, true);
-        lenientMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES, true);
-        lenientMapper.configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_COMMENTS, true);
-
-        return lenientMapper.readValue(sanitized, new TypeReference<List<Map<String, Object>>>() {});
+        return LENIENT_MAPPER.readValue(sanitized, new TypeReference<List<Map<String, Object>>>() {});
     }
 
     private String buildPreviousContext(List<List<Map<String, Object>>> allYearDecisions, int currentYear, int targetYears) {
@@ -602,30 +605,35 @@ public class SimulationGenerationService {
             List<Map<String, Object>> yearDecisions = year <= allYearDecisions.size()
                     ? allYearDecisions.get(year - 1) : List.of();
 
-            // Build decisions JSON summary for prompt
-            StringBuilder decisionsJson = new StringBuilder("[");
-            for (int i = 0; i < yearDecisions.size(); i++) {
-                Map<String, Object> d = yearDecisions.get(i);
-                if (i > 0) decisionsJson.append(",");
-                decisionsJson.append("{\"decisionId\":\"").append(d.get("id")).append("\"")
-                        .append(",\"displayLabel\":\"").append(d.get("displayLabel")).append("\"")
-                        .append(",\"decisionType\":\"").append(d.get("decisionType")).append("\"")
-                        .append(",\"choices\":[");
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
-                if (choices != null) {
-                    for (int j = 0; j < choices.size(); j++) {
-                        Map<String, Object> c = choices.get(j);
-                        if (j > 0) decisionsJson.append(",");
-                        decisionsJson.append("{\"id\":\"").append(c.get("id")).append("\"")
-                                .append(",\"quality\":").append(c.get("quality"))
-                                .append(",\"consequenceTag\":\"").append(c.getOrDefault("consequenceTag", "")).append("\"")
-                                .append(",\"impactDescription\":\"").append(
-                                        ((String) c.getOrDefault("impactDescription", "")).replace("\"", "'")).append("\"}");
+            // Build decisions JSON summary for prompt via ObjectMapper for safe escaping
+            List<Map<String, Object>> decisionsSummary = new ArrayList<>();
+            for (Map<String, Object> d : yearDecisions) {
+                Map<String, Object> dSummary = new LinkedHashMap<>();
+                dSummary.put("decisionId", d.get("id"));
+                dSummary.put("displayLabel", d.get("displayLabel"));
+                dSummary.put("decisionType", d.get("decisionType"));
+                List<Map<String, Object>> choicesList = (List<Map<String, Object>>) d.get("choices");
+                List<Map<String, Object>> choicesSummary = new ArrayList<>();
+                if (choicesList != null) {
+                    for (Map<String, Object> c : choicesList) {
+                        Map<String, Object> cSummary = new LinkedHashMap<>();
+                        cSummary.put("id", c.get("id"));
+                        cSummary.put("quality", c.get("quality"));
+                        cSummary.put("consequenceTag", c.getOrDefault("consequenceTag", ""));
+                        cSummary.put("impactDescription", c.getOrDefault("impactDescription", ""));
+                        choicesSummary.add(cSummary);
                     }
                 }
-                decisionsJson.append("]}");
+                dSummary.put("choices", choicesSummary);
+                decisionsSummary.add(dSummary);
             }
-            decisionsJson.append("]");
+            String decisionsJsonStr;
+            try {
+                decisionsJsonStr = objectMapper.writeValueAsString(decisionsSummary);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize decisions summary for Phase 3.5 year " + year, e);
+            }
+            StringBuilder decisionsJson = new StringBuilder(decisionsJsonStr);
 
             StringBuilder metricIds = new StringBuilder();
             if (metricDefinitions != null) {
@@ -873,32 +881,35 @@ public class SimulationGenerationService {
             String concept, String subject, String audience, int targetYears,
             List<List<Map<String, Object>>> allYearDecisions) {
 
-        // Build a summary of all decisions with consequence data for the prompt
-        StringBuilder allDecisionsJson = new StringBuilder("[");
-        boolean firstDecision = true;
-        for (int y = 0; y < allYearDecisions.size(); y++) {
-            for (Map<String, Object> d : allYearDecisions.get(y)) {
-                if (!firstDecision) allDecisionsJson.append(",");
-                firstDecision = false;
-                allDecisionsJson.append("{\"decisionId\":\"").append(d.get("id")).append("\"")
-                        .append(",\"displayLabel\":\"").append(d.getOrDefault("displayLabel", "")).append("\"")
-                        .append(",\"choices\":[");
-                List<Map<String, Object>> choices = (List<Map<String, Object>>) d.get("choices");
-                if (choices != null) {
-                    for (int j = 0; j < choices.size(); j++) {
-                        Map<String, Object> c = choices.get(j);
-                        if (j > 0) allDecisionsJson.append(",");
-                        allDecisionsJson.append("{\"id\":\"").append(c.get("id")).append("\"")
-                                .append(",\"quality\":").append(c.get("quality"))
-                                .append(",\"consequenceTag\":\"").append(c.getOrDefault("consequenceTag", "")).append("\"")
-                                .append(",\"impactDescription\":\"")
-                                .append(((String) c.getOrDefault("impactDescription", "")).replace("\"", "'")).append("\"}");
+        // Build a summary of all decisions with consequence data for the prompt via ObjectMapper
+        List<Map<String, Object>> allDecisionsSummary = new ArrayList<>();
+        for (List<Map<String, Object>> yearDecisions : allYearDecisions) {
+            for (Map<String, Object> d : yearDecisions) {
+                Map<String, Object> dSummary = new LinkedHashMap<>();
+                dSummary.put("decisionId", d.get("id"));
+                dSummary.put("displayLabel", d.getOrDefault("displayLabel", ""));
+                List<Map<String, Object>> choicesList = (List<Map<String, Object>>) d.get("choices");
+                List<Map<String, Object>> choicesSummary = new ArrayList<>();
+                if (choicesList != null) {
+                    for (Map<String, Object> c : choicesList) {
+                        Map<String, Object> cSummary = new LinkedHashMap<>();
+                        cSummary.put("id", c.get("id"));
+                        cSummary.put("quality", c.get("quality"));
+                        cSummary.put("consequenceTag", c.getOrDefault("consequenceTag", ""));
+                        cSummary.put("impactDescription", c.getOrDefault("impactDescription", ""));
+                        choicesSummary.add(cSummary);
                     }
                 }
-                allDecisionsJson.append("]}");
+                dSummary.put("choices", choicesSummary);
+                allDecisionsSummary.add(dSummary);
             }
         }
-        allDecisionsJson.append("]");
+        StringBuilder allDecisionsJson;
+        try {
+            allDecisionsJson = new StringBuilder(objectMapper.writeValueAsString(allDecisionsSummary));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize all decisions summary for Phase 5", e);
+        }
 
         String systemPrompt = """
                 Generate final debriefs for a %d-year career simulation about %s in %s for %s students.
@@ -962,7 +973,11 @@ public class SimulationGenerationService {
             Map<String, Object> debriefs,
             Map<String, Object> consequenceWeaving) {
 
+        // Critical errors block generation completion (frontend would null-crash on these);
+        // soft errors are logged but allow the simulation to proceed to REVIEW so instructors
+        // can patch minor content issues.
         List<String> errors = new ArrayList<>();
+        List<String> criticalErrors = new ArrayList<>();
 
         // Role progression length matches targetYears
         if (roleProgression.size() != targetYears) {
@@ -972,13 +987,13 @@ public class SimulationGenerationService {
 
         // Every year has exactly decisionsPerYear decisions
         if (allYearDecisions.size() != targetYears) {
-            errors.add("Expected " + targetYears + " years of decisions but got " + allYearDecisions.size());
+            criticalErrors.add("Expected " + targetYears + " years of decisions but got " + allYearDecisions.size());
         }
         for (int y = 0; y < allYearDecisions.size(); y++) {
             int yearNum = y + 1;
             List<Map<String, Object>> decisions = allYearDecisions.get(y);
             if (decisions.size() != decisionsPerYear) {
-                errors.add("Year " + yearNum + " has " + decisions.size() +
+                criticalErrors.add("Year " + yearNum + " has " + decisions.size() +
                         " decisions but expected " + decisionsPerYear);
             }
             // Every decision has choices with quality scores and new consequence fields
@@ -987,17 +1002,17 @@ public class SimulationGenerationService {
                 String did = (String) decision.getOrDefault("id", "y" + yearNum + "_d" + (d+1));
                 List<Map<String, Object>> choices = (List<Map<String, Object>>) decision.get("choices");
                 if (choices == null || choices.isEmpty()) {
-                    errors.add("Year " + yearNum + " decision " + (d + 1) + " has no choices");
+                    criticalErrors.add("Year " + yearNum + " decision " + (d + 1) + " has no choices");
                 } else {
                     for (Map<String, Object> choice : choices) {
                         if (choice.get("quality") == null) {
-                            errors.add(did + " choice " + choice.get("id") + " missing quality score");
+                            criticalErrors.add(did + " choice " + choice.get("id") + " missing quality score");
                         }
                         if (choice.get("consequenceTag") == null) {
-                            errors.add(did + " choice " + choice.get("id") + " missing consequenceTag");
+                            criticalErrors.add(did + " choice " + choice.get("id") + " missing consequenceTag");
                         }
                         if (choice.get("impactDescription") == null) {
-                            errors.add(did + " choice " + choice.get("id") + " missing impactDescription");
+                            criticalErrors.add(did + " choice " + choice.get("id") + " missing impactDescription");
                         }
                         List<?> metricImpacts = (List<?>) choice.get("metricImpacts");
                         if (metricImpacts == null || metricImpacts.isEmpty()) {
@@ -1028,10 +1043,10 @@ public class SimulationGenerationService {
             if (consequenceWeaving != null) {
                 Map<String, Object> yearWeaving = (Map<String, Object>) consequenceWeaving.get(yearKey);
                 if (yearWeaving == null || yearWeaving.isEmpty()) {
-                    errors.add(yearKey + ": missing consequenceWeaving data");
+                    criticalErrors.add(yearKey + ": missing consequenceWeaving data");
                 } else {
                     if (yearWeaving.get("decisionConsequenceMap") == null) {
-                        errors.add(yearKey + ": consequenceWeaving missing decisionConsequenceMap");
+                        criticalErrors.add(yearKey + ": consequenceWeaving missing decisionConsequenceMap");
                     }
                     Map<String, Object> crossNarratives = (Map<String, Object>) yearWeaving.get("crossDecisionNarratives");
                     if (crossNarratives == null) {
@@ -1056,12 +1071,12 @@ public class SimulationGenerationService {
             String key = "year" + y;
             Object review = yearEndReviews.get(key);
             if (review == null) {
-                errors.add("Missing year-end review for " + key);
+                criticalErrors.add("Missing year-end review for " + key);
             } else if (review instanceof Map) {
                 Map<String, Object> reviewMap = (Map<String, Object>) review;
                 for (String variant : new String[]{"STRONG", "MID", "POOR"}) {
                     if (!reviewMap.containsKey(variant)) {
-                        errors.add(key + " year-end review missing variant: " + variant);
+                        criticalErrors.add(key + " year-end review missing variant: " + variant);
                     } else {
                         Map<String, Object> variantMap = (Map<String, Object>) reviewMap.get(variant);
                         if (variantMap != null) {
@@ -1082,12 +1097,12 @@ public class SimulationGenerationService {
             String key = "year" + y;
             Object narrative = openingNarratives.get(key);
             if (narrative == null) {
-                errors.add("Missing opening narrative for " + key);
+                criticalErrors.add("Missing opening narrative for " + key);
             } else if (narrative instanceof Map) {
                 Map<String, Object> narrativeMap = (Map<String, Object>) narrative;
                 for (String variant : new String[]{"THRIVING", "STEADY", "STRUGGLING"}) {
                     if (!narrativeMap.containsKey(variant)) {
-                        errors.add(key + " opening narrative missing variant: " + variant);
+                        criticalErrors.add(key + " opening narrative missing variant: " + variant);
                     }
                 }
             }
@@ -1096,7 +1111,7 @@ public class SimulationGenerationService {
         // All 4 debrief variants exist with new fields
         for (String variant : new String[]{"THRIVING", "STEADY", "STRUGGLING", "FIRED"}) {
             if (!debriefs.containsKey(variant)) {
-                errors.add("Missing debrief variant: " + variant);
+                criticalErrors.add("Missing debrief variant: " + variant);
             } else {
                 Map<String, Object> debriefVariant = (Map<String, Object>) debriefs.get(variant);
                 if (debriefVariant != null) {
@@ -1111,11 +1126,15 @@ public class SimulationGenerationService {
         }
 
         if (!errors.isEmpty()) {
-            String errorMsg = "Validation failed with " + errors.size() + " error(s): " +
-                    String.join("; ", errors);
-            logger.warn("Phase 6 validation issues: {}", errorMsg);
-            // Log warnings but don't fail — AI output may have minor structural differences
-            // that can be edited by instructors in REVIEW status
+            logger.warn("Phase 6 validation soft warnings ({}): {}",
+                    errors.size(), String.join("; ", errors));
+            // Soft warnings — instructors can patch these in REVIEW status
+        }
+        if (!criticalErrors.isEmpty()) {
+            String errorMsg = "Phase 6 validation failed with " + criticalErrors.size() +
+                    " critical error(s): " + String.join("; ", criticalErrors);
+            logger.error(errorMsg);
+            throw new RuntimeException(errorMsg);
         }
     }
 
@@ -1283,8 +1302,18 @@ public class SimulationGenerationService {
         boolean inString = false;
         for (int i = start; i < trimmed.length(); i++) {
             char c = trimmed.charAt(i);
-            if (c == '"' && (i == 0 || trimmed.charAt(i - 1) != '\\')) {
-                inString = !inString;
+            if (c == '"') {
+                // Count consecutive backslashes immediately before this quote.
+                // The quote is escaped only if that count is odd.
+                int backslashes = 0;
+                int j = i - 1;
+                while (j >= start && trimmed.charAt(j) == '\\') {
+                    backslashes++;
+                    j--;
+                }
+                if (backslashes % 2 == 0) {
+                    inString = !inString;
+                }
             }
             if (!inString) {
                 if (c == openChar) depth++;

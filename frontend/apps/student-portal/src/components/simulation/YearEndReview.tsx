@@ -2,7 +2,7 @@
 
 import { Building2, Users, TrendingUp, ArrowUpRight, ArrowDownRight, Link2, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { YearEndReviewDTO } from '@kunal-ak23/edudron-shared-utils'
+import type { YearEndReviewDTO, MetricValue } from '@kunal-ak23/edudron-shared-utils'
 
 interface YearEndReviewProps {
   review: YearEndReviewDTO
@@ -51,9 +51,10 @@ export function YearEndReview({ review, currentYear, onContinue, continuing }: Y
             Key Metrics
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {Object.entries(review.metrics).map(([key, metric]: [string, any]) => {
-              const value = typeof metric === 'object' ? metric.value : metric
-              const trend = typeof metric === 'object' ? metric.trend : undefined
+            {Object.entries(review.metrics).map(([key, metric]) => {
+              const isMetricObject = typeof metric === 'object' && metric !== null
+              const value = isMetricObject ? (metric as MetricValue).value : metric
+              const trend = isMetricObject ? (metric as MetricValue).trend : undefined
               const isPositive = trend === 'up' || trend === 'positive'
               const isNegative = trend === 'down' || trend === 'negative'
 
@@ -115,8 +116,8 @@ export function YearEndReview({ review, currentYear, onContinue, continuing }: Y
         </div>
       )}
 
-      {/* Warning banner — STRUGGLING band */}
-      {review.warningSignal && (
+      {/* Warning banner — STRUGGLING band only */}
+      {review.band === 'STRUGGLING' && review.warningSignal && (
         <div className="flex items-start gap-3 p-4 bg-amber-900/20 border border-amber-500/30 rounded-xl animate-pulse-subtle">
           <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
           <p className="text-sm text-amber-300 leading-relaxed">{review.warningSignal}</p>

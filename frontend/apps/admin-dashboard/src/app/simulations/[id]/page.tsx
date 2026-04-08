@@ -314,11 +314,11 @@ export default function SimulationEditorPage() {
     }
   }
 
-  // Move to Draft (Review)
-  const handleMoveToDraft = async () => {
+  // Move to Review
+  const handleMoveToReview = async () => {
     setChangingStatus(true)
     try {
-      const updated = await simulationsApi.moveToDraft(simulationId)
+      const updated = await simulationsApi.moveToReview(simulationId)
       setSimulation(updated)
       toast({ title: 'Moved to Review', description: 'Simulation is now in review status for editing.' })
     } catch (error) {
@@ -482,7 +482,7 @@ export default function SimulationEditorPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleMoveToDraft}
+              onClick={handleMoveToReview}
               disabled={changingStatus}
             >
               {changingStatus ? (

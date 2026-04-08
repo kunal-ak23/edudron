@@ -61,8 +61,39 @@ export default function SimulationPlayPage() {
   const [openingNarrativeDone, setOpeningNarrativeDone] = useState(false)
   const [decisionNarrativeDone, setDecisionNarrativeDone] = useState(false)
   const [mobileTab, setMobileTab] = useState<MobileTab>('game')
-  const [budgetHistory, setBudgetHistory] = useState<number[]>([])
-  const [consecutiveStruggling, setConsecutiveStruggling] = useState(0)
+  // Persist across page refresh via sessionStorage, keyed by playId
+  const [budgetHistory, setBudgetHistory] = useState<number[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = window.sessionStorage.getItem(`sim:${playId}:budgetHistory`)
+      return raw ? (JSON.parse(raw) as number[]) : []
+    } catch {
+      return []
+    }
+  })
+  const [consecutiveStruggling, setConsecutiveStruggling] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0
+    try {
+      const raw = window.sessionStorage.getItem(`sim:${playId}:consecutiveStruggling`)
+      return raw ? Number(raw) || 0 : 0
+    } catch {
+      return 0
+    }
+  })
+
+  // Mirror to sessionStorage on change
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.setItem(`sim:${playId}:budgetHistory`, JSON.stringify(budgetHistory))
+    } catch { /* ignore quota errors */ }
+  }, [budgetHistory, playId])
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      window.sessionStorage.setItem(`sim:${playId}:consecutiveStruggling`, String(consecutiveStruggling))
+    } catch { /* ignore quota errors */ }
+  }, [consecutiveStruggling, playId])
   const revealTimerRef = useRef<number | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastReviewedYearRef = useRef<number>(0)
@@ -432,23 +463,25 @@ export default function SimulationPlayPage() {
             <ArrowLeft className="h-4 w-4 mr-1" />
             Exit
           </Button>
-          {/* Temp: Restart for testing */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={async () => {
-              try {
-                await simulationsApi.abandonPlay(playId)
-                const newPlay = await simulationsApi.startPlay(simulationId)
-                router.push(`/simulations/${simulationId}/play/${newPlay.id}`)
-              } catch (e) {
-                console.error('Restart failed', e)
-              }
-            }}
-            className="text-amber-400 hover:text-amber-300 text-xs"
-          >
-            Restart (dev)
-          </Button>
+          {/* Dev-only: Restart for testing */}
+          {process.env.NODE_ENV === 'development' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await simulationsApi.abandonPlay(playId)
+                  const newPlay = await simulationsApi.startPlay(simulationId)
+                  router.push(`/simulations/${simulationId}/play/${newPlay.id}`)
+                } catch (e) {
+                  console.error('Restart failed', e)
+                }
+              }}
+              className="text-amber-400 hover:text-amber-300 text-xs"
+            >
+              Restart (dev)
+            </Button>
+          )}
         </div>
 
         {/* Main 3-panel area */}
@@ -491,7 +524,7 @@ export default function SimulationPlayPage() {
                     role={state.currentRole || ''}
                     performanceBand={state.performanceBand || 'STEADY'}
                     currentYear={state.currentYear || 1}
-                    totalYears={state.totalYears || 4}
+                    totalYears={state.totalYears || 5}
                     currentDecision={state.currentDecision || 1}
                     totalDecisions={state.totalDecisions || 5}
                     decisionHistory={state.decisionHistory || []}
@@ -523,7 +556,7 @@ export default function SimulationPlayPage() {
                 role={state.currentRole || ''}
                 performanceBand={state.performanceBand || 'STEADY'}
                 currentYear={state.currentYear || 1}
-                totalYears={state.totalYears || 4}
+                totalYears={state.totalYears || 5}
                 currentDecision={state.currentDecision || 1}
                 totalDecisions={state.totalDecisions || 5}
                 decisionHistory={state.decisionHistory || []}
@@ -531,6 +564,8 @@ export default function SimulationPlayPage() {
                 badDecisionCount={state.badDecisionCount || 0}
                 neutralDecisionCount={state.neutralDecisionCount || 0}
                 keyInsights={state.keyInsights || []}
+                consecutiveStruggling={consecutiveStruggling}
+                budgetHistory={budgetHistory}
               />
             )}
           </aside>
@@ -570,14 +605,12 @@ export default function SimulationPlayPage() {
         {playPhase === 'ADVISOR_REACTION' && lastReaction && state && (
           <div className="fixed bottom-16 left-0 right-0 px-4 z-40">
             <div className="max-w-2xl mx-auto space-y-2">
-              {/* Post-decision feedback card (desktop) */}
-              <div className="hidden xl:block">
-                <PostDecisionFeedback
-                  scoreDelta={state.scoreDelta}
-                  impactDescription={state.impactDescription}
-                  metricImpacts={state.metricImpacts}
-                />
-              </div>
+              {/* Post-decision feedback card (visible on all viewports) */}
+              <PostDecisionFeedback
+                scoreDelta={state.scoreDelta}
+                impactDescription={state.impactDescription}
+                metricImpacts={state.metricImpacts}
+              />
               <AdvisorDialog
                 mood={lastReaction.mood}
                 text={lastReaction.text}
@@ -608,7 +641,7 @@ export default function SimulationPlayPage() {
             <StatusHUD
               role={state.currentRole || 'Unknown'}
               year={state.currentYear}
-              totalYears={(state as any).totalYears || 7}
+              totalYears={state.totalYears || 5}
               decision={state.currentDecision}
               totalDecisions={state.totalDecisions}
               budget={state.currentBudget}

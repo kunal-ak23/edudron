@@ -295,11 +295,11 @@ public class SimulationAdminController {
         return ResponseEntity.noContent().build();
     }
 
-    @PostMapping("/{id}/move-to-draft")
-    @Operation(summary = "Move to draft", description = "Move simulation back to review/draft status for editing")
-    public ResponseEntity<SimulationDTO> moveToDraft(@PathVariable String id) {
+    @PostMapping("/{id}/move-to-review")
+    @Operation(summary = "Move to review", description = "Move simulation back to review status for editing")
+    public ResponseEntity<SimulationDTO> moveToReview(@PathVariable String id) {
         requireAdmin();
-        return ResponseEntity.ok(simulationService.moveToDraft(id));
+        return ResponseEntity.ok(simulationService.moveToReview(id));
     }
 
     @PostMapping("/{id}/move-to-published")
