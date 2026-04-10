@@ -106,7 +106,11 @@ export default function ResultsExportPage() {
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
+      
+      // Delay revocation to prevent NS_BINDING_ABORTED in Firefox
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url)
+      }, 1000)
 
       toast({ title: 'Success', description: 'Results exported successfully' })
     } catch {
@@ -204,6 +208,7 @@ export default function ResultsExportPage() {
 
                   <div>
                     <Button
+                      type="button"
                       onClick={handleExport}
                       disabled={!selectedId || exporting}
                       className="cursor-pointer transition-colors duration-200"
