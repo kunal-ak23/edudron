@@ -39,7 +39,12 @@ export default function GenerateSimulationPage() {
   const [concept, setConcept] = useState('')
   const [subject, setSubject] = useState('')
   const [audience, setAudience] = useState<string>('')
+  const [suggestedTitle, setSuggestedTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [scenarioPremise, setScenarioPremise] = useState('')
+  const [recommendedCareerPath, setRecommendedCareerPath] = useState('')
+  const [learningGoals, setLearningGoals] = useState<string[]>([])
+  const [generationNotes, setGenerationNotes] = useState<string[]>([])
   const [targetYears, setTargetYears] = useState(5)
   const [decisionsPerYear, setDecisionsPerYear] = useState(6)
 
@@ -127,7 +132,12 @@ export default function GenerateSimulationPage() {
       setConcept(response.concept)
       setSubject(response.subject)
       setAudience(response.audience)
+      setSuggestedTitle(response.suggestedTitle || '')
       setDescription(response.description)
+      setScenarioPremise(response.scenarioPremise || '')
+      setRecommendedCareerPath(response.recommendedCareerPath || '')
+      setLearningGoals(response.learningGoals || [])
+      setGenerationNotes(response.generationNotes || [])
       setExistingSimulations(response.existingSimulations)
       toast({
         title: 'Smart Suggest Complete',
@@ -248,7 +258,16 @@ export default function GenerateSimulationPage() {
               </Label>
               <Select
                 value={courseId}
-                onValueChange={(val) => { setCourseId(val); setSelectedLectureIds([]); setExistingSimulations([]) }}
+                onValueChange={(val) => {
+                  setCourseId(val)
+                  setSelectedLectureIds([])
+                  setExistingSimulations([])
+                  setSuggestedTitle('')
+                  setScenarioPremise('')
+                  setRecommendedCareerPath('')
+                  setLearningGoals([])
+                  setGenerationNotes([])
+                }}
                 disabled={generating}
               >
                 <SelectTrigger className={generating ? 'opacity-60 cursor-not-allowed' : ''}>
@@ -383,6 +402,15 @@ export default function GenerateSimulationPage() {
             </div>
 
             {/* 8. Description */}
+            {suggestedTitle && (
+              <div className="space-y-2">
+                <Label>Suggested Title</Label>
+                <div className="rounded-md border bg-muted/30 p-3 text-sm leading-6 text-muted-foreground whitespace-pre-wrap">
+                  {suggestedTitle}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea
@@ -394,6 +422,50 @@ export default function GenerateSimulationPage() {
                 className={generating ? 'opacity-60 cursor-not-allowed' : ''}
               />
             </div>
+
+            {recommendedCareerPath && (
+              <div className="space-y-2">
+                <Label>Recommended Career Path</Label>
+                <div className="rounded-md border bg-muted/30 p-3 text-sm leading-6 text-muted-foreground whitespace-pre-wrap">
+                  {recommendedCareerPath}
+                </div>
+              </div>
+            )}
+
+            {scenarioPremise && (
+              <div className="space-y-2">
+                <Label>Scenario Premise</Label>
+                <div className="rounded-md border bg-muted/30 p-3 text-sm leading-6 text-muted-foreground whitespace-pre-wrap">
+                  {scenarioPremise}
+                </div>
+              </div>
+            )}
+
+            {learningGoals.length > 0 && (
+              <div className="space-y-2">
+                <Label>Learning Goals</Label>
+                <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  {learningGoals.map((goal, index) => (
+                    <p key={`${goal}-${index}`} className={index > 0 ? 'mt-2' : ''}>
+                      {goal}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {generationNotes.length > 0 && (
+              <div className="space-y-2">
+                <Label>Generation Notes</Label>
+                <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  {generationNotes.map((note, index) => (
+                    <p key={`${note}-${index}`} className={index > 0 ? 'mt-2' : ''}>
+                      {note}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 9. Advanced Options */}
             <details className={`border rounded-md p-3 ${generating ? 'opacity-60 pointer-events-none' : ''}`}>

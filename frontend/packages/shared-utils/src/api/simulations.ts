@@ -225,7 +225,12 @@ export interface SimulationSuggestionResponse {
   concept: string
   subject: string
   audience: string
+  suggestedTitle?: string
   description: string
+  scenarioPremise?: string
+  recommendedCareerPath?: string
+  learningGoals?: string[]
+  generationNotes?: string[]
   existingSimulations: Array<{ id: string; title: string; concept: string; status: string }>
 }
 

@@ -31,6 +31,33 @@ public class SimulationGenerationService {
             .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_SINGLE_QUOTES, true)
             .configure(com.fasterxml.jackson.core.JsonParser.Feature.ALLOW_COMMENTS, true);
 
+    private static final Map<String, String> AUDIENCE_BRIEFS = Map.of(
+            "UNDERGRADUATE", """
+                    Audience profile: undergraduate learners preparing for their first serious role.
+                    Scenario level: early-career, supervised, execution-focused, and concrete.
+                    Appropriate roles: analyst, coordinator, trainee, associate, junior specialist.
+                    Decision scope: team-, project-, or client-level problems with clear guardrails and visible feedback loops.
+                    Avoid: board-level ownership in year 1, unrealistic executive authority, and jargon-heavy scenarios with no explanation.
+                    Career path rule: progression should start with entry-level responsibility and grow into lead/manager responsibility only by the later years.
+                    """,
+            "MBA", """
+                    Audience profile: MBA learners preparing for leadership, business ownership, or general management roles.
+                    Scenario level: manager-to-executive, cross-functional, strategic, financially accountable.
+                    Appropriate roles: product manager, business unit manager, strategy lead, operations manager, founder's office, director.
+                    Decision scope: P&L trade-offs, organizational alignment, stakeholder conflict, market positioning, growth bets, resource allocation.
+                    Avoid: beginner-only or overly hand-held scenarios that feel like internship exercises.
+                    Career path rule: progression should begin at a post-IC leadership level and move toward GM/VP/business-head scope.
+                    """,
+            "GRADUATE", """
+                    Audience profile: advanced graduate learners preparing for specialized, research-intensive, or expert professional roles.
+                    Scenario level: specialist, principal, consulting, research, or domain-expert decisions with analytical depth.
+                    Appropriate roles: researcher, senior analyst, specialist consultant, lab lead, policy analyst, advanced practitioner.
+                    Decision scope: rigorous analysis, methodology choices, evidence quality, technical trade-offs, ethics, and expert judgment.
+                    Avoid: simplistic beginner framing and generic business-school scenarios unless the subject clearly calls for them.
+                    Career path rule: progression should deepen expertise first, then expand into senior specialist, principal, or practice-lead responsibility.
+                    """
+    );
+
     @Autowired
     private FoundryAIService foundryAIService;
 
@@ -206,8 +233,16 @@ public class SimulationGenerationService {
     // ════════════════════════════════════════════════════════════════════
 
     private Map<String, Object> phaseOneSetup(String concept, String subject, String audience, int targetYears) {
+        String audienceBrief = audienceBrief(audience);
+        String careerPathRules = careerPathRules(audience, subject, targetYears);
         String systemPrompt = """
                 You are designing an immersive career simulation about %s in %s for %s students.
+
+                AUDIENCE CALIBRATION:
+                %s
+
+                CAREER PATH REQUIREMENTS:
+                %s
 
                 Generate:
                 1. A role setup with: character (vivid, named), world (specific company/industry), goal (concrete stakes)
@@ -263,7 +298,7 @@ public class SimulationGenerationService {
                 - "exec_male_1": Corporate executive, 50s, serious and decisive
                 - "tech_young_1": Young tech professional, 20s-30s, enthusiastic
                 - "medical_female_1": Doctor/scientist, 30s-40s, analytical
-                """.formatted(concept, subject, audience, targetYears);
+                """.formatted(concept, subject, audience, audienceBrief, careerPathRules, targetYears);
 
         String userPrompt = "Generate the role setup, role progression, metrics, financial model, and advisor character for this simulation. " +
                 "Return ONLY the JSON object, no additional text.";
@@ -327,11 +362,24 @@ public class SimulationGenerationService {
                     """.formatted(guidanceLevel);
         }
 
+        String audienceBrief = audienceBrief(audience);
+        String yearCalibration = audienceYearCalibration(audience, year, targetYears, currentTitle);
+        String careerPathRules = careerPathRules(audience, subject, targetYears);
+
         String systemPrompt = """
                 You are generating Year %d of a %d-year career simulation about %s in %s.
 
                 The student's role: %s
                 Context from previous years: %s
+
+                AUDIENCE CALIBRATION:
+                %s
+
+                YEAR-SPECIFIC ROLE CALIBRATION:
+                %s
+
+                CAREER PATH REQUIREMENTS:
+                %s
 
                 Generate exactly %d decisions. Each decision must:
                 - Feel like a real-world judgment call, NOT a quiz
@@ -373,6 +421,10 @@ public class SimulationGenerationService {
 
                 CRITICAL - ADAPT ALL LANGUAGE TO THE SUBJECT AND AUDIENCE:
                 - Do NOT use generic corporate jargon if the simulation is about farming, healthcare, sports, etc.
+                - The authority level, budget size, stakeholder seniority, and strategic scope MUST match the audience's career stage.
+                - UNDERGRADUATE scenarios should feel like early-career responsibilities with manager oversight and learnable stakes.
+                - MBA scenarios should feel like leadership decisions across functions, teams, budgets, and market-facing trade-offs.
+                - GRADUATE scenarios should feel like advanced specialist or research-informed work with deeper technical or analytical judgment.
                 - Use terminology natural to the domain. Examples:
                   * Farming: "Cooperative Meeting" not "Stakeholder Meeting", "Seasonal Budget" not "Investment Portfolio"
                   * Healthcare: "Patient Care Conference" not "Stakeholder Meeting", "Department Funding" not "Budget Allocation"
@@ -398,8 +450,8 @@ public class SimulationGenerationService {
                 7. Vary the set of interactive types used each year
 
                 For each decision, also generate:
-                - "conceptKeywords": array of 2-3 business/management terms used in this decision that an undergraduate might not know.
-                  Each keyword is {"term": "...", "explanation": "1-2 sentence plain English explanation suitable for an undergraduate student"}
+                - "conceptKeywords": array of 2-3 course or professional terms used in this decision that may need explanation for this audience.
+                  Each keyword is {"term": "...", "explanation": "1-2 sentence plain English explanation suitable for %s students"}
                   Example: [{"term": "Cross-functional Team", "explanation": "A team with members from different departments working toward a common goal."}]
                 - "advisorMood": one of ["neutral", "concerned", "excited", "disappointed", "proud"]
                 - "advisorDialog": 1-2 sentences the mentor says to set up this decision.
@@ -505,7 +557,8 @@ public class SimulationGenerationService {
                   }
                 ]
                 """.formatted(year, targetYears, concept, subject,
-                currentTitle, previousContext, decisionsPerYear, deptInstruction, mentorGuidanceInstruction)
+                currentTitle, previousContext, audienceBrief, yearCalibration, careerPathRules,
+                decisionsPerYear, deptInstruction, audience.toLowerCase().replace('_', ' '), mentorGuidanceInstruction)
                 .replace("{YEAR}", String.valueOf(year));
 
         String userPrompt = "Generate the " + decisionsPerYear + " decisions for Year " + year +
@@ -585,6 +638,45 @@ public class SimulationGenerationService {
             sb.append(". ");
         }
         return sb.toString();
+    }
+
+    private String audienceBrief(String audience) {
+        if (audience == null) {
+            return "Audience profile: unspecified. Default to practical, clearly explained professional scenarios.";
+        }
+        return AUDIENCE_BRIEFS.getOrDefault(audience.toUpperCase(),
+                "Audience profile: " + audience + ". Keep scenarios professionally grounded and appropriately scaffolded.");
+    }
+
+    private String careerPathRules(String audience, String subject, int targetYears) {
+        String normalized = audience == null ? "" : audience.toUpperCase();
+        return switch (normalized) {
+            case "MBA" -> """
+                    Build a %d-year path in %s that starts in a real management role and progresses toward executive or business-head responsibility.
+                    The student should own teams, cross-functional trade-offs, or P&L-relevant work from the beginning.
+                    Promotions must feel believable for an MBA hire: manager/lead -> senior manager/director -> business head/VP-style scope.
+                    """.formatted(targetYears, subject);
+            case "GRADUATE" -> """
+                    Build a %d-year path in %s that starts in an advanced specialist or research-oriented role and grows toward principal, lead, or practice authority.
+                    The student should make evidence-based, expert-level decisions rather than purely beginner operational choices.
+                    Promotions must deepen expertise before broadening leadership.
+                    """.formatted(targetYears, subject);
+            default -> """
+                    Build a %d-year path in %s that starts in an entry-level or junior professional role and grows toward lead or manager responsibility by the final years.
+                    Early decisions should show supervision, bounded ownership, and concrete learning moments.
+                    Promotions must feel like a credible first-career progression for a student entering the field.
+                    """.formatted(targetYears, subject);
+        };
+    }
+
+    private String audienceYearCalibration(String audience, int year, int targetYears, String currentTitle) {
+        String normalized = audience == null ? "" : audience.toUpperCase();
+        String progressNote = "Year " + year + " of " + targetYears + " with title \"" + currentTitle + "\".";
+        return switch (normalized) {
+            case "MBA" -> progressNote + " Keep the scenario anchored in leadership authority, cross-functional coordination, strategic trade-offs, and financial accountability appropriate for this title.";
+            case "GRADUATE" -> progressNote + " Keep the scenario anchored in advanced analytical, specialist, research, or expert judgment responsibilities appropriate for this title.";
+            default -> progressNote + " Keep the scenario anchored in early-career responsibilities, close-to-the-work execution, guided judgment, and practical growth appropriate for this title.";
+        };
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -838,11 +930,19 @@ public class SimulationGenerationService {
     private Map<String, Object> phaseFourOpeningNarratives(
             String concept, String subject, String audience,
             int targetYears, List<String> roleProgression) {
+        String audienceBrief = audienceBrief(audience);
+        String careerPathRules = careerPathRules(audience, subject, targetYears);
 
         String systemPrompt = """
                 You are writing opening narratives for a %d-year career simulation about %s in %s for %s students.
 
                 Role progression: %s
+
+                AUDIENCE CALIBRATION:
+                %s
+
+                CAREER PATH REQUIREMENTS:
+                %s
 
                 For each year (1 to %d), generate 3 short opening paragraphs (THRIVING, STEADY, STRUGGLING).
                 These set the tone for how the year begins based on the student's past performance.
@@ -857,7 +957,7 @@ public class SimulationGenerationService {
                   "year2": { ... }
                 }
                 """.formatted(targetYears, concept, subject, audience,
-                String.join(", ", roleProgression), targetYears);
+                String.join(", ", roleProgression), audienceBrief, careerPathRules, targetYears);
 
         String userPrompt = "Generate the opening narratives for all " + targetYears +
                 " years. Return ONLY the JSON object, no additional text.";
@@ -914,6 +1014,12 @@ public class SimulationGenerationService {
         String systemPrompt = """
                 Generate final debriefs for a %d-year career simulation about %s in %s for %s students.
 
+                AUDIENCE CALIBRATION:
+                %s
+
+                CAREER PATH REQUIREMENTS:
+                %s
+
                 ALL DECISIONS WITH CONSEQUENCES:
                 %s
 
@@ -945,7 +1051,9 @@ public class SimulationGenerationService {
                   "STRUGGLING": { ... },
                   "FIRED": { ... }
                 }
-                """.formatted(targetYears, concept, subject, audience, allDecisionsJson, concept, concept);
+                """.formatted(targetYears, concept, subject, audience,
+                audienceBrief(audience), careerPathRules(audience, subject, targetYears),
+                allDecisionsJson, concept, concept);
 
         String userPrompt = "Generate the 4 debrief variants. Return ONLY the JSON object, no additional text.";
 

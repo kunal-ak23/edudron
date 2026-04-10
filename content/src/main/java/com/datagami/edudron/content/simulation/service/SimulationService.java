@@ -407,23 +407,47 @@ public class SimulationService {
         }
 
         // Call AI
-        String systemPrompt = "You are analyzing course content to suggest a simulation concept.\n\n" +
-                courseContext + "\n" +
-                (existingContext.length() > 0
-                        ? "Existing simulations for this course (DO NOT duplicate these):\n" + existingContext + "\n"
-                        : "") +
-                "Suggest a NEW simulation that:\n" +
-                "1. Teaches a core concept from this course material\n" +
-                "2. Is different from any existing simulations listed above\n" +
-                "3. Can be experienced as a 5-year career journey with real-world decisions\n" +
-                "4. Has a vivid, specific professional scenario\n\n" +
-                "Return ONLY a JSON object:\n" +
-                "{\n" +
-                "  \"concept\": \"the underlying concept being taught (never revealed to students until debrief)\",\n" +
-                "  \"subject\": \"the academic subject area\",\n" +
-                "  \"audience\": \"UNDERGRADUATE or MBA or GRADUATE (infer from course level)\",\n" +
-                "  \"description\": \"2-3 sentence student-facing description of the simulation experience\"\n" +
-                "}";
+        String systemPrompt = """
+                You are analyzing course content to create a high-quality simulation brief for course-aligned career simulations.
+
+                COURSE CONTEXT:
+                %s
+
+                %s
+
+                Your job is to produce a recommendation that is detailed enough to drive strong simulation generation later.
+
+                Requirements:
+                1. Pick a concept that is central to the course, not a side topic.
+                2. Infer the most likely audience as UNDERGRADUATE, MBA, or GRADUATE from the course language and level.
+                3. Make the scenario professionally realistic and specific, not generic corporate filler.
+                4. Ensure the scenario can sustain a multi-year career journey with promotions, consequences, and changing responsibility.
+                5. Match the career ladder to BOTH the audience and the subject.
+                6. Avoid duplicating or closely overlapping existing simulations.
+
+                Audience calibration:
+                - UNDERGRADUATE: start with entry-level or junior roles, clear responsibilities, guided stakes, practical learning progression.
+                - MBA: start with manager/lead/business roles, cross-functional trade-offs, financial accountability, executive trajectory.
+                - GRADUATE: start with advanced specialist/research/consulting roles, deeper analytical rigor, expert judgment progression.
+
+                Return ONLY a JSON object with this exact shape:
+                {
+                  "concept": "core underlying concept taught through the simulation",
+                  "subject": "academic subject area",
+                  "audience": "UNDERGRADUATE or MBA or GRADUATE",
+                  "suggestedTitle": "strong simulation title suitable for admin prefill",
+                  "description": "2-3 sentence student-facing description of the simulation experience",
+                  "scenarioPremise": "2-4 sentences describing the company/organization, the student's starting role, and the real-world stakes",
+                  "recommendedCareerPath": "2-3 sentences describing the audience-appropriate and subject-appropriate career path the simulation should follow",
+                  "learningGoals": ["3-5 concise bullet-style strings naming what students should learn through decisions"],
+                  "generationNotes": ["4-6 concise instructions for simulation generation covering scenario tone, decision style, domain realism, audience calibration, and role progression"]
+                }
+                """.formatted(
+                courseContext,
+                existingContext.length() > 0
+                        ? "EXISTING SIMULATIONS FOR THIS COURSE (DO NOT DUPLICATE THESE):\n" + existingContext
+                        : "EXISTING SIMULATIONS FOR THIS COURSE: none"
+        );
 
         String userPrompt = "Analyze this course and suggest a simulation concept. Return ONLY the JSON object.";
 
@@ -438,12 +462,28 @@ public class SimulationService {
             result.setConcept((String) parsed.get("concept"));
             result.setSubject((String) parsed.get("subject"));
             result.setAudience((String) parsed.get("audience"));
+            result.setSuggestedTitle((String) parsed.get("suggestedTitle"));
             result.setDescription((String) parsed.get("description"));
+            result.setScenarioPremise((String) parsed.get("scenarioPremise"));
+            result.setRecommendedCareerPath((String) parsed.get("recommendedCareerPath"));
+            result.setLearningGoals(toStringList(parsed.get("learningGoals")));
+            result.setGenerationNotes(toStringList(parsed.get("generationNotes")));
             result.setExistingSimulations(existingList);
             return result;
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse AI suggestion response", e);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> toStringList(Object value) {
+        if (value == null) {
+            return List.of();
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(String::valueOf).toList();
+        }
+        return List.of(String.valueOf(value));
     }
 
     // ============ STUDENT OPERATIONS ============
