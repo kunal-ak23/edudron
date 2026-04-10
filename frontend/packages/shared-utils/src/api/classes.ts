@@ -121,6 +121,17 @@ export class ClassesApi {
     return []
   }
 
+  async listAllClasses(): Promise<Class[]> {
+    const response = await this.apiClient.get<Class[]>('/api/classes')
+    if (Array.isArray(response)) {
+      return response
+    }
+    if (Array.isArray(response.data)) {
+      return response.data
+    }
+    return []
+  }
+
   async getClass(id: string): Promise<Class> {
     const response = await this.apiClient.get<Class>(`/api/classes/${id}`)
     return response.data

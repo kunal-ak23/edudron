@@ -38,11 +38,11 @@ export default function ResultsExportPage() {
   const loadOptions = useCallback(async () => {
     setLoadingOptions(true)
     try {
-      const [coursesRes] = await Promise.all([
+      const [coursesRes, sectionsRes, classesRes] = await Promise.all([
         coursesApi.listCourses().catch(() => []),
+        sectionsApi.listAllSections().catch(() => []),
+        classesApi.listAllClasses().catch(() => []),
       ])
-      const sectionsRes: any[] = [] // Sections loaded dynamically when class is selected
-      const classesRes: any[] = [] // Classes loaded dynamically when institute is selected
 
       const normalize = (data: any): SelectOption[] => {
         const arr = Array.isArray(data)
@@ -54,7 +54,7 @@ export default function ResultsExportPage() {
               : []
         return arr.map((item: any) => ({
           id: item.id,
-          name: item.name || item.title || item.id,
+          name: item.name || item.title || item.code || item.id,
         }))
       }
 

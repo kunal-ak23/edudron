@@ -78,6 +78,17 @@ export class SectionsApi {
     return []
   }
 
+  async listAllSections(): Promise<Section[]> {
+    const response = await this.apiClient.get<Section[]>('/api/sections')
+    if (Array.isArray(response)) {
+      return response
+    }
+    if (Array.isArray(response.data)) {
+      return response.data
+    }
+    return []
+  }
+
   async getSection(id: string): Promise<Section> {
     const response = await this.apiClient.get<Section>(`/api/sections/${id}`)
     return response.data
