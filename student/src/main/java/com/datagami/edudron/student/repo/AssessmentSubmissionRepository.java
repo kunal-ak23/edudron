@@ -37,6 +37,24 @@ public interface AssessmentSubmissionRepository extends JpaRepository<Assessment
     List<AssessmentSubmission> findByClientIdAndAssessmentIdAndIdIn(UUID clientId, String assessmentId, List<String> ids);
 
     List<AssessmentSubmission> findByClientIdAndCourseId(UUID clientId, String courseId);
+
+    /**
+     * Lightweight projection for results export — only fetches the 3 columns needed for scoring.
+     * Avoids loading heavy JSON columns (answersJson, aiReviewFeedback, proctoringData, etc.)
+     * that cause OutOfMemoryError on large datasets.
+     */
+    @Query(value = "SELECT student_id AS studentId, assessment_id AS assessmentId, score " +
+            "FROM student.assessment_submissions " +
+            "WHERE client_id = :clientId AND course_id = :courseId",
+            nativeQuery = true)
+    List<ScoreSummaryProjection> findScoreSummariesByClientIdAndCourseId(
+            @Param("clientId") UUID clientId, @Param("courseId") String courseId);
+
+    interface ScoreSummaryProjection {
+        String getStudentId();
+        String getAssessmentId();
+        java.math.BigDecimal getScore();
+    }
 }
 
 

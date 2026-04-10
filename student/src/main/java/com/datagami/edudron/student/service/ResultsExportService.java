@@ -295,12 +295,13 @@ public class ResultsExportService {
             cd.assessmentMaxScores.put(aId, maxScore);
         }
 
-        // Fetch all submissions for this course at once
-        List<AssessmentSubmission> allSubmissions = submissionRepository.findByClientIdAndCourseId(clientId, courseId);
+        // Fetch only the score columns (avoids loading heavy JSON blobs that cause OOM)
+        List<AssessmentSubmissionRepository.ScoreSummaryProjection> allScores =
+                submissionRepository.findScoreSummariesByClientIdAndCourseId(clientId, courseId);
 
         // Build student -> assessment -> best score map
         cd.studentAssessmentScores = new HashMap<>();
-        for (AssessmentSubmission sub : allSubmissions) {
+        for (AssessmentSubmissionRepository.ScoreSummaryProjection sub : allScores) {
             if (!studentIds.contains(sub.getStudentId())) continue;
             String key = sub.getStudentId() + "::" + sub.getAssessmentId();
             BigDecimal existing = cd.studentAssessmentScores.get(key);
