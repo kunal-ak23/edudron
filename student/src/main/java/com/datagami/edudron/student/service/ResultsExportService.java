@@ -2,6 +2,7 @@ package com.datagami.edudron.student.service;
 
 import com.datagami.edudron.common.TenantContext;
 import com.datagami.edudron.student.client.ContentAssessmentClient;
+import com.datagami.edudron.student.client.ContentExamClient;
 import com.datagami.edudron.student.domain.*;
 import com.datagami.edudron.student.repo.*;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -45,6 +46,7 @@ public class ResultsExportService {
     private static final Logger log = LoggerFactory.getLogger(ResultsExportService.class);
 
     private final ContentAssessmentClient contentAssessmentClient;
+    private final ContentExamClient contentExamClient;
     private final EnrollmentRepository enrollmentRepository;
     private final AssessmentSubmissionRepository submissionRepository;
     private final ProjectRepository projectRepository;
@@ -61,6 +63,7 @@ public class ResultsExportService {
     private final Object restTemplateLock = new Object();
 
     public ResultsExportService(ContentAssessmentClient contentAssessmentClient,
+                                ContentExamClient contentExamClient,
                                 EnrollmentRepository enrollmentRepository,
                                 AssessmentSubmissionRepository submissionRepository,
                                 ProjectRepository projectRepository,
@@ -70,6 +73,7 @@ public class ResultsExportService {
                                 ClassRepository classRepository,
                                 StudentAuditService auditService) {
         this.contentAssessmentClient = contentAssessmentClient;
+        this.contentExamClient = contentExamClient;
         this.enrollmentRepository = enrollmentRepository;
         this.submissionRepository = submissionRepository;
         this.projectRepository = projectRepository;
@@ -228,7 +232,9 @@ public class ResultsExportService {
         List<CourseData> courseDataList = new ArrayList<>();
         for (String courseId : courseIds) {
             CourseData cd = buildCourseData(clientId, courseId, sectionId, sortedStudentIds);
-            courseDataList.add(cd);
+            if (cd.hasExportableContent()) {
+                courseDataList.add(cd);
+            }
         }
 
         // 3. Generate Excel workbook
@@ -269,6 +275,14 @@ public class ResultsExportService {
 
         // Fetch assessments for this course
         List<JsonNode> assessments = contentAssessmentClient.getAssessmentsForCourse(courseId);
+        assessments = assessments.stream()
+                .filter(assessment -> courseId.equals(getJsonText(assessment, "courseId")))
+                .collect(Collectors.toList());
+        if (sectionId != null) {
+            assessments = assessments.stream()
+                    .filter(assessment -> sectionId.equals(getJsonText(assessment, "sectionId")))
+                    .collect(Collectors.toList());
+        }
         cd.assessments = assessments;
 
         // Build assessment ID -> title/maxScore maps
@@ -281,19 +295,10 @@ public class ResultsExportService {
             cd.assessmentIds.add(aId);
             cd.assessmentTitles.put(aId, a.has("title") ? a.get("title").asText() : aId);
 
-            BigDecimal maxScore = BigDecimal.ZERO;
-            if (a.has("maxScore") && !a.get("maxScore").isNull()) {
-                maxScore = new BigDecimal(a.get("maxScore").asText());
-            } else if (a.has("questions") && a.get("questions").isArray()) {
-                // Calculate maxScore from questions
-                for (JsonNode q : a.get("questions")) {
-                    if (q.has("marks") && !q.get("marks").isNull()) {
-                        maxScore = maxScore.add(new BigDecimal(q.get("marks").asText()));
-                    }
-                }
-            }
+            BigDecimal maxScore = resolveAssessmentMaxScore(aId, a);
             cd.assessmentMaxScores.put(aId, maxScore);
         }
+        Set<String> includedAssessmentIds = new HashSet<>(cd.assessmentIds);
 
         // Fetch only the score columns (avoids loading heavy JSON blobs that cause OOM)
         List<AssessmentSubmissionRepository.ScoreSummaryProjection> allScores =
@@ -301,13 +306,26 @@ public class ResultsExportService {
 
         // Build student -> assessment -> best score map
         cd.studentAssessmentScores = new HashMap<>();
+        Map<String, BigDecimal> submissionMaxScores = new HashMap<>();
         for (AssessmentSubmissionRepository.ScoreSummaryProjection sub : allScores) {
             if (!studentIds.contains(sub.getStudentId())) continue;
+            if (!includedAssessmentIds.contains(sub.getAssessmentId())) continue;
             String key = sub.getStudentId() + "::" + sub.getAssessmentId();
             BigDecimal existing = cd.studentAssessmentScores.get(key);
             BigDecimal current = sub.getScore() != null ? sub.getScore() : BigDecimal.ZERO;
             if (existing == null || current.compareTo(existing) > 0) {
                 cd.studentAssessmentScores.put(key, current);
+            }
+            BigDecimal submissionMax = sub.getMaxScore();
+            if (submissionMax != null && submissionMax.compareTo(BigDecimal.ZERO) > 0) {
+                submissionMaxScores.merge(sub.getAssessmentId(), submissionMax, BigDecimal::max);
+            }
+        }
+        for (String assessmentId : cd.assessmentIds) {
+            BigDecimal existingMax = cd.assessmentMaxScores.getOrDefault(assessmentId, BigDecimal.ZERO);
+            BigDecimal submissionMax = submissionMaxScores.get(assessmentId);
+            if (existingMax.compareTo(BigDecimal.ZERO) <= 0 && submissionMax != null) {
+                cd.assessmentMaxScores.put(assessmentId, submissionMax);
             }
         }
 
@@ -473,7 +491,7 @@ public class ResultsExportService {
 
         // Assessment columns (score/max)
         for (String aId : cd.assessmentIds) {
-            String title = truncate(cd.assessmentTitles.get(aId), 25);
+            String title = cd.assessmentTitles.get(aId);
             createHeaderCell(headerRow, col++, title, headerStyle);
             createHeaderCell(headerRow, col++, title + " Max", headerStyle);
         }
@@ -562,6 +580,60 @@ public class ResultsExportService {
         return total;
     }
 
+    private BigDecimal resolveAssessmentMaxScore(String assessmentId, JsonNode assessmentNode) {
+        BigDecimal fromListPayload = sumQuestionPoints(assessmentNode);
+        if (fromListPayload.compareTo(BigDecimal.ZERO) > 0) {
+            return fromListPayload;
+        }
+
+        JsonNode examDetail = contentExamClient.getExam(assessmentId);
+        BigDecimal fromDetail = sumQuestionPoints(examDetail);
+        if (fromDetail.compareTo(BigDecimal.ZERO) > 0) {
+            return fromDetail;
+        }
+
+        return BigDecimal.ZERO;
+    }
+
+    private BigDecimal sumQuestionPoints(JsonNode examNode) {
+        if (examNode == null) {
+            return BigDecimal.ZERO;
+        }
+
+        if (examNode.has("maxScore") && !examNode.get("maxScore").isNull()) {
+            String raw = examNode.get("maxScore").asText();
+            if (raw != null && !raw.isBlank()) {
+                try {
+                    return new BigDecimal(raw);
+                } catch (NumberFormatException ignored) {
+                    // Fall through to question-based calculation.
+                }
+            }
+        }
+
+        BigDecimal total = BigDecimal.ZERO;
+        if (examNode.has("questions") && examNode.get("questions").isArray()) {
+            for (JsonNode question : examNode.get("questions")) {
+                BigDecimal points = getQuestionPoints(question);
+                total = total.add(points);
+            }
+        }
+        return total;
+    }
+
+    private BigDecimal getQuestionPoints(JsonNode question) {
+        if (question == null) {
+            return BigDecimal.ZERO;
+        }
+        if (question.has("points") && !question.get("points").isNull()) {
+            return new BigDecimal(question.get("points").asText());
+        }
+        if (question.has("marks") && !question.get("marks").isNull()) {
+            return new BigDecimal(question.get("marks").asText());
+        }
+        return BigDecimal.ZERO;
+    }
+
     /**
      * Fetch student name/email from identity service for a set of student IDs.
      */
@@ -610,6 +682,14 @@ public class ResultsExportService {
         cell.setCellStyle(style);
     }
 
+    private String getJsonText(JsonNode node, String fieldName) {
+        if (node == null || fieldName == null || !node.has(fieldName) || node.get(fieldName).isNull()) {
+            return null;
+        }
+        String value = node.get(fieldName).asText();
+        return value != null && !value.isBlank() ? value : null;
+    }
+
     private String sanitizeSheetName(String name) {
         if (name == null) return "Sheet";
         // Remove invalid characters for Excel sheet names
@@ -651,5 +731,10 @@ public class ResultsExportService {
         // key: "studentId::eventId" -> marks
         Map<String, Integer> studentEventGrades;
         BigDecimal courseMaxScore;
+
+        boolean hasExportableContent() {
+            return (assessmentIds != null && !assessmentIds.isEmpty())
+                    || (projectEvents != null && !projectEvents.isEmpty());
+        }
     }
 }
